@@ -944,12 +944,45 @@ class DataFrame(object):
         |  5|    80|Alice|
         +---+------+-----+
         
-	(Note: drop_duplicates is an alias for dropDuplicates)
+	(Note: dropDuplicates is an alias for drop_duplicates)
 	"""
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(1.4)
+    def drop_duplicates(self, subset=None):
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+        optionally only considering certain columns.
+
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([ \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=10, height=80)]).toDF()
+        >>> df.drop_duplicates().show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        | 10|    80|Alice|
+        +---+------+-----+
+
+        >>> df.drop_duplicates(['name', 'height']).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        +---+------+-----+
+
+        (Note: drop_duplicates is an alias for dropDuplicates)
+        """
+        if subset is None:
+            jdf = self._jdf.drop_duplicates()
+        else:
+            jdf = self._jdf.drop_duplicates(self._jseq(subset))
         return DataFrame(jdf, self.sql_ctx)
 
     @since("1.3.1")
@@ -1277,7 +1310,7 @@ class DataFrame(object):
     ##########################################################################################
 
     groupby = groupBy
-    drop_duplicates = dropDuplicates
+   # drop_duplicates = dropDuplicates
 
 
 # Having SchemaRDD for backward compatibility (for docs)

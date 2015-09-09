@@ -330,7 +330,7 @@ class Column(object):
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
         
-	(Note : astype is alias for cast)
+	(Note : cast is alias for astype)
         """
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
@@ -343,7 +343,30 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
-    astype = cast
+    @ignore_unicode_prefix
+    @since(1.3)
+    def astype(self, dataType):
+        """ Convert the column into type ``dataType``.
+
+        >>> df.select(df.age.astype("string").alias('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
+        >>> df.select(df.age.astype(StringType()).alias('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
+
+        (Note : astype is alias for cast)
+        """
+        if isinstance(dataType, basestring):
+            jc = self._jc.astype(dataType)
+        elif isinstance(dataType, DataType):
+            sc = SparkContext._active_spark_context
+            ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
+            jdt = ssql_ctx.parseDataType(dataType.json())
+            jc = self._jc.astype(jdt)
+        else:
+            raise TypeError("unexpected type: %s" % type(dataType))
+        return Column(jc)
+
+    # astype = cast
 
     @since(1.3)
     def between(self, lowerBound, upperBound):
