@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.hive;
+package org.apache.spark.sql.hive;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -31,10 +31,8 @@ import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
 import static org.apache.spark.sql.functions.*;
-import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.sql.hive.test.TestHive$;
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
-import test.org.apache.spark.sql.hive.aggregate.MyDoubleSum;
+import org.apache.spark.sql.hive.aggregate.MyDoubleSum;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext sc;

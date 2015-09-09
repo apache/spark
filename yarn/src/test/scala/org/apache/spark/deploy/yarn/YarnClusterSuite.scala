@@ -21,7 +21,6 @@ import java.io.File
 import java.net.URL
 
 import scala.collection.mutable
-import scala.collection.JavaConversions._
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.{ByteStreams, Files}
@@ -29,7 +28,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
 import org.apache.spark._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
+import org.apache.spark.launcher.TestClasspathBuilder
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
+  SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
 
@@ -40,7 +41,7 @@ import org.apache.spark.util.Utils
  */
 class YarnClusterSuite extends BaseYarnClusterSuite {
 
-  override def yarnConfig: YarnConfiguration = new YarnConfiguration()
+  override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
   private val TEST_PYFILE = """
     |import mod1, mod2
@@ -112,6 +113,17 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
 
+    // When running tests, let's not assume the user has built the assembly module, which also
+    // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
+    // needed locations.
+    val sparkHome = sys.props("spark.test.home");
+    val pythonPath = Seq(
+        s"$sparkHome/python/lib/py4j-0.8.2.1-src.zip",
+        s"$sparkHome/python")
+    val extraEnv = Map(
+      "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator))
+
     val moduleDir =
       if (clientMode) {
         // In client-mode, .py files added with --py-files are not visible in the driver.
@@ -131,7 +143,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
     runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files", pyFiles),
-      appArgs = Seq(result.getAbsolutePath()))
+      appArgs = Seq(result.getAbsolutePath()),
+      extraEnv = extraEnv)
     checkResult(result)
   }
 
@@ -216,8 +229,8 @@ private object YarnClusterDriver extends Logging with Matchers {
       assert(listener.driverLogs.nonEmpty)
       val driverLogs = listener.driverLogs.get
       assert(driverLogs.size === 2)
-      assert(driverLogs.containsKey("stderr"))
-      assert(driverLogs.containsKey("stdout"))
+      assert(driverLogs.contains("stderr"))
+      assert(driverLogs.contains("stdout"))
       val urlStr = driverLogs("stderr")
       // Ensure that this is a valid URL, else this will throw an exception
       new URL(urlStr)

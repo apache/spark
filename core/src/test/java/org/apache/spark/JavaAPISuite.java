@@ -24,10 +24,10 @@ import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
-import scala.collection.JavaConversions;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
+import scala.collection.JavaConverters;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -1473,7 +1473,9 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(expected, results);
 
     Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
-        combinedRDD.rdd(), JavaConversions.asScalaBuffer(Lists.<RDD<?>>newArrayList()));
+        combinedRDD.rdd(),
+        JavaConverters.collectionAsScalaIterableConverter(
+            Collections.<RDD<?>>emptyList()).asScala().toSeq());
     combinedRDD = originalRDD.keyBy(keyFunction)
         .combineByKey(
              createCombinerFunction,

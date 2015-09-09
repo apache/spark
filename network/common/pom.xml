@@ -48,6 +48,10 @@
       <artifactId>slf4j-api</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>com.google.code.findbugs</groupId>
+      <artifactId>jsr305</artifactId>
+    </dependency>
     <!--
       Promote Guava to "compile" so that maven-shade-plugin picks it up (for packaging the Optional
       class exposed in the Java API). The plugin will then remove this dependency from the published

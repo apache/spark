@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.IOException
+import java.util.{Collections, Arrays}
 
-import scala.collection.JavaConversions._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -107,7 +107,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     ParquetFileWriter.writeMetadataFile(
       conf,
       path,
-      new Footer(path, new ParquetMetadata(metaData, Nil)) :: Nil)
+      Arrays.asList(new Footer(path, new ParquetMetadata(metaData, Collections.emptyList()))))
   }
 
   /**

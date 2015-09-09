@@ -22,7 +22,7 @@ import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.concurrent.duration._
@@ -171,11 +171,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
    *  - allow SQL11 keywords to be used as identifiers
    */
-  private[sql] def defaultOverides() = {
+  private[sql] def defaultOverrides() = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
   }
 
-  defaultOverides()
+  defaultOverrides()
 
   /**
    * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.
@@ -190,11 +190,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     // into the isolated client loader
     val metadataConf = new HiveConf()
 
-    val defaltWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
-    logInfo("defalt warehouse location is " + defaltWarehouseLocation)
+    val defaultWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
+    logInfo("default warehouse location is " + defaultWarehouseLocation)
 
     // `configure` goes second to override other settings.
-    val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap ++ configure
+    val allConfig = metadataConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configure
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (hiveExecutionVersion != hiveMetastoreVersion) {

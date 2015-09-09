@@ -33,9 +33,10 @@ import org.apache.spark.rdd.RDD
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class SVMModel (
-    override val weights: Vector,
-    override val intercept: Double)
+@Since("0.8.0")
+class SVMModel @Since("1.1.0") (
+    @Since("1.0.0") override val weights: Vector,
+    @Since("0.8.0") override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
   with Saveable with PMMLExportable {
 
@@ -47,7 +48,7 @@ class SVMModel (
    * with prediction score greater than or equal to this threshold is identified as an positive,
    * and negative otherwise. The default value is 0.0.
    */
-  @Since("1.3.0")
+  @Since("1.0.0")
   @Experimental
   def setThreshold(threshold: Double): this.type = {
     this.threshold = Some(threshold)
@@ -92,12 +93,12 @@ class SVMModel (
 
   override protected def formatVersion: String = "1.0"
 
-  @Since("1.4.0")
   override def toString: String = {
     s"${super.toString}, numClasses = 2, threshold = ${threshold.getOrElse("None")}"
   }
 }
 
+@Since("1.3.0")
 object SVMModel extends Loader[SVMModel] {
 
   @Since("1.3.0")
@@ -132,6 +133,7 @@ object SVMModel extends Loader[SVMModel] {
  * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
  * NOTE: Labels used in SVM should be {0, 1}.
  */
+@Since("0.8.0")
 class SVMWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -141,6 +143,7 @@ class SVMWithSGD private (
 
   private val gradient = new HingeGradient()
   private val updater = new SquaredL2Updater()
+  @Since("0.8.0")
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -152,6 +155,7 @@ class SVMWithSGD private (
    * Construct a SVM object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParm: 0.01, miniBatchFraction: 1.0}.
    */
+  @Since("0.8.0")
   def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
@@ -162,6 +166,7 @@ class SVMWithSGD private (
 /**
  * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}.
  */
+@Since("0.8.0")
 object SVMWithSGD {
 
   /**

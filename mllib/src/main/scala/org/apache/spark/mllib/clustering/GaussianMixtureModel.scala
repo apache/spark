@@ -46,9 +46,9 @@ import org.apache.spark.sql.{SQLContext, Row}
  */
 @Since("1.3.0")
 @Experimental
-class GaussianMixtureModel(
-  val weights: Array[Double],
-  val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable {
+class GaussianMixtureModel @Since("1.3.0") (
+  @Since("1.3.0") val weights: Array[Double],
+  @Since("1.3.0") val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable {
 
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
 
@@ -168,17 +168,16 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
-      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
-
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
+      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
 
       val (weights, gaussians) = dataArray.map {
         case Row(weight: Double, mu: Vector, sigma: Matrix) =>
           (weight, new MultivariateGaussian(mu, sigma))
       }.unzip
 
-      return new GaussianMixtureModel(weights.toArray, gaussians.toArray)
+      new GaussianMixtureModel(weights.toArray, gaussians.toArray)
     }
   }
 

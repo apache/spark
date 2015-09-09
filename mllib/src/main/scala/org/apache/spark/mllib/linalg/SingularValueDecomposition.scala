@@ -31,6 +31,7 @@ case class SingularValueDecomposition[UType, VType](U: UType, s: Vector, V: VTyp
  * :: Experimental ::
  * Represents QR factors.
  */
+@Since("1.5.0")
 @Experimental
 case class QRDecomposition[QType, RType](Q: QType, R: RType)
 
