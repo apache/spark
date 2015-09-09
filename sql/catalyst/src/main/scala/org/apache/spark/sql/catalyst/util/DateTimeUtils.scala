@@ -90,9 +90,7 @@ object DateTimeUtils {
     // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
     val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
-    val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY)
-    require(days <= Integer.MAX_VALUE && days >= Integer.MIN_VALUE, "Date exceeeds allowed range.")
-    days.toInt
+    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
@@ -212,7 +210,6 @@ object DateTimeUtils {
       day -= 1
       secondsInDay += SECONDS_PER_DAY
       nanos += (SECONDS_PER_DAY * MICROS_PER_SECOND * 1000L)
-      require(day >= 0, "Timestamp exceeds allowed range.")
     }
     (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
   }

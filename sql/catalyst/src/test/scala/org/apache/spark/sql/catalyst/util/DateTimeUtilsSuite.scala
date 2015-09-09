@@ -435,25 +435,11 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       }
     }
 
-    // Avoid negative Julian day counts since the Hive/Impala timestamp spec does not
-    // expect them.
-    val julianDay = -(JULIAN_DAY_OF_EPOCH * SECONDS_PER_DAY * MICROS_PER_SECOND)
-    intercept[IllegalArgumentException] {
-      toJulianDay(julianDay - 1)
-    }
-
     // Make sure calculated nanos are positive, since that's what the Hive/Impala timestamp
     // spec expects.
+    val julianDay = -(JULIAN_DAY_OF_EPOCH * SECONDS_PER_DAY * MICROS_PER_SECOND)
     val (_, nanos) = toJulianDay(julianDay + 1)
     assert(nanos >= 0)
-
-    // Make sure timestamp in ms does not overflow number of days returned as int. millisToDays()
-    // considers the current time zone, so add 2 full days when checking to be sure.
-    val msPerDay = SECONDS_PER_DAY * 1000L
-    val tooManyDays = Integer.MAX_VALUE * msPerDay
-    intercept[IllegalArgumentException] {
-      millisToDays(tooManyDays + 2 * msPerDay)
-    }
   }
 
 }
