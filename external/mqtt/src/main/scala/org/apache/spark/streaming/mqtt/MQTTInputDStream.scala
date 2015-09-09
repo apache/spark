@@ -17,25 +17,12 @@
 
 package org.apache.spark.streaming.mqtt
 
-import scala.collection.Map
-import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions._
-import scala.reflect.ClassTag
-
-import java.util.Properties
-import java.util.concurrent.Executors
-import java.io.IOException
-
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.MqttCallback
 import org.eclipse.paho.client.mqttv3.MqttClient
-import org.eclipse.paho.client.mqttv3.MqttClientPersistence
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
-import org.eclipse.paho.client.mqttv3.MqttException
 import org.eclipse.paho.client.mqttv3.MqttMessage
-import org.eclipse.paho.client.mqttv3.MqttTopic
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
-import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
@@ -56,6 +43,8 @@ class MQTTInputDStream(
     topic: String,
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[String](ssc_) {
+
+  private[streaming] override def name: String = s"MQTT stream [$id]"
 
   def getReceiver(): Receiver[String] = {
     new MQTTReceiver(brokerUrl, topic, storageLevel)
@@ -82,18 +71,18 @@ class MQTTReceiver(
     val client = new MqttClient(brokerUrl, MqttClient.generateClientId(), persistence)
 
     // Callback automatically triggers as and when new message arrives on specified topic
-    val callback: MqttCallback = new MqttCallback() {
+    val callback = new MqttCallback() {
 
       // Handles Mqtt message
-      override def messageArrived(arg0: String, arg1: MqttMessage) {
-        store(new String(arg1.getPayload(),"utf-8"))
+      override def messageArrived(topic: String, message: MqttMessage) {
+        store(new String(message.getPayload(), "utf-8"))
       }
 
-      override def deliveryComplete(arg0: IMqttDeliveryToken) {
+      override def deliveryComplete(token: IMqttDeliveryToken) {
       }
 
-      override def connectionLost(arg0: Throwable) {
-        restart("Connection lost ", arg0)
+      override def connectionLost(cause: Throwable) {
+        restart("Connection lost ", cause)
       }
     }
 

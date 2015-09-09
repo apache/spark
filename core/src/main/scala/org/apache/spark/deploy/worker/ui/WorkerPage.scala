@@ -17,10 +17,8 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import scala.concurrent.Await
 import scala.xml.Node
 
-import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
@@ -31,20 +29,16 @@ import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
-  val workerActor = parent.worker.self
-  val worker = parent.worker
-  val timeout = parent.timeout
+private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
+  private val workerEndpoint = parent.worker.self
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
-    val workerState = Await.result(stateFuture, timeout)
+    val workerState = workerEndpoint.askWithRetry[WorkerStateResponse](RequestWorkerState)
     JsonProtocol.writeWorkerState(workerState)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
-    val workerState = Await.result(stateFuture, timeout)
+    val workerState = workerEndpoint.askWithRetry[WorkerStateResponse](RequestWorkerState)
 
     val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
     val runningExecutors = workerState.executors
@@ -134,7 +128,7 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   def driverRow(driver: DriverRunner): Seq[Node] = {
     <tr>
       <td>{driver.driverId}</td>
-      <td>{driver.driverDesc.command.arguments(1)}</td>
+      <td>{driver.driverDesc.command.arguments(2)}</td>
       <td>{driver.finalState.getOrElse(DriverState.RUNNING)}</td>
       <td sorttable_customkey={driver.driverDesc.cores.toString}>
         {driver.driverDesc.cores.toString}

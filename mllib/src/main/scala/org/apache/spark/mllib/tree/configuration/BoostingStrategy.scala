@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree.configuration
 
 import scala.beans.BeanProperty
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
 
@@ -34,15 +34,21 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                      weak hypotheses used in the final model.
  * @param learningRate Learning rate for shrinking the contribution of each estimator. The
  *                     learning rate should be between in the interval (0, 1]
+ * @param validationTol Useful when runWithValidation is used. If the error rate on the
+ *                      validation input between two iterations is less than the validationTol
+ *                      then stop.  Ignored when
+ *                      [[org.apache.spark.mllib.tree.GradientBoostedTrees.run()]] is used.
  */
+@Since("1.2.0")
 @Experimental
-case class BoostingStrategy(
+case class BoostingStrategy @Since("1.4.0") (
     // Required boosting parameters
-    @BeanProperty var treeStrategy: Strategy,
-    @BeanProperty var loss: Loss,
+    @Since("1.2.0") @BeanProperty var treeStrategy: Strategy,
+    @Since("1.2.0") @BeanProperty var loss: Loss,
     // Optional boosting parameters
-    @BeanProperty var numIterations: Int = 100,
-    @BeanProperty var learningRate: Double = 0.1) extends Serializable {
+    @Since("1.2.0") @BeanProperty var numIterations: Int = 100,
+    @Since("1.2.0") @BeanProperty var learningRate: Double = 0.1,
+    @Since("1.4.0") @BeanProperty var validationTol: Double = 1e-5) extends Serializable {
 
   /**
    * Check validity of parameters.
@@ -65,6 +71,7 @@ case class BoostingStrategy(
   }
 }
 
+@Since("1.2.0")
 @Experimental
 object BoostingStrategy {
 
@@ -73,6 +80,7 @@ object BoostingStrategy {
    * @param algo Learning goal.  Supported: "Classification" or "Regression"
    * @return Configuration for boosting algorithm
    */
+  @Since("1.2.0")
   def defaultParams(algo: String): BoostingStrategy = {
     defaultParams(Algo.fromString(algo))
   }
@@ -84,15 +92,16 @@ object BoostingStrategy {
    *             [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
    * @return Configuration for boosting algorithm
    */
+  @Since("1.3.0")
   def defaultParams(algo: Algo): BoostingStrategy = {
-    val treeStragtegy = Strategy.defaultStategy(algo)
-    treeStragtegy.maxDepth = 3
+    val treeStrategy = Strategy.defaultStrategy(algo)
+    treeStrategy.maxDepth = 3
     algo match {
       case Algo.Classification =>
-        treeStragtegy.numClasses = 2
-        new BoostingStrategy(treeStragtegy, LogLoss)
+        treeStrategy.numClasses = 2
+        new BoostingStrategy(treeStrategy, LogLoss)
       case Algo.Regression =>
-        new BoostingStrategy(treeStragtegy, SquaredError)
+        new BoostingStrategy(treeStrategy, SquaredError)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by boosting.")
     }

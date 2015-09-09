@@ -29,23 +29,22 @@ private[spark] sealed trait TaskLocation {
 /**
  * A location that includes both a host and an executor id on that host.
  */
-private [spark] case class ExecutorCacheTaskLocation(override val host: String,
-    val executorId: String) extends TaskLocation {
-}
+private [spark]
+case class ExecutorCacheTaskLocation(override val host: String, executorId: String)
+  extends TaskLocation
 
 /**
  * A location on a host.
  */
 private [spark] case class HostTaskLocation(override val host: String) extends TaskLocation {
-  override def toString = host
+  override def toString: String = host
 }
 
 /**
  * A location on a host that is cached by HDFS.
  */
-private [spark] case class HDFSCacheTaskLocation(override val host: String)
-    extends TaskLocation {
-  override def toString = TaskLocation.inMemoryLocationTag + host
+private [spark] case class HDFSCacheTaskLocation(override val host: String) extends TaskLocation {
+  override def toString: String = TaskLocation.inMemoryLocationTag + host
 }
 
 private[spark] object TaskLocation {
@@ -54,14 +53,16 @@ private[spark] object TaskLocation {
   // confusion.  See  RFC 952 and RFC 1123 for information about the format of hostnames.
   val inMemoryLocationTag = "hdfs_cache_"
 
-  def apply(host: String, executorId: String) = new ExecutorCacheTaskLocation(host, executorId)
+  def apply(host: String, executorId: String): TaskLocation = {
+    new ExecutorCacheTaskLocation(host, executorId)
+  }
 
   /**
    * Create a TaskLocation from a string returned by getPreferredLocations.
    * These strings have the form [hostname] or hdfs_cache_[hostname], depending on whether the
    * location is cached.
    */
-  def apply(str: String) = {
+  def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
     if (hstr.equals(str)) {
       new HostTaskLocation(str)

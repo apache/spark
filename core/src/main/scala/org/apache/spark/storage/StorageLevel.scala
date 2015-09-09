@@ -26,9 +26,9 @@ import org.apache.spark.util.Utils
 /**
  * :: DeveloperApi ::
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
- * or Tachyon, whether to drop the RDD to disk if it falls out of memory or Tachyon , whether to
- * keep the data in memory in a serialized format, and whether to replicate the RDD partitions on
- * multiple nodes.
+ * or ExternalBlockStore, whether to drop the RDD to disk if it falls out of memory or
+ * ExternalBlockStore, whether to keep the data in memory in a serialized format, and whether
+ * to replicate the RDD partitions on multiple nodes.
  *
  * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants
  * for commonly useful storage levels. To create your own storage level object, use the
@@ -50,11 +50,11 @@ class StorageLevel private(
 
   def this() = this(false, true, false, false)  // For deserialization
 
-  def useDisk = _useDisk
-  def useMemory = _useMemory
-  def useOffHeap = _useOffHeap
-  def deserialized = _deserialized
-  def replication = _replication
+  def useDisk: Boolean = _useDisk
+  def useMemory: Boolean = _useMemory
+  def useOffHeap: Boolean = _useOffHeap
+  def deserialized: Boolean = _deserialized
+  def replication: Int = _replication
 
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hash codes")
 
@@ -80,7 +80,7 @@ class StorageLevel private(
       false
   }
 
-  def isValid = (useMemory || useDisk || useOffHeap) && (replication > 0)
+  def isValid: Boolean = (useMemory || useDisk || useOffHeap) && (replication > 0)
 
   def toInt: Int = {
     var ret = 0
@@ -126,7 +126,7 @@ class StorageLevel private(
     var result = ""
     result += (if (useDisk) "Disk " else "")
     result += (if (useMemory) "Memory " else "")
-    result += (if (useOffHeap) "Tachyon " else "")
+    result += (if (useOffHeap) "ExternalBlockStore " else "")
     result += (if (deserialized) "Deserialized " else "Serialized ")
     result += s"${replication}x Replicated"
     result
@@ -183,7 +183,7 @@ object StorageLevel {
       useMemory: Boolean,
       useOffHeap: Boolean,
       deserialized: Boolean,
-      replication: Int) = {
+      replication: Int): StorageLevel = {
     getCachedStorageLevel(
       new StorageLevel(useDisk, useMemory, useOffHeap, deserialized, replication))
   }
@@ -197,7 +197,7 @@ object StorageLevel {
       useDisk: Boolean,
       useMemory: Boolean,
       deserialized: Boolean,
-      replication: Int = 1) = {
+      replication: Int = 1): StorageLevel = {
     getCachedStorageLevel(new StorageLevel(useDisk, useMemory, false, deserialized, replication))
   }
 

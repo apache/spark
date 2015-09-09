@@ -80,11 +80,13 @@ private[repl] trait SparkILoopInit {
     if (!initIsComplete)
       withLock { while (!initIsComplete) initLoopCondition.await() }
     if (initError != null) {
+      // scalastyle:off println
       println("""
         |Failed to initialize the REPL due to an unexpected error.
         |This is a bug, please, report it along with the error diagnostics printed below.
         |%s.""".stripMargin.format(initError)
       )
+      // scalastyle:on println
       false
     } else true
   }
@@ -127,7 +129,17 @@ private[repl] trait SparkILoopInit {
            _sc
          }
         """)
+      command("""
+         @transient val sqlContext = {
+           val _sqlContext = org.apache.spark.repl.Main.interp.createSQLContext()
+           println("SQL context available as sqlContext.")
+           _sqlContext
+         }
+        """)
       command("import org.apache.spark.SparkContext._")
+      command("import sqlContext.implicits._")
+      command("import sqlContext.sql")
+      command("import org.apache.spark.sql.functions._")
     }
   }
 

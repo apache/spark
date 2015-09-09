@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.beans.BeanInfo
@@ -23,6 +24,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
 
 @BeanInfo
@@ -63,28 +65,29 @@ object SimpleTextClassificationPipeline {
       .setOutputCol("features")
     val lr = new LogisticRegression()
       .setMaxIter(10)
-      .setRegParam(0.01)
+      .setRegParam(0.001)
     val pipeline = new Pipeline()
       .setStages(Array(tokenizer, hashingTF, lr))
 
     // Fit the pipeline to training documents.
-    val model = pipeline.fit(training)
+    val model = pipeline.fit(training.toDF())
 
     // Prepare test documents, which are unlabeled.
     val test = sc.parallelize(Seq(
       Document(4L, "spark i j k"),
       Document(5L, "l m n"),
-      Document(6L, "mapreduce spark"),
+      Document(6L, "spark hadoop spark"),
       Document(7L, "apache hadoop")))
 
     // Make predictions on test documents.
-    model.transform(test)
-      .select("id", "text", "score", "prediction")
+    model.transform(test.toDF())
+      .select("id", "text", "probability", "prediction")
       .collect()
-      .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
-        println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+      .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+        println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
 
     sc.stop()
   }
 }
+// scalastyle:on println

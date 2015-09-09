@@ -45,6 +45,7 @@ import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
@@ -130,6 +131,7 @@ class SparkILoop(
   // NOTE: Must be public for visibility
   @DeveloperApi
   var sparkContext: SparkContext = _
+  var sqlContext: SQLContext = _
 
   override def echoCommandMessage(msg: String) {
     intp.reporter printMessage msg
@@ -204,7 +206,8 @@ class SparkILoop(
         // e.g. file:/C:/my/path.jar -> C:/my/path.jar
         SparkILoop.getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
       } else {
-        SparkILoop.getAddedJars
+        // We need new URI(jar).getPath here for the case that `jar` includes encoded white space (%20).
+        SparkILoop.getAddedJars.map { jar => new URI(jar).getPath }
       }
     // work around for Scala bug
     val totalClassPath = addedJars.foldLeft(
@@ -978,7 +981,7 @@ class SparkILoop(
     // which spins off a separate thread, then print the prompt and try
     // our best to look ready.  The interlocking lazy vals tend to
     // inter-deadlock, so we break the cycle with a single asynchronous
-    // message to an actor.
+    // message to an rpcEndpoint.
     if (isAsync) {
       intp initialize initializedCallback()
       createAsyncListener() // listens for signal to run postInitialization
@@ -1005,15 +1008,32 @@ class SparkILoop(
     val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
-      .setAppName("Spark shell")
       .setJars(jars)
       .set("spark.repl.class.uri", intp.classServerUri)
+      .setIfMissing("spark.app.name", "Spark shell")
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
     sparkContext
+  }
+
+  @DeveloperApi
+  def createSQLContext(): SQLContext = {
+    val name = "org.apache.spark.sql.hive.HiveContext"
+    val loader = Utils.getContextOrSparkClassLoader
+    try {
+      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
+        .newInstance(sparkContext).asInstanceOf[SQLContext] 
+      logInfo("Created sql context (with Hive support)..")
+    }
+    catch {
+      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
+        sqlContext = new SQLContext(sparkContext)
+        logInfo("Created sql context..")
+    }
+    sqlContext
   }
 
   private def getMaster(): String = {
@@ -1045,15 +1065,16 @@ class SparkILoop(
   private def main(settings: Settings): Unit = process(settings)
 }
 
-object SparkILoop {
+object SparkILoop extends Logging {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
 
   def getAddedJars: Array[String] = {
     val envJars = sys.env.get("ADD_JARS")
-    val propJars = sys.props.get("spark.jars").flatMap { p =>
-      if (p == "") None else Some(p)
+    if (envJars.isDefined) {
+      logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
     }
+    val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
     val jars = propJars.orElse(envJars).getOrElse("")
     Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }
@@ -1080,7 +1101,9 @@ object SparkILoop {
             val s = super.readLine()
             // helping out by printing the line being interpreted.
             if (s != null)
+              // scalastyle:off println
               output.println(s)
+              // scalastyle:on println
             s
           }
         }
@@ -1089,7 +1112,7 @@ object SparkILoop {
         if (settings.classpath.isDefault)
           settings.classpath.value = sys.props("java.class.path")
 
-        getAddedJars.foreach(settings.classpath.append(_))
+        getAddedJars.map(jar => new URI(jar).getPath).foreach(settings.classpath.append(_))
 
         repl process settings
       }

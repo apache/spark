@@ -17,28 +17,16 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import java.io.File
+
+import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.util.Utils
 
-class CachedTableSuite extends QueryTest {
-  /**
-   * Throws a test failed exception when the number of cached tables differs from the expected
-   * number.
-   */
-  def assertCached(query: DataFrame, numCachedTables: Int = 1): Unit = {
-    val planWithCaching = query.queryExecution.withCachedData
-    val cachedData = planWithCaching collect {
-      case cached: InMemoryRelation => cached
-    }
-
-    assert(
-      cachedData.size == numCachedTables,
-      s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
-        planWithCaching)
-  }
+class CachedTableSuite extends QueryTest with TestHiveSingleton {
+  import hiveContext._
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = table(tableName).queryExecution.executedPlan
@@ -69,7 +57,7 @@ class CachedTableSuite extends QueryTest {
     checkAnswer(
       sql("SELECT * FROM src s"),
       preCacheResults)
-    
+
     uncacheTable("src")
     assertCached(sql("SELECT * FROM src"), 0)
   }
@@ -92,12 +80,12 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("Drop cached table") {
-    sql("CREATE TABLE test(a INT)")
-    cacheTable("test")
-    sql("SELECT * FROM test").collect()
-    sql("DROP TABLE test")
-    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
-      sql("SELECT * FROM test").collect()
+    sql("CREATE TABLE cachedTableTest(a INT)")
+    cacheTable("cachedTableTest")
+    sql("SELECT * FROM cachedTableTest").collect()
+    sql("DROP TABLE cachedTableTest")
+    intercept[AnalysisException] {
+      sql("SELECT * FROM cachedTableTest").collect()
     }
   }
 
@@ -107,18 +95,18 @@ class CachedTableSuite extends QueryTest {
 
   test("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
-      TestHive.uncacheTable("src")
+      hiveContext.uncacheTable("src")
     }
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' HiveQL statement") {
-    TestHive.sql("CACHE TABLE src")
+    sql("CACHE TABLE src")
     assertCached(table("src"))
-    assert(TestHive.isCached("src"), "Table 'src' should be cached")
+    assert(hiveContext.isCached("src"), "Table 'src' should be cached")
 
-    TestHive.sql("UNCACHE TABLE src")
+    sql("UNCACHE TABLE src")
     assertCached(table("src"), 0)
-    assert(!TestHive.isCached("src"), "Table 'src' should not be cached")
+    assert(!hiveContext.isCached("src"), "Table 'src' should not be cached")
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
@@ -169,5 +157,50 @@ class CachedTableSuite extends QueryTest {
     sql("CACHE TABLE udfTest AS SELECT * FROM src WHERE floor(key) = 1")
     assertCached(table("udfTest"))
     uncacheTable("udfTest")
+  }
+
+  test("REFRESH TABLE also needs to recache the data (data source tables)") {
+    val tempPath: File = Utils.createTempDir()
+    tempPath.delete()
+    table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
+    sql("DROP TABLE IF EXISTS refreshTable")
+    createExternalTable("refreshTable", tempPath.toString, "parquet")
+    checkAnswer(
+      table("refreshTable"),
+      table("src").collect())
+    // Cache the table.
+    sql("CACHE TABLE refreshTable")
+    assertCached(table("refreshTable"))
+    // Append new data.
+    table("src").write.mode(SaveMode.Append).parquet(tempPath.toString)
+    // We are still using the old data.
+    assertCached(table("refreshTable"))
+    checkAnswer(
+      table("refreshTable"),
+      table("src").collect())
+    // Refresh the table.
+    sql("REFRESH TABLE refreshTable")
+    // We are using the new data.
+    assertCached(table("refreshTable"))
+    checkAnswer(
+      table("refreshTable"),
+      table("src").unionAll(table("src")).collect())
+
+    // Drop the table and create it again.
+    sql("DROP TABLE refreshTable")
+    createExternalTable("refreshTable", tempPath.toString, "parquet")
+    // It is not cached.
+    assert(!isCached("refreshTable"), "refreshTable should not be cached.")
+    // Refresh the table. REFRESH TABLE command should not make a uncached
+    // table cached.
+    sql("REFRESH TABLE refreshTable")
+    checkAnswer(
+      table("refreshTable"),
+      table("src").unionAll(table("src")).collect())
+    // It is not cached.
+    assert(!isCached("refreshTable"), "refreshTable should not be cached.")
+
+    sql("DROP TABLE refreshTable")
+    Utils.deleteRecursively(tempPath)
   }
 }

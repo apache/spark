@@ -28,7 +28,6 @@ import org.apache.spark._
  * of them will be combined together, showed in one line.
  */
 private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
-
   // Carrige return
   val CR = '\r'
   // Update period of progress bar, in milliseconds
@@ -66,7 +65,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     val stageIds = sc.statusTracker.getActiveStageIds()
     val stages = stageIds.map(sc.statusTracker.getStageInfo).flatten.filter(_.numTasks() > 1)
       .filter(now - _.submissionTime() > FIRST_DELAY).sortBy(_.stageId())
-    if (stages.size > 0) {
+    if (stages.length > 0) {
       show(now, stages.take(3))  // display at most 3 stages in same time
     }
   }
@@ -82,7 +81,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
       val total = s.numTasks()
       val header = s"[Stage ${s.stageId()}:"
       val tailer = s"(${s.numCompletedTasks()} + ${s.numActiveTasks()}) / $total]"
-      val w = width - header.size - tailer.size
+      val w = width - header.length - tailer.length
       val bar = if (w > 0) {
         val percent = w * s.numCompletedTasks() / total
         (0 until w).map { i =>
@@ -121,4 +120,10 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     clear()
     lastFinishTime = System.currentTimeMillis()
   }
+
+  /**
+   * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
+   * SparkContext if it's not terminated.
+   */
+  def stop(): Unit = timer.cancel()
 }

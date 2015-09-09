@@ -15,11 +15,14 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import os
+import sys
 
 from pyspark import SparkContext
 from pyspark.sql import SQLContext
-from pyspark.sql import Row, StructField, StructType, StringType, IntegerType
+from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType
 
 
 if __name__ == "__main__":
@@ -31,7 +34,7 @@ if __name__ == "__main__":
                               Row(name="Smith", age=23),
                               Row(name="Sarah", age=18)])
     # Infer schema from the first row, create a DataFrame and print the schema
-    some_df = sqlContext.inferSchema(some_rdd)
+    some_df = sqlContext.createDataFrame(some_rdd)
     some_df.printSchema()
 
     # Another RDD is created from a list of tuples
@@ -40,7 +43,7 @@ if __name__ == "__main__":
     schema = StructType([StructField("person_name", StringType(), False),
                         StructField("person_age", IntegerType(), False)])
     # Create a DataFrame by applying the schema to the RDD and print the schema
-    another_df = sqlContext.applySchema(another_rdd, schema)
+    another_df = sqlContext.createDataFrame(another_rdd, schema)
     another_df.printSchema()
     # root
     #  |-- age: integer (nullable = true)
@@ -48,7 +51,11 @@ if __name__ == "__main__":
 
     # A JSON dataset is pointed to by path.
     # The path can be either a single text file or a directory storing text files.
-    path = os.path.join(os.environ['SPARK_HOME'], "examples/src/main/resources/people.json")
+    if len(sys.argv) < 2:
+        path = "file://" + \
+            os.path.join(os.environ['SPARK_HOME'], "examples/src/main/resources/people.json")
+    else:
+        path = sys.argv[1]
     # Create a DataFrame from the file(s) pointed to by path
     people = sqlContext.jsonFile(path)
     # root
@@ -68,6 +75,6 @@ if __name__ == "__main__":
     teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
     for each in teenagers.collect():
-        print each[0]
+        print(each[0])
 
     sc.stop()

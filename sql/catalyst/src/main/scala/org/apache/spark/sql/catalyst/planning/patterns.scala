@@ -17,34 +17,11 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import scala.annotation.tailrec
-
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-
-/**
- * A pattern that matches any number of filter operations on top of another relational operator.
- * Adjacent filter operators are collected and their conditions are broken up and returned as a
- * sequence of conjunctive predicates.
- *
- * @return A tuple containing a sequence of conjunctive predicates that should be used to filter the
- *         output and a relational operator.
- */
-object FilteredOperation extends PredicateHelper {
-  type ReturnType = (Seq[Expression], LogicalPlan)
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = Some(collectFilters(Nil, plan))
-
-  @tailrec
-  private def collectFilters(filters: Seq[Expression], plan: LogicalPlan): ReturnType = plan match {
-    case Filter(condition, child) =>
-      collectFilters(filters ++ splitConjunctivePredicates(condition), child)
-    case other => (filters, other)
-  }
-}
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -62,8 +39,9 @@ object PhysicalOperation extends PredicateHelper {
   }
 
   /**
-   * Collects projects and filters, in-lining/substituting aliases if necessary.  Here are two
-   * examples for alias in-lining/substitution.  Before:
+   * Collects all deterministic projects and filters, in-lining/substituting aliases if necessary.
+   * Here are two examples for alias in-lining/substitution.
+   * Before:
    * {{{
    *   SELECT c1 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
    *   SELECT c1 AS c2 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
@@ -74,15 +52,15 @@ object PhysicalOperation extends PredicateHelper {
    *   SELECT key AS c2 FROM t1 WHERE key > 10
    * }}}
    */
-  def collectProjectsAndFilters(plan: LogicalPlan):
+  private def collectProjectsAndFilters(plan: LogicalPlan):
       (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
     plan match {
-      case Project(fields, child) =>
+      case Project(fields, child) if fields.forall(_.deterministic) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case Filter(condition, child) =>
+      case Filter(condition, child) if condition.deterministic =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
@@ -91,16 +69,18 @@ object PhysicalOperation extends PredicateHelper {
         (None, Nil, other, Map.empty)
     }
 
-  def collectAliases(fields: Seq[Expression]) = fields.collect {
-    case a @ Alias(child, _) => a.toAttribute.asInstanceOf[Attribute] -> child
+  private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
+    case a @ Alias(child, _) => a.toAttribute -> child
   }.toMap
 
-  def substitute(aliases: Map[Attribute, Expression])(expr: Expression) = expr.transform {
-    case a @ Alias(ref: AttributeReference, name) =>
-      aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
+  private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
+    expr.transform {
+      case a @ Alias(ref: AttributeReference, name) =>
+        aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
 
-    case a: AttributeReference =>
-      aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+      case a: AttributeReference =>
+        aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+    }
   }
 }
 
@@ -127,10 +107,10 @@ object PartialAggregation {
     case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
       // Collect all aggregate expressions.
       val allAggregates =
-        aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a})
+        aggregateExpressions.flatMap(_ collect { case a: AggregateExpression1 => a})
       // Collect all aggregate expressions that can be computed partially.
       val partialAggregates =
-        aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p})
+        aggregateExpressions.flatMap(_ collect { case p: PartialAggregate1 => p})
 
       // Only do partial aggregation if supported by all aggregate expressions.
       if (allAggregates.size == partialAggregates.size) {
@@ -141,33 +121,28 @@ object PartialAggregation {
         // We need to pass all grouping expressions though so the grouping can happen a second
         // time. However some of them might be unnamed so we alias them allowing them to be
         // referenced in the second aggregation.
-        val namedGroupingExpressions: Map[Expression, NamedExpression] =
-          groupingExpressions.filter(!_.isInstanceOf[Literal]).map {
+        val namedGroupingExpressions: Seq[(Expression, NamedExpression)] =
+          groupingExpressions.map {
             case n: NamedExpression => (n, n)
             case other => (other, Alias(other, "PartialGroup")())
-          }.toMap
+          }
 
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
-        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformDown {
           case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
 
           case e: Expression =>
-            // Should trim aliases around `GetField`s. These aliases are introduced while
-            // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-            // (Should we just turn `GetField` into a `NamedExpression`?)
-            namedGroupingExpressions
-              .get(e.transform { case Alias(g: GetField, _) => g })
-              .map(_.toAttribute)
-              .getOrElse(e)
+            namedGroupingExpressions.collectFirst {
+              case (expr, ne) if expr semanticEquals e => ne.toAttribute
+            }.getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
 
-        val partialComputation =
-          (namedGroupingExpressions.values ++
-            partialEvaluations.values.flatMap(_.partialEvaluations)).toSeq
+        val partialComputation = namedGroupingExpressions.map(_._2) ++
+          partialEvaluations.values.flatMap(_.partialEvaluations)
 
-        val namedGroupingAttributes = namedGroupingExpressions.values.map(_.toAttribute).toSeq
+        val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
 
         Some(
           (namedGroupingAttributes,
@@ -187,7 +162,7 @@ object PartialAggregation {
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
-  /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
+  /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
@@ -198,8 +173,9 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // as join keys.
       val (joinPredicates, otherPredicates) =
         condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
-          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-            (canEvaluate(l, right) && canEvaluate(r, left)) => true
+          case EqualTo(l, r) =>
+            (canEvaluate(l, left) && canEvaluate(r, right)) ||
+            (canEvaluate(l, right) && canEvaluate(r, left))
           case _ => false
         }
 
@@ -207,10 +183,9 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
       }
-      val leftKeys = joinKeys.map(_._1)
-      val rightKeys = joinKeys.map(_._2)
 
       if (joinKeys.nonEmpty) {
+        val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
         Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
       } else {

@@ -41,11 +41,11 @@ package object trees extends Logging {
    * A [[TreeNode]] companion for reference equality for Hash based Collection.
    */
   class TreeNodeRef(val obj: TreeNode[_]) {
-    override def equals(o: Any) = o match {
+    override def equals(o: Any): Boolean = o match {
       case that: TreeNodeRef => that.obj.eq(obj)
       case _ => false
     }
 
-    override def hashCode = if (obj == null) 0 else obj.hashCode
+    override def hashCode: Int = if (obj == null) 0 else obj.hashCode
   }
 }

@@ -26,7 +26,7 @@ import org.apache.spark.Partition
   * @param host preferred kafka host, i.e. the leader at the time the rdd was created
   * @param port preferred kafka host's port
   */
-private[spark]
+private[kafka]
 class KafkaRDDPartition(
   val index: Int,
   val topic: String,
@@ -35,25 +35,7 @@ class KafkaRDDPartition(
   val untilOffset: Long,
   val host: String,
   val port: Int
-) extends Partition
-
-private[spark]
-object KafkaRDDPartition {
-  def apply(
-    index: Int,
-    topic: String,
-    partition: Int,
-    fromOffset: Long,
-    untilOffset: Long,
-    host: String,
-    port: Int
-  ): KafkaRDDPartition = new KafkaRDDPartition(
-    index,
-    topic,
-    partition,
-    fromOffset,
-    untilOffset,
-    host,
-    port
-  )
+) extends Partition {
+  /** Number of messages this partition refers to */
+  def count(): Long = untilOffset - fromOffset
 }

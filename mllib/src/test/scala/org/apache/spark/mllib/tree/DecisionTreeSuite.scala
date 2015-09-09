@@ -20,8 +20,7 @@ package org.apache.spark.mllib.tree
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -29,10 +28,16 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Strategy}
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
-import org.apache.spark.mllib.tree.model.{InformationGainStats, DecisionTreeModel, Node}
+import org.apache.spark.mllib.tree.model._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.Utils
 
-class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
+
+class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests examining individual elements of training
+  /////////////////////////////////////////////////////////////////////////////
 
   test("Binary classification with continuous features: split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
@@ -188,7 +193,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(splits.length === 2)
     assert(bins.length === 2)
     assert(splits(0).length === 3)
-    assert(bins(0).length === 6)
+    assert(bins(0).length === 0)
 
     // Expecting 2^2 - 1 = 3 bins/splits
     assert(splits(0)(0).feature === 0)
@@ -226,41 +231,6 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(splits(1)(2).categories.contains(0.0))
     assert(splits(1)(2).categories.contains(1.0))
 
-    // Check bins.
-
-    assert(bins(0)(0).category === Double.MinValue)
-    assert(bins(0)(0).lowSplit.categories.length === 0)
-    assert(bins(0)(0).highSplit.categories.length === 1)
-    assert(bins(0)(0).highSplit.categories.contains(0.0))
-    assert(bins(1)(0).category === Double.MinValue)
-    assert(bins(1)(0).lowSplit.categories.length === 0)
-    assert(bins(1)(0).highSplit.categories.length === 1)
-    assert(bins(1)(0).highSplit.categories.contains(0.0))
-
-    assert(bins(0)(1).category === Double.MinValue)
-    assert(bins(0)(1).lowSplit.categories.length === 1)
-    assert(bins(0)(1).lowSplit.categories.contains(0.0))
-    assert(bins(0)(1).highSplit.categories.length === 1)
-    assert(bins(0)(1).highSplit.categories.contains(1.0))
-    assert(bins(1)(1).category === Double.MinValue)
-    assert(bins(1)(1).lowSplit.categories.length === 1)
-    assert(bins(1)(1).lowSplit.categories.contains(0.0))
-    assert(bins(1)(1).highSplit.categories.length === 1)
-    assert(bins(1)(1).highSplit.categories.contains(1.0))
-
-    assert(bins(0)(2).category === Double.MinValue)
-    assert(bins(0)(2).lowSplit.categories.length === 1)
-    assert(bins(0)(2).lowSplit.categories.contains(1.0))
-    assert(bins(0)(2).highSplit.categories.length === 2)
-    assert(bins(0)(2).highSplit.categories.contains(1.0))
-    assert(bins(0)(2).highSplit.categories.contains(0.0))
-    assert(bins(1)(2).category === Double.MinValue)
-    assert(bins(1)(2).lowSplit.categories.length === 1)
-    assert(bins(1)(2).lowSplit.categories.contains(1.0))
-    assert(bins(1)(2).highSplit.categories.length === 2)
-    assert(bins(1)(2).highSplit.categories.contains(1.0))
-    assert(bins(1)(2).highSplit.categories.contains(0.0))
-
   }
 
   test("Multiclass classification with ordered categorical features: split and bin calculations") {
@@ -287,6 +257,165 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(bins(0).length === 0)
   }
 
+  test("Avoid aggregation on the last level") {
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)))
+    val input = sc.parallelize(arr)
+
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 1,
+      numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+
+    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
+
+    val topNode = Node.emptyNode(nodeIndex = 1)
+    assert(topNode.predict.predict === Double.MinValue)
+    assert(topNode.impurity === -1.0)
+    assert(topNode.isLeaf === false)
+
+    val nodesForGroup = Map((0, Array(topNode)))
+    val treeToNodeToIndexInfo = Map((0, Map(
+      (topNode.id, new RandomForest.NodeIndexInfo(0, None))
+    )))
+    val nodeQueue = new mutable.Queue[(Int, Node)]()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(topNode),
+      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
+
+    // don't enqueue leaf nodes into node queue
+    assert(nodeQueue.isEmpty)
+
+    // set impurity and predict for topNode
+    assert(topNode.predict.predict !== Double.MinValue)
+    assert(topNode.impurity !== -1.0)
+
+    // set impurity and predict for child nodes
+    assert(topNode.leftNode.get.predict.predict === 0.0)
+    assert(topNode.rightNode.get.predict.predict === 1.0)
+    assert(topNode.leftNode.get.impurity === 0.0)
+    assert(topNode.rightNode.get.impurity === 0.0)
+  }
+
+  test("Avoid aggregation if impurity is 0.0") {
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)))
+    val input = sc.parallelize(arr)
+
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+      numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+
+    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
+
+    val topNode = Node.emptyNode(nodeIndex = 1)
+    assert(topNode.predict.predict === Double.MinValue)
+    assert(topNode.impurity === -1.0)
+    assert(topNode.isLeaf === false)
+
+    val nodesForGroup = Map((0, Array(topNode)))
+    val treeToNodeToIndexInfo = Map((0, Map(
+      (topNode.id, new RandomForest.NodeIndexInfo(0, None))
+    )))
+    val nodeQueue = new mutable.Queue[(Int, Node)]()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(topNode),
+      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
+
+    // don't enqueue a node into node queue if its impurity is 0.0
+    assert(nodeQueue.isEmpty)
+
+    // set impurity and predict for topNode
+    assert(topNode.predict.predict !== Double.MinValue)
+    assert(topNode.impurity !== -1.0)
+
+    // set impurity and predict for child nodes
+    assert(topNode.leftNode.get.predict.predict === 0.0)
+    assert(topNode.rightNode.get.predict.predict === 1.0)
+    assert(topNode.leftNode.get.impurity === 0.0)
+    assert(topNode.rightNode.get.impurity === 0.0)
+  }
+
+  test("Second level node building with vs. without groups") {
+    val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
+    assert(arr.length === 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
+    val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    assert(splits.length === 2)
+    assert(splits(0).length === 99)
+    assert(bins.length === 2)
+    assert(bins(0).length === 100)
+
+    // Train a 1-node model
+    val strategyOneNode = new Strategy(Classification, Entropy, maxDepth = 1,
+      numClasses = 2, maxBins = 100)
+    val modelOneNode = DecisionTree.train(rdd, strategyOneNode)
+    val rootNode1 = modelOneNode.topNode.deepCopy()
+    val rootNode2 = modelOneNode.topNode.deepCopy()
+    assert(rootNode1.leftNode.nonEmpty)
+    assert(rootNode1.rightNode.nonEmpty)
+
+    val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
+
+    // Single group second level tree construction.
+    val nodesForGroup = Map((0, Array(rootNode1.leftNode.get, rootNode1.rightNode.get)))
+    val treeToNodeToIndexInfo = Map((0, Map(
+      (rootNode1.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)),
+      (rootNode1.rightNode.get.id, new RandomForest.NodeIndexInfo(1, None)))))
+    val nodeQueue = new mutable.Queue[(Int, Node)]()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode1),
+      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
+    val children1 = new Array[Node](2)
+    children1(0) = rootNode1.leftNode.get
+    children1(1) = rootNode1.rightNode.get
+
+    // Train one second-level node at a time.
+    val nodesForGroupA = Map((0, Array(rootNode2.leftNode.get)))
+    val treeToNodeToIndexInfoA = Map((0, Map(
+      (rootNode2.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
+    nodeQueue.clear()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
+      nodesForGroupA, treeToNodeToIndexInfoA, splits, bins, nodeQueue)
+    val nodesForGroupB = Map((0, Array(rootNode2.rightNode.get)))
+    val treeToNodeToIndexInfoB = Map((0, Map(
+      (rootNode2.rightNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
+    nodeQueue.clear()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
+      nodesForGroupB, treeToNodeToIndexInfoB, splits, bins, nodeQueue)
+    val children2 = new Array[Node](2)
+    children2(0) = rootNode2.leftNode.get
+    children2(1) = rootNode2.rightNode.get
+
+    // Verify whether the splits obtained using single group and multiple group level
+    // construction strategies are the same.
+    for (i <- 0 until 2) {
+      assert(children1(i).stats.nonEmpty && children1(i).stats.get.gain > 0)
+      assert(children2(i).stats.nonEmpty && children2(i).stats.get.gain > 0)
+      assert(children1(i).split === children2(i).split)
+      assert(children1(i).stats.nonEmpty && children2(i).stats.nonEmpty)
+      val stats1 = children1(i).stats.get
+      val stats2 = children2(i).stats.get
+      assert(stats1.gain === stats2.gain)
+      assert(stats1.impurity === stats2.impurity)
+      assert(stats1.leftImpurity === stats2.leftImpurity)
+      assert(stats1.rightImpurity === stats2.rightImpurity)
+      assert(children1(i).predict.predict === children2(i).predict.predict)
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests calling train()
+  /////////////////////////////////////////////////////////////////////////////
 
   test("Binary classification stump with ordered categorical features") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
@@ -471,76 +600,6 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(rootNode.predict.predict === 1)
   }
 
-  test("Second level node building with vs. without groups") {
-    val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
-    assert(arr.length === 1000)
-    val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
-    val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
-    assert(splits.length === 2)
-    assert(splits(0).length === 99)
-    assert(bins.length === 2)
-    assert(bins(0).length === 100)
-
-    // Train a 1-node model
-    val strategyOneNode = new Strategy(Classification, Entropy, maxDepth = 1,
-      numClasses = 2, maxBins = 100)
-    val modelOneNode = DecisionTree.train(rdd, strategyOneNode)
-    val rootNode1 = modelOneNode.topNode.deepCopy()
-    val rootNode2 = modelOneNode.topNode.deepCopy()
-    assert(rootNode1.leftNode.nonEmpty)
-    assert(rootNode1.rightNode.nonEmpty)
-
-    val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
-
-    // Single group second level tree construction.
-    val nodesForGroup = Map((0, Array(rootNode1.leftNode.get, rootNode1.rightNode.get)))
-    val treeToNodeToIndexInfo = Map((0, Map(
-      (rootNode1.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)),
-      (rootNode1.rightNode.get.id, new RandomForest.NodeIndexInfo(1, None)))))
-    val nodeQueue = new mutable.Queue[(Int, Node)]()
-    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode1),
-      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
-    val children1 = new Array[Node](2)
-    children1(0) = rootNode1.leftNode.get
-    children1(1) = rootNode1.rightNode.get
-
-    // Train one second-level node at a time.
-    val nodesForGroupA = Map((0, Array(rootNode2.leftNode.get)))
-    val treeToNodeToIndexInfoA = Map((0, Map(
-      (rootNode2.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
-    nodeQueue.clear()
-    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupA, treeToNodeToIndexInfoA, splits, bins, nodeQueue)
-    val nodesForGroupB = Map((0, Array(rootNode2.rightNode.get)))
-    val treeToNodeToIndexInfoB = Map((0, Map(
-      (rootNode2.rightNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
-    nodeQueue.clear()
-    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupB, treeToNodeToIndexInfoB, splits, bins, nodeQueue)
-    val children2 = new Array[Node](2)
-    children2(0) = rootNode2.leftNode.get
-    children2(1) = rootNode2.rightNode.get
-
-    // Verify whether the splits obtained using single group and multiple group level
-    // construction strategies are the same.
-    for (i <- 0 until 2) {
-      assert(children1(i).stats.nonEmpty && children1(i).stats.get.gain > 0)
-      assert(children2(i).stats.nonEmpty && children2(i).stats.get.gain > 0)
-      assert(children1(i).split === children2(i).split)
-      assert(children1(i).stats.nonEmpty && children2(i).stats.nonEmpty)
-      val stats1 = children1(i).stats.get
-      val stats2 = children2(i).stats.get
-      assert(stats1.gain === stats2.gain)
-      assert(stats1.impurity === stats2.impurity)
-      assert(stats1.leftImpurity === stats2.leftImpurity)
-      assert(stats1.rightImpurity === stats2.rightImpurity)
-      assert(children1(i).predict.predict === children2(i).predict.predict)
-    }
-  }
-
   test("Multiclass classification stump with 3-ary (unordered) categorical features") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
@@ -561,11 +620,11 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification stump with 1 continuous feature, to check off-by-1 error") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0))
-    arr(2) = new LabeledPoint(1.0, Vectors.dense(2.0))
-    arr(3) = new LabeledPoint(1.0, Vectors.dense(3.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(3.0)))
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClasses = 2)
@@ -577,11 +636,11 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification stump with 2 continuous features") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(3) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0))))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0)))))
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
@@ -701,11 +760,10 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("split must satisfy min instances per node requirements") {
-    val arr = new Array[LabeledPoint](3)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
-
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
       maxDepth = 2, numClasses = 2, minInstancesPerNode = 2)
@@ -728,11 +786,11 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   test("do not choose split that does not satisfy min instance per node requirements") {
     // if a split does not satisfy min instances per node requirements,
     // this split is invalid, even though the information gain of split is large.
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0, 1.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0, 1.0))
-    arr(2) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
-    arr(3) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)))
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
@@ -748,10 +806,10 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("split must satisfy min info gain requirements") {
-    val arr = new Array[LabeledPoint](3)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
 
     val input = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
@@ -772,94 +830,35 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(gain == InformationGainStats.invalidInformationGainStats)
   }
 
-  test("Avoid aggregation on the last level") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0))
-    arr(2) = new LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0))
-    arr(3) = new LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0))
-    val input = sc.parallelize(arr)
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests of model save/load
+  /////////////////////////////////////////////////////////////////////////////
 
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 1,
-      numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
-    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
-    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
-
-    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
-
-    val topNode = Node.emptyNode(nodeIndex = 1)
-    assert(topNode.predict.predict === Double.MinValue)
-    assert(topNode.impurity === -1.0)
-    assert(topNode.isLeaf === false)
-
-    val nodesForGroup = Map((0, Array(topNode)))
-    val treeToNodeToIndexInfo = Map((0, Map(
-      (topNode.id, new RandomForest.NodeIndexInfo(0, None))
-      )))
-    val nodeQueue = new mutable.Queue[(Int, Node)]()
-    DecisionTree.findBestSplits(baggedInput, metadata, Array(topNode),
-      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
-
-    // don't enqueue leaf nodes into node queue
-    assert(nodeQueue.isEmpty)
-
-    // set impurity and predict for topNode
-    assert(topNode.predict.predict !== Double.MinValue)
-    assert(topNode.impurity !== -1.0)
-
-    // set impurity and predict for child nodes
-    assert(topNode.leftNode.get.predict.predict === 0.0)
-    assert(topNode.rightNode.get.predict.predict === 1.0)
-    assert(topNode.leftNode.get.impurity === 0.0)
-    assert(topNode.rightNode.get.impurity === 0.0)
+  test("Node.subtreeIterator") {
+    val model = DecisionTreeSuite.createModel(Classification)
+    val nodeIds = model.topNode.subtreeIterator.map(_.id).toArray.sorted
+    assert(nodeIds === DecisionTreeSuite.createdModelNodeIds)
   }
 
-  test("Avoid aggregation if impurity is 0.0") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0))
-    arr(2) = new LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0))
-    arr(3) = new LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0))
-    val input = sc.parallelize(arr)
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
 
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
-      numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
-    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
-    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
-
-    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
-
-    val topNode = Node.emptyNode(nodeIndex = 1)
-    assert(topNode.predict.predict === Double.MinValue)
-    assert(topNode.impurity === -1.0)
-    assert(topNode.isLeaf === false)
-
-    val nodesForGroup = Map((0, Array(topNode)))
-    val treeToNodeToIndexInfo = Map((0, Map(
-      (topNode.id, new RandomForest.NodeIndexInfo(0, None))
-    )))
-    val nodeQueue = new mutable.Queue[(Int, Node)]()
-    DecisionTree.findBestSplits(baggedInput, metadata, Array(topNode),
-      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
-
-    // don't enqueue a node into node queue if its impurity is 0.0
-    assert(nodeQueue.isEmpty)
-
-    // set impurity and predict for topNode
-    assert(topNode.predict.predict !== Double.MinValue)
-    assert(topNode.impurity !== -1.0)
-
-    // set impurity and predict for child nodes
-    assert(topNode.leftNode.get.predict.predict === 0.0)
-    assert(topNode.rightNode.get.predict.predict === 1.0)
-    assert(topNode.leftNode.get.impurity === 0.0)
-    assert(topNode.rightNode.get.impurity === 0.0)
+    Array(Classification, Regression).foreach { algo =>
+      val model = DecisionTreeSuite.createModel(algo)
+      // Save model, load it back, and compare.
+      try {
+        model.save(sc, path)
+        val sameModel = DecisionTreeModel.load(sc, path)
+        DecisionTreeSuite.checkEqual(model, sameModel)
+      } finally {
+        Utils.deleteRecursively(tempDir)
+      }
+    }
   }
 }
 
-object DecisionTreeSuite {
+object DecisionTreeSuite extends SparkFunSuite {
 
   def validateClassifier(
       model: DecisionTreeModel,
@@ -979,4 +978,96 @@ object DecisionTreeSuite {
     arr
   }
 
+  /** Create a leaf node with the given node ID */
+  private def createLeafNode(id: Int): Node = {
+    Node(nodeIndex = id, new Predict(0.0, 1.0), impurity = 0.5, isLeaf = true)
+  }
+
+  /**
+   * Create an internal node with the given node ID and feature type.
+   * Note: This does NOT set the child nodes.
+   */
+  private def createInternalNode(id: Int, featureType: FeatureType): Node = {
+    val node = Node(nodeIndex = id, new Predict(0.0, 1.0), impurity = 0.5, isLeaf = false)
+    featureType match {
+      case Continuous =>
+        node.split = Some(new Split(feature = 0, threshold = 0.5, Continuous,
+          categories = List.empty[Double]))
+      case Categorical =>
+        node.split = Some(new Split(feature = 1, threshold = 0.0, Categorical,
+          categories = List(0.0, 1.0)))
+    }
+    // TODO: The information gain stats should be consistent with info in children: SPARK-7131
+    node.stats = Some(new InformationGainStats(gain = 0.1, impurity = 0.2,
+      leftImpurity = 0.3, rightImpurity = 0.4, new Predict(1.0, 0.4), new Predict(0.0, 0.6)))
+    node
+  }
+
+  /**
+   * Create a tree model.  This is deterministic and contains a variety of node and feature types.
+   * TODO: Update to be a correct tree (with matching probabilities, impurities, etc.): SPARK-7131
+   */
+  private[spark] def createModel(algo: Algo): DecisionTreeModel = {
+    val topNode = createInternalNode(id = 1, Continuous)
+    val (node2, node3) = (createLeafNode(id = 2), createInternalNode(id = 3, Categorical))
+    val (node6, node7) = (createLeafNode(id = 6), createLeafNode(id = 7))
+    topNode.leftNode = Some(node2)
+    topNode.rightNode = Some(node3)
+    node3.leftNode = Some(node6)
+    node3.rightNode = Some(node7)
+    new DecisionTreeModel(topNode, algo)
+  }
+
+  /** Sorted Node IDs matching the model returned by [[createModel()]] */
+  private val createdModelNodeIds = Array(1, 2, 3, 6, 7)
+
+  /**
+   * Check if the two trees are exactly the same.
+   * Note: I hesitate to override Node.equals since it could cause problems if users
+   *       make mistakes such as creating loops of Nodes.
+   * If the trees are not equal, this prints the two trees and throws an exception.
+   */
+  private[mllib] def checkEqual(a: DecisionTreeModel, b: DecisionTreeModel): Unit = {
+    try {
+      assert(a.algo === b.algo)
+      checkEqual(a.topNode, b.topNode)
+    } catch {
+      case ex: Exception =>
+        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
+          "TREE A:\n" + a.toDebugString + "\n" +
+          "TREE B:\n" + b.toDebugString + "\n", ex)
+    }
+  }
+
+  /**
+   * Return true iff the two nodes and their descendents are exactly the same.
+   * Note: I hesitate to override Node.equals since it could cause problems if users
+   *       make mistakes such as creating loops of Nodes.
+   */
+  private def checkEqual(a: Node, b: Node): Unit = {
+    assert(a.id === b.id)
+    assert(a.predict === b.predict)
+    assert(a.impurity === b.impurity)
+    assert(a.isLeaf === b.isLeaf)
+    assert(a.split === b.split)
+    (a.stats, b.stats) match {
+      // TODO: Check other fields besides the infomation gain.
+      case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
+      case (None, None) =>
+      case _ => throw new AssertionError(
+          s"Only one instance has stats defined. (a.stats: ${a.stats}, b.stats: ${b.stats})")
+    }
+    (a.leftNode, b.leftNode) match {
+      case (Some(aNode), Some(bNode)) => checkEqual(aNode, bNode)
+      case (None, None) =>
+      case _ => throw new AssertionError("Only one instance has leftNode defined. " +
+        s"(a.leftNode: ${a.leftNode}, b.leftNode: ${b.leftNode})")
+    }
+    (a.rightNode, b.rightNode) match {
+      case (Some(aNode: Node), Some(bNode: Node)) => checkEqual(aNode, bNode)
+      case (None, None) =>
+      case _ => throw new AssertionError("Only one instance has rightNode defined. " +
+        s"(a.rightNode: ${a.rightNode}, b.rightNode: ${b.rightNode})")
+    }
+  }
 }

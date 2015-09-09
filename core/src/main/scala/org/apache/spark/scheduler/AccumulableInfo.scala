@@ -24,23 +24,33 @@ import org.apache.spark.annotation.DeveloperApi
  * Information about an [[org.apache.spark.Accumulable]] modified during a task or stage.
  */
 @DeveloperApi
-class AccumulableInfo (
+class AccumulableInfo private[spark] (
     val id: Long,
     val name: String,
     val update: Option[String], // represents a partial update within a task
-    val value: String) {
+    val value: String,
+    val internal: Boolean) {
 
   override def equals(other: Any): Boolean = other match {
     case acc: AccumulableInfo =>
       this.id == acc.id && this.name == acc.name &&
-        this.update == acc.update && this.value == acc.value
+        this.update == acc.update && this.value == acc.value &&
+        this.internal == acc.internal
     case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(id, name, update, value, internal)
+    state.map(_.hashCode).reduceLeft(31 * _ + _)
   }
 }
 
 object AccumulableInfo {
-  def apply(id: Long, name: String, update: Option[String], value: String) =
-    new AccumulableInfo(id, name, update, value)
+  def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
+    new AccumulableInfo(id, name, update, value, internal = false)
+  }
 
-  def apply(id: Long, name: String, value: String) = new AccumulableInfo(id, name, None, value)
+  def apply(id: Long, name: String, value: String): AccumulableInfo = {
+    new AccumulableInfo(id, name, None, value, internal = false)
+  }
 }

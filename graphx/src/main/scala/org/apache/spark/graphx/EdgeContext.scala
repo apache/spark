@@ -49,3 +49,19 @@ abstract class EdgeContext[VD, ED, A] {
     et
   }
 }
+
+object EdgeContext {
+
+  /**
+   * Extractor mainly used for Graph#aggregateMessages*.
+   * Example:
+   * {{{
+   *  val messages = graph.aggregateMessages(
+   *    case ctx @ EdgeContext(_, _, _, _, attr) =>
+   *      ctx.sendToDst(attr)
+   *    , _ + _)
+   * }}}
+   */
+  def unapply[VD, ED, A](edge: EdgeContext[VD, ED, A]): Some[(VertexId, VertexId, VD, VD, ED)] =
+    Some(edge.srcId, edge.dstId, edge.srcAttr, edge.dstAttr, edge.attr)
+}

@@ -23,7 +23,8 @@ import org.apache.spark.util.Utils
 /**
  * Command-line parser for the master.
  */
-private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]) extends Logging {
+private[history] class HistoryServerArguments(conf: SparkConf, args: Array[String])
+  extends Logging {
   private var propertiesFile: String = null
 
   parse(args.toList)
@@ -55,6 +56,7 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
    Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
   private def printUsageAndExit(exitCode: Int) {
+    // scalastyle:off println
     System.err.println(
       """
       |Usage: HistoryServer [options]
@@ -83,6 +85,7 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
       |  spark.history.fs.updateInterval    How often to reload log data from storage
       |                                     (in seconds, default: 10)
       |""".stripMargin)
+    // scalastyle:on println
     System.exit(exitCode)
   }
 

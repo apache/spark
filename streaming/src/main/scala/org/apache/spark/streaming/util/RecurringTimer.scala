@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.util
 
 import org.apache.spark.Logging
+import org.apache.spark.util.{Clock, SystemClock}
 
 private[streaming]
 class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name: String)
@@ -38,7 +39,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
    * current system time.
    */
   def getStartTime(): Long = {
-    (math.floor(clock.currentTime.toDouble / period) + 1).toLong * period
+    (math.floor(clock.getTimeMillis().toDouble / period) + 1).toLong * period
   }
 
   /**
@@ -48,7 +49,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
    * more than current time.
    */
   def getRestartTime(originalStartTime: Long): Long = {
-    val gap = clock.currentTime - originalStartTime
+    val gap = clock.getTimeMillis() - originalStartTime
     (math.floor(gap.toDouble / period).toLong + 1) * period + originalStartTime
   }
 
@@ -105,7 +106,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 }
 
 private[streaming]
-object RecurringTimer {
+object RecurringTimer extends Logging {
 
   def main(args: Array[String]) {
     var lastRecurTime = 0L
@@ -113,7 +114,7 @@ object RecurringTimer {
 
     def onRecur(time: Long) {
       val currentTime = System.currentTimeMillis()
-      println("" + currentTime + ": " + (currentTime - lastRecurTime))
+      logInfo("" + currentTime + ": " + (currentTime - lastRecurTime))
       lastRecurTime = currentTime
     }
     val timer = new  RecurringTimer(new SystemClock(), period, onRecur, "Test")

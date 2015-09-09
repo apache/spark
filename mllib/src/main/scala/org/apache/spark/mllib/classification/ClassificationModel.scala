@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.annotation.Experimental
+import org.json4s.{DefaultFormats, JValue}
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.util.Loader
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * :: Experimental ::
@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Row}
  * belongs. The categories are represented by double values: 0.0, 1.0, 2.0, etc.
  */
 @Experimental
+@Since("0.8.0")
 trait ClassificationModel extends Serializable {
   /**
    * Predict values for the given data set using the model trained.
@@ -37,6 +38,7 @@ trait ClassificationModel extends Serializable {
    * @param testData RDD representing data points to be predicted
    * @return an RDD[Double] where each entry contains the corresponding prediction
    */
+  @Since("1.0.0")
   def predict(testData: RDD[Vector]): RDD[Double]
 
   /**
@@ -45,6 +47,7 @@ trait ClassificationModel extends Serializable {
    * @param testData array representing a single data point
    * @return predicted category from the trained model
    */
+  @Since("1.0.0")
   def predict(testData: Vector): Double
 
   /**
@@ -52,6 +55,7 @@ trait ClassificationModel extends Serializable {
    * @param testData JavaRDD representing data points to be predicted
    * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
    */
+  @Since("1.0.0")
   def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
     predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }
@@ -60,16 +64,10 @@ private[mllib] object ClassificationModel {
 
   /**
    * Helper method for loading GLM classification model metadata.
-   *
-   * @param modelClass  String name for model class (used for error messages)
    * @return (numFeatures, numClasses)
    */
-  def getNumFeaturesClasses(metadata: DataFrame, modelClass: String, path: String): (Int, Int) = {
-    metadata.select("numFeatures", "numClasses").take(1)(0) match {
-      case Row(nFeatures: Int, nClasses: Int) => (nFeatures, nClasses)
-      case _ => throw new Exception(s"$modelClass unable to load" +
-        s" numFeatures, numClasses from metadata: ${Loader.metadataPath(path)}")
-    }
+  def getNumFeaturesClasses(metadata: JValue): (Int, Int) = {
+    implicit val formats = DefaultFormats
+    ((metadata \ "numFeatures").extract[Int], (metadata \ "numClasses").extract[Int])
   }
-
 }

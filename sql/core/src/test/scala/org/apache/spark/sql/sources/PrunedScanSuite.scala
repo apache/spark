@@ -19,7 +19,9 @@ package org.apache.spark.sql.sources
 
 import scala.language.existentials
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 class PrunedScanSource extends RelationProvider {
@@ -31,14 +33,15 @@ class PrunedScanSource extends RelationProvider {
 }
 
 case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
-  extends PrunedScan {
+  extends BaseRelation
+  with PrunedScan {
 
-  override def schema =
+  override def schema: StructType =
     StructType(
       StructField("a", IntegerType, nullable = false) ::
       StructField("b", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan(requiredColumns: Array[String]) = {
+  override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
     val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)
@@ -49,10 +52,11 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
   }
 }
 
-class PrunedScanSuite extends DataSourceTest {
-  import caseInsensisitiveContext._
+class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     sql(
       """
         |CREATE TEMPORARY TABLE oneToTenPruned
@@ -130,7 +134,7 @@ class PrunedScanSuite extends DataSourceTest {
             queryExecution)
       }
 
-      if (rawOutput.size != expectedColumns.size) {
+      if (rawOutput.numFields != expectedColumns.size) {
         fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
       }
     }

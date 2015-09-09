@@ -17,15 +17,14 @@
 
 package org.apache.spark.storage
 
-import org.scalatest.FunSuite
-import org.apache.spark.Success
+import org.apache.spark.{SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 
 /**
  * Test the behavior of StorageStatusListener in response to all relevant events.
  */
-class StorageStatusListenerSuite extends FunSuite {
+class StorageStatusListenerSuite extends SparkFunSuite {
   private val bm1 = BlockManagerId("big", "dog", 1)
   private val bm2 = BlockManagerId("fat", "duck", 2)
   private val taskInfo1 = new TaskInfo(0, 0, 0, 0, "big", "dog", TaskLocality.ANY, false)

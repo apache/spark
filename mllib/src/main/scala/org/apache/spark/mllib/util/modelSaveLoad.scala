@@ -20,13 +20,13 @@ package org.apache.spark.mllib.util
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.fs.Path
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{DataType, StructType, StructField}
-
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * :: DeveloperApi ::
@@ -35,6 +35,7 @@ import org.apache.spark.sql.types.{DataType, StructType, StructField}
  * This should be inherited by the class which implements model instances.
  */
 @DeveloperApi
+@Since("1.3.0")
 trait Saveable {
 
   /**
@@ -48,8 +49,9 @@ trait Saveable {
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
-   *              This directory and any intermediate directory will be created if needed.
+   *              If the directory already exists, this method throws an exception.
    */
+  @Since("1.3.0")
   def save(sc: SparkContext, path: String): Unit
 
   /** Current version of model save/load format. */
@@ -64,6 +66,7 @@ trait Saveable {
  * This should be inherited by an object paired with the model class.
  */
 @DeveloperApi
+@Since("1.3.0")
 trait Loader[M <: Saveable] {
 
   /**
@@ -75,6 +78,7 @@ trait Loader[M <: Saveable] {
    * @param path  Path specifying the directory to which the model was saved.
    * @return  Model instance
    */
+  @Since("1.3.0")
   def load(sc: SparkContext, path: String): M
 
 }
@@ -110,7 +114,7 @@ private[mllib] object Loader {
       assert(loadedFields.contains(field.name), s"Unable to parse model data." +
         s"  Expected field with name ${field.name} was missing in loaded schema:" +
         s" ${loadedFields.mkString(", ")}")
-      assert(loadedFields(field.name) == field.dataType,
+      assert(loadedFields(field.name).sameType(field.dataType),
         s"Unable to parse model data.  Expected field $field but found field" +
           s" with different type: ${loadedFields(field.name)}")
     }
@@ -120,20 +124,11 @@ private[mllib] object Loader {
    * Load metadata from the given path.
    * @return (class name, version, metadata)
    */
-  def loadMetadata(sc: SparkContext, path: String): (String, String, DataFrame) = {
-    val sqlContext = new SQLContext(sc)
-    val metadata = sqlContext.jsonFile(metadataPath(path))
-    val (clazz, version) = try {
-      val metadataArray = metadata.select("class", "version").take(1)
-      assert(metadataArray.size == 1)
-      metadataArray(0) match {
-        case Row(clazz: String, version: String) => (clazz, version)
-      }
-    } catch {
-      case e: Exception =>
-        throw new Exception(s"Unable to load model metadata from: ${metadataPath(path)}")
-    }
+  def loadMetadata(sc: SparkContext, path: String): (String, String, JValue) = {
+    implicit val formats = DefaultFormats
+    val metadata = parse(sc.textFile(metadataPath(path)).first())
+    val clazz = (metadata \ "class").extract[String]
+    val version = (metadata \ "version").extract[String]
     (clazz, version, metadata)
   }
-
 }

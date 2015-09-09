@@ -17,9 +17,9 @@
 
 package org.apache.spark.metrics
 
-import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master.MasterSource
 import org.apache.spark.metrics.source.Source
 
@@ -27,7 +27,7 @@ import com.codahale.metrics.MetricRegistry
 
 import scala.collection.mutable.ArrayBuffer
 
-class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester{
+class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
   var filePath: String = _
   var conf: SparkConf = null
   var securityMgr: SecurityManager = null

@@ -99,7 +99,7 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
           case None => "(partial: " + initialValue + ")"
         }
       }
-      def getFinalValueInternal() = PartialResult.this.getFinalValueInternal().map(f)
+      def getFinalValueInternal(): Option[T] = PartialResult.this.getFinalValueInternal().map(f)
     }
   }
 

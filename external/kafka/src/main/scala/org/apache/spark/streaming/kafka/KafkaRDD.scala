@@ -17,16 +17,17 @@
 
 package org.apache.spark.streaming.kafka
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.partial.{PartialResult, BoundedDouble}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.NextIterator
 
-import java.util.Properties
 import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
-import kafka.consumer.{ConsumerConfig, SimpleConsumer}
+import kafka.consumer.SimpleConsumer
 import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
@@ -36,14 +37,12 @@ import kafka.utils.VerifiableProperties
  * Starting and ending offsets are specified in advance,
  * so that you can control exactly-once semantics.
  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
- * configuration parameters</a>.
- *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
- *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
- * @param batch Each KafkaRDDPartition in the batch corresponds to a
- *   range of offsets for a given Kafka topic/partition
+ * configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers" to be set
+ * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+ * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
  * @param messageHandler function for translating each message into the desired type
  */
-private[spark]
+private[kafka]
 class KafkaRDD[
   K: ClassTag,
   V: ClassTag,
@@ -61,6 +60,47 @@ class KafkaRDD[
         val (host, port) = leaders(TopicAndPartition(o.topic, o.partition))
         new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
     }.toArray
+  }
+
+  override def count(): Long = offsetRanges.map(_.count).sum
+
+  override def countApprox(
+      timeout: Long,
+      confidence: Double = 0.95
+  ): PartialResult[BoundedDouble] = {
+    val c = count
+    new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
+  }
+
+  override def isEmpty(): Boolean = count == 0L
+
+  override def take(num: Int): Array[R] = {
+    val nonEmptyPartitions = this.partitions
+      .map(_.asInstanceOf[KafkaRDDPartition])
+      .filter(_.count > 0)
+
+    if (num < 1 || nonEmptyPartitions.size < 1) {
+      return new Array[R](0)
+    }
+
+    // Determine in advance how many messages need to be taken from each partition
+    val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
+      val remain = num - result.values.sum
+      if (remain > 0) {
+        val taken = Math.min(remain, part.count)
+        result + (part.index -> taken.toInt)
+      } else {
+        result
+      }
+    }
+
+    val buf = new ArrayBuffer[R]
+    val res = context.runJob(
+      this,
+      (tc: TaskContext, it: Iterator[R]) => it.take(parts(tc.partitionId)).toArray,
+      parts.keys.toArray)
+    res.foreach(buf ++= _)
+    buf.toArray
   }
 
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
@@ -88,7 +128,7 @@ class KafkaRDD[
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
-      log.warn("Beginning offset ${part.fromOffset} is the same as ending offset " +
+      log.info(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
@@ -157,7 +197,11 @@ class KafkaRDD[
         .dropWhile(_.offset < requestOffset)
     }
 
-    override def close() = consumer.close()
+    override def close(): Unit = {
+      if (consumer != null) {
+        consumer.close()
+      }
+    }
 
     override def getNext(): R = {
       if (iter == null || !iter.hasNext) {
@@ -183,7 +227,7 @@ class KafkaRDD[
   }
 }
 
-private[spark]
+private[kafka]
 object KafkaRDD {
   import KafkaCluster.LeaderOffset
 
@@ -209,7 +253,7 @@ object KafkaRDD {
       fromOffsets: Map[TopicAndPartition, Long],
       untilOffsets: Map[TopicAndPartition, LeaderOffset],
       messageHandler: MessageAndMetadata[K, V] => R
-  ): KafkaRDD[K, V, U, T, R] = {
+    ): KafkaRDD[K, V, U, T, R] = {
     val leaders = untilOffsets.map { case (tp, lo) =>
         tp -> (lo.host, lo.port)
     }.toMap

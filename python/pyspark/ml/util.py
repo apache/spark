@@ -15,21 +15,22 @@
 # limitations under the License.
 #
 
+from functools import wraps
 import uuid
 
 
-def inherit_doc(cls):
-    for name, func in vars(cls).items():
-        # only inherit docstring for public functions
-        if name.startswith("_"):
-            continue
-        if not func.__doc__:
-            for parent in cls.__bases__:
-                parent_func = getattr(parent, name, None)
-                if parent_func and getattr(parent_func, "__doc__", None):
-                    func.__doc__ = parent_func.__doc__
-                    break
-    return cls
+def keyword_only(func):
+    """
+    A decorator that forces keyword arguments in the wrapped method
+    and saves actual input keyword arguments in `_input_kwargs`.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if len(args) > 1:
+            raise TypeError("Method %s forces keyword arguments." % func.__name__)
+        wrapper._input_kwargs = kwargs
+        return func(*args, **kwargs)
+    return wrapper
 
 
 class Identifiable(object):
@@ -38,9 +39,16 @@ class Identifiable(object):
     """
 
     def __init__(self):
-        #: A unique id for the object. The default implementation
-        #: concatenates the class name, "-", and 8 random hex chars.
-        self.uid = type(self).__name__ + "-" + uuid.uuid4().hex[:8]
+        #: A unique id for the object.
+        self.uid = self._randomUID()
 
     def __repr__(self):
         return self.uid
+
+    @classmethod
+    def _randomUID(cls):
+        """
+        Generate a unique id for the object. The default implementation
+        concatenates the class name, "_", and 12 random hex chars.
+        """
+        return cls.__name__ + "_" + uuid.uuid4().hex[12:]

@@ -30,8 +30,10 @@ except ImportError:
 
 class StatCounter(object):
 
-    def __init__(self, values=[]):
-        self.n = 0L    # Running count of our values
+    def __init__(self, values=None):
+        if values is None:
+            values = list()
+        self.n = 0    # Running count of our values
         self.mu = 0.0  # Running mean of our values
         self.m2 = 0.0  # Running variance numerator (sum of (x - mean)^2)
         self.maxValue = float("-inf")
@@ -87,7 +89,7 @@ class StatCounter(object):
         return copy.deepcopy(self)
 
     def count(self):
-        return self.n
+        return int(self.n)
 
     def mean(self):
         return self.mu

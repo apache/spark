@@ -19,19 +19,18 @@ package org.apache.spark.sql.columnar.compression
 
 import java.nio.ByteBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
-import org.apache.spark.sql.types.NativeType
+import org.apache.spark.sql.types.AtomicType
 
-class DictionaryEncodingSuite extends FunSuite {
-  testDictionaryEncoding(new IntColumnStats,    INT)
-  testDictionaryEncoding(new LongColumnStats,   LONG)
+class DictionaryEncodingSuite extends SparkFunSuite {
+  testDictionaryEncoding(new IntColumnStats, INT)
+  testDictionaryEncoding(new LongColumnStats, LONG)
   testDictionaryEncoding(new StringColumnStats, STRING)
 
-  def testDictionaryEncoding[T <: NativeType](
+  def testDictionaryEncoding[T <: AtomicType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T]) {
 

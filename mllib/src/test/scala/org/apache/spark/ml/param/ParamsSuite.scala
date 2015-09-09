@@ -17,23 +17,42 @@
 
 package org.apache.spark.ml.param
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class ParamsSuite extends FunSuite {
-
-  val solver = new TestParams()
-  import solver.{inputCol, maxIter}
+class ParamsSuite extends SparkFunSuite {
 
   test("param") {
+    val solver = new TestParams()
+    val uid = solver.uid
+    import solver.{maxIter, inputCol}
+
     assert(maxIter.name === "maxIter")
-    assert(maxIter.doc === "max number of iterations")
-    assert(maxIter.defaultValue.get === 100)
-    assert(maxIter.parent.eq(solver))
-    assert(maxIter.toString === "maxIter: max number of iterations (default: 100)")
-    assert(inputCol.defaultValue === None)
+    assert(maxIter.doc === "maximum number of iterations (>= 0)")
+    assert(maxIter.parent === uid)
+    assert(maxIter.toString === s"${uid}__maxIter")
+    assert(!maxIter.isValid(-1))
+    assert(maxIter.isValid(0))
+    assert(maxIter.isValid(1))
+
+    solver.setMaxIter(5)
+    assert(solver.explainParam(maxIter) ===
+      "maxIter: maximum number of iterations (>= 0) (default: 10, current: 5)")
+
+    assert(inputCol.toString === s"${uid}__inputCol")
+
+    intercept[java.util.NoSuchElementException] {
+      solver.getOrDefault(solver.handleInvalid)
+    }
+
+    intercept[IllegalArgumentException] {
+      solver.setMaxIter(-1)
+    }
   }
 
   test("param pair") {
+    val solver = new TestParams()
+    import solver.maxIter
+
     val pair0 = maxIter -> 5
     val pair1 = maxIter.w(5)
     val pair2 = ParamPair(maxIter, 5)
@@ -41,16 +60,24 @@ class ParamsSuite extends FunSuite {
       assert(pair.param.eq(maxIter))
       assert(pair.value === 5)
     }
+    intercept[IllegalArgumentException] {
+      val pair = maxIter -> -1
+    }
   }
 
   test("param map") {
+    val solver = new TestParams()
+    import solver.{maxIter, inputCol}
+
     val map0 = ParamMap.empty
 
     assert(!map0.contains(maxIter))
-    assert(map0(maxIter) === maxIter.defaultValue.get)
     map0.put(maxIter, 10)
     assert(map0.contains(maxIter))
     assert(map0(maxIter) === 10)
+    intercept[IllegalArgumentException] {
+      map0.put(maxIter, -1)
+    }
 
     assert(!map0.contains(inputCol))
     intercept[NoSuchElementException] {
@@ -78,31 +105,143 @@ class ParamsSuite extends FunSuite {
   }
 
   test("params") {
+    val solver = new TestParams()
+    import solver.{handleInvalid, maxIter, inputCol}
+
     val params = solver.params
-    assert(params.size === 2)
-    assert(params(0).eq(inputCol), "params must be ordered by name")
-    assert(params(1).eq(maxIter))
-    assert(solver.explainParams() === Seq(inputCol, maxIter).mkString("\n"))
+    assert(params.length === 3)
+    assert(params(0).eq(handleInvalid), "params must be ordered by name")
+    assert(params(1).eq(inputCol), "params must be ordered by name")
+    assert(params(2).eq(maxIter))
+
+    assert(!solver.isSet(maxIter))
+    assert(solver.isDefined(maxIter))
+    assert(solver.getMaxIter === 10)
+    solver.setMaxIter(100)
+    assert(solver.isSet(maxIter))
+    assert(solver.getMaxIter === 100)
+    assert(!solver.isSet(inputCol))
+    assert(!solver.isDefined(inputCol))
+    intercept[NoSuchElementException](solver.getInputCol)
+
+    assert(solver.explainParam(maxIter) ===
+      "maxIter: maximum number of iterations (>= 0) (default: 10, current: 100)")
+    assert(solver.explainParams() ===
+      Seq(handleInvalid, inputCol, maxIter).map(solver.explainParam).mkString("\n"))
+
     assert(solver.getParam("inputCol").eq(inputCol))
     assert(solver.getParam("maxIter").eq(maxIter))
-    intercept[NoSuchMethodException] {
+    assert(solver.hasParam("inputCol"))
+    assert(!solver.hasParam("abc"))
+    intercept[NoSuchElementException] {
       solver.getParam("abc")
     }
-    assert(!solver.isSet(inputCol))
+
     intercept[IllegalArgumentException] {
-      solver.validate()
+      solver.validateParams()
     }
-    solver.validate(ParamMap(inputCol -> "input"))
+    solver.copy(ParamMap(inputCol -> "input")).validateParams()
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
+    assert(solver.isDefined(inputCol))
     assert(solver.getInputCol === "input")
-    solver.validate()
+    solver.validateParams()
     intercept[IllegalArgumentException] {
-      solver.validate(ParamMap(maxIter -> -10))
+      ParamMap(maxIter -> -10)
     }
-    solver.setMaxIter(-10)
     intercept[IllegalArgumentException] {
-      solver.validate()
+      solver.setMaxIter(-10)
     }
+
+    solver.clearMaxIter()
+    assert(!solver.isSet(maxIter))
+
+    val copied = solver.copy(ParamMap(solver.maxIter -> 50))
+    assert(copied.uid === solver.uid)
+    assert(copied.getInputCol === solver.getInputCol)
+    assert(copied.getMaxIter === 50)
+  }
+
+  test("ParamValidate") {
+    val alwaysTrue = ParamValidators.alwaysTrue[Int]
+    assert(alwaysTrue(1))
+
+    val gt1Int = ParamValidators.gt[Int](1)
+    assert(!gt1Int(1) && gt1Int(2))
+    val gt1Double = ParamValidators.gt[Double](1)
+    assert(!gt1Double(1.0) && gt1Double(1.1))
+
+    val gtEq1Int = ParamValidators.gtEq[Int](1)
+    assert(!gtEq1Int(0) && gtEq1Int(1))
+    val gtEq1Double = ParamValidators.gtEq[Double](1)
+    assert(!gtEq1Double(0.9) && gtEq1Double(1.0))
+
+    val lt1Int = ParamValidators.lt[Int](1)
+    assert(lt1Int(0) && !lt1Int(1))
+    val lt1Double = ParamValidators.lt[Double](1)
+    assert(lt1Double(0.9) && !lt1Double(1.0))
+
+    val ltEq1Int = ParamValidators.ltEq[Int](1)
+    assert(ltEq1Int(1) && !ltEq1Int(2))
+    val ltEq1Double = ParamValidators.ltEq[Double](1)
+    assert(ltEq1Double(1.0) && !ltEq1Double(1.1))
+
+    val inRange02IntInclusive = ParamValidators.inRange[Int](0, 2)
+    assert(inRange02IntInclusive(0) && inRange02IntInclusive(1) && inRange02IntInclusive(2) &&
+      !inRange02IntInclusive(-1) && !inRange02IntInclusive(3))
+    val inRange02IntExclusive =
+      ParamValidators.inRange[Int](0, 2, lowerInclusive = false, upperInclusive = false)
+    assert(!inRange02IntExclusive(0) && inRange02IntExclusive(1) && !inRange02IntExclusive(2))
+
+    val inRange02DoubleInclusive = ParamValidators.inRange[Double](0, 2)
+    assert(inRange02DoubleInclusive(0) && inRange02DoubleInclusive(1) &&
+      inRange02DoubleInclusive(2) &&
+      !inRange02DoubleInclusive(-0.1) && !inRange02DoubleInclusive(2.1))
+    val inRange02DoubleExclusive =
+      ParamValidators.inRange[Double](0, 2, lowerInclusive = false, upperInclusive = false)
+    assert(!inRange02DoubleExclusive(0) && inRange02DoubleExclusive(1) &&
+      !inRange02DoubleExclusive(2))
+
+    val inArray = ParamValidators.inArray[Int](Array(1, 2))
+    assert(inArray(1) && inArray(2) && !inArray(0))
+
+    val arrayLengthGt = ParamValidators.arrayLengthGt[Int](2.0)
+    assert(arrayLengthGt(Array(0, 1, 2)) && !arrayLengthGt(Array(0, 1)))
+  }
+
+  test("Params.copyValues") {
+    val t = new TestParams()
+    val t2 = t.copy(ParamMap.empty)
+    assert(!t2.isSet(t2.maxIter))
+    val t3 = t.copy(ParamMap(t.maxIter -> 20))
+    assert(t3.isSet(t3.maxIter))
+  }
+}
+
+object ParamsSuite extends SparkFunSuite {
+
+  /**
+   * Checks common requirements for [[Params.params]]:
+   *   - params are ordered by names
+   *   - param parent has the same UID as the object's UID
+   *   - param name is the same as the param method name
+   *   - obj.copy should return the same type as the obj
+   */
+  def checkParams(obj: Params): Unit = {
+    val clazz = obj.getClass
+
+    val params = obj.params
+    val paramNames = params.map(_.name)
+    require(paramNames === paramNames.sorted, "params must be ordered by names")
+    params.foreach { p =>
+      assert(p.parent === obj.uid)
+      assert(obj.getParam(p.name) === p)
+      // TODO: Check that setters return self, which needs special handling for generic types.
+    }
+
+    val copyMethod = clazz.getMethod("copy", classOf[ParamMap])
+    val copyReturnType = copyMethod.getReturnType
+    require(copyReturnType === obj.getClass,
+      s"${clazz.getName}.copy should return ${clazz.getName} instead of ${copyReturnType.getName}.")
   }
 }

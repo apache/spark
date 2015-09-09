@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-private[spark] object DriverState extends Enumeration {
+private[deploy] object DriverState extends Enumeration {
 
   type DriverState = Value
 

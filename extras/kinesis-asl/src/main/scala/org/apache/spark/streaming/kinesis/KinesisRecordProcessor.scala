@@ -18,24 +18,23 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.List
 
-import scala.collection.JavaConversions.asScalaBuffer
 import scala.util.Random
+import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
-
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.InvalidStateException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.KinesisClientLibDependencyException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.ThrottlingException
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
+
+import org.apache.spark.Logging
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
  * This implementation operates on the Array[Byte] from the KinesisReceiver.
- * The Kinesis Worker creates an instance of this KinesisRecordProcessor upon startup.
+ * The Kinesis Worker creates an instance of this KinesisRecordProcessor for each
+ *   shard in the Kinesis stream upon startup.  This is normally done in separate threads,
+ *   but the KCLs within the KinesisReceivers will balance themselves out if you create
+ *   multiple Receivers.
  *
  * @param receiver Kinesis receiver
  * @param workerId for logging purposes
@@ -47,8 +46,9 @@ private[kinesis] class KinesisRecordProcessor(
     workerId: String,
     checkpointState: KinesisCheckpointState) extends IRecordProcessor with Logging {
 
-  /* shardId to be populated during initialize() */
-  var shardId: String = _
+  // shardId to be populated during initialize()
+  @volatile
+  private var shardId: String = _
 
   /**
    * The Kinesis Client Library calls this method during IRecordProcessor initialization.
@@ -56,8 +56,8 @@ private[kinesis] class KinesisRecordProcessor(
    * @param shardId assigned by the KCL to this particular RecordProcessor.
    */
   override def initialize(shardId: String) {
-    logInfo(s"Initialize:  Initializing workerId $workerId with shardId $shardId")
     this.shardId = shardId
+    logInfo(s"Initialized workerId $workerId with shardId $shardId")
   }
 
   /**
@@ -66,48 +66,44 @@ private[kinesis] class KinesisRecordProcessor(
    * and Spark Streaming's Receiver.store().
    *
    * @param batch list of records from the Kinesis stream shard
-   * @param checkpointer used to update Kinesis when this batch has been processed/stored 
+   * @param checkpointer used to update Kinesis when this batch has been processed/stored
    *   in the DStream
    */
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
     if (!receiver.isStopped()) {
       try {
-        /*
-         * Note:  If we try to store the raw ByteBuffer from record.getData(), the Spark Streaming
-         * Receiver.store(ByteBuffer) attempts to deserialize the ByteBuffer using the
-         *   internally-configured Spark serializer (kryo, etc).
-         * This is not desirable, so we instead store a raw Array[Byte] and decouple
-         *   ourselves from Spark's internal serialization strategy.
-         */
-        batch.foreach(record => receiver.store(record.getData().array()))
-        
-        logDebug(s"Stored:  Worker $workerId stored ${batch.size} records for shardId $shardId")
+        receiver.addRecords(shardId, batch)
+        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
 
         /*
-         * Checkpoint the sequence number of the last record successfully processed/stored 
-         *   in the batch.
-         * In this implementation, we're checkpointing after the given checkpointIntervalMillis.
-         * Note that this logic requires that processRecords() be called AND that it's time to 
-         *   checkpoint.  I point this out because there is no background thread running the 
-         *   checkpointer.  Checkpointing is tested and trigger only when a new batch comes in.
-         * If the worker is shutdown cleanly, checkpoint will happen (see shutdown() below).
-         * However, if the worker dies unexpectedly, a checkpoint may not happen.
-         * This could lead to records being processed more than once.
+         *
+         * Checkpoint the sequence number of the last record successfully stored.
+         * Note that in this current implementation, the checkpointing occurs only when after
+         * checkpointIntervalMillis from the last checkpoint, AND when there is new record
+         * to process. This leads to the checkpointing lagging behind what records have been
+         * stored by the receiver. Ofcourse, this can lead records processed more than once,
+         * under failures and restarts.
+         *
+         * TODO: Instead of checkpointing here, run a separate timer task to perform
+         * checkpointing so that it checkpoints in a timely manner independent of whether
+         * new records are available or not.
          */
         if (checkpointState.shouldCheckpoint()) {
-          /* Perform the checkpoint */
-          KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
+          receiver.getLatestSeqNumToCheckpoint(shardId).foreach { latestSeqNum =>
+            /* Perform the checkpoint */
+            KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(latestSeqNum), 4, 100)
 
-          /* Update the next checkpoint time */
-          checkpointState.advanceCheckpoint()
+            /* Update the next checkpoint time */
+            checkpointState.advanceCheckpoint()
 
-          logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint of ${batch.size}" +
+            logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint of ${batch.size}" +
               s" records for shardId $shardId")
-          logDebug(s"Checkpoint:  Next checkpoint is at " +
-              s" ${checkpointState.checkpointClock.currentTime()} for shardId $shardId")
+            logDebug(s"Checkpoint:  Next checkpoint is at " +
+              s" ${checkpointState.checkpointClock.getTimeMillis()} for shardId $shardId")
+          }
         }
       } catch {
-        case e: Throwable => {
+        case NonFatal(e) => {
           /*
            *  If there is a failure within the batch, the batch will not be checkpointed.
            *  This will potentially cause records since the last checkpoint to be processed
@@ -116,22 +112,22 @@ private[kinesis] class KinesisRecordProcessor(
           logError(s"Exception:  WorkerId $workerId encountered and exception while storing " +
               " or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
 
-          /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor.*/
+          /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor. */
           throw e
         }
       }
     } else {
       /* RecordProcessor has been stopped. */
-      logInfo(s"Stopped:  The Spark KinesisReceiver has stopped for workerId $workerId" + 
+      logInfo(s"Stopped:  KinesisReceiver has stopped for workerId $workerId" +
           s" and shardId $shardId.  No more records will be processed.")
     }
   }
 
   /**
    * Kinesis Client Library is shutting down this Worker for 1 of 2 reasons:
-   * 1) the stream is resharding by splitting or merging adjacent shards 
+   * 1) the stream is resharding by splitting or merging adjacent shards
    *     (ShutdownReason.TERMINATE)
-   * 2) the failed or latent Worker has stopped sending heartbeats for whatever reason 
+   * 2) the failed or latent Worker has stopped sending heartbeats for whatever reason
    *     (ShutdownReason.ZOMBIE)
    *
    * @param checkpointer used to perform a Kinesis checkpoint for ShutdownReason.TERMINATE
@@ -145,8 +141,12 @@ private[kinesis] class KinesisRecordProcessor(
        * Checkpoint to indicate that all records from the shard have been drained and processed.
        * It's now OK to read from the new shards that resulted from a resharding event.
        */
-      case ShutdownReason.TERMINATE => 
-        KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
+      case ShutdownReason.TERMINATE =>
+        val latestSeqNumToCheckpointOption = receiver.getLatestSeqNumToCheckpoint(shardId)
+        if (latestSeqNumToCheckpointOption.nonEmpty) {
+          KinesisRecordProcessor.retryRandom(
+            checkpointer.checkpoint(latestSeqNumToCheckpointOption.get), 4, 100)
+        }
 
       /*
        * ZOMBIE Use Case.  NoOp.
@@ -190,7 +190,7 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
                logError(s"Retryable Exception:  Random backOffMillis=${backOffMillis}", e)
                retryRandom(expression, numRetriesLeft - 1, maxBackOffMillis)
              }
-        /* Throw:  Shutdown has been requested by the Kinesis Client Library.*/
+        /* Throw:  Shutdown has been requested by the Kinesis Client Library. */
         case _: ShutdownException => {
           logError(s"ShutdownException:  Caught shutdown exception, skipping checkpoint.", e)
           throw e

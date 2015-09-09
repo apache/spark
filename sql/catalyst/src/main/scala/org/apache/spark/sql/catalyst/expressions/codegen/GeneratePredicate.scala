@@ -17,32 +17,54 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
- * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[Row]].
+ * Interface for generated predicate
  */
-object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
-  import scala.reflect.runtime.{universe => ru}
-  import scala.reflect.runtime.universe._
+abstract class Predicate {
+  def eval(r: InternalRow): Boolean
+}
 
-  protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer(in)
+/**
+ * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[InternalRow]].
+ */
+object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Boolean] {
+
+  protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
   protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
     BindReferences.bindReference(in, inputSchema)
 
-  protected def create(predicate: Expression): ((Row) => Boolean) = {
-    val cEval = expressionEvaluator(predicate)
+  protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
+    val ctx = newCodeGenContext()
+    val eval = predicate.gen(ctx)
+    val code = s"""
+      public SpecificPredicate generate($exprType[] expr) {
+        return new SpecificPredicate(expr);
+      }
 
-    val code =
-      q"""
-        (i: $rowType) => {
-          ..${cEval.code}
-          if (${cEval.nullTerm}) false else ${cEval.primitiveTerm}
+      class SpecificPredicate extends ${classOf[Predicate].getName} {
+        private final $exprType[] expressions;
+        ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
+
+        public SpecificPredicate($exprType[] expr) {
+          expressions = expr;
+          ${initMutableStates(ctx)}
         }
-      """
 
-    log.debug(s"Generated predicate '$predicate':\n$code")
-    toolBox.eval(code).asInstanceOf[Row => Boolean]
+        @Override
+        public boolean eval(InternalRow i) {
+          ${eval.code}
+          return !${eval.isNull} && ${eval.primitive};
+        }
+      }"""
+
+    logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
+
+    val p = compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
+    (r: InternalRow) => p.eval(r)
   }
 }

@@ -17,117 +17,125 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.NativeType
-
-
-/**
- * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
- * a value through a primitive function implicitly marks that column as not null.
- */
-trait MutableRow extends Row {
-  def setNullAt(i: Int): Unit
-
-  def update(ordinal: Int, value: Any)
-
-  def setInt(ordinal: Int, value: Int)
-  def setLong(ordinal: Int, value: Long)
-  def setDouble(ordinal: Int, value: Double)
-  def setBoolean(ordinal: Int, value: Boolean)
-  def setShort(ordinal: Int, value: Short)
-  def setByte(ordinal: Int, value: Byte)
-  def setFloat(ordinal: Int, value: Float)
-  def setString(ordinal: Int, value: String)
-}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
- * A row with no data.  Calling any methods will result in an error.  Can be used as a placeholder.
+ * An extended version of [[InternalRow]] that implements all special getters, toString
+ * and equals/hashCode by `genericGet`.
  */
-object EmptyRow extends Row {
-  override def apply(i: Int): Any = throw new UnsupportedOperationException
-  override def toSeq = Seq.empty
-  override def length = 0
-  override def isNullAt(i: Int): Boolean = throw new UnsupportedOperationException
-  override def getInt(i: Int): Int = throw new UnsupportedOperationException
-  override def getLong(i: Int): Long = throw new UnsupportedOperationException
-  override def getDouble(i: Int): Double = throw new UnsupportedOperationException
-  override def getFloat(i: Int): Float = throw new UnsupportedOperationException
-  override def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
-  override def getShort(i: Int): Short = throw new UnsupportedOperationException
-  override def getByte(i: Int): Byte = throw new UnsupportedOperationException
-  override def getString(i: Int): String = throw new UnsupportedOperationException
-  override def getAs[T](i: Int): T = throw new UnsupportedOperationException
-  def copy() = this
-}
+trait BaseGenericInternalRow extends InternalRow {
 
-/**
- * A row implementation that uses an array of objects as the underlying storage.  Note that, while
- * the array is not copied, and thus could technically be mutated after creation, this is not
- * allowed.
- */
-class GenericRow(protected[sql] val values: Array[Any]) extends Row {
-  /** No-arg constructor for serialization. */
-  def this() = this(null)
+  protected def genericGet(ordinal: Int): Any
 
-  def this(size: Int) = this(new Array[Any](size))
+  // default implementation (slow)
+  private def getAs[T](ordinal: Int) = genericGet(ordinal).asInstanceOf[T]
+  override def isNullAt(ordinal: Int): Boolean = getAs[AnyRef](ordinal) eq null
+  override def get(ordinal: Int, dataType: DataType): AnyRef = getAs(ordinal)
+  override def getBoolean(ordinal: Int): Boolean = getAs(ordinal)
+  override def getByte(ordinal: Int): Byte = getAs(ordinal)
+  override def getShort(ordinal: Int): Short = getAs(ordinal)
+  override def getInt(ordinal: Int): Int = getAs(ordinal)
+  override def getLong(ordinal: Int): Long = getAs(ordinal)
+  override def getFloat(ordinal: Int): Float = getAs(ordinal)
+  override def getDouble(ordinal: Int): Double = getAs(ordinal)
+  override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
+  override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
+  override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
+  override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
+  override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
+  override def getMap(ordinal: Int): MapData = getAs(ordinal)
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
 
-  override def toSeq = values.toSeq
-
-  override def length = values.length
-
-  override def apply(i: Int) = values(i)
-
-  override def isNullAt(i: Int) = values(i) == null
-
-  override def getInt(i: Int): Int = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive int value.")
-    values(i).asInstanceOf[Int]
+  override def anyNull: Boolean = {
+    val len = numFields
+    var i = 0
+    while (i < len) {
+      if (isNullAt(i)) { return true }
+      i += 1
+    }
+    false
   }
 
-  override def getLong(i: Int): Long = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive long value.")
-    values(i).asInstanceOf[Long]
+  override def toString: String = {
+    if (numFields == 0) {
+      "[empty row]"
+    } else {
+      val sb = new StringBuilder
+      sb.append("[")
+      sb.append(genericGet(0))
+      val len = numFields
+      var i = 1
+      while (i < len) {
+        sb.append(",")
+        sb.append(genericGet(i))
+        i += 1
+      }
+      sb.append("]")
+      sb.toString()
+    }
   }
 
-  override def getDouble(i: Int): Double = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive double value.")
-    values(i).asInstanceOf[Double]
-  }
+  override def equals(o: Any): Boolean = {
+    if (!o.isInstanceOf[BaseGenericInternalRow]) {
+      return false
+    }
 
-  override def getFloat(i: Int): Float = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive float value.")
-    values(i).asInstanceOf[Float]
-  }
+    val other = o.asInstanceOf[BaseGenericInternalRow]
+    if (other eq null) {
+      return false
+    }
 
-  override def getBoolean(i: Int): Boolean = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive boolean value.")
-    values(i).asInstanceOf[Boolean]
-  }
+    val len = numFields
+    if (len != other.numFields) {
+      return false
+    }
 
-  override def getShort(i: Int): Short = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive short value.")
-    values(i).asInstanceOf[Short]
-  }
-
-  override def getByte(i: Int): Byte = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive byte value.")
-    values(i).asInstanceOf[Byte]
-  }
-
-  override def getString(i: Int): String = {
-    values(i).asInstanceOf[String]
+    var i = 0
+    while (i < len) {
+      if (isNullAt(i) != other.isNullAt(i)) {
+        return false
+      }
+      if (!isNullAt(i)) {
+        val o1 = genericGet(i)
+        val o2 = other.genericGet(i)
+        o1 match {
+          case b1: Array[Byte] =>
+            if (!o2.isInstanceOf[Array[Byte]] ||
+              !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+              return false
+            }
+          case f1: Float if java.lang.Float.isNaN(f1) =>
+            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+              return false
+            }
+          case d1: Double if java.lang.Double.isNaN(d1) =>
+            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
+              return false
+            }
+          case _ => if (o1 != o2) {
+            return false
+          }
+        }
+      }
+      i += 1
+    }
+    true
   }
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
     var result: Int = 37
-
     var i = 0
-    while (i < values.length) {
+    val len = numFields
+    while (i < len) {
       val update: Int =
         if (isNullAt(i)) {
           0
         } else {
-          apply(i) match {
+          genericGet(i) match {
             case b: Boolean => if (b) 0 else 1
             case b: Byte => b.toInt
             case s: Short => s.toInt
@@ -137,6 +145,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
             case d: Double =>
               val b = java.lang.Double.doubleToLongBits(d)
               (b ^ (b >>> 32)).toInt
+            case a: Array[Byte] => java.util.Arrays.hashCode(a)
             case other => other.hashCode()
           }
         }
@@ -145,62 +154,111 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     }
     result
   }
-
-  def copy() = this
 }
 
-class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
+/**
+ * An extended interface to [[InternalRow]] that allows the values for each column to be updated.
+ * Setting a value through a primitive function implicitly marks that column as not null.
+ */
+abstract class MutableRow extends InternalRow {
+  def setNullAt(i: Int): Unit
+
+  def update(i: Int, value: Any)
+
+  // default implementation (slow)
+  def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
+  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
+  def setShort(i: Int, value: Short): Unit = { update(i, value) }
+  def setInt(i: Int, value: Int): Unit = { update(i, value) }
+  def setLong(i: Int, value: Long): Unit = { update(i, value) }
+  def setFloat(i: Int, value: Float): Unit = { update(i, value) }
+  def setDouble(i: Int, value: Double): Unit = { update(i, value) }
+
+  /**
+   * Update the decimal column at `i`.
+   *
+   * Note: In order to support update decimal with precision > 18 in UnsafeRow,
+   * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
+   */
+  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
+}
+
+/**
+ * A row implementation that uses an array of objects as the underlying storage.  Note that, while
+ * the array is not copied, and thus could technically be mutated after creation, this is not
+ * allowed.
+ */
+class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
-  def this() = this(null)
+  protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def setBoolean(ordinal: Int, value: Boolean): Unit = { values(ordinal) = value }
-  override def setByte(ordinal: Int, value: Byte): Unit = { values(ordinal) = value }
-  override def setDouble(ordinal: Int, value: Double): Unit = { values(ordinal) = value }
-  override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
-  override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
-  override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
+  override def length: Int = values.length
 
-  override def setNullAt(i: Int): Unit = { values(i) = null }
+  override def get(i: Int): Any = values(i)
 
-  override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }
+  override def toSeq: Seq[Any] = values.toSeq
 
-  override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
-
-  override def copy() = new GenericRow(values.clone())
+  override def copy(): Row = this
 }
 
+class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
+  extends GenericRow(values) {
 
-class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
-  def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
-    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null, null)
 
-  def compare(a: Row, b: Row): Int = {
-    var i = 0
-    while (i < ordering.size) {
-      val order = ordering(i)
-      val left = order.child.eval(a)
-      val right = order.child.eval(b)
+  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
+}
 
-      if (left == null && right == null) {
-        // Both null, continue looking.
-      } else if (left == null) {
-        return if (order.direction == Ascending) -1 else 1
-      } else if (right == null) {
-        return if (order.direction == Ascending) 1 else -1
-      } else {
-        val comparison = order.dataType match {
-          case n: NativeType if order.direction == Ascending =>
-            n.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case n: NativeType if order.direction == Descending =>
-            n.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
-        }
-        if (comparison != 0) return comparison
-      }
-      i += 1
-    }
-    return 0
-  }
+/**
+ * A internal row implementation that uses an array of objects as the underlying storage.
+ * Note that, while the array is not copied, and thus could technically be mutated after creation,
+ * this is not allowed.
+ */
+class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGenericInternalRow {
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null)
+
+  def this(size: Int) = this(new Array[Any](size))
+
+  override protected def genericGet(ordinal: Int) = values(ordinal)
+
+  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values
+
+  override def numFields: Int = values.length
+
+  override def copy(): InternalRow = new GenericInternalRow(values.clone())
+}
+
+/**
+ * This is used for serialization of Python DataFrame
+ */
+class GenericInternalRowWithSchema(values: Array[Any], val schema: StructType)
+  extends GenericInternalRow(values) {
+
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null, null)
+
+  def fieldIndex(name: String): Int = schema.fieldIndex(name)
+}
+
+class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericInternalRow {
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null)
+
+  def this(size: Int) = this(new Array[Any](size))
+
+  override protected def genericGet(ordinal: Int) = values(ordinal)
+
+  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values
+
+  override def numFields: Int = values.length
+
+  override def setNullAt(i: Int): Unit = { values(i) = null}
+
+  override def update(i: Int, value: Any): Unit = { values(i) = value }
+
+  override def copy(): InternalRow = new GenericInternalRow(values.clone())
 }

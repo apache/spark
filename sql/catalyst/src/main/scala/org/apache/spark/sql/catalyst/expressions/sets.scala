@@ -17,41 +17,81 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
+
+/** The data type for expressions returning an OpenHashSet as the result. */
+private[sql] class OpenHashSetUDT(
+    val elementType: DataType) extends UserDefinedType[OpenHashSet[Any]] {
+
+  override def sqlType: DataType = ArrayType(elementType)
+
+  /** Since we are using OpenHashSet internally, usually it will not be called. */
+  override def serialize(obj: Any): Seq[Any] = {
+    obj.asInstanceOf[OpenHashSet[Any]].iterator.toSeq
+  }
+
+  /** Since we are using OpenHashSet internally, usually it will not be called. */
+  override def deserialize(datum: Any): OpenHashSet[Any] = {
+    val iterator = datum.asInstanceOf[Seq[Any]].iterator
+    val set = new OpenHashSet[Any]
+    while(iterator.hasNext) {
+      set.add(iterator.next())
+    }
+
+    set
+  }
+
+  override def userClass: Class[OpenHashSet[Any]] = classOf[OpenHashSet[Any]]
+
+  private[spark] override def asNullable: OpenHashSetUDT = this
+}
 
 /**
  * Creates a new set of the specified type
  */
-case class NewSet(elementType: DataType) extends LeafExpression {
-  type EvaluatedType = Any
+case class NewSet(elementType: DataType) extends LeafExpression with CodegenFallback {
 
-  def nullable = false
+  override def nullable: Boolean = false
 
-  // We are currently only using these Expressions internally for aggregation.  However, if we ever
-  // expose these to users we'll want to create a proper type instead of hijacking ArrayType.
-  def dataType = ArrayType(elementType)
+  override def dataType: OpenHashSetUDT = new OpenHashSetUDT(elementType)
 
-  def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     new OpenHashSet[Any]()
   }
 
-  override def toString = s"new Set($dataType)"
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    elementType match {
+      case IntegerType | LongType =>
+        ev.isNull = "false"
+        s"""
+          ${ctx.javaType(dataType)} ${ev.primitive} = new ${ctx.javaType(dataType)}();
+        """
+      case _ => super.genCode(ctx, ev)
+    }
+  }
+
+  override def toString: String = s"new Set($dataType)"
 }
 
 /**
  * Adds an item to a set.
  * For performance, this expression mutates its input during evaluation.
+ * Note: this expression is internal and created only by the GeneratedAggregate,
+ * we don't need to do type check for it.
  */
-case class AddItemToSet(item: Expression, set: Expression) extends Expression {
-  type EvaluatedType = Any
+case class AddItemToSet(item: Expression, set: Expression)
+  extends Expression with CodegenFallback {
 
-  def children = item :: set :: Nil
+  override def children: Seq[Expression] = item :: set :: Nil
 
-  def nullable = set.nullable
+  override def nullable: Boolean = set.nullable
 
-  def dataType = set.dataType
-  def eval(input: Row): Any = {
+  override def dataType: DataType = set.dataType
+
+  override def eval(input: InternalRow): Any = {
     val itemEval = item.eval(input)
     val setEval = set.eval(input).asInstanceOf[OpenHashSet[Any]]
 
@@ -67,23 +107,41 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
     }
   }
 
-  override def toString = s"$set += $item"
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
+    elementType match {
+      case IntegerType | LongType =>
+        val itemEval = item.gen(ctx)
+        val setEval = set.gen(ctx)
+        val htype = ctx.javaType(dataType)
+
+        ev.isNull = "false"
+        ev.primitive = setEval.primitive
+        itemEval.code + setEval.code +  s"""
+          if (!${itemEval.isNull} && !${setEval.isNull}) {
+           (($htype)${setEval.primitive}).add(${itemEval.primitive});
+          }
+         """
+      case _ => super.genCode(ctx, ev)
+    }
+  }
+
+  override def toString: String = s"$set += $item"
 }
 
 /**
  * Combines the elements of two sets.
  * For performance, this expression mutates its left input set during evaluation.
+ * Note: this expression is internal and created only by the GeneratedAggregate,
+ * we don't need to do type check for it.
  */
-case class CombineSets(left: Expression, right: Expression) extends BinaryExpression {
-  type EvaluatedType = Any
+case class CombineSets(left: Expression, right: Expression)
+  extends BinaryExpression with CodegenFallback {
 
-  def nullable = left.nullable || right.nullable
+  override def nullable: Boolean = left.nullable
+  override def dataType: DataType = left.dataType
 
-  def dataType = left.dataType
-
-  def symbol = "++="
-
-  def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input).asInstanceOf[OpenHashSet[Any]]
     if(leftEval != null) {
       val rightEval = right.eval(input).asInstanceOf[OpenHashSet[Any]]
@@ -93,32 +151,44 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
           val rightValue = iterator.next()
           leftEval.add(rightValue)
         }
-        leftEval
-      } else {
-        null
       }
+      leftEval
     } else {
       null
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
+    elementType match {
+      case IntegerType | LongType =>
+        val leftEval = left.gen(ctx)
+        val rightEval = right.gen(ctx)
+        val htype = ctx.javaType(dataType)
+
+        ev.isNull = leftEval.isNull
+        ev.primitive = leftEval.primitive
+        leftEval.code + rightEval.code + s"""
+          if (!${leftEval.isNull} && !${rightEval.isNull}) {
+            ${leftEval.primitive}.union((${htype})${rightEval.primitive});
+          }
+        """
+      case _ => super.genCode(ctx, ev)
     }
   }
 }
 
 /**
  * Returns the number of elements in the input set.
+ * Note: this expression is internal and created only by the GeneratedAggregate,
+ * we don't need to do type check for it.
  */
-case class CountSet(child: Expression) extends UnaryExpression {
-  type EvaluatedType = Any
+case class CountSet(child: Expression) extends UnaryExpression with CodegenFallback {
 
-  def nullable = child.nullable
+  override def dataType: DataType = LongType
 
-  def dataType = LongType
+  protected override def nullSafeEval(input: Any): Any =
+    input.asInstanceOf[OpenHashSet[Any]].size.toLong
 
-  def eval(input: Row): Any = {
-    val childEval = child.eval(input).asInstanceOf[OpenHashSet[Any]]
-    if (childEval != null) {
-      childEval.size.toLong
-    }
-  }
-
-  override def toString = s"$child.count()"
+  override def toString: String = s"$child.count()"
 }

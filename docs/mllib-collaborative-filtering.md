@@ -66,6 +66,7 @@ recommendation model by measuring the Mean Squared Error of rating prediction.
 
 {% highlight scala %}
 import org.apache.spark.mllib.recommendation.ALS
+import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
 import org.apache.spark.mllib.recommendation.Rating
 
 // Load and parse the data
@@ -76,7 +77,7 @@ val ratings = data.map(_.split(',') match { case Array(user, item, rate) =>
 
 // Build the recommendation model using ALS
 val rank = 10
-val numIterations = 20
+val numIterations = 10
 val model = ALS.train(ratings, rank, numIterations, 0.01)
 
 // Evaluate the model on rating data
@@ -95,6 +96,10 @@ val MSE = ratesAndPreds.map { case ((user, product), (r1, r2)) =>
   err * err
 }.mean()
 println("Mean Squared Error = " + MSE)
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = MatrixFactorizationModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 If the rating matrix is derived from another source of information (e.g., it is inferred from
@@ -102,7 +107,8 @@ other signals), you can use the `trainImplicit` method to get better results.
 
 {% highlight scala %}
 val alpha = 0.01
-val model = ALS.trainImplicit(ratings, rank, numIterations, alpha)
+val lambda = 0.01
+val model = ALS.trainImplicit(ratings, rank, numIterations, lambda, alpha)
 {% endhighlight %}
 </div>
 
@@ -143,7 +149,7 @@ public class CollaborativeFiltering {
 
     // Build the recommendation model using ALS
     int rank = 10;
-    int numIterations = 20;
+    int numIterations = 10;
     MatrixFactorizationModel model = ALS.train(JavaRDD.toRDD(ratings), rank, numIterations, 0.01); 
 
     // Evaluate the model on rating data
@@ -181,6 +187,10 @@ public class CollaborativeFiltering {
       }
     ).rdd()).mean();
     System.out.println("Mean Squared Error = " + MSE);
+
+    // Save and load model
+    model.save(sc.sc(), "myModelPath");
+    MatrixFactorizationModel sameModel = MatrixFactorizationModel.load(sc.sc(), "myModelPath");
   }
 }
 {% endhighlight %}
@@ -192,7 +202,7 @@ We use the default ALS.train() method which assumes ratings are explicit. We eva
 recommendation by measuring the Mean Squared Error of rating prediction.
 
 {% highlight python %}
-from pyspark.mllib.recommendation import ALS, Rating
+from pyspark.mllib.recommendation import ALS, MatrixFactorizationModel, Rating
 
 # Load and parse the data
 data = sc.textFile("data/mllib/als/test.data")
@@ -200,15 +210,19 @@ ratings = data.map(lambda l: l.split(',')).map(lambda l: Rating(int(l[0]), int(l
 
 # Build the recommendation model using Alternating Least Squares
 rank = 10
-numIterations = 20
+numIterations = 10
 model = ALS.train(ratings, rank, numIterations)
 
 # Evaluate the model on training data
 testdata = ratings.map(lambda p: (p[0], p[1]))
 predictions = model.predictAll(testdata).map(lambda r: ((r[0], r[1]), r[2]))
 ratesAndPreds = ratings.map(lambda r: ((r[0], r[1]), r[2])).join(predictions)
-MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).reduce(lambda x, y: x + y) / ratesAndPreds.count()
+MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).mean()
 print("Mean Squared Error = " + str(MSE))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = MatrixFactorizationModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 If the rating matrix is derived from other source of information (i.e., it is inferred from other

@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.recommendation
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.recommendation.{ALS => NewALS}
 import org.apache.spark.rdd.RDD
@@ -27,7 +27,11 @@ import org.apache.spark.storage.StorageLevel
 /**
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
  */
-case class Rating(user: Int, product: Int, rating: Double)
+@Since("0.8.0")
+case class Rating @Since("0.8.0") (
+    @Since("0.8.0") user: Int,
+    @Since("0.8.0") product: Int,
+    @Since("0.8.0") rating: Double)
 
 /**
  * Alternating Least Squares matrix factorization.
@@ -58,6 +62,7 @@ case class Rating(user: Int, product: Int, rating: Double)
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
+@Since("0.8.0")
 class ALS private (
     private var numUserBlocks: Int,
     private var numProductBlocks: Int,
@@ -73,6 +78,7 @@ class ALS private (
    * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
    * lambda: 0.01, implicitPrefs: false, alpha: 1.0}.
    */
+  @Since("0.8.0")
   def this() = this(-1, -1, 10, 10, 0.01, false, 1.0)
 
   /** If true, do alternating nonnegative least squares. */
@@ -82,10 +88,14 @@ class ALS private (
   private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
   private var finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
 
+  /** checkpoint interval */
+  private var checkpointInterval: Int = 10
+
   /**
    * Set the number of blocks for both user blocks and product blocks to parallelize the computation
    * into; pass -1 for an auto-configured number of blocks. Default: -1.
    */
+  @Since("0.8.0")
   def setBlocks(numBlocks: Int): this.type = {
     this.numUserBlocks = numBlocks
     this.numProductBlocks = numBlocks
@@ -95,6 +105,7 @@ class ALS private (
   /**
    * Set the number of user blocks to parallelize the computation.
    */
+  @Since("1.1.0")
   def setUserBlocks(numUserBlocks: Int): this.type = {
     this.numUserBlocks = numUserBlocks
     this
@@ -103,30 +114,35 @@ class ALS private (
   /**
    * Set the number of product blocks to parallelize the computation.
    */
+  @Since("1.1.0")
   def setProductBlocks(numProductBlocks: Int): this.type = {
     this.numProductBlocks = numProductBlocks
     this
   }
 
   /** Set the rank of the feature matrices computed (number of features). Default: 10. */
+  @Since("0.8.0")
   def setRank(rank: Int): this.type = {
     this.rank = rank
     this
   }
 
   /** Set the number of iterations to run. Default: 10. */
+  @Since("0.8.0")
   def setIterations(iterations: Int): this.type = {
     this.iterations = iterations
     this
   }
 
   /** Set the regularization parameter, lambda. Default: 0.01. */
+  @Since("0.8.0")
   def setLambda(lambda: Double): this.type = {
     this.lambda = lambda
     this
   }
 
   /** Sets whether to use implicit preference. Default: false. */
+  @Since("0.8.1")
   def setImplicitPrefs(implicitPrefs: Boolean): this.type = {
     this.implicitPrefs = implicitPrefs
     this
@@ -135,12 +151,14 @@ class ALS private (
   /**
    * Sets the constant used in computing confidence in implicit ALS. Default: 1.0.
    */
+  @Since("0.8.1")
   def setAlpha(alpha: Double): this.type = {
     this.alpha = alpha
     this
   }
 
   /** Sets a random seed to have deterministic results. */
+  @Since("1.0.0")
   def setSeed(seed: Long): this.type = {
     this.seed = seed
     this
@@ -150,6 +168,7 @@ class ALS private (
    * Set whether the least-squares problems solved at each iteration should have
    * nonnegativity constraints.
    */
+  @Since("1.1.0")
   def setNonnegative(b: Boolean): this.type = {
     this.nonnegative = b
     this
@@ -162,6 +181,7 @@ class ALS private (
    * set `spark.rdd.compress` to `true` to reduce the space requirement, at the cost of speed.
    */
   @DeveloperApi
+  @Since("1.1.0")
   def setIntermediateRDDStorageLevel(storageLevel: StorageLevel): this.type = {
     require(storageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
@@ -172,13 +192,28 @@ class ALS private (
   /**
    * :: DeveloperApi ::
    * Sets storage level for final RDDs (user/product used in MatrixFactorizationModel). The default
-   * value is `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g. 
+   * value is `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g.
    * `MEMORY_AND_DISK_SER` and set `spark.rdd.compress` to `true` to reduce the space requirement,
    * at the cost of speed.
    */
   @DeveloperApi
+  @Since("1.3.0")
   def setFinalRDDStorageLevel(storageLevel: StorageLevel): this.type = {
     this.finalRDDStorageLevel = storageLevel
+    this
+  }
+
+  /**
+   * Set period (in iterations) between checkpoints (default = 10). Checkpointing helps with
+   * recovery (when nodes fail) and StackOverflow exceptions caused by long lineage. It also helps
+   * with eliminating temporary shuffle files on disk, which can be important when there are many
+   * ALS iterations. If the checkpoint directory is not set in [[org.apache.spark.SparkContext]],
+   * this setting is ignored.
+   */
+  @DeveloperApi
+  @Since("1.4.0")
+  def setCheckpointInterval(checkpointInterval: Int): this.type = {
+    this.checkpointInterval = checkpointInterval
     this
   }
 
@@ -186,6 +221,7 @@ class ALS private (
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
    */
+  @Since("0.8.0")
   def run(ratings: RDD[Rating]): MatrixFactorizationModel = {
     val sc = ratings.context
 
@@ -212,6 +248,7 @@ class ALS private (
       nonnegative = nonnegative,
       intermediateRDDStorageLevel = intermediateRDDStorageLevel,
       finalRDDStorageLevel = StorageLevel.NONE,
+      checkpointInterval = checkpointInterval,
       seed = seed)
 
     val userFactors = floatUserFactors
@@ -232,12 +269,14 @@ class ALS private (
   /**
    * Java-friendly version of [[ALS.run]].
    */
+  @Since("1.3.0")
   def run(ratings: JavaRDD[Rating]): MatrixFactorizationModel = run(ratings.rdd)
 }
 
 /**
  * Top-level methods for calling Alternating Least Squares (ALS) matrix factorization.
  */
+@Since("0.8.0")
 object ALS {
   /**
    * Train a matrix factorization model given an RDD of ratings given by users to some products,
@@ -253,6 +292,7 @@ object ALS {
    * @param blocks     level of parallelism to split computation into
    * @param seed       random seed
    */
+  @Since("0.9.1")
   def train(
       ratings: RDD[Rating],
       rank: Int,
@@ -277,6 +317,7 @@ object ALS {
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
    */
+  @Since("0.8.0")
   def train(
       ratings: RDD[Rating],
       rank: Int,
@@ -299,6 +340,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
+  @Since("0.8.0")
   def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double)
     : MatrixFactorizationModel = {
     train(ratings, rank, iterations, lambda, -1)
@@ -315,6 +357,7 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
+  @Since("0.8.0")
   def train(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     train(ratings, rank, iterations, 0.01, -1)
@@ -335,6 +378,7 @@ object ALS {
    * @param alpha      confidence parameter
    * @param seed       random seed
    */
+  @Since("0.8.1")
   def trainImplicit(
       ratings: RDD[Rating],
       rank: Int,
@@ -361,6 +405,7 @@ object ALS {
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter
    */
+  @Since("0.8.1")
   def trainImplicit(
       ratings: RDD[Rating],
       rank: Int,
@@ -385,6 +430,7 @@ object ALS {
    * @param lambda     regularization factor (recommended: 0.01)
    * @param alpha      confidence parameter
    */
+  @Since("0.8.1")
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
     : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, lambda, -1, alpha)
@@ -402,6 +448,7 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
+  @Since("0.8.1")
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)

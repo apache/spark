@@ -27,8 +27,8 @@ abstract class CompletionIterator[ +A, +I <: Iterator[A]](sub: I) extends Iterat
 // scalastyle:on
 
   private[this] var completed = false
-  def next() = sub.next()
-  def hasNext = {
+  def next(): A = sub.next()
+  def hasNext: Boolean = {
     val r = sub.hasNext
     if (!r && !completed) {
       completed = true
@@ -37,13 +37,13 @@ abstract class CompletionIterator[ +A, +I <: Iterator[A]](sub: I) extends Iterat
     r
   }
 
-  def completion()
+  def completion(): Unit
 }
 
 private[spark] object CompletionIterator {
-  def apply[A, I <: Iterator[A]](sub: I, completionFunction: => Unit) : CompletionIterator[A,I] = {
-    new CompletionIterator[A,I](sub) {
-      def completion() = completionFunction
+  def apply[A, I <: Iterator[A]](sub: I, completionFunction: => Unit) : CompletionIterator[A, I] = {
+    new CompletionIterator[A, I](sub) {
+      def completion(): Unit = completionFunction
     }
   }
 }

@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Quick Start
+description: Quick start tutorial for Spark SPARK_VERSION_SHORT
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -125,7 +126,7 @@ scala> val wordCounts = textFile.flatMap(line => line.split(" ")).map(word => (w
 wordCounts: spark.RDD[(String, Int)] = spark.ShuffledAggregatedRDD@71f027b8
 {% endhighlight %}
 
-Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (String, Int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
+Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations), and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (String, Int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
 
 {% highlight scala %}
 scala> wordCounts.collect()
@@ -162,7 +163,7 @@ One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can i
 >>> wordCounts = textFile.flatMap(lambda line: line.split()).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
 {% endhighlight %}
 
-Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
+Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations), and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
 
 {% highlight python %}
 >>> wordCounts.collect()
@@ -183,10 +184,10 @@ scala> linesWithSpark.cache()
 res7: spark.RDD[String] = spark.FilteredRDD@17e51082
 
 scala> linesWithSpark.count()
-res8: Long = 15
+res8: Long = 19
 
 scala> linesWithSpark.count()
-res9: Long = 15
+res9: Long = 19
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -201,10 +202,10 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 >>> linesWithSpark.cache()
 
 >>> linesWithSpark.count()
-15
+19
 
 >>> linesWithSpark.count()
-15
+19
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -216,13 +217,13 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 </div>
 
 # Self-Contained Applications
-Now say we wanted to write a self-contained application using the Spark API. We will walk through a
-simple application in both Scala (with SBT), Java (with Maven), and Python.
+Suppose we wish to write a self-contained application using the Spark API. We will walk through a
+simple application in Scala (with sbt), Java (with Maven), and Python.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-We'll create a very simple Spark application in Scala. So simple, in fact, that it's
+We'll create a very simple Spark application in Scala--so simple, in fact, that it's
 named `SimpleApp.scala`:
 
 {% highlight scala %}
@@ -258,7 +259,7 @@ object which contains information about our
 application. 
 
 Our application depends on the Spark API, so we'll also include an sbt configuration file, 
-`simple.sbt` which explains that Spark is a dependency. This file also adds a repository that 
+`simple.sbt`, which explains that Spark is a dependency. This file also adds a repository that 
 Spark depends on:
 
 {% highlight scala %}
@@ -301,7 +302,7 @@ Lines with a: 46, Lines with b: 23
 
 </div>
 <div data-lang="java" markdown="1">
-This example will use Maven to compile an application jar, but any similar build system will work.
+This example will use Maven to compile an application JAR, but any similar build system will work.
 
 We'll create a very simple Spark application, `SimpleApp.java`:
 
@@ -373,7 +374,7 @@ $ find .
 Now, we can package the application using Maven and execute it with `./bin/spark-submit`.
 
 {% highlight bash %}
-# Package a jar containing your application
+# Package a JAR containing your application
 $ mvn package
 ...
 [INFO] Building jar: {..}/{..}/target/simple-project-1.0.jar
@@ -405,7 +406,7 @@ logData = sc.textFile(logFile).cache()
 numAs = logData.filter(lambda s: 'a' in s).count()
 numBs = logData.filter(lambda s: 'b' in s).count()
 
-print "Lines with a: %i, lines with b: %i" % (numAs, numBs)
+print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
 {% endhighlight %}
 
 
@@ -422,14 +423,14 @@ dependencies to `spark-submit` through its `--py-files` argument by packaging th
 
 We can run this application using the `bin/spark-submit` script:
 
-{% highlight python %}
+{% highlight bash %}
 # Use spark-submit to run your application
 $ YOUR_SPARK_HOME/bin/spark-submit \
   --master local[4] \
   SimpleApp.py
 ...
 Lines with a: 46, Lines with b: 23
-{% endhighlight python %}
+{% endhighlight %}
 
 </div>
 </div>
@@ -443,7 +444,8 @@ Congratulations on running your first Spark application!
 * Finally, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python)).
+ [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
 You can run them as follows:
 
 {% highlight bash %}
@@ -452,4 +454,7 @@ You can run them as follows:
 
 # For Python examples, use spark-submit directly:
 ./bin/spark-submit examples/src/main/python/pi.py
+
+# For R examples, use spark-submit directly:
+./bin/spark-submit examples/src/main/r/dataframe.R
 {% endhighlight %}

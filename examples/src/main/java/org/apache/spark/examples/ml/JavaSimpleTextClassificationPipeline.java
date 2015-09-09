@@ -30,8 +30,8 @@ import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 
 /**
  * A simple text classification pipeline that recognizes "spark" from input text. It uses the Java
@@ -54,7 +54,7 @@ public class JavaSimpleTextClassificationPipeline {
       new LabeledDocument(1L, "b d", 0.0),
       new LabeledDocument(2L, "spark f g h", 1.0),
       new LabeledDocument(3L, "hadoop mapreduce", 0.0));
-    DataFrame training = jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     Tokenizer tokenizer = new Tokenizer()
@@ -66,7 +66,7 @@ public class JavaSimpleTextClassificationPipeline {
       .setOutputCol("features");
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
-      .setRegParam(0.01);
+      .setRegParam(0.001);
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
 
@@ -77,16 +77,17 @@ public class JavaSimpleTextClassificationPipeline {
     List<Document> localTest = Lists.newArrayList(
       new Document(4L, "spark i j k"),
       new Document(5L, "l m n"),
-      new Document(6L, "mapreduce spark"),
+      new Document(6L, "spark hadoop spark"),
       new Document(7L, "apache hadoop"));
-    DataFrame test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
+    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
     // Make predictions on test documents.
-    model.transform(test).registerTempTable("prediction");
-    DataFrame predictions = jsql.sql("SELECT id, text, score, prediction FROM prediction");
-    for (Row r: predictions.collect()) {
-      System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> score=" + r.get(2)
+    DataFrame predictions = model.transform(test);
+    for (Row r: predictions.select("id", "text", "probability", "prediction").collect()) {
+      System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
+
+    jsc.stop();
   }
 }

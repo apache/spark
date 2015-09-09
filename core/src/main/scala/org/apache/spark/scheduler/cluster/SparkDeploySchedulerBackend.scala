@@ -17,43 +17,48 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.concurrent.Semaphore
+
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     masters: Array[String])
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with AppClientListener
   with Logging {
 
-  var client: AppClient = null
-  var stopping = false
-  var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
-  @volatile var appId: String = _
+  private var client: AppClient = null
+  private var stopping = false
 
-  val registrationLock = new Object()
-  var registrationDone = false
+  @volatile var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
+  @volatile private var appId: String = _
 
-  val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
-  val totalExpectedCores = maxCores.getOrElse(0)
+  private val registrationBarrier = new Semaphore(0)
+
+  private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
+  private val totalExpectedCores = maxCores.getOrElse(0)
 
   override def start() {
     super.start()
 
     // The endpoint for executors to talk to us
-    val driverUrl = AkkaUtils.address(
-      AkkaUtils.protocol(actorSystem),
-      SparkEnv.driverActorSystemName,
-      conf.get("spark.driver.host"),
-      conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{APP_ID}}",
-      "{{WORKER_URL}}")
+    val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
+      RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    val args = Seq(
+      "--driver-url", driverUrl,
+      "--executor-id", "{{EXECUTOR_ID}}",
+      "--hostname", "{{HOSTNAME}}",
+      "--cores", "{{CORES}}",
+      "--app-id", "{{APP_ID}}",
+      "--worker-url", "{{WORKER_URL}}")
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
     val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath")
@@ -77,12 +82,11 @@ private[spark] class SparkDeploySchedulerBackend(
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, sc.eventLogDir)
-
-    client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
+    val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
+    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
+      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
+    client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
-
     waitForRegistration()
   }
 
@@ -90,8 +94,10 @@ private[spark] class SparkDeploySchedulerBackend(
     stopping = true
     super.stop()
     client.stop()
-    if (shutdownCallback != null) {
-      shutdownCallback(this)
+
+    val callback = shutdownCallback
+    if (callback != null) {
+      callback(this)
     }
   }
 
@@ -112,9 +118,12 @@ private[spark] class SparkDeploySchedulerBackend(
     notifyContext()
     if (!stopping) {
       logError("Application has been killed. Reason: " + reason)
-      scheduler.error(reason)
-      // Ensure the application terminates, as we can no longer run jobs.
-      sc.stop()
+      try {
+        scheduler.error(reason)
+      } finally {
+        // Ensure the application terminates, as we can no longer run jobs.
+        sc.stop()
+      }
     }
   }
 
@@ -143,19 +152,40 @@ private[spark] class SparkDeploySchedulerBackend(
       super.applicationId
     }
 
-  private def waitForRegistration() = {
-    registrationLock.synchronized {
-      while (!registrationDone) {
-        registrationLock.wait()
-      }
+  /**
+   * Request executors from the Master by specifying the total number desired,
+   * including existing pending and running executors.
+   *
+   * @return whether the request is acknowledged.
+   */
+  protected override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
+    Option(client) match {
+      case Some(c) => c.requestTotalExecutors(requestedTotal)
+      case None =>
+        logWarning("Attempted to request executors before driver fully initialized.")
+        false
     }
   }
 
-  private def notifyContext() = {
-    registrationLock.synchronized {
-      registrationDone = true
-      registrationLock.notifyAll()
+  /**
+   * Kill the given list of executors through the Master.
+   * @return whether the kill request is acknowledged.
+   */
+  protected override def doKillExecutors(executorIds: Seq[String]): Boolean = {
+    Option(client) match {
+      case Some(c) => c.killExecutors(executorIds)
+      case None =>
+        logWarning("Attempted to kill executors before driver fully initialized.")
+        false
     }
+  }
+
+  private def waitForRegistration() = {
+    registrationBarrier.acquire()
+  }
+
+  private def notifyContext() = {
+    registrationBarrier.release()
   }
 
 }

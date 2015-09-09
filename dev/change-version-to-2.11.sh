@@ -17,5 +17,7 @@
 # limitations under the License.
 #
 
-find . -name 'pom.xml' | grep -v target \
-  | xargs -I {} sed -i -e 's|\(artifactId.*\)_2.10|\1_2.11|g' {} 
+# This script exists for backwards compability. Use change-scala-version.sh instead.
+echo "This script is deprecated. Please instead run: change-scala-version.sh 2.11"
+
+$(dirname $0)/change-scala-version.sh 2.11

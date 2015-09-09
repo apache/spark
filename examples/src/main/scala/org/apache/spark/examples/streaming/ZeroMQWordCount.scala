@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import akka.actor.ActorSystem
@@ -35,7 +36,7 @@ import org.apache.spark.SparkConf
  */
 object SimpleZeroMQPublisher {
 
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       System.err.println("Usage: SimpleZeroMQPublisher <zeroMQUrl> <topic> ")
       System.exit(1)
@@ -45,7 +46,7 @@ object SimpleZeroMQPublisher {
     val acs: ActorSystem = ActorSystem()
 
     val pubSocket = ZeroMQExtension(acs).newSocket(SocketType.Pub, Bind(url))
-    implicit def stringToByteString(x: String) = ByteString(x)
+    implicit def stringToByteString(x: String): ByteString = ByteString(x)
     val messages: List[ByteString] = List("words ", "may ", "count ")
     while (true) {
       Thread.sleep(1000)
@@ -86,7 +87,7 @@ object ZeroMQWordCount {
     // Create the context and set the batch size
     val ssc = new StreamingContext(sparkConf, Seconds(2))
 
-    def bytesToStringIterator(x: Seq[ByteString]) = (x.map(_.utf8String)).iterator
+    def bytesToStringIterator(x: Seq[ByteString]): Iterator[String] = x.map(_.utf8String).iterator
 
     // For this stream, a zeroMQ publisher should be running.
     val lines = ZeroMQUtils.createStream(ssc, url, Subscribe(topic), bytesToStringIterator _)
@@ -97,3 +98,4 @@ object ZeroMQWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

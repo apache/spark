@@ -35,7 +35,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
   java.util.Arrays.sort(data, startIdx, endIdx)
   val length = endIdx - startIdx
 
-  val defaultProbabilities = Array(0,0.25,0.5,0.75,1.0)
+  val defaultProbabilities = Array(0, 0.25, 0.5, 0.75, 1.0)
 
   /**
    * Get the value of the distribution at the given probabilities.  Probabilities should be
@@ -44,7 +44,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
    */
   def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities)
       : IndexedSeq[Double] = {
-    probabilities.toIndexedSeq.map{p:Double => data(closestIndex(p))}
+    probabilities.toIndexedSeq.map { p: Double => data(closestIndex(p)) }
   }
 
   private def closestIndex(p: Double) = {
@@ -52,20 +52,24 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
   }
 
   def showQuantiles(out: PrintStream = System.out): Unit = {
+    // scalastyle:off println
     out.println("min\t25%\t50%\t75%\tmax")
     getQuantiles(defaultProbabilities).foreach{q => out.print(q + "\t")}
     out.println
+    // scalastyle:on println
   }
 
-  def statCounter = StatCounter(data.slice(startIdx, endIdx))
+  def statCounter: StatCounter = StatCounter(data.slice(startIdx, endIdx))
 
   /**
    * print a summary of this distribution to the given PrintStream.
    * @param out
    */
   def summary(out: PrintStream = System.out) {
+    // scalastyle:off println
     out.println(statCounter)
     showQuantiles(out)
+    // scalastyle:on println
   }
 }
 
@@ -80,8 +84,10 @@ private[spark] object Distribution {
   }
 
   def showQuantiles(out: PrintStream = System.out, quantiles: Traversable[Double]) {
+    // scalastyle:off println
     out.println("min\t25%\t50%\t75%\tmax")
     quantiles.foreach{q => out.print(q + "\t")}
     out.println
+    // scalastyle:on println
   }
 }

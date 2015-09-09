@@ -29,7 +29,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 
 /**
  * Manages some sort- and hash-based shuffle data, including the creation
- * and cleanup of directories that can be read by the {@link ExternalShuffleBlockManager}.
+ * and cleanup of directories that can be read by the {@link ExternalShuffleBlockResolver}.
  */
 public class TestShuffleDataContext {
   public final String[] localDirs;
@@ -61,9 +61,9 @@ public class TestShuffleDataContext {
     String blockId = "shuffle_" + shuffleId + "_" + mapId + "_0";
 
     OutputStream dataStream = new FileOutputStream(
-      ExternalShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
+      ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
     DataOutputStream indexStream = new DataOutputStream(new FileOutputStream(
-      ExternalShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+      ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
 
     long offset = 0;
     indexStream.writeLong(offset);
@@ -82,7 +82,7 @@ public class TestShuffleDataContext {
     for (int i = 0; i < blocks.length; i ++) {
       String blockId = "shuffle_" + shuffleId + "_" + mapId + "_" + i;
       Files.write(blocks[i],
-        ExternalShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId));
+        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId));
     }
   }
 

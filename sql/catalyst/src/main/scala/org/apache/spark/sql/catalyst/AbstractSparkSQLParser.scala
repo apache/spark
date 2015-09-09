@@ -20,29 +20,27 @@ package org.apache.spark.sql.catalyst
 import scala.language.implicitConversions
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.{PackratParsers, RegexParsers}
+import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.plans.logical._
 
-private[sql] object KeywordNormalizer {
-  def apply(str: String) = str.toLowerCase()
-}
-
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def apply(input: String): LogicalPlan = {
+  def parse(input: String): LogicalPlan = {
     // Initialize the Keywords.
-    lexical.initialize(reservedWords)
+    initLexical
     phrase(start)(new lexical.Scanner(input)) match {
       case Success(plan, _) => plan
       case failureOrError => sys.error(failureOrError.toString)
     }
   }
+  /* One time initialization of lexical.This avoid reinitialization of  lexical in parse method */
+  protected lazy val initLexical: Unit = lexical.initialize(reservedWords)
 
   protected case class Keyword(str: String) {
-    def normalize = KeywordNormalizer(str)
+    def normalize: String = lexical.normalizeKeyword(str)
     def parser: Parser[String] = normalize
   }
 
@@ -81,7 +79,7 @@ private[sql] abstract class AbstractSparkSQLParser
 
 class SqlLexical extends StdLexical {
   case class FloatLit(chars: String) extends Token {
-    override def toString = chars
+    override def toString: String = chars
   }
 
   /* This is a work around to support the lazy setting */
@@ -90,21 +88,26 @@ class SqlLexical extends StdLexical {
     reserved ++= keywords
   }
 
+  /* Normal the keyword string */
+  def normalizeKeyword(str: String): String = str.toLowerCase
+
   delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
     ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~", "<=>"
   )
 
   protected override def processIdent(name: String) = {
-    val token = KeywordNormalizer(name)
+    val token = normalizeKeyword(name)
     if (reserved contains token) Keyword(token) else Identifier(name)
   }
 
   override lazy val token: Parser[Token] =
     ( identChar ~ (identChar | digit).* ^^
       { case first ~ rest => processIdent((first :: rest).mkString) }
+    | digit.* ~ identChar ~ (identChar | digit).* ^^
+      { case first ~ middle ~ rest => processIdent((first ++ (middle :: rest)).mkString) }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
-        case i ~ None    => NumericLit(i.mkString)
+        case i ~ None => NumericLit(i.mkString)
         case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)
       }
     | '\'' ~> chrExcept('\'', '\n', EofCh).* <~ '\'' ^^
@@ -120,7 +123,7 @@ class SqlLexical extends StdLexical {
     | failure("illegal character")
     )
 
-  override def identChar = letter | elem('_')
+  override def identChar: Parser[Elem] = letter | elem('_')
 
   override def whitespace: Parser[Any] =
     ( whitespaceChar

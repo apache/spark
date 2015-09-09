@@ -28,7 +28,7 @@ private[master] object MasterMessages {
 
   case object RevokedLeadership
 
-  // Actor System to Master
+  // Master to itself
 
   case object CheckForWorkerTimeOut
 
@@ -36,7 +36,7 @@ private[master] object MasterMessages {
 
   case object CompleteRecovery
 
-  case object RequestWebUIPort
+  case object BoundPortsRequest
 
-  case class WebUIPortResponse(webUIBoundPort: Int)
+  case class BoundPortsResponse(rpcEndpointPort: Int, webUIPort: Int, restPort: Option[Int])
 }

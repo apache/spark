@@ -17,13 +17,14 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.Experimental
+import org.json4s.{DefaultFormats, JValue}
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.util.Loader
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
 
+@Since("0.8.0")
 @Experimental
 trait RegressionModel extends Serializable {
   /**
@@ -31,7 +32,9 @@ trait RegressionModel extends Serializable {
    *
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
+   *
    */
+  @Since("1.0.0")
   def predict(testData: RDD[Vector]): RDD[Double]
 
   /**
@@ -39,14 +42,18 @@ trait RegressionModel extends Serializable {
    *
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
+   *
    */
+  @Since("1.0.0")
   def predict(testData: Vector): Double
 
   /**
    * Predict values for examples stored in a JavaRDD.
    * @param testData JavaRDD representing data points to be predicted
    * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
+   *
    */
+  @Since("1.0.0")
   def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
     predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }
@@ -55,16 +62,10 @@ private[mllib] object RegressionModel {
 
   /**
    * Helper method for loading GLM regression model metadata.
-   *
-   * @param modelClass  String name for model class (used for error messages)
    * @return numFeatures
    */
-  def getNumFeatures(metadata: DataFrame, modelClass: String, path: String): Int = {
-    metadata.select("numFeatures").take(1)(0) match {
-      case Row(nFeatures: Int) => nFeatures
-      case _ => throw new Exception(s"$modelClass unable to load" +
-        s" numFeatures from metadata: ${Loader.metadataPath(path)}")
-    }
+  def getNumFeatures(metadata: JValue): Int = {
+    implicit val formats = DefaultFormats
+    (metadata \ "numFeatures").extract[Int]
   }
-
 }

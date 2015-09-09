@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
@@ -51,6 +50,11 @@ public final class ChunkFetchFailure implements ResponseMessage {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
     String errorString = Encoders.Strings.decode(buf);
     return new ChunkFetchFailure(streamChunkId, errorString);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(streamChunkId, errorString);
   }
 
   @Override

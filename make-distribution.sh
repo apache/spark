@@ -26,13 +26,14 @@
 
 set -o pipefail
 set -e
+set -x
 
 # Figure out where the Spark framework is installed
 SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 SPARK_TACHYON=false
-TACHYON_VERSION="0.5.0"
+TACHYON_VERSION="0.7.1"
 TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
 TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/${TACHYON_TGZ}"
 
@@ -57,7 +58,7 @@ while (( "$#" )); do
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
       echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-0.23, hdaoop-2.2, hadoop-2.3 and hadoop-2.4."
+      echo "Error: Related profiles include hadoop-1, hadoop-2.2, hadoop-2.3 and hadoop-2.4."
       exit_with_usage
       ;;
     --with-yarn)
@@ -98,9 +99,9 @@ done
 if [ -z "$JAVA_HOME" ]; then
   # Fall back on JAVA_HOME from rpm, if found
   if [ $(command -v  rpm) ]; then
-    RPM_JAVA_HOME=$(rpm -E %java_home 2>/dev/null)
+    RPM_JAVA_HOME="$(rpm -E %java_home 2>/dev/null)"
     if [ "$RPM_JAVA_HOME" != "%java_home" ]; then
-      JAVA_HOME=$RPM_JAVA_HOME
+      JAVA_HOME="$RPM_JAVA_HOME"
       echo "No JAVA_HOME set, proceeding with '$JAVA_HOME' learned from rpm"
     fi
   fi
@@ -113,45 +114,32 @@ fi
 
 if [ $(command -v git) ]; then
     GITREV=$(git rev-parse --short HEAD 2>/dev/null || :)
-    if [ ! -z $GITREV ]; then
+    if [ ! -z "$GITREV" ]; then
 	 GITREVSTRING=" (git revision $GITREV)"
     fi
     unset GITREV
 fi
 
 
-if [ ! $(command -v $MVN) ] ; then
+if [ ! $(command -v "$MVN") ] ; then
     echo -e "Could not locate Maven command: '$MVN'."
     echo -e "Specify the Maven command with the --mvn flag"
     exit -1;
 fi
 
-VERSION=$($MVN help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
-SPARK_HADOOP_VERSION=$($MVN help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ 2>/dev/null | grep -v "INFO" | tail -n 1)
+SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | tail -n 1)
-SPARK_HIVE=$($MVN help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
+SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+    | grep -v "INFO"\
+    | tail -n 1)
+SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
     | grep -v "INFO"\
     | fgrep --count "<id>hive</id>";\
     # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
     # because we use "set -o pipefail"
     echo -n)
-
-JAVA_CMD="$JAVA_HOME"/bin/java
-JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
-if [[ ! "$JAVA_VERSION" =~ "1.6" && -z "$SKIP_JAVA_TEST" ]]; then
-  echo "***NOTE***: JAVA_HOME is not set to a JDK 6 installation. The resulting"
-  echo "            distribution may not work well with PySpark and will not run"
-  echo "            with Java 6 (See SPARK-1703 and SPARK-1911)."
-  echo "            This test can be disabled by adding --skip-java-test."
-  echo "Output from 'java -version' was:"
-  echo "$JAVA_VERSION"
-  read -p "Would you like to continue anyways? [y,n]: " -r
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Okay, exiting."
-    exit 1
-  fi
-fi
 
 if [ "$NAME" == "none" ]; then
   NAME=$SPARK_HADOOP_VERSION
@@ -227,12 +215,17 @@ cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 cp -r "$SPARK_HOME/ec2" "$DISTDIR"
+# Copy SparkR if it exists
+if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
+  mkdir -p "$DISTDIR"/R/lib
+  cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR"/R/lib
+fi
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
 
-  pushd $TMPD > /dev/null
+  pushd "$TMPD" > /dev/null
   echo "Fetching tachyon tgz"
 
   TACHYON_DL="${TACHYON_TGZ}.part"
@@ -259,7 +252,7 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   fi
 
   popd > /dev/null
-  rm -rf $TMPD
+  rm -rf "$TMPD"
 fi
 
 if [ "$MAKE_TGZ" == "true" ]; then

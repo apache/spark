@@ -20,10 +20,10 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -48,17 +48,21 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Add Locale setting
     Locale.setDefault(Locale.US)
     // Set a relatively small column batch size for testing purposes
-    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, "5")
+    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
-    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
+    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
+    RuleExecutor.resetTime()
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
-    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
-    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
+    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+
+    // For debugging dump some statistics about how much time was spent in various optimizer rules.
+    logWarning(RuleExecutor.dumpTimeSpent())
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
@@ -116,6 +120,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // This test is totally fine except that it includes wrong queries and expects errors, but error
     // message format in Hive and Spark SQL differ. Should workaround this later.
     "udf_to_unix_timestamp",
+    // we can cast dates likes '2015-03-18' to a timestamp and extract the seconds.
+    // Hive returns null for second('2015-03-18')
+    "udf_second",
+    // we can cast dates likes '2015-03-18' to a timestamp and extract the minutes.
+    // Hive returns null for minute('2015-03-18')
+    "udf_minute",
+
 
     // Cant run without local map/reduce.
     "index_auto_update",
@@ -185,7 +196,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Hive does not support buckets.
     ".*bucket.*",
 
-    // No window support yet
+    // We have our own tests based on these query files.
     ".*window.*",
 
     // Fails in hive with authorization errors.
@@ -222,8 +233,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_when",
     "udf_case",
 
-    // Needs constant object inspectors
-    "udf_round",
+    // the table src(key INT, value STRING) is not the same as HIVE unittest. In Hive
+    // is src(key STRING, value STRING), and in the reflect.q, it failed in
+    // Integer.valueOf, which expect the first argument passed as STRING type not INT.
+    "udf_reflect",
 
     // Sort with Limit clause causes failure.
     "ctas",
@@ -231,8 +244,66 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // timestamp in array, the output format of Hive contains double quotes, while
     // Spark SQL doesn't
-    "udf_sort_array"
-  ) ++ HiveShim.compatibilityBlackList
+    "udf_sort_array",
+
+    // It has a bug and it has been fixed by
+    // https://issues.apache.org/jira/browse/HIVE-7673 (in Hive 0.14 and trunk).
+    "input46",
+
+    // These tests were broken by the hive client isolation PR.
+    "part_inherit_tbl_props",
+    "part_inherit_tbl_props_with_star",
+
+    "nullformatCTAS", // SPARK-7411: need to finish CTAS parser
+
+    // The isolated classloader seemed to make some of our test reset mechanisms less robust.
+    "combine1", // This test changes compression settings in a way that breaks all subsequent tests.
+    "load_dyn_part14.*", // These work alone but fail when run with other tests...
+
+    // the answer is sensitive for jdk version
+    "udf_java_method",
+
+    // Spark SQL use Long for TimestampType, lose the precision under 1us
+    "timestamp_1",
+    "timestamp_2",
+    "timestamp_udf",
+
+    // Hive returns string from UTC formatted timestamp, spark returns timestamp type
+    "date_udf",
+
+    // Can't compare the result that have newline in it
+    "udf_get_json_object",
+
+    // Unlike Hive, we do support log base in (0, 1.0], therefore disable this
+    "udf7",
+
+    // Trivial changes to DDL output
+    "compute_stats_empty_table",
+    "compute_stats_long",
+    "create_view_translate",
+    "show_create_table_serde",
+    "show_tblproperties",
+
+    // Odd changes to output
+    "merge4",
+
+    // Thift is broken...
+    "inputddl8",
+
+    // Hive changed ordering of ddl:
+    "varchar_union1",
+
+    // Parser changes in Hive 1.2
+    "input25",
+    "input26",
+
+    // Uses invalid table name
+    "innerjoin",
+
+    // classpath problems
+    "compute_stats.*",
+    "udf_bitmap_.*"
+  )
 
   /**
    * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
@@ -364,7 +435,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "date_comparison",
     "date_join1",
     "date_serde",
-    "date_udf",
     "decimal_1",
     "decimal_4",
     "decimal_join",
@@ -518,10 +588,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl2",
     "inputddl3",
     "inputddl4",
+    "inputddl5",
     "inputddl6",
     "inputddl7",
     "inputddl8",
     "insert1",
+    "insert1_overwrite_partitions",
     "insert2_overwrite_partitions",
     "insert_compressed",
     "join0",
@@ -626,6 +698,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "mapreduce8",
     "merge1",
     "merge2",
+    "merge4",
     "mergejoins",
     "multiMapJoin1",
     "multiMapJoin2",
@@ -639,6 +712,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "nonblock_op_deduplicate",
     "notable_alias1",
     "notable_alias2",
+    "nullformatCTAS",
     "nullgroup",
     "nullgroup2",
     "nullgroup3",
@@ -718,6 +792,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "select_unquote_and",
     "select_unquote_not",
     "select_unquote_or",
+    "semicolon",
     "semijoin",
     "serde_regex",
     "serde_reported_schema",
@@ -769,13 +844,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_publisher_error_1",
     "subq2",
     "tablename_with_select",
-    "timestamp_1",
-    "timestamp_2",
     "timestamp_3",
     "timestamp_comparison",
     "timestamp_lazy",
     "timestamp_null",
-    "timestamp_udf",
     "touch",
     "transform_ppr1",
     "transform_ppr2",
@@ -790,7 +862,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf2",
     "udf5",
     "udf6",
-    "udf7",
     "udf8",
     "udf9",
     "udf_10_trims",
@@ -852,7 +923,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_int",
     "udf_isnotnull",
     "udf_isnull",
-    "udf_java_method",
     "udf_lcase",
     "udf_length",
     "udf_lessthan",
@@ -867,7 +937,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_lpad",
     "udf_ltrim",
     "udf_map",
-    "udf_minute",
     "udf_modulo",
     "udf_month",
     "udf_named_struct",
@@ -884,6 +953,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_power",
     "udf_radians",
     "udf_rand",
+    "udf_reflect2",
     "udf_regexp",
     "udf_regexp_extract",
     "udf_regexp_replace",
@@ -893,7 +963,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_round_3",
     "udf_rpad",
     "udf_rtrim",
-    "udf_second",
     "udf_sign",
     "udf_sin",
     "udf_smallint",
@@ -920,6 +989,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_trim",
     "udf_ucase",
     "udf_unix_timestamp",
+    "udf_unhex",
     "udf_upper",
     "udf_var_pop",
     "udf_var_samp",

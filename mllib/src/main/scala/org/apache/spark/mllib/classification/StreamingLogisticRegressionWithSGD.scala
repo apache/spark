@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
 
@@ -44,6 +44,7 @@ import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
  * }}}
  */
 @Experimental
+@Since("1.3.0")
 class StreamingLogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -58,36 +59,44 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
    * Initial weights must be set before using trainOn or predictOn
    * (see `StreamingLinearAlgorithm`)
    */
+  @Since("1.3.0")
   def this() = this(0.1, 50, 1.0, 0.0)
 
   protected val algorithm = new LogisticRegressionWithSGD(
     stepSize, numIterations, regParam, miniBatchFraction)
 
+  protected var model: Option[LogisticRegressionModel] = None
+
   /** Set the step size for gradient descent. Default: 0.1. */
+  @Since("1.3.0")
   def setStepSize(stepSize: Double): this.type = {
     this.algorithm.optimizer.setStepSize(stepSize)
     this
   }
 
   /** Set the number of iterations of gradient descent to run per update. Default: 50. */
+  @Since("1.3.0")
   def setNumIterations(numIterations: Int): this.type = {
     this.algorithm.optimizer.setNumIterations(numIterations)
     this
   }
 
   /** Set the fraction of each batch to use for updates. Default: 1.0. */
+  @Since("1.3.0")
   def setMiniBatchFraction(miniBatchFraction: Double): this.type = {
     this.algorithm.optimizer.setMiniBatchFraction(miniBatchFraction)
     this
   }
 
   /** Set the regularization parameter. Default: 0.0. */
+  @Since("1.3.0")
   def setRegParam(regParam: Double): this.type = {
     this.algorithm.optimizer.setRegParam(regParam)
     this
   }
 
   /** Set the initial weights. Default: [0.0, 0.0]. */
+  @Since("1.3.0")
   def setInitialWeights(initialWeights: Vector): this.type = {
     this.model = Some(algorithm.createModel(initialWeights, 0.0))
     this

@@ -19,7 +19,7 @@ package org.apache.spark.input
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
@@ -44,12 +44,9 @@ private[spark] abstract class StreamFileInputFormat[T]
    * which is set through setMaxSplitSize
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
-    val files = listStatus(context)
-    val totalLen = files.map { file =>
-      if (file.isDir) 0L else file.getLen
-    }.sum
-
-    val maxSplitSize = Math.ceil(totalLen * 1.0 / files.length).toLong
+    val files = listStatus(context).asScala
+    val totalLen = files.map(file => if (file.isDir) 0L else file.getLen).sum
+    val maxSplitSize = Math.ceil(totalLen * 1.0 / files.size).toLong
     super.setMaxSplitSize(maxSplitSize)
   }
 
@@ -73,16 +70,16 @@ private[spark] abstract class StreamBasedRecordReader[T](
   private var key = ""
   private var value: T = null.asInstanceOf[T]
 
-  override def initialize(split: InputSplit, context: TaskAttemptContext) = {}
-  override def close() = {}
+  override def initialize(split: InputSplit, context: TaskAttemptContext): Unit = {}
+  override def close(): Unit = {}
 
-  override def getProgress = if (processed) 1.0f else 0.0f
+  override def getProgress: Float = if (processed) 1.0f else 0.0f
 
-  override def getCurrentKey = key
+  override def getCurrentKey: String = key
 
-  override def getCurrentValue = value
+  override def getCurrentValue: T = value
 
-  override def nextKeyValue = {
+  override def nextKeyValue: Boolean = {
     if (!processed) {
       val fileIn = new PortableDataStream(split, context, index)
       value = parseStream(fileIn)
@@ -119,7 +116,8 @@ private[spark] class StreamRecordReader(
  * The format for the PortableDataStream files
  */
 private[spark] class StreamInputFormat extends StreamFileInputFormat[PortableDataStream] {
-  override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext) = {
+  override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext)
+    : CombineFileRecordReader[String, PortableDataStream] = {
     new CombineFileRecordReader[String, PortableDataStream](
       split.asInstanceOf[CombineFileSplit], taContext, classOf[StreamRecordReader])
   }
@@ -204,7 +202,7 @@ class PortableDataStream(
   /**
    * Close the file (if it is currently open)
    */
-  def close() = {
+  def close(): Unit = {
     if (isOpen) {
       try {
         fileIn.close()

@@ -22,6 +22,8 @@
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
 
+ORIGINAL_ARGS="$@"
+
 START_TACHYON=false
 
 while (( "$#" )); do
@@ -53,7 +55,9 @@ if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
   SPARK_MASTER_WEBUI_PORT=8080
 fi
 
-"$sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT
+"$sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 \
+  --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
+  $ORIGINAL_ARGS
 
 if [ "$START_TACHYON" == "true" ]; then
   "$sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP

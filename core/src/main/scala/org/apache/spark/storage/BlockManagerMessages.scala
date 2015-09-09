@@ -19,8 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
-import akka.actor.ActorRef
-
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] object BlockManagerMessages {
@@ -43,7 +42,6 @@ private[spark] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerSlave
 
-
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
   //////////////////////////////////////////////////////////////////////////////////
@@ -52,7 +50,7 @@ private[spark] object BlockManagerMessages {
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
       maxMemSize: Long,
-      sender: ActorRef)
+      sender: RpcEndpointRef)
     extends ToBlockManagerMaster
 
   case class UpdateBlockInfo(
@@ -61,7 +59,7 @@ private[spark] object BlockManagerMessages {
       var storageLevel: StorageLevel,
       var memSize: Long,
       var diskSize: Long,
-      var tachyonSize: Long)
+      var externalBlockStoreSize: Long)
     extends ToBlockManagerMaster
     with Externalizable {
 
@@ -73,7 +71,7 @@ private[spark] object BlockManagerMessages {
       storageLevel.writeExternal(out)
       out.writeLong(memSize)
       out.writeLong(diskSize)
-      out.writeLong(tachyonSize)
+      out.writeLong(externalBlockStoreSize)
     }
 
     override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -82,7 +80,7 @@ private[spark] object BlockManagerMessages {
       storageLevel = StorageLevel(in)
       memSize = in.readLong()
       diskSize = in.readLong()
-      tachyonSize = in.readLong()
+      externalBlockStoreSize = in.readLong()
     }
   }
 
@@ -92,7 +90,7 @@ private[spark] object BlockManagerMessages {
 
   case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
-  case class GetActorSystemHostPortForExecutor(executorId: String) extends ToBlockManagerMaster
+  case class GetRpcHostPortForExecutor(executorId: String) extends ToBlockManagerMaster
 
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 
@@ -110,5 +108,5 @@ private[spark] object BlockManagerMessages {
 
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
-  case object ExpireDeadHosts extends ToBlockManagerMaster
+  case class HasCachedBlocks(executorId: String) extends ToBlockManagerMaster
 }

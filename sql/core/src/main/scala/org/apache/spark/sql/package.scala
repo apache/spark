@@ -34,14 +34,18 @@ import org.apache.spark.sql.execution.SparkPlan
 package object sql {
 
   /**
-   * Converts a logical plan into zero or more SparkPlans.
+   * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
+   * with the query planner and is not designed to be stable across spark releases.  Developers
+   * writing libraries should instead consider using the stable APIs provided in
+   * [[org.apache.spark.sql.sources]]
    */
   @DeveloperApi
-  protected[sql] type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+  type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
 
   /**
    * Type alias for [[DataFrame]]. Kept here for backward source compatibility for Scala.
+   * @deprecated As of 1.3.0, replaced by `DataFrame`.
    */
-  @deprecated("1.3.0", "use DataFrame")
+  @deprecated("use DataFrame", "1.3.0")
   type SchemaRDD = DataFrame
 }

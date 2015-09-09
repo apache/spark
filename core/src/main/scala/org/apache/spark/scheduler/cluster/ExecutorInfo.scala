@@ -25,8 +25,8 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 class ExecutorInfo(
    val executorHost: String,
-   val totalCores: Int
-) {
+   val totalCores: Int,
+   val logUrlMap: Map[String, String]) {
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[ExecutorInfo]
 
@@ -34,12 +34,13 @@ class ExecutorInfo(
     case that: ExecutorInfo =>
       (that canEqual this) &&
         executorHost == that.executorHost &&
-        totalCores == that.totalCores
+        totalCores == that.totalCores &&
+        logUrlMap == that.logUrlMap
     case _ => false
   }
 
   override def hashCode(): Int = {
-    val state = Seq(executorHost, totalCores)
+    val state = Seq(executorHost, totalCores, logUrlMap)
     state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
   }
 }

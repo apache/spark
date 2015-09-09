@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{Expression, Row}
-import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::
@@ -32,36 +35,46 @@ case class BroadcastLeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with HashJoin {
+    right: SparkPlan,
+    condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
-  override val buildSide = BuildRight
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def output = left.output
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
 
-  override def execute() = {
-    val buildIter= buildPlan.execute().map(_.copy()).collect().toIterator
-    val hashSet = new java.util.HashSet[Row]()
-    var currentRow: Row = null
+    val input = right.execute().map { row =>
+      numRightRows += 1
+      row.copy()
+    }.collect()
 
-    // Create a Hash set of buildKeys
-    while (buildIter.hasNext) {
-      currentRow = buildIter.next()
-      val rowKey = buildSideKeyGenerator(currentRow)
-      if (!rowKey.anyNull) {
-        val keyExists = hashSet.contains(rowKey)
-        if (!keyExists) {
-          hashSet.add(rowKey)
-        }
+    if (condition.isEmpty) {
+      val hashSet = buildKeyHashSet(input.toIterator, SQLMetrics.nullLongMetric)
+      val broadcastedRelation = sparkContext.broadcast(hashSet)
+
+      left.execute().mapPartitions { streamIter =>
+        hashSemiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
       }
-    }
+    } else {
+      val hashRelation =
+        HashedRelation(input.toIterator, SQLMetrics.nullLongMetric, rightKeyGenerator, input.size)
+      val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
-    val broadcastedRelation = sparkContext.broadcast(hashSet)
-
-    streamedPlan.execute().mapPartitions { streamIter =>
-      val joinKeys = streamSideKeyGenerator()
-      streamIter.filter(current => {
-        !joinKeys(current).anyNull && broadcastedRelation.value.contains(joinKeys.currentValue)
-      })
+      left.execute().mapPartitions { streamIter =>
+        val hashedRelation = broadcastedRelation.value
+        hashedRelation match {
+          case unsafe: UnsafeHashedRelation =>
+            TaskContext.get().internalMetricsToAccumulators(
+              InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
+          case _ =>
+        }
+        hashSemiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)
+      }
     }
   }
 }

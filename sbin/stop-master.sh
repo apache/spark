@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# Starts the master on the machine this script is executed on.
+# Stops the master on the machine this script is executed on.
 
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`

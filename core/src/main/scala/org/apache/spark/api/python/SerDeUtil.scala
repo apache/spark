@@ -22,7 +22,6 @@ import java.util.{ArrayList => JArrayList}
 
 import org.apache.spark.api.java.JavaRDD
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Failure
@@ -56,16 +55,13 @@ private[spark] object SerDeUtil extends Logging {
     //    {'\0', 0, 0, 0} /* Sentinel */
     //  };
     // TODO: support Py_UNICODE with 2 bytes
-    // FIXME: unpickle array of float is wrong in Pyrolite, so we reverse the
-    // machine code for float/double here to workaround it.
-    // we should fix this after Pyrolite fix them
     val machineCodes: Map[Char, Int] = if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
       Map('c' -> 1, 'B' -> 0, 'b' -> 1, 'H' -> 3, 'h' -> 5, 'I' -> 7, 'i' -> 9,
-        'L' -> 11, 'l' -> 13, 'f' -> 14, 'd' -> 16, 'u' -> 21
+        'L' -> 11, 'l' -> 13, 'f' -> 15, 'd' -> 17, 'u' -> 21
       )
     } else {
       Map('c' -> 1, 'B' -> 0, 'b' -> 1, 'H' -> 2, 'h' -> 4, 'I' -> 6, 'i' -> 8,
-        'L' -> 10, 'l' -> 12, 'f' -> 15, 'd' -> 17, 'u' -> 20
+        'L' -> 10, 'l' -> 12, 'f' -> 14, 'd' -> 16, 'u' -> 20
       )
     }
     override def construct(args: Array[Object]): Object = {
@@ -84,7 +80,7 @@ private[spark] object SerDeUtil extends Logging {
   private var initialized = false
   // This should be called before trying to unpickle array.array from Python
   // In cluster mode, this should be put in closure
-  def initialize() = {
+  def initialize(): Unit = {
     synchronized{
       if (!initialized) {
         Unpickler.registerConstructor("array", "array", new ArrayConstructor())
@@ -217,7 +213,7 @@ private[spark] object SerDeUtil extends Logging {
         new AutoBatchedPickler(cleaned)
       } else {
         val pickle = new Pickler
-        cleaned.grouped(batchSize).map(batched => pickle.dumps(seqAsJavaList(batched)))
+        cleaned.grouped(batchSize).map(batched => pickle.dumps(batched.asJava))
       }
     }
   }

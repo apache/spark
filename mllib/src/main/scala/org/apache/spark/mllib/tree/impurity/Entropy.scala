@@ -17,13 +17,14 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 
 /**
  * :: Experimental ::
  * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
  * binary classification.
  */
+@Since("1.0.0")
 @Experimental
 object Entropy extends Impurity {
 
@@ -36,6 +37,7 @@ object Entropy extends Impurity {
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
+  @Since("1.1.0")
   @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double = {
     if (totalCount == 0) {
@@ -63,6 +65,7 @@ object Entropy extends Impurity {
    * @param sumSquares summation of squares of the labels
    * @return information value, or 0 if count = 0
    */
+  @Since("1.0.0")
   @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Entropy.calculate")
@@ -71,7 +74,8 @@ object Entropy extends Impurity {
    * Get this impurity instance.
    * This is useful for passing impurity parameters to a Strategy in Java.
    */
-  def instance = this
+  @Since("1.1.0")
+  def instance: this.type = this
 
 }
 
@@ -118,7 +122,7 @@ private[tree] class EntropyAggregator(numClasses: Int)
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[tree] class EntropyCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].

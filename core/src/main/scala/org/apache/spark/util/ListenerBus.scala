@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.util.concurrent.CopyOnWriteArrayList
 
+import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
@@ -43,7 +45,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * `postToAll` in the same thread for all events.
    */
   final def postToAll(event: E): Unit = {
-    // JavaConversions will create a JIterableWrapper if we use some Scala collection functions.
+    // JavaConverters can create a JIterableWrapper if we use asScala.
     // However, this method will be called frequently. To avoid the wrapper cost, here ewe use
     // Java Iterator directly.
     val iter = listeners.iterator
@@ -63,5 +65,10 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * thread.
    */
   def onPostEvent(listener: L, event: E): Unit
+
+  private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
+    val c = implicitly[ClassTag[T]].runtimeClass
+    listeners.asScala.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
+  }
 
 }

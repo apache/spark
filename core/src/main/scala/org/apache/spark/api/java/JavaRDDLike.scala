@@ -17,10 +17,10 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList, Iterator => JIterator}
+import java.{lang => jl}
 import java.lang.{Iterable => JIterable, Long => JLong}
+import java.util.{Comparator, List => JList, Iterator => JIterator}
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -39,6 +39,14 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
+ * As a workaround for https://issues.scala-lang.org/browse/SI-8905, implementations
+ * of JavaRDDLike should extend this dummy abstract class instead of directly inheriting
+ * from the trait. See SPARK-3266 for additional details.
+ */
+private[spark] abstract class AbstractJavaRDDLike[T, This <: JavaRDDLike[T, This]]
+  extends JavaRDDLike[T, This]
+
+/**
  * Defines operations common to several Java RDD implementations.
  * Note that this trait is not intended to be implemented by user code.
  */
@@ -50,10 +58,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def rdd: RDD[T]
 
   @deprecated("Use partitions() instead.", "1.1.0")
-  def splits: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
-  
+  def splits: JList[Partition] = rdd.partitions.toSeq.asJava
+
   /** Set of partitions in this RDD. */
-  def partitions: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
+  def partitions: JList[Partition] = rdd.partitions.toSeq.asJava
+
+  /** The partitioner of this RDD. */
+  def partitioner: Optional[Partitioner] = JavaUtils.optionToOptional(rdd.partitioner)
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context: SparkContext = rdd.context
@@ -70,7 +81,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * subclasses of RDD.
    */
   def iterator(split: Partition, taskContext: TaskContext): java.util.Iterator[T] =
-    asJavaIterator(rdd.iterator(split, taskContext))
+    rdd.iterator(split, taskContext).asJava
 
   // Transformations (return a new RDD)
 
@@ -85,9 +96,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * of the original partition.
    */
   def mapPartitionsWithIndex[R](
-      f: JFunction2[java.lang.Integer, java.util.Iterator[T], java.util.Iterator[R]],
+      f: JFunction2[jl.Integer, java.util.Iterator[T], java.util.Iterator[R]],
       preservesPartitioning: Boolean = false): JavaRDD[R] =
-    new JavaRDD(rdd.mapPartitionsWithIndex(((a,b) => f(a,asJavaIterator(b))),
+    new JavaRDD(rdd.mapPartitionsWithIndex((a, b) => f.call(a, b.asJava).asScala,
         preservesPartitioning)(fakeClassTag))(fakeClassTag)
 
   /**
@@ -101,7 +112,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return a new RDD by applying a function to all elements of this RDD.
    */
   def mapToPair[K2, V2](f: PairFunction[T, K2, V2]): JavaPairRDD[K2, V2] = {
-    def cm = implicitly[ClassTag[(K2, V2)]]
+    def cm: ClassTag[(K2, V2)] = implicitly[ClassTag[(K2, V2)]]
     new JavaPairRDD(rdd.map[(K2, V2)](f)(cm))(fakeClassTag[K2], fakeClassTag[V2])
   }
 
@@ -111,7 +122,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def flatMap[U](f: FlatMapFunction[T, U]): JavaRDD[U] = {
     import scala.collection.JavaConverters._
-    def fn = (x: T) => f.call(x).asScala
+    def fn: (T) => Iterable[U] = (x: T) => f.call(x).asScala
     JavaRDD.fromRDD(rdd.flatMap(fn)(fakeClassTag[U]))(fakeClassTag[U])
   }
 
@@ -121,8 +132,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def flatMapToDouble(f: DoubleFlatMapFunction[T]): JavaDoubleRDD = {
     import scala.collection.JavaConverters._
-    def fn = (x: T) => f.call(x).asScala
-    new JavaDoubleRDD(rdd.flatMap(fn).map((x: java.lang.Double) => x.doubleValue()))
+    def fn: (T) => Iterable[jl.Double] = (x: T) => f.call(x).asScala
+    new JavaDoubleRDD(rdd.flatMap(fn).map((x: jl.Double) => x.doubleValue()))
   }
 
   /**
@@ -131,8 +142,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def flatMapToPair[K2, V2](f: PairFlatMapFunction[T, K2, V2]): JavaPairRDD[K2, V2] = {
     import scala.collection.JavaConverters._
-    def fn = (x: T) => f.call(x).asScala
-    def cm = implicitly[ClassTag[(K2, V2)]]
+    def fn: (T) => Iterable[(K2, V2)] = (x: T) => f.call(x).asScala
+    def cm: ClassTag[(K2, V2)] = implicitly[ClassTag[(K2, V2)]]
     JavaPairRDD.fromRDD(rdd.flatMap(fn)(cm))(fakeClassTag[K2], fakeClassTag[V2])
   }
 
@@ -140,7 +151,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return a new RDD by applying a function to each partition of this RDD.
    */
   def mapPartitions[U](f: FlatMapFunction[java.util.Iterator[T], U]): JavaRDD[U] = {
-    def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+    def fn: (Iterator[T]) => Iterator[U] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
     JavaRDD.fromRDD(rdd.mapPartitions(fn)(fakeClassTag[U]))(fakeClassTag[U])
   }
 
@@ -149,7 +162,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def mapPartitions[U](f: FlatMapFunction[java.util.Iterator[T], U],
       preservesPartitioning: Boolean): JavaRDD[U] = {
-    def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+    def fn: (Iterator[T]) => Iterator[U] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
     JavaRDD.fromRDD(
       rdd.mapPartitions(fn, preservesPartitioning)(fakeClassTag[U]))(fakeClassTag[U])
   }
@@ -158,8 +173,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return a new RDD by applying a function to each partition of this RDD.
    */
   def mapPartitionsToDouble(f: DoubleFlatMapFunction[java.util.Iterator[T]]): JavaDoubleRDD = {
-    def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
-    new JavaDoubleRDD(rdd.mapPartitions(fn).map((x: java.lang.Double) => x.doubleValue()))
+    def fn: (Iterator[T]) => Iterator[jl.Double] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
+    new JavaDoubleRDD(rdd.mapPartitions(fn).map((x: jl.Double) => x.doubleValue()))
   }
 
   /**
@@ -167,7 +184,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def mapPartitionsToPair[K2, V2](f: PairFlatMapFunction[java.util.Iterator[T], K2, V2]):
   JavaPairRDD[K2, V2] = {
-    def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+    def fn: (Iterator[T]) => Iterator[(K2, V2)] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
     JavaPairRDD.fromRDD(rdd.mapPartitions(fn))(fakeClassTag[K2], fakeClassTag[V2])
   }
 
@@ -176,7 +195,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def mapPartitionsToDouble(f: DoubleFlatMapFunction[java.util.Iterator[T]],
       preservesPartitioning: Boolean): JavaDoubleRDD = {
-    def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+    def fn: (Iterator[T]) => Iterator[jl.Double] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
     new JavaDoubleRDD(rdd.mapPartitions(fn, preservesPartitioning)
       .map(x => x.doubleValue()))
   }
@@ -186,7 +207,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def mapPartitionsToPair[K2, V2](f: PairFlatMapFunction[java.util.Iterator[T], K2, V2],
       preservesPartitioning: Boolean): JavaPairRDD[K2, V2] = {
-    def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+    def fn: (Iterator[T]) => Iterator[(K2, V2)] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
     JavaPairRDD.fromRDD(
       rdd.mapPartitions(fn, preservesPartitioning))(fakeClassTag[K2], fakeClassTag[V2])
   }
@@ -195,14 +218,14 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Applies a function f to each partition of this RDD.
    */
   def foreachPartition(f: VoidFunction[java.util.Iterator[T]]) {
-    rdd.foreachPartition((x => f.call(asJavaIterator(x))))
+    rdd.foreachPartition((x => f.call(x.asJava)))
   }
 
   /**
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
   def glom(): JavaRDD[JList[T]] =
-    new JavaRDD(rdd.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
+    new JavaRDD(rdd.glom().map(_.toSeq.asJava))
 
   /**
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
@@ -242,13 +265,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: JList[String]): JavaRDD[String] =
-    rdd.pipe(asScalaBuffer(command))
+    rdd.pipe(command.asScala)
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: JList[String], env: java.util.Map[String, String]): JavaRDD[String] =
-    rdd.pipe(asScalaBuffer(command), mapAsScalaMap(env))
+    rdd.pipe(command.asScala, env.asScala)
 
   /**
    * Zips this RDD with another one, returning key-value pairs with the first element in each RDD,
@@ -269,8 +292,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def zipPartitions[U, V](
       other: JavaRDDLike[U, _],
       f: FlatMapFunction2[java.util.Iterator[T], java.util.Iterator[U], V]): JavaRDD[V] = {
-    def fn = (x: Iterator[T], y: Iterator[U]) => asScalaIterator(
-      f.call(asJavaIterator(x), asJavaIterator(y)).iterator())
+    def fn: (Iterator[T], Iterator[U]) => Iterator[V] = {
+      (x: Iterator[T], y: Iterator[U]) => f.call(x.asJava, y.asJava).iterator().asScala
+    }
     JavaRDD.fromRDD(
       rdd.zipPartitions(other.rdd)(fn)(other.classTag, fakeClassTag[V]))(fakeClassTag[V])
   }
@@ -307,28 +331,22 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Return an array that contains all of the elements in this RDD.
    */
-  def collect(): JList[T] = {
-    import scala.collection.JavaConversions._
-    val arr: java.util.Collection[T] = rdd.collect().toSeq
-    new java.util.ArrayList(arr)
-  }
+  def collect(): JList[T] =
+    rdd.collect().toSeq.asJava
 
   /**
    * Return an iterator that contains all of the elements in this RDD.
    *
    * The iterator will consume as much memory as the largest partition in this RDD.
    */
-  def toLocalIterator(): JIterator[T] = {
-     import scala.collection.JavaConversions._
-     rdd.toLocalIterator
-  }
-
+  def toLocalIterator(): JIterator[T] =
+     asJavaIteratorConverter(rdd.toLocalIterator).asJava
 
   /**
    * Return an array that contains all of the elements in this RDD.
    * @deprecated As of Spark 1.0.0, toArray() is deprecated, use {@link #collect()} instead
    */
-  @Deprecated
+  @deprecated("use collect()", "1.0.0")
   def toArray(): JList[T] = collect()
 
   /**
@@ -337,9 +355,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def collectPartitions(partitionIds: Array[Int]): Array[JList[T]] = {
     // This is useful for implementing `take` from other language frontends
     // like Python where the data is serialized.
-    import scala.collection.JavaConversions._
-    val res = context.runJob(rdd, (it: Iterator[T]) => it.toArray, partitionIds, true)
-    res.map(x => new java.util.ArrayList(x.toSeq)).toArray
+    val res = context.runJob(rdd, (it: Iterator[T]) => it.toArray, partitionIds)
+    res.map(_.toSeq.asJava)
   }
 
   /**
@@ -363,9 +380,16 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
-   * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
-   * modify t1 and return it as its result value to avoid object allocation; however, it should not
-   * modify t2.
+   * given associative and commutative function and a neutral "zero value". The function
+   * op(t1, t2) is allowed to modify t1 and return it as its result value to avoid object
+   * allocation; however, it should not modify t2.
+   *
+   * This behaves somewhat differently from fold operations implemented for non-distributed
+   * collections in functional languages like Scala. This fold operation may be applied to
+   * partitions individually, and then fold those results into the final result, rather than
+   * apply the fold to each element sequentially in some defined ordering. For functions
+   * that are not commutative, the result may differ from that of a fold applied to a
+   * non-distributed collection.
    */
   def fold(zeroValue: T)(f: JFunction2[T, T, T]): T =
     rdd.fold(zeroValue)(f)
@@ -433,8 +457,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
-  def countByValue(): java.util.Map[T, java.lang.Long] =
-    mapAsSerializableJavaMap(rdd.countByValue().map((x => (x._1, new java.lang.Long(x._2)))))
+  def countByValue(): java.util.Map[T, jl.Long] =
+    mapAsSerializableJavaMap(rdd.countByValue().map((x => (x._1, new jl.Long(x._2)))))
 
   /**
    * (Experimental) Approximate version of countByValue().
@@ -456,20 +480,14 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * it will be slow if a lot of partitions are required. In that case, use collect() to get the
    * whole RDD instead.
    */
-  def take(num: Int): JList[T] = {
-    import scala.collection.JavaConversions._
-    val arr: java.util.Collection[T] = rdd.take(num).toSeq
-    new java.util.ArrayList(arr)
-  }
+  def take(num: Int): JList[T] =
+    rdd.take(num).toSeq.asJava
 
-  def takeSample(withReplacement: Boolean, num: Int): JList[T] = 
+  def takeSample(withReplacement: Boolean, num: Int): JList[T] =
     takeSample(withReplacement, num, Utils.random.nextLong)
-    
-  def takeSample(withReplacement: Boolean, num: Int, seed: Long): JList[T] = {
-    import scala.collection.JavaConversions._
-    val arr: java.util.Collection[T] = rdd.takeSample(withReplacement, num, seed).toSeq
-    new java.util.ArrayList(arr)
-  }
+
+  def takeSample(withReplacement: Boolean, num: Int, seed: Long): JList[T] =
+    rdd.takeSample(withReplacement, num, seed).toSeq.asJava
 
   /**
    * Return the first element in this RDD.
@@ -549,10 +567,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * @return an array of top elements
    */
   def top(num: Int, comp: Comparator[T]): JList[T] = {
-    import scala.collection.JavaConversions._
-    val topElems = rdd.top(num)(Ordering.comparatorToOrdering(comp))
-    val arr: java.util.Collection[T] = topElems.toSeq
-    new java.util.ArrayList(arr)
+    rdd.top(num)(Ordering.comparatorToOrdering(comp)).toSeq.asJava
   }
 
   /**
@@ -574,10 +589,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * @return an array of top elements
    */
   def takeOrdered(num: Int, comp: Comparator[T]): JList[T] = {
-    import scala.collection.JavaConversions._
-    val topElems = rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp))
-    val arr: java.util.Collection[T] = topElems.toSeq
-    new java.util.ArrayList(arr)
+    rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp)).toSeq.asJava
   }
 
   /**
@@ -663,7 +675,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * applies a function f to each partition of this RDD.
    */
   def foreachPartitionAsync(f: VoidFunction[java.util.Iterator[T]]): JavaFutureAction[Void] = {
-    new JavaFutureActionWrapper[Unit, Void](rdd.foreachPartitionAsync(x => f.call(x)),
+    new JavaFutureActionWrapper[Unit, Void](rdd.foreachPartitionAsync(x => f.call(x.asJava)),
       { x => null.asInstanceOf[Void] })
   }
 }
