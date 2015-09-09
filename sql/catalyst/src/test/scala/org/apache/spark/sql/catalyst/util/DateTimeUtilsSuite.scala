@@ -428,10 +428,13 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("SPARK-10439: bound checks") {
-    // Avoid truncation when converting from ms to us.
+    // Avoid truncation when converting from ms to us. Make sure dates are within allowed range.
     Seq(JLong.MIN_VALUE, JLong.MAX_VALUE).foreach { ts =>
       intercept[IllegalArgumentException] {
         fromJavaTimestamp(new Timestamp(ts))
+      }
+      intercept[IllegalArgumentException] {
+        fromJavaDate(new Date(ts))
       }
     }
 
