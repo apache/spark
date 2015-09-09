@@ -229,9 +229,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
             "documents. Default 1.0")
         self.vocabSize = Param(
             self, "vocabSize", "max size of the vocabulary. Default 1<<18.")
-        self._setDefault(minTF=1.0)
-        self._setDefault(minDF=1.0)
-        self._setDefault(vocabSize=1<<18)
+        self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1<<18)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
