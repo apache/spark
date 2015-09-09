@@ -939,6 +939,9 @@ class StringIndexerModel(JavaModel):
     """
     @property
     def labels(self):
+        """
+        Ordered list of labels, corresponding to indices to be assigned.
+        """
         return self._java_obj.labels
 
 
@@ -947,9 +950,9 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
 
-    A [[Transformer]] that maps a column of string indices back to a new column of corresponding
-    string values using either the ML attributes of the input column, or if provided using the
-    labels supplied by the user.
+    A :py:class:`Transformer` that maps a column of string indices back to a new column of
+    corresponding string values using either the ML attributes of the input column, or if
+    provided using the labels supplied by the user.
     All original columns are kept during transformation.
     See L{StringIndexer} for converting strings into indices.
     """
