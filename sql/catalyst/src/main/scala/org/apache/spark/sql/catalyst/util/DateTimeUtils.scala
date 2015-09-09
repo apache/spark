@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.{Long => JLong}
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{TimeZone, Calendar}
@@ -41,6 +42,7 @@ object DateTimeUtils {
   final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
+  final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
 
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
@@ -55,6 +57,13 @@ object DateTimeUtils {
   final val toYearZero = to2001 + 7304850
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
+
+  // Constants defining the allowed ranges for timestamps that can be parsed by java.sql.Timestamp.
+  // Limits are calculated based on UTC.
+  private[spark] final val MIN_TIMESTAMP: Long =
+    Timestamp.valueOf("0001-01-01 00:00:00").getTime() + defaultTimeZone.getRawOffset()
+  private[spark] final val MAX_TIMESTAMP: Long =
+    Timestamp.valueOf("9999-12-31 23:59:59.999999").getTime() + defaultTimeZone.getRawOffset()
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
@@ -139,6 +148,8 @@ object DateTimeUtils {
    * Returns the number of days since epoch from from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
+    require(date.getTime() <= MAX_TIMESTAMP && date.getTime() >= MIN_TIMESTAMP,
+      s"Timestamp exceeds allowed range.")
     millisToDays(date.getTime)
   }
 
@@ -172,6 +183,8 @@ object DateTimeUtils {
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
     if (t != null) {
+      require(t.getTime() <= MAX_TIMESTAMP && t.getTime() >= MIN_TIMESTAMP,
+        s"Timestamp exceeds allowed range.")
       t.getTime() * 1000L + (t.getNanos().toLong / 1000) % 1000L
     } else {
       0L
@@ -192,11 +205,10 @@ object DateTimeUtils {
    * Returns Julian day and nanoseconds in a day from the number of microseconds
    */
   def toJulianDay(us: SQLTimestamp): (Int, Long) = {
-    val seconds = us / MICROS_PER_SECOND
-    val day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
-    val secondsInDay = seconds % SECONDS_PER_DAY
-    val nanos = (us % MICROS_PER_SECOND) * 1000L
-    (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
+    val usFromJulianEpoch = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
+    val day = usFromJulianEpoch / MICROS_PER_DAY
+    val micros = usFromJulianEpoch % MICROS_PER_DAY
+    (day.toInt, micros * 1000L)
   }
 
   /**

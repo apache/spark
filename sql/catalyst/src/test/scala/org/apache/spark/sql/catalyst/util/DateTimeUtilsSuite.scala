@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.{Long => JLong}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
@@ -425,4 +426,26 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
     test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
   }
+
+  test("SPARK-10439: bound checks") {
+    // Avoid truncation when converting from ms to us. Make sure dates are within allowed range.
+    Seq(JLong.MIN_VALUE, JLong.MAX_VALUE).foreach { ts =>
+      intercept[IllegalArgumentException] {
+        fromJavaTimestamp(new Timestamp(ts))
+      }
+      intercept[IllegalArgumentException] {
+        fromJavaDate(new Date(ts))
+      }
+    }
+
+    // Make sure calculated nanos are positive, since that's what the Hive/Impala timestamp spec
+    // expects. Also make sure it's less than 999999999 (the limit imposed by java.sql.Timestamp).
+    val julianDay = -(JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY)
+    val nextDay = julianDay + MICROS_PER_DAY
+    val (day, nanos) = toJulianDay(nextDay + 1)
+    assert(day === 1)
+    assert(nanos >= 0)
+    assert(nanos <= 999999999)
+  }
+
 }
