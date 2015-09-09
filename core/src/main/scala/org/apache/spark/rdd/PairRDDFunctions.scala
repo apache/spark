@@ -105,9 +105,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * This method is here for backward compatibility. It
-   * does not provide combiner classtag information to
-   * the shuffle.
+   * Generic function to combine the elements for each key using a custom set of aggregation
+   * functions. This method is here for backward compatibility. It does not provide combiner
+   * classtag information to the shuffle.
    *
    * @see [[combineByKeyWithClassTag]]
    */
@@ -123,9 +123,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * This method is here for backward compatibility. It
-   * does not provide combiner classtag information to
-   * the shuffle.
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the output RDD.
+   * This method is here for backward compatibility. It does not provide combiner
+   * classtag information to the shuffle.
    *
    * @see [[combineByKeyWithClassTag]]
    */
@@ -605,9 +605,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * This method is here for backward compatibility. It
-   * does not provide combiner classtag information to
-   * the shuffle.
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the resulting RDD using the
+   * existing partitioner/parallelism level. This method is here for backward compatibility. It
+   * does not provide combiner classtag information to the shuffle.
    *
    * @see [[combineByKeyWithClassTag]]
    */
