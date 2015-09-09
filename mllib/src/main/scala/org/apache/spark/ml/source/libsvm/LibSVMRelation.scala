@@ -20,6 +20,7 @@ package org.apache.spark.ml.source.libsvm
 import com.google.common.base.Objects
 
 import org.apache.spark.Logging
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -68,8 +69,10 @@ private[ml] class LibSVMRelation(val path: String, val numFeatures: Int, val vec
  * This is used for creating DataFrame from LibSVM format file.
  * The LibSVM file path must be specified to DefaultSource.
  */
+@Since("1.6.0")
 class DefaultSource extends RelationProvider with DataSourceRegister {
 
+  @Since("1.6.0")
   override def shortName(): String = "libsvm"
 
   private def checkPath(parameters: Map[String, String]): String = {

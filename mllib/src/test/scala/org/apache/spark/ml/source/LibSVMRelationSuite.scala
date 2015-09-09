@@ -21,8 +21,8 @@ import java.io.File
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.source.libsvm._
 import org.apache.spark.mllib.linalg.{SparseVector, Vectors, DenseVector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils
@@ -67,19 +67,10 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("select long vector with specifying the number of features") {
-    val lines =
-      """
-        |1 1:1 10:2 20:3 30:4 40:5 50:6 60:7 70:8 80:9 90:10 100:1
-        |0 1:1 10:10 20:9 30:8 40:7 50:6 60:5 70:4 80:3 90:2 100:1
-      """.stripMargin
-    val tempDir = Utils.createTempDir()
-    val file = new File(tempDir.getPath, "part-00001")
-    Files.write(lines, file, Charsets.US_ASCII)
     val df = sqlContext.read.option("numFeatures", "100").format("libsvm")
-      .load(tempDir.toURI.toString)
+      .load(path)
     val row1 = df.first()
     val v = row1.getAs[SparseVector](1)
-    assert(v == Vectors.sparse(100, Seq((0, 1.0), (9, 2.0), (19, 3.0), (29, 4.0), (39, 5.0),
-      (49, 6.0), (59, 7.0), (69, 8.0), (79, 9.0), (89, 10.0), (99, 1.0))))
+    assert(v == Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
   }
 }

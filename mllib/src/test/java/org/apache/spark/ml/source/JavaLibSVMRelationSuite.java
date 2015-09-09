@@ -23,13 +23,13 @@ import java.io.IOException;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 
-import org.apache.spark.mllib.linalg.DenseVector;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
@@ -45,6 +45,7 @@ public class JavaLibSVMRelationSuite {
   private transient SQLContext jsql;
   private transient DataFrame dataset;
 
+  private File tmpDir;
   private File path;
 
   @Before
@@ -52,8 +53,8 @@ public class JavaLibSVMRelationSuite {
     jsc = new JavaSparkContext("local", "JavaLibSVMRelationSuite");
     jsql = new SQLContext(jsc);
 
-    File tmpDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
-    path = File.createTempFile("datasource", "libsvm-relation", tmpDir);
+    tmpDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
+    path = new File(tmpDir.getPath(), "part-00000");
 
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
     Files.write(s, path, Charsets.US_ASCII);
@@ -63,7 +64,7 @@ public class JavaLibSVMRelationSuite {
   public void tearDown() {
     jsc.stop();
     jsc = null;
-    path.delete();
+    Utils.deleteRecursively(tmpDir);
   }
 
   @Test
@@ -72,7 +73,7 @@ public class JavaLibSVMRelationSuite {
     Assert.assertEquals("label", dataset.columns()[0]);
     Assert.assertEquals("features", dataset.columns()[1]);
     Row r = dataset.first();
-    Assert.assertEquals(Double.valueOf(1.0), Double.valueOf(r.getDouble(0)));
+    Assert.assertEquals(1.0, r.getDouble(0), 1e-15);
     DenseVector v = r.getAs(1);
     Assert.assertEquals(Vectors.dense(1.0, 0.0, 2.0, 0.0, 3.0, 0.0), v);
   }
