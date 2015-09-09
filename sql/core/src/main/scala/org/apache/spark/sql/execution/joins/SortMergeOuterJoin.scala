@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter, FullOuter}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
+import org.apache.spark.util.collection.BitSet
 
 /**
  * :: DeveloperApi ::
@@ -52,6 +55,8 @@ case class SortMergeOuterJoin(
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
+      case FullOuter =>
+        (left.output ++ right.output).map(_.withNullability(true))
       case x =>
         throw new IllegalArgumentException(
           s"${getClass.getSimpleName} should not take $x as the JoinType")
@@ -62,6 +67,7 @@ case class SortMergeOuterJoin(
     // For left and right outer joins, the output is partitioned by the streamed input's join keys.
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
+    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
@@ -71,6 +77,7 @@ case class SortMergeOuterJoin(
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
     case LeftOuter => requiredOrders(leftKeys)
     case RightOuter => requiredOrders(rightKeys)
+    case FullOuter => Nil
     case x => throw new IllegalArgumentException(
       s"SortMergeOuterJoin should not take $x as the JoinType")
   }
@@ -164,6 +171,26 @@ case class SortMergeOuterJoin(
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(
             smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows).toScala
+
+        case FullOuter =>
+          val leftNullRow = new GenericInternalRow(left.output.length)
+          val rightNullRow = new GenericInternalRow(right.output.length)
+          val smjScanner = new SortMergeFullJoinScanner(
+            leftKeyGenerator = createLeftKeyGenerator(),
+            rightKeyGenerator = createRightKeyGenerator(),
+            keyOrdering,
+            leftIter = RowIterator.fromScala(leftIter),
+            numLeftRows,
+            rightIter = RowIterator.fromScala(rightIter),
+            numRightRows,
+            boundCondition,
+            leftNullRow,
+            rightNullRow)
+
+          new FullOuterIterator(
+            smjScanner,
+            resultProj,
+            numOutputRows).toScala
 
         case x =>
           throw new IllegalArgumentException(
@@ -267,6 +294,231 @@ private class RightOuterIterator(
     val r = advanceLeftUntilBoundConditionSatisfied() || advanceRight()
     if (r) numRows += 1
     r
+  }
+
+  override def getRow: InternalRow = resultProj(joinedRow)
+}
+
+private class SortMergeFullJoinScanner(
+    leftKeyGenerator: Projection,
+    rightKeyGenerator: Projection,
+    keyOrdering: Ordering[InternalRow],
+    leftIter: RowIterator,
+    numLeftRows: LongSQLMetric,
+    rightIter: RowIterator,
+    numRightRows: LongSQLMetric,
+    boundCondition: InternalRow => Boolean,
+    leftNullRow: InternalRow,
+    rightNullRow: InternalRow)  {
+  private[this] val joinedRow: JoinedRow = new JoinedRow()
+  private[this] var leftRow: InternalRow = _
+  private[this] var leftRowKey: InternalRow = _
+  private[this] var rightRow: InternalRow = _
+  private[this] var rightRowKey: InternalRow = _
+
+  private[this] var leftIndex: Int = _
+  private[this] var rightIndex: Int = _
+  private[this] val leftMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
+  private[this] val rightMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
+
+  private[this] var notMatchBitSet: BitSet = _
+  private[this] val foundRightIndex: ArrayBuffer[Int] = new ArrayBuffer[Int]
+
+  private[this] var leftAdvanced: Boolean = false
+  private[this] var rightAdvanced: Boolean = false
+
+  // --- Private methods --------------------------------------------------------------------------
+
+  /**
+   * Advance the left iterator and compute the new row's join key.
+   * @return true if the left iterator returned a row and false otherwise.
+   */
+  private def advancedLeft(): Boolean = {
+    if (leftIter.advanceNext()) {
+      leftRow = leftIter.getRow
+      leftRowKey = leftKeyGenerator(leftRow)
+      numLeftRows += 1
+      true
+    } else {
+      leftRow = null
+      leftRowKey = null
+      false
+    }
+  }
+
+  /**
+   * Advance the right iterator and compute the new row's join key.
+   * @return true if the right iterator returned a row and false otherwise.
+   */
+  private def advancedRight(): Boolean = {
+    if (rightIter.advanceNext()) {
+      rightRow = rightIter.getRow
+      rightRowKey = rightKeyGenerator(rightRow)
+      numRightRows += 1
+      true
+    } else {
+      rightRow = null
+      rightRowKey = null
+      false
+    }
+  }
+
+  /**
+   * Consume rows from both iterators. Keep record matching rows in buffers until their
+   * row keys are different.
+   */
+  private def findMatchingRows(matchingKey: InternalRow): Unit = {
+    leftMatches.clear()
+    rightMatches.clear()
+
+    do {
+      leftMatches += leftRow.copy()
+      leftAdvanced = advancedLeft()
+    } while (leftAdvanced && (keyOrdering.compare(leftRowKey, matchingKey) == 0))
+
+    do {
+      rightMatches += rightRow.copy()
+      rightAdvanced = advancedRight()
+    } while (rightAdvanced && (keyOrdering.compare(matchingKey, rightRowKey) == 0))
+
+    leftIndex = 0
+    rightIndex = 0
+    notMatchBitSet = new BitSet(rightMatches.size)
+  }
+
+  /**
+   * Scan for next matching rows in buffers of both sides.
+   * @return true if next row(s) are found and false otherwise.
+   */
+  private def scanNextInBuffered(): Boolean = {
+    if (leftIndex < leftMatches.size) {
+      var found = false
+      do {
+        found = boundCondition(joinedRow(leftMatches(leftIndex), rightMatches(rightIndex)))
+        if (!found) {
+          if (!foundRightIndex.contains(rightIndex)) {
+            notMatchBitSet.set(rightIndex)
+          }
+          rightIndex += 1
+        }
+      } while (!found && rightIndex < rightMatches.size)
+
+      // No match can be found
+      // Output only left row
+      if (!found) {
+        // We only output left row with null right row when we can't find any matches in right
+        // iterator, including current try and previous tries
+        if (foundRightIndex.isEmpty) {
+          joinedRow(leftMatches(leftIndex), rightNullRow)
+          leftIndex += 1
+          rightIndex = 0
+        }
+      } else {
+        notMatchBitSet.unset(rightIndex)
+        foundRightIndex += rightIndex
+        rightIndex += 1
+        if (rightIndex == rightMatches.size) {
+          leftIndex += 1
+          rightIndex = 0
+        }
+      }
+      if (leftIndex == leftMatches.size) {
+        rightIndex = 0
+        foundRightIndex.clear()
+      }
+      true
+    } else if (rightIndex < rightMatches.size) {
+      // Output those right rows not matched by any left row
+      rightIndex = notMatchBitSet.nextSetBit(rightIndex)
+      if (rightIndex >= 0) {
+        joinedRow(leftNullRow, rightMatches(rightIndex))
+        rightIndex += 1
+        true
+      } else {
+        false
+      }
+    } else {
+      false
+    }
+  }
+
+  private def canCompare: Boolean = {
+    (leftAdvanced && rightAdvanced ) && (!leftRowKey.anyNull || !rightRowKey.anyNull)
+  }
+
+  // --- Public methods --------------------------------------------------------------------------
+
+  def getLeftRow(): InternalRow = leftRow
+  def getRightRow(): InternalRow = rightRow
+  def getJoinedRow(): JoinedRow = joinedRow
+
+  def advanceNextPair(): Boolean = {
+    // We already buffered some matching rows, use them directly
+    if (leftMatches.size > 0 && rightMatches.size > 0) {
+      if (scanNextInBuffered()) {
+        return true
+      } else {
+        // No more rows in buffers
+        leftMatches.clear()
+        rightMatches.clear()
+      }
+    }
+
+    if (leftRow == null) {
+      leftAdvanced = advancedLeft()
+    }
+
+    if (rightRow == null) {
+      rightAdvanced = advancedRight()
+    }
+
+    // Both left and right iterators have rows and they can be compared
+    if (canCompare) {
+      // No buffered matching rows
+      val comp = keyOrdering.compare(leftRowKey, rightRowKey)
+      if (comp == 0) {
+        // Find matching rows from both iterators and put in buffers
+        findMatchingRows(leftRowKey.copy())
+        scanNextInBuffered()
+        // Since we buffered matching rows, we don't consume rows in next round
+      } else if (comp < 0) {
+        joinedRow(getLeftRow(), rightNullRow)
+        leftRow = null
+      } else {
+        joinedRow(leftNullRow, getRightRow())
+        rightRow = null
+      }
+      true
+    } else if (leftAdvanced) {
+      // Only consume row(s) from left iterator
+      joinedRow(getLeftRow(), rightNullRow)
+      leftRow = null
+      true
+    } else if (rightAdvanced) {
+      // Only consume row(s) from right iterator
+      joinedRow(leftNullRow, getRightRow())
+      rightRow = null
+      true
+    } else {
+      // Both iterators have been consumed
+      false
+    }
+  }
+}
+
+private class FullOuterIterator(
+    smjScanner: SortMergeFullJoinScanner,
+    resultProj: InternalRow => InternalRow,
+    numRows: LongSQLMetric
+  ) extends RowIterator {
+  private[this] val joinedRow: JoinedRow = smjScanner.getJoinedRow()
+
+  override def advanceNext(): Boolean = {
+    val advancedStatus = smjScanner.advanceNextPair()
+    if (advancedStatus) {
+      numRows += 1
+    }
+    advancedStatus
   }
 
   override def getRow: InternalRow = resultProj(joinedRow)
