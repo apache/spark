@@ -82,7 +82,6 @@ class StreamingContext(object):
         # start callback server
         # getattr will fallback to JVM, so we cannot test by hasattr()
         if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
-            gw._eager_load()
             gw.callback_server_parameters.eager_load = True
             gw.callback_server_parameters.daemonize = True
             gw.callback_server_parameters.port = 0
