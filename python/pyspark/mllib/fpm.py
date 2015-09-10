@@ -41,6 +41,8 @@ class FPGrowthModel(JavaModelWrapper):
     >>> model = FPGrowth.train(rdd, 0.6, 2)
     >>> sorted(model.freqItemsets().collect())
     [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
+
+    .. addedversion:: 1.4.0
     """
 
     @since("1.4.0")
