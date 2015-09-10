@@ -19,26 +19,22 @@ package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Attribute, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Projection, UnsafeProjection}
 
+case class ConvertToUnsafeNode(conf: SQLConf, child: LocalNode) extends UnaryLocalNode(conf) {
 
-case class ProjectNode(conf: SQLConf, projectList: Seq[NamedExpression], child: LocalNode)
-  extends UnaryLocalNode(conf) {
+  override def output: Seq[Attribute] = child.output
 
-  private[this] var project: UnsafeProjection = _
-
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  private[this] var convertToUnsafe: Projection = _
 
   override def open(): Unit = {
-    project = UnsafeProjection.create(projectList, child.output)
     child.open()
+    convertToUnsafe = UnsafeProjection.create(child.schema)
   }
 
   override def next(): Boolean = child.next()
 
-  override def fetch(): InternalRow = {
-    project.apply(child.fetch())
-  }
+  override def fetch(): InternalRow = convertToUnsafe(child.fetch())
 
   override def close(): Unit = child.close()
 }
