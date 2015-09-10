@@ -246,10 +246,12 @@ private[spark] class MesosSchedulerBackend(
           // cores for the Mesos executor by offering fewer cores to the Spark executor
           (getResource(o.getResourcesList, "cpus") - mesosExecutorCores).toInt
         }
+        val memory = getResource(o.getResourcesList, "mem").toLong*1024*1024
         new WorkerOffer(
           o.getSlaveId.getValue,
           o.getHostname,
-          cpus)
+          cpus,
+          memory)
       }
 
       val slaveIdToOffer = usableOffers.map(o => o.getSlaveId.getValue -> o).toMap
@@ -285,11 +287,11 @@ private[spark] class MesosSchedulerBackend(
       val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
 
       mesosTasks.foreach { case (slaveId, tasks) =>
-        slaveIdToWorkerOffer.get(slaveId).foreach(o =>
+        slaveIdToWorkerOffer.get(slaveId).foreach(o => {
           listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), slaveId,
             // TODO: Add support for log urls for Mesos
-            new ExecutorInfo(o.host, o.cores, Map.empty)))
-        )
+            new ExecutorInfo(o.host, o.cores, o.memory, Map.empty)))
+        })
         logTrace(s"Launching Mesos tasks on slave '$slaveId', tasks:\n${getTasksSummary(tasks)}")
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
       }

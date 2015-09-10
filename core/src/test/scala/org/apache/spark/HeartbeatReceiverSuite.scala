@@ -171,9 +171,9 @@ class HeartbeatReceiverSuite
     val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
     fakeSchedulerBackend.driverEndpoint.askWithRetry[RegisteredExecutor.type](
-      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "dummy:4040", 0, Map.empty))
+      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "dummy:4040", 0, 0, Map.empty))
     fakeSchedulerBackend.driverEndpoint.askWithRetry[RegisteredExecutor.type](
-      RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "dummy:4040", 0, Map.empty))
+      RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "dummy:4040", 0, 0, Map.empty))
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
     heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
     heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId2, null))

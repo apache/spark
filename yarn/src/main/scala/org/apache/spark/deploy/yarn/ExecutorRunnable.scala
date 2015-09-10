@@ -225,6 +225,7 @@ class ExecutorRunnable(
         "--executor-id", slaveId.toString,
         "--hostname", hostname.toString,
         "--cores", executorCores.toString,
+        "--memory", executorMemoryString,
         "--app-id", appId) ++
       userClassPath ++
       Seq(

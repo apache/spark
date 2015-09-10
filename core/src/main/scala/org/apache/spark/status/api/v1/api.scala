@@ -48,6 +48,8 @@ class ExecutorStageSummary private[spark](
 class ExecutorSummary private[spark](
     val id: String,
     val hostPort: String,
+    val totalCores: Int,
+    val totalMemory: Long,
     val rddBlocks: Int,
     val memoryUsed: Long,
     val diskUsed: Long,

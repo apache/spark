@@ -116,6 +116,7 @@ private[deploy] class ExecutorRunner(
     case "{{EXECUTOR_ID}}" => execId.toString
     case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
+    case "{{MEMORY}}" => memory + "MB"
     case "{{APP_ID}}" => appId
     case other => other
   }

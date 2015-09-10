@@ -155,7 +155,7 @@ class ExecutorAllocationManagerSuite
     // Verify that running a task doesn't affect the target
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 3)))
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, 1024*1024*1024L, Map.empty)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
     assert(numExecutorsTarget(manager) === 5)
     assert(addExecutors(manager) === 1)
@@ -615,13 +615,13 @@ class ExecutorAllocationManagerSuite
 
     // New executors have registered
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, 1024*1024*1024L, Map.empty)))
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 1)
     assert(removeTimes(manager).contains("executor-1"))
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-2", new ExecutorInfo("host2", 1, Map.empty)))
+      0L, "executor-2", new ExecutorInfo("host2", 1, 1024*1024*1024L, Map.empty)))
     assert(executorIds(manager).size === 2)
     assert(executorIds(manager).contains("executor-2"))
     assert(removeTimes(manager).size === 2)
@@ -648,7 +648,7 @@ class ExecutorAllocationManagerSuite
 
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, 1024*1024*1024L, Map.empty)))
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 0)
@@ -660,7 +660,7 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).isEmpty)
     assert(removeTimes(manager).isEmpty)
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, 1024*1024*1024L, Map.empty)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
 
     assert(executorIds(manager).size === 1)
@@ -668,7 +668,7 @@ class ExecutorAllocationManagerSuite
     assert(removeTimes(manager).size === 0)
 
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-2", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-2", new ExecutorInfo("host1", 1, 1024*1024*1024L, Map.empty)))
     assert(executorIds(manager).size === 2)
     assert(executorIds(manager).contains("executor-2"))
     assert(removeTimes(manager).size === 1)

@@ -39,8 +39,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     }
 
     val numFreeCores = 1
-    val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores),
-      new WorkerOffer("executor1", "host1", numFreeCores))
+    val totalMemory = 1024*1024*1024L
+    val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores, totalMemory),
+      new WorkerOffer("executor1", "host1", numFreeCores, totalMemory))
     // Repeatedly try to schedule a 1-task job, and make sure that it doesn't always
     // get scheduled on the same executor. While there is a chance this test will fail
     // because the task randomly gets placed on the first executor all 1000 times, the
@@ -62,6 +63,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
   test("Scheduler correctly accounts for multiple CPUs per task") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskCpus = 2
+    val totalMemory = 1024*1024*1024L
 
     sc.conf.set("spark.task.cpus", taskCpus.toString)
     val taskScheduler = new TaskSchedulerImpl(sc)
@@ -72,8 +74,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
       override def executorAdded(execId: String, host: String) {}
     }
     // Give zero core offers. Should not generate any tasks
-    val zeroCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", 0),
-      new WorkerOffer("executor1", "host1", 0))
+    val zeroCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", 0, totalMemory),
+      new WorkerOffer("executor1", "host1", 0, totalMemory))
     val taskSet = FakeTask.createTaskSet(1)
     taskScheduler.submitTasks(taskSet)
     var taskDescriptions = taskScheduler.resourceOffers(zeroCoreWorkerOffers).flatten
@@ -81,16 +83,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
 
     // No tasks should run as we only have 1 core free.
     val numFreeCores = 1
-    val singleCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores),
-      new WorkerOffer("executor1", "host1", numFreeCores))
+    val singleCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores, totalMemory),
+      new WorkerOffer("executor1", "host1", numFreeCores, totalMemory))
     taskScheduler.submitTasks(taskSet)
     taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
     assert(0 === taskDescriptions.length)
 
     // Now change the offers to have 2 cores in one executor and verify if it
     // is chosen.
-    val multiCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", taskCpus),
-      new WorkerOffer("executor1", "host1", numFreeCores))
+    val multiCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", taskCpus, totalMemory),
+      new WorkerOffer("executor1", "host1", numFreeCores, totalMemory))
     taskScheduler.submitTasks(taskSet)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(1 === taskDescriptions.length)
@@ -100,6 +102,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
   test("Scheduler does not crash when tasks are not serializable") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskCpus = 2
+    val totalMemory = 1024*1024*1024L
 
     sc.conf.set("spark.task.cpus", taskCpus.toString)
     val taskScheduler = new TaskSchedulerImpl(sc)
@@ -113,8 +116,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     taskScheduler.setDAGScheduler(dagScheduler)
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
-    val multiCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", taskCpus),
-      new WorkerOffer("executor1", "host1", numFreeCores))
+    val multiCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", taskCpus, totalMemory),
+      new WorkerOffer("executor1", "host1", numFreeCores, totalMemory))
     taskScheduler.submitTasks(taskSet)
     var taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(0 === taskDescriptions.length)
@@ -158,6 +161,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
     taskScheduler.initialize(new FakeSchedulerBackend)
+
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
       override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
@@ -165,7 +169,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     }
 
     val numFreeCores = 1
-    val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores))
+    val totalMemory = 1024*1024*1024L
+    val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores, totalMemory))
     val attempt1 = FakeTask.createTaskSet(10)
 
     // submit attempt 1, offer some resources, some tasks get scheduled
@@ -203,7 +208,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     }
 
     val numFreeCores = 10
-    val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores))
+    val totalMemory = 1024*1024*1024L
+    val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores, totalMemory))
     val attempt1 = FakeTask.createTaskSet(10)
 
     // submit attempt 1, offer some resources, some tasks get scheduled

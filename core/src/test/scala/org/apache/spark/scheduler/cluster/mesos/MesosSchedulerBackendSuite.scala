@@ -48,7 +48,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, 1024*1024*1024L, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.getSparkHome()).thenReturn(Option("/spark-home"))
@@ -87,7 +87,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, 1024*1024*1024L, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)
@@ -146,7 +146,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, 1024*1024*1024L, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)
@@ -169,12 +169,14 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     expectedWorkerOffers.append(new WorkerOffer(
       mesosOffers.get(0).getSlaveId.getValue,
       mesosOffers.get(0).getHostname,
-      (minCpu - backend.mesosExecutorCores).toInt
+      (minCpu - backend.mesosExecutorCores).toInt,
+      1024*1024*1024L
     ))
     expectedWorkerOffers.append(new WorkerOffer(
       mesosOffers.get(2).getSlaveId.getValue,
       mesosOffers.get(2).getHostname,
-      (minCpu - backend.mesosExecutorCores).toInt
+      (minCpu - backend.mesosExecutorCores).toInt,
+      1024*1024*1024L
     ))
     val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
@@ -227,7 +229,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
-      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, 1024*1024*1204L, Map.empty)))
 
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)
@@ -273,7 +275,8 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     expectedWorkerOffers.append(new WorkerOffer(
       mesosOffers.get(0).getSlaveId.getValue,
       mesosOffers.get(0).getHostname,
-      2 // Deducting 1 for executor
+      2, // Deducting 1 for executor
+      1024*1024*1024L
     ))
 
     val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
