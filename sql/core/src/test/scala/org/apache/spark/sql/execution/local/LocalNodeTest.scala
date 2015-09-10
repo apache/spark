@@ -17,39 +17,15 @@
 
 package org.apache.spark.sql.execution.local
 
-import scala.reflect.runtime.universe.TypeTag
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row, SQLConf}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
 
-  protected val conf = new SQLConf
-
-  /**
-   * Sets all configurations specified in `pairs`, calls `f`, and then restore all configurations.
-   */
-  protected def withConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(conf.getConfString(key)).toOption)
-    (keys, values).zipped.foreach(conf.setConfString)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConfString(key, value)
-        case (key, None) => conf.unsetConf(key)
-      }
-    }
-  }
-
-  /**
-   * Creates a DataFrame from a local Seq of Product.
-   */
-  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
-    sqlContext.implicits.localSeqToDataFrameHolder(data)
-  }
+  def conf: SQLConf = sqlContext.conf
 
   /**
    * Runs the LocalNode and makes sure the answer matches the expected result.

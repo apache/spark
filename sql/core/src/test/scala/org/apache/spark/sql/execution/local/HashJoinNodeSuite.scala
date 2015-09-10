@@ -24,7 +24,8 @@ class HashJoinNodeSuite extends LocalNodeTest {
 
   import testImplicits._
 
-  private def wrapForUnsafe(f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
+  private def wrapForUnsafe(
+      f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
     if (conf.unsafeEnabled) {
       (left: LocalNode, right: LocalNode) => {
         val _left = ConvertToUnsafeNode(conf, left)
@@ -39,7 +40,7 @@ class HashJoinNodeSuite extends LocalNodeTest {
 
   def joinSuite(suiteName: String, confPairs: (String, String)*): Unit = {
     test(s"$suiteName: inner join with one match per row") {
-      withConf(confPairs: _*) {
+      withSQLConf(confPairs: _*) {
         checkAnswer2(
           upperCaseData,
           lowerCaseData,
@@ -58,7 +59,7 @@ class HashJoinNodeSuite extends LocalNodeTest {
     }
 
     test(s"$suiteName: inner join with multiple matches") {
-      withConf(confPairs: _*) {
+      withSQLConf(confPairs: _*) {
         val x = testData2.where($"a" === 1).as("x")
         val y = testData2.where($"a" === 1).as("y")
         checkAnswer2(
@@ -79,7 +80,7 @@ class HashJoinNodeSuite extends LocalNodeTest {
     }
 
     test(s"$suiteName: inner join, no matches") {
-      withConf(confPairs: _*) {
+      withSQLConf(confPairs: _*) {
         val x = testData2.where($"a" === 1).as("x")
         val y = testData2.where($"a" === 2).as("y")
         checkAnswer2(
@@ -100,7 +101,7 @@ class HashJoinNodeSuite extends LocalNodeTest {
     }
 
     test(s"$suiteName: big inner join, 4 matches per row") {
-      withConf(confPairs: _*) {
+      withSQLConf(confPairs: _*) {
         val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
         val bigDataX = bigData.as("x")
         val bigDataY = bigData.as("y")
