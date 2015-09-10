@@ -108,27 +108,27 @@ class UnsafeRowSerializerSuite extends SparkFunSuite {
         .set("spark.shuffle.sort.bypassMergeThreshold", "0")
         .set("spark.shuffle.memoryFraction", "0.0001")
 
-        sc = new SparkContext("local", "test", conf)
-        outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
-        // prepare data
-        val converter = unsafeRowConverter(Array(IntegerType))
-        val data = (1 to 1000).iterator.map { i =>
-          (i, converter(Row(i)))
-        }
-        val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
-          partitioner = Some(new HashPartitioner(10)),
-          serializer = Some(new UnsafeRowSerializer(numFields = 1)))
+      sc = new SparkContext("local", "test", conf)
+      outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
+      // prepare data
+      val converter = unsafeRowConverter(Array(IntegerType))
+      val data = (1 to 1000).iterator.map { i =>
+        (i, converter(Row(i)))
+      }
+      val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
+        partitioner = Some(new HashPartitioner(10)),
+        serializer = Some(new UnsafeRowSerializer(numFields = 1)))
 
-        // Ensure we spilled something and have to merge them later
-        assert(sorter.numSpills === 0)
-        sorter.insertAll(data)
-        assert(sorter.numSpills > 0)
+      // Ensure we spilled something and have to merge them later
+      assert(sorter.numSpills === 0)
+      sorter.insertAll(data)
+      assert(sorter.numSpills > 0)
 
-        // Merging spilled files should not throw assertion error
-        val taskContext =
-          new TaskContextImpl(0, 0, 0, 0, null, null, InternalAccumulator.create(sc))
-        taskContext.taskMetrics.shuffleWriteMetrics = Some(new ShuffleWriteMetrics)
-        sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), taskContext, outputFile)
+      // Merging spilled files should not throw assertion error
+      val taskContext =
+        new TaskContextImpl(0, 0, 0, 0, null, null, InternalAccumulator.create(sc))
+      taskContext.taskMetrics.shuffleWriteMetrics = Some(new ShuffleWriteMetrics)
+      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), taskContext, outputFile)
     } {
       // Clean up
       if (sc != null) {
