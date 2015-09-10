@@ -22,9 +22,9 @@ if sys.version >= '3':
     basestring = str
     long = int
 
+from pyspark import since
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql import since
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "Column", "SchemaRDD", "DataFrameNaFunctions",
@@ -59,6 +59,18 @@ def _to_seq(sc, cols, converter=None):
     if converter:
         cols = [converter(c) for c in cols]
     return sc._jvm.PythonUtils.toSeq(cols)
+
+
+def _to_list(sc, cols, converter=None):
+    """
+    Convert a list of Column (or names) into a JVM (Scala) List of Column.
+
+    An optional `converter` could be used to convert items in `cols`
+    into JVM Column objects.
+    """
+    if converter:
+        cols = [converter(c) for c in cols]
+    return sc._jvm.PythonUtils.toList(cols)
 
 
 def _unary_op(name, doc="unary operator"):
@@ -213,6 +225,9 @@ class Column(object):
         if item.startswith("__"):
             raise AttributeError(item)
         return self.getField(item)
+
+    def __iter__(self):
+        raise TypeError("Column is not iterable")
 
     # string methods
     rlike = _bin_op("rlike")

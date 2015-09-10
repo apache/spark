@@ -21,7 +21,7 @@ import java.net.URI
 import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.spark.SparkUserAppException
@@ -71,7 +71,7 @@ object PythonRunner {
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
 
     // Launch Python process
-    val builder = new ProcessBuilder(Seq(pythonExec, formattedPythonFile) ++ otherArgs)
+    val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:

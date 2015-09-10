@@ -29,7 +29,9 @@ __all__ = ['Broker', 'KafkaUtils', 'OffsetRange', 'TopicAndPartition', 'utf8_dec
 
 def utf8_decoder(s):
     """ Decode the unicode as UTF-8 """
-    return s and s.decode('utf-8')
+    if s is None:
+        return None
+    return s.decode('utf-8')
 
 
 class KafkaUtils(object):
