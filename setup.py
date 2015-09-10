@@ -51,6 +51,7 @@ setup(
         'flask-login>=0.2.11',
         'flower>=0.7.3',
         'future>=0.15.0',
+        'gunicorn>=19.3.0',
         'jinja2>=2.7.3',
         'markdown>=2.5.2',
         'pandas>=0.15.2',
@@ -61,7 +62,6 @@ setup(
         'sqlalchemy>=0.9.8',
         'statsd>=3.0.1',
         'thrift>=0.9.2',
-        'tornado>=4.0.2',
     ],
     extras_require={
         'all': devel + optional,

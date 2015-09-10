@@ -237,6 +237,7 @@ def webserver(args):
     print(settings.HEADER)
     log_to_stdout()
     from airflow.www.app import app
+    threads = args.threads or conf.get('webserver', 'threads')
     if args.debug:
         print(
             "Starting the web server on port {0} and host {1}.".format(
@@ -244,14 +245,12 @@ def webserver(args):
         app.run(debug=True, port=args.port, host=args.hostname)
     else:
         print(
-            'Running Tornado server on host {host} and port {port}...'.format(
-                host=args.hostname, port=args.port))
-        from tornado.httpserver import HTTPServer
-        from tornado.ioloop import IOLoop
-        from tornado.wsgi import WSGIContainer
-        http_server = HTTPServer(WSGIContainer(app))
-        http_server.listen(args.port)
-        IOLoop.instance().start()
+            'Running the Gunicorn server with {threads}'
+            'on host {args.hostname} and port '
+            '{args.port}...'.format(**locals()))
+        subprocess.Popen([
+            'gunicorn', '-w', str(args.threads), '-b',
+            args.hostname + ':' + str(args.port), 'airflow.www.app:app'])
 
 
 def scheduler(args):
@@ -487,6 +486,11 @@ def get_parser():
         default=conf.get('webserver', 'WEB_SERVER_PORT'),
         type=int,
         help="Set the port on which to run the web server")
+    parser_webserver.add_argument(
+        "-w", "--threads",
+        default=conf.get('webserver', 'THREADS'),
+        type=int,
+        help="Number of threads to run the webserver on")
     parser_webserver.add_argument(
         "-hn", "--hostname",
         default=conf.get('webserver', 'WEB_SERVER_HOST'),

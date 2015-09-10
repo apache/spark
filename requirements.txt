@@ -12,6 +12,7 @@ flask-cache
 flask-login
 flower
 future
+gunicorn
 hive-thrift-py
 ipython
 jinja2
