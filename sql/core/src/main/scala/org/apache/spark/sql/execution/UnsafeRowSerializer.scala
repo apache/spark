@@ -72,7 +72,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
     override def writeKey[T: ClassTag](key: T): SerializationStream = {
       // The key is only needed on the map side when computing partition ids. It does not need to
       // be shuffled.
-      assert(key.isInstanceOf[Int])
+      assert(null == key || key.isInstanceOf[Int])
       this
     }
 
