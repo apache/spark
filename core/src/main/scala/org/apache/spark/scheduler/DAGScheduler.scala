@@ -901,7 +901,7 @@ class DAGScheduler(
       // the stage as completed here in case there are no tasks to run
       markStageAsFinished(stage, None)
 
-      def debugString: String = stage match {
+      logDebug(stage match {
         case stage: ShuffleMapStage =>
           s"Stage ${stage} is actually done; " +
             s"(available: ${stage.isAvailable}," +
@@ -909,8 +909,7 @@ class DAGScheduler(
             s"partitions: ${stage.numPartitions})"
         case stage : ResultStage =>
           s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})"
-      }
-      logDebug(debugString)
+      })
     }
   }
 
