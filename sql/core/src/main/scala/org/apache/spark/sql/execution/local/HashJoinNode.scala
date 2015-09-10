@@ -49,7 +49,6 @@ case class HashJoinNode(
   private[this] var hashed: HashedRelation = _
   private[this] var joinKeys: Projection = _
 
-
   override def output: Seq[Attribute] = left.output ++ right.output
 
   private[this] def isUnsafeMode: Boolean = {
