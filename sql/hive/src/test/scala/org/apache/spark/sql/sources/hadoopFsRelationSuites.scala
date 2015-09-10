@@ -375,6 +375,19 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
+  test("saveAsTable()/load() - partitioned table - boolean type") {
+    sqlContext.range(2)
+      .select('id, ('id % 2 === 0).as("b"))
+      .write.partitionBy("b").saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(
+        sqlContext.table("t").sort('id),
+        Row(0, true) :: Row(1, false) :: Nil
+      )
+    }
+  }
+
   test("saveAsTable()/load() - partitioned table - Overwrite") {
     partitionedTestDF.write
       .format(dataSourceName)
