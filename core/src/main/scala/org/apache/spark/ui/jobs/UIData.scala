@@ -111,6 +111,8 @@ private[spark] object UIData {
       var errorMessage: Option[String] = None)
 
   case class ExecutorUIData(
+      val cores: Int,
+      val memory: Long,
       val startTime: Long,
       var finishTime: Option[Long] = None,
       var finishReason: Option[String] = None)

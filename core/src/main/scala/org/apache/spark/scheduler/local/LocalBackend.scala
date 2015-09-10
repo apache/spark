@@ -79,7 +79,7 @@ private[spark] class LocalEndpoint(
   }
 
   def reviveOffers() {
-    val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
+    val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores, Runtime.getRuntime.freeMemory()))
     for (task <- scheduler.resourceOffers(offers).flatten) {
       freeCores -= scheduler.CPUS_PER_TASK
       executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber,
@@ -121,7 +121,7 @@ private[spark] class LocalBackend(
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
       executorEndpoint.localExecutorId,
-      new ExecutorInfo(executorEndpoint.localExecutorHostname, totalCores, Map.empty)))
+      new ExecutorInfo(executorEndpoint.localExecutorHostname, totalCores, Runtime.getRuntime.maxMemory(), Map.empty)))
   }
 
   override def stop() {

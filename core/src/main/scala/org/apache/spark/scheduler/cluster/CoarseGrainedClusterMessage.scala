@@ -45,6 +45,7 @@ private[spark] object CoarseGrainedClusterMessages {
       executorRef: RpcEndpointRef,
       hostPort: String,
       cores: Int,
+      memory: Long,
       logUrls: Map[String, String])
     extends CoarseGrainedClusterMessage {
     Utils.checkHostPort(hostPort, "Expected host port")

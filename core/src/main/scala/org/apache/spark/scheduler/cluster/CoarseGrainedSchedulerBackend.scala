@@ -128,7 +128,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RegisterExecutor(executorId, executorRef, hostPort, cores, logUrls) =>
+      case RegisterExecutor(executorId, executorRef, hostPort, cores, memory, logUrls) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorDataMap.contains(executorId)) {
           context.reply(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
@@ -138,7 +138,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val (host, _) = Utils.parseHostPort(hostPort)
-          val data = new ExecutorData(executorRef, executorRef.address, host, cores, cores, logUrls)
+          val data = new ExecutorData(executorRef, executorRef.address, host, cores, cores, memory, logUrls)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -179,7 +179,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Filter out executors under killing
       val activeExecutors = executorDataMap.filterKeys(!executorsPendingToRemove.contains(_))
       val workOffers = activeExecutors.map { case (id, executorData) =>
-        new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+        new WorkerOffer(id, executorData.executorHost, executorData.freeCores, executorData.totalMemory)
       }.toSeq
       launchTasks(scheduler.resourceOffers(workOffers))
     }
@@ -195,7 +195,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       if (!executorsPendingToRemove.contains(executorId)) {
         val executorData = executorDataMap(executorId)
         val workOffers = Seq(
-          new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
+          new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores, executorData.totalMemory))
         launchTasks(scheduler.resourceOffers(workOffers))
       }
     }

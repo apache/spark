@@ -57,6 +57,7 @@ private[spark] class SparkDeploySchedulerBackend(
       "--executor-id", "{{EXECUTOR_ID}}",
       "--hostname", "{{HOSTNAME}}",
       "--cores", "{{CORES}}",
+      "--memory", "{{MEMORY}}",
       "--app-id", "{{APP_ID}}",
       "--worker-url", "{{WORKER_URL}}")
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")

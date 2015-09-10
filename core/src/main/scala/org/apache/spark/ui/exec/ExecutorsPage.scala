@@ -20,6 +20,9 @@ package org.apache.spark.ui.exec
 import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.storage.StorageStatus
+import org.apache.spark.ui.jobs.UIData.ExecutorUIData
+
 import scala.xml.Node
 
 import org.apache.spark.status.api.v1.ExecutorSummary
@@ -52,12 +55,12 @@ private[ui] class ExecutorsPage(
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val storageStatusList = listener.storageStatusList
+    val storageStatusList = listener.storageStatusList.filter(!_.blockManagerId.isDriver)
     val maxMem = storageStatusList.map(_.maxMem).sum
     val memUsed = storageStatusList.map(_.memUsed).sum
     val diskUsed = storageStatusList.map(_.diskUsed).sum
-    val execInfo = for (statusId <- 0 until storageStatusList.size) yield
-      ExecutorsPage.getExecInfo(listener, statusId)
+    val execInfo = storageStatusList.map(status=>
+      ExecutorsPage.getExecInfo(listener, status))
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
@@ -66,6 +69,8 @@ private[ui] class ExecutorsPage(
         <thead>
           <th>Executor ID</th>
           <th>Address</th>
+          <th>Cores</th>
+          <th>Memory</th>
           <th>RDD Blocks</th>
           <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
           <th>Disk Used</th>
@@ -120,6 +125,8 @@ private[ui] class ExecutorsPage(
     <tr>
       <td>{info.id}</td>
       <td>{info.hostPort}</td>
+      <td>{info.totalCores}</td>
+      <td>{Utils.bytesToString(info.totalMemory)}</td>
       <td>{info.rddBlocks}</td>
       <td sorttable_customkey={memoryUsed.toString}>
         {Utils.bytesToString(memoryUsed)} /
@@ -176,10 +183,18 @@ private[ui] class ExecutorsPage(
 
 private[spark] object ExecutorsPage {
   /** Represent an executor's info as a map given a storage status index */
-  def getExecInfo(listener: ExecutorsListener, statusId: Int): ExecutorSummary = {
-    val status = listener.storageStatusList(statusId)
+  def getExecInfo(listener: ExecutorsListener, status: StorageStatus): ExecutorSummary = {
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
+    val executorData = listener.executorIdToData.get(execId)
+    var totalCores = 0
+    var totalMemory = 0L
+    listener.executorIdToData.get(execId) match {
+      case Some(d) =>
+        totalCores = d.cores
+        totalMemory = d.memory
+      case _ =>
+    }
     val rddBlocks = status.numBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
@@ -197,6 +212,8 @@ private[spark] object ExecutorsPage {
     new ExecutorSummary(
       execId,
       hostPort,
+      totalCores,
+      totalMemory,
       rddBlocks,
       memUsed,
       diskUsed,

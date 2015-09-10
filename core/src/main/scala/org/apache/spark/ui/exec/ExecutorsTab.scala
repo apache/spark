@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{Resubmitted, ExceptionFailure, SparkContext}
+import org.apache.spark.{Logging, Resubmitted, ExceptionFailure, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
@@ -43,7 +43,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
 @DeveloperApi
-class ExecutorsListener(storageStatusListener: StorageStatusListener) extends SparkListener {
+class ExecutorsListener(storageStatusListener: StorageStatusListener) extends SparkListener with Logging {
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
@@ -62,7 +62,9 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
-    executorIdToData(eid) = ExecutorUIData(executorAdded.time)
+    log.info("executor added:" + executorAdded.executorId)
+    executorIdToData(eid) = ExecutorUIData(executorAdded.executorInfo.totalCores,
+      executorAdded.executorInfo.totalMemory, executorAdded.time)
   }
 
   override def onExecutorRemoved(

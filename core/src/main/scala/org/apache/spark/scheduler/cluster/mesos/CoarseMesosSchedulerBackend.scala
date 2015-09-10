@@ -168,6 +168,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
     val uri = conf.getOption("spark.executor.uri")
       .orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
+    val memory = getResource(offer.getResourcesList, "mem").toLong*1024*1024
 
     if (uri.isEmpty) {
       val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
@@ -178,7 +179,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         s" --executor-id ${offer.getSlaveId.getValue}" +
         s" --hostname ${offer.getHostname}" +
         s" --cores $numCores" +
+        s" --memory $memory" +
         s" --app-id $appId")
+
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
@@ -191,6 +194,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         s" --executor-id $executorId" +
         s" --hostname ${offer.getHostname}" +
         s" --cores $numCores" +
+        s" --memory $memory" +
         s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
     }

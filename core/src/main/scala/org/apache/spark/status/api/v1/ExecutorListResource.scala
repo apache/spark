@@ -29,8 +29,8 @@ private[v1] class ExecutorListResource(ui: SparkUI) {
   def executorList(): Seq[ExecutorSummary] = {
     val listener = ui.executorsListener
     val storageStatusList = listener.storageStatusList
-    (0 until storageStatusList.size).map { statusId =>
-      ExecutorsPage.getExecInfo(listener, statusId)
+    storageStatusList.map { status =>
+      ExecutorsPage.getExecInfo(listener, status)
     }
   }
 }
