@@ -350,6 +350,11 @@ class CloudPickler(Pickler):
             if new_override:
                 d['__new__'] = obj.__new__
 
+            if '__dict__' in d:
+                # '__dict__' is not writable
+                self.save_reduce(typ, (obj.__name__, obj.__bases__, d), obj=obj)
+                return
+
             self.save(_load_class)
             self.save_reduce(typ, (obj.__name__, obj.__bases__, {"__doc__": obj.__doc__}), obj=obj)
             d.pop('__doc__', None)
@@ -382,7 +387,7 @@ class CloudPickler(Pickler):
             self.save_reduce(types.MethodType, (obj.__func__, obj.__self__), obj=obj)
         else:
             self.save_reduce(types.MethodType, (obj.__func__, obj.__self__, obj.__self__.__class__),
-                         obj=obj)
+                             obj=obj)
     dispatch[types.MethodType] = save_instancemethod
 
     def save_inst(self, obj):
