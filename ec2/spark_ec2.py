@@ -178,6 +178,9 @@ def parse_args():
         "-i", "--identity-file",
         help="SSH private key file to use for logging into instances")
     parser.add_option(
+        "-p", "--profile", default="default",
+        help=" If you have multiple profiles, you can configure additional, named profiles by using this option (default: %default)")
+    parser.add_option(
         "-t", "--instance-type", default="m1.large",
         help="Type of instance to launch (default: %default). " +
              "WARNING: must be 64-bit; small instances won't work")
@@ -1311,7 +1314,10 @@ def real_main():
         sys.exit(1)
 
     try:
-        conn = ec2.connect_to_region(opts.region)
+        if opts.profile != "default":
+            conn = ec2.connect_to_region(opts.region, profile_name=opts.profile)
+	else:
+            conn = ec2.connect_to_region(opts.region)
     except Exception as e:
         print((e), file=stderr)
         sys.exit(1)
