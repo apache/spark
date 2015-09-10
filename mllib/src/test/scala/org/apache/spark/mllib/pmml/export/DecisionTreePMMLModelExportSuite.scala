@@ -166,8 +166,8 @@ with PrivateMethodTester {
     assert(pmmlLeftNode_L1.hasNodes)
     assert(pmmlLeftNode_L1.getId === "2")
     assert(pmmlLeftNode_L1.getScore == "3.0")
-    //left node to the root node should have compound predicate, since its condition is on multiple
-    //categories
+    // left node to the root node should have compound predicate, since its condition is on multiple
+    // categories
     val predicateL1 = pmmlLeftNode_L1.getPredicate
     assert(predicateL1 != null)
     assert(predicateL1.isInstanceOf[CompoundPredicate])
