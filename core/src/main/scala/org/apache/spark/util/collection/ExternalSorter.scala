@@ -294,8 +294,8 @@ private[spark] class ExternalSorter[K, V, C](
         if (partitionId < 0) {
            throw new IllegalArgumentException("Encountered negative partition Id: " + partitionId)
         }
-				if (partitionId >= numPartitions) {
-					throw new IllegalArgumentException("Encountered partition Id: " + partitionId + " which is >= " + numPartitions)
+        if (partitionId >= numPartitions) {
+           throw new IllegalArgumentException("Encountered partition Id: " + partitionId + " which is >= " + numPartitions)
         }
         it.writeNext(writer)
         elementsPerPartition(partitionId) += 1
