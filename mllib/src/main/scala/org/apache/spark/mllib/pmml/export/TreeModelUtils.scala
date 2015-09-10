@@ -30,6 +30,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
 private[mllib] object TreeModelUtils {
 
   val FieldNamePrefix = "field_"
+  val ClassNamePrefix = "class_"
 
 
   def toPMMLTree(dtModel: DecisionTreeModel, modelName: String): (TreeModel, List[DataField]) = {
@@ -41,11 +42,23 @@ private[mllib] object TreeModelUtils {
       .withFunctionName(miningFunctionType)
       .withSplitCharacteristic(TreeModel.SplitCharacteristic.BINARY_SPLIT)
 
-    val (rootNode, miningFields, dataFields) = buildStub(dtModel.topNode)
+    var (rootNode, miningFields, dataFields, classes) = buildStub(dtModel.topNode, dtModel.algo)
+
+    if (dtModel.algo == Algo.Classification) {
+      miningFields = miningFields :+ new MiningField()
+        .withName(FieldName.create("class"))
+        .withUsageType(FieldUsageType.PREDICTED)
+
+      val dataField = new DataField()
+        .withName(FieldName.create("class"))
+        .withOpType(OpType.CATEGORICAL).withValues(classes.asJava)
+        .withDataType(DataType.STRING)
+
+      dataFields = dataFields :+ dataField
+    }
 
     val miningSchema = new MiningSchema()
       .withMiningFields(miningFields.asJava)
-
 
     treeModel.withNode(rootNode)
       .withMiningSchema(miningSchema)
@@ -55,59 +68,84 @@ private[mllib] object TreeModelUtils {
   }
 
   /** Build a pmml tree stub given the root mllib node. */
-  private def buildStub(rootDTNode: Node): (PMMLNode, List[MiningField], List[DataField]) = {
+  private def buildStub(
+              rootDTNode: Node,
+              algo: Algo): (PMMLNode, List[MiningField], List[DataField], List[PMMLValue]) = {
 
     val miningFields = MutableList[MiningField]()
     val dataFields = mutable.HashMap[String, DataField]()
+    val classes = mutable.MutableList[Double]()
 
-    def buildStubInternal(rootNode: Node): PMMLNode = {
+    def buildStubInternal(rootNode: Node, predicate: Predicate): PMMLNode = {
 
       // get rootPMML node for the MLLib node
       val rootPMMLNode = createNode(rootNode)
+      rootPMMLNode.withPredicate(predicate)
 
-      if (!rootNode.isLeaf) {
+      var leftPredicate: Predicate = new True()
+      var rightPredicate: Predicate = new True()
 
-        if (rootNode.split.isDefined) {
-          val fieldName = FieldName.create(FieldNamePrefix + rootNode.split.get.feature)
-          val dataField = getDataField(rootNode, fieldName).get
+      if (rootNode.split.isDefined) {
+        val fieldName = FieldName.create(FieldNamePrefix + rootNode.split.get.feature)
+        val dataField = getDataField(rootNode, fieldName).get
 
-          if (!dataFields.get(dataField.getName.getValue).isDefined) {
-            dataFields.put(dataField.getName.getValue, dataField)
-            miningFields += new MiningField()
-              .withName(dataField.getName)
-              .withUsageType(FieldUsageType.ACTIVE)
+        if (!dataFields.get(dataField.getName.getValue).isDefined) {
+          dataFields.put(dataField.getName.getValue, dataField)
+          miningFields += new MiningField()
+            .withName(dataField.getName)
+            .withUsageType(FieldUsageType.ACTIVE)
 
-          } else if (dataField.getOpType != OpType.CONTINUOUS.value()) {
-            appendCategories(
-              dataFields.get(dataField.getName.getValue).get,
-              dataField.getValues.asScala.toList)
-          }
-
-          rootPMMLNode.withPredicate(getPredicate(rootNode, Some(dataField.getName)))
-
+        } else if (dataField.getOpType != OpType.CONTINUOUS.value()) {
+          appendCategories(
+            dataFields.get(dataField.getName.getValue).get,
+            dataField.getValues.asScala.toList)
         }
-        // if left node exist, add the node
-        if (rootNode.leftNode.isDefined) {
-          val leftNode = buildStubInternal(rootNode.leftNode.get)
-          rootPMMLNode.withNodes(leftNode)
-        }
-        // if right node exist, add the node
-        if (rootNode.rightNode.isDefined) {
-          val rightNode = buildStubInternal(rootNode.rightNode.get)
-          rootPMMLNode.withNodes(rightNode)
-        }
-      } else {
-        rootPMMLNode.withPredicate(getPredicate(rootNode, None))
+
+        leftPredicate = getPredicate(rootNode, Some(dataField.getName), true)
+        rightPredicate = getPredicate(rootNode, Some(dataField.getName), false)
+
       }
+      // if left node exist, add the node
+      if (rootNode.leftNode.isDefined) {
+        val leftNode = buildStubInternal(rootNode.leftNode.get, leftPredicate)
+        rootPMMLNode.withNodes(leftNode)
+      }
+      // if right node exist, add the node
+      if (rootNode.rightNode.isDefined) {
+        val rightNode = buildStubInternal(rootNode.rightNode.get, rightPredicate)
+        rootPMMLNode.withNodes(rightNode)
+      }
+
+      //add to the list of classes
+      if (rootNode.isLeaf && (algo == Algo.Classification)) {
+        classes += rootNode.predict.predict
+      }
+
       rootPMMLNode
     }
 
-    val pmmlTreeRootNode = buildStubInternal(rootDTNode)
+    val pmmlTreeRootNode = buildStubInternal(rootDTNode, new True())
 
-    (pmmlTreeRootNode, miningFields.toList, dataFields.values.toList)
+    val pmmlValues = classes.toList.distinct.map(doubleVal => doubleVal.toInt)
+      .map(classInt => ClassNamePrefix + classInt.toString).map(strVal => new PMMLValue(strVal))
+
+    val result = (pmmlTreeRootNode,
+      sortMiningFields(miningFields.toList),
+      sortedDataFields(dataFields.values.toList),
+      pmmlValues)
+
+    result
 
   }
 
+  private def sortMiningFields(miningFields: List[MiningField]): List[MiningField] = {
+    miningFields
+      .sortBy { case mField => mField.getName.getValue.replace(FieldNamePrefix, "").toInt }
+  }
+
+  private def sortedDataFields(dataFields: List[DataField]): List[DataField] = {
+    dataFields.sortBy { case dField => dField.getName.getValue.replace(FieldNamePrefix, "").toInt }
+  }
 
   private def appendCategories(dtField: DataField, values: List[PMMLValue]): DataField = {
     if (dtField.getOpType == OpType.CATEGORICAL) {
@@ -126,7 +164,7 @@ private[mllib] object TreeModelUtils {
   }
 
   /** Get pmml Predicate for a given mlLib tree node. */
-  private def getPredicate(node: Node, fieldName: Option[FieldName]): Predicate = {
+  private def getPredicate(node: Node, fieldName: Option[FieldName], isLeft: Boolean): Predicate = {
     // compound predicate if classification and categories list length > 0
 
     if (node.split.isDefined) {
@@ -140,27 +178,43 @@ private[mllib] object TreeModelUtils {
       featureType match {
         case FeatureType.Continuous => {
           val value = split.threshold.toString
-          new SimplePredicate(field, SimplePredicate.Operator.LESS_OR_EQUAL)
-            .withValue(value)
+          if (isLeft) {
+            new SimplePredicate(field, SimplePredicate.Operator.LESS_OR_EQUAL)
+              .withValue(value)
+          }
+          else {
+            new SimplePredicate(field, SimplePredicate.Operator.GREATER_THAN)
+              .withValue(value)
+          }
         }
         case FeatureType.Categorical => {
           if (split.categories.length > 1) {
-            val predicates: List[Predicate] =
-              for (category <- split.categories)
-                yield
-                new SimplePredicate(field, SimplePredicate.Operator.EQUAL)
-                  .withValue(category.toString)
+            if (isLeft) {
+              val predicates: List[Predicate] =
+                for (category <- split.categories)
+                  yield
+                  new SimplePredicate(field, SimplePredicate.Operator.EQUAL)
+                    .withValue(category.toString)
 
-            val compoundPredicate = new CompoundPredicate()
-              .withBooleanOperator(CompoundPredicate.BooleanOperator.OR)
-              .withPredicates(predicates.asJava)
+              val compoundPredicate = new CompoundPredicate()
+                .withBooleanOperator(CompoundPredicate.BooleanOperator.OR)
+                .withPredicates(predicates.asJava)
 
-            compoundPredicate
-
+              compoundPredicate
+            } else {
+              new True()
+            }
           }
           else {
             val value = split.categories(0).toString
-            new SimplePredicate(field, SimplePredicate.Operator.EQUAL).withValue(value)
+
+            if (isLeft) {
+              new SimplePredicate(field, SimplePredicate.Operator.EQUAL)
+                .withValue(value)
+            }
+            else {
+              new True()
+            }
           }
         }
       }
@@ -178,14 +232,6 @@ private[mllib] object TreeModelUtils {
       .withScore(mlLibNode.predict.predict.toString)
 
     node
-  }
-
-  /** Get PMML mining function type for given mlLib Algo. */
-  private def getPMMLMiningFunctionType(mlLibAlgo: Algo): MiningFunctionType = {
-    mlLibAlgo match {
-      case Algo.Classification => MiningFunctionType.CLASSIFICATION
-      case Algo.Regression => MiningFunctionType.REGRESSION
-    }
   }
 
   /** Get PMML datafield based on the mllib split feature. */
@@ -211,6 +257,14 @@ private[mllib] object TreeModelUtils {
     }
     else {
       None
+    }
+  }
+
+  /** Get PMML mining function type for given mlLib Algo. */
+  private def getPMMLMiningFunctionType(mlLibAlgo: Algo): MiningFunctionType = {
+    mlLibAlgo match {
+      case Algo.Classification => MiningFunctionType.CLASSIFICATION
+      case Algo.Regression => MiningFunctionType.REGRESSION
     }
   }
 }
