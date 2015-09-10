@@ -26,8 +26,10 @@ class TransferTests(unittest.TestCase):
         configuration.test_mode()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG(TEST_DAG_ID, default_args=args)
-        dag.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
         self.dag = dag
+
+    def test_clear(self):
+        self.dag.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
 
     def test_mysql_to_hive(self):
         sql = "SELECT * FROM task_instance LIMIT 1000;"
