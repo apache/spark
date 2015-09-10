@@ -144,7 +144,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 LabeledPoint pos = new LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0));
 
 // Create a labeled point with a negative label and a sparse feature vector.
-LabeledPoint neg = new LabeledPoint(1.0, Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0}));
+LabeledPoint neg = new LabeledPoint(0.0, Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0}));
 {% endhighlight %}
 </div>
 
