@@ -197,10 +197,10 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
   override def toErrorString: String = s"TaskCommitDenied (Driver denied task commit)" +
     s" for job: $jobID, partition: $partitionID, attempt: $attemptID"
   /**
-    If a task failed because its attempt to commit was denied, do not count this failure
-    towards failing the stage. This is intended to prevent spurious stage failures in cases
-    where many speculative tasks are launched and denied to commit.
-  */
+   * If a task failed because its attempt to commit was denied, do not count this failure
+   * towards failing the stage. This is intended to prevent spurious stage failures in cases
+   * where many speculative tasks are launched and denied to commit.
+   */
   override def shouldEventuallyFailJob: Boolean = false
 }
 

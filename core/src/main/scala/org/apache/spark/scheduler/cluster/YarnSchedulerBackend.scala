@@ -99,13 +99,8 @@ private[spark] abstract class YarnSchedulerBackend(
 
   /**
    * Override the DriverEndpoint to add extra logic for the case when an executor is disconnected.
-   * We should check the cluster manager and find if the loss of the executor was caused by YARN
-   * force killing it due to preemption.
-   *
-   * Specifically, this endpoint is the endpoint used by CoarseGrainedSchedulerBackend. Unlike
-   * YarnSchedulerEndpoint, it handles messages from executors the driver is connected to. It
-   * does query the application master when the onDisconnected event is received, however.
-   *
+   * This endpoint communicates with the executors and queries the AM for an executor's exit
+   * status when the executor is disconnected.
    */
   private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
       extends DriverEndpoint(rpcEnv, sparkProperties) {
@@ -120,6 +115,11 @@ private[spark] abstract class YarnSchedulerBackend(
      * having been preempted. If the executor "exited normally" according to the application
      * master then we pass that information down to the TaskSetManager to inform the
      * TaskSetManager that tasks on that lost executor should not count towards a job failure.
+     *
+     * TODO there's a race condition where while we are querying the ApplicationMaster for
+     * the executor loss reason, there is the potential that tasks will be scheduled on
+     * the executor that failed. We should fix this by having this onDisconnected event
+     * also "blacklist" executors so that tasks are not assigned to them.
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach { executorId =>
@@ -158,6 +158,7 @@ private[spark] abstract class YarnSchedulerBackend(
                 s" but got no response. Marking as slave lost.", e)
               driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
             }
+            case t => throw t
           }
         case None =>
           logWarning("Attempted to check for an executor loss reason" +

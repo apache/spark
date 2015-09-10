@@ -218,9 +218,6 @@ private[yarn] class YarnAllocator(
    * Deal with any containers YARN has granted to us by possibly launching executors in them.
    *
    * This must be synchronized because variables read in this method are mutated by other methods.
-   *
-   * Returns a list of executor loss reasons discovered by the allocator, which can then be
-   * forwarded to the driver by the calling ApplicationMaster.
    */
   def allocateResources(): Unit = synchronized {
     updateResourceRequests()
@@ -503,6 +500,7 @@ private[yarn] class YarnAllocator(
       containerIdToExecutorId.remove(containerId).foreach { eid =>
         executorIdToContainer.remove(eid)
         pendingLossReasonRequests.remove(eid).foreach { pendingRequests =>
+          // Notify application of executor loss reasons so it can decide whether it should abort
           pendingRequests.foreach(_.reply(exitReason))
         }
         if (!alreadyReleased) {
@@ -519,11 +517,14 @@ private[yarn] class YarnAllocator(
    * Register that some RpcCallContext has asked the AM why the executor was lost. Note that
    * we can only find the loss reason to send back in the next call to allocateResources().
    */
-  private[yarn] def enqueueGetLossReasonRequest(eid: String, context: RpcCallContext): Unit
-      = synchronized {
+  private[yarn] def enqueueGetLossReasonRequest(
+      eid: String,
+      context: RpcCallContext): Unit = synchronized {
     if (executorIdToContainer.contains(eid)) {
       pendingLossReasonRequests
         .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
+    } else {
+      logWarning(s"Tried to get the loss reason for non-existent executor $eid")
     }
   }
 

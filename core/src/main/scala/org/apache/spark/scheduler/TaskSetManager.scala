@@ -709,12 +709,11 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
-      case e: ExecutorLostFailure =>
-        if (e.isNormalExit) {
-          logInfo(s"Task $tid failed because while it was being computed, its executor" +
+      case e: ExecutorLostFailure if e.isNormalExit =>
+        logInfo(s"Task $tid failed because while it was being computed, its executor" +
           s" exited normally. Not marking the task as failed.")
-        }
         None
+
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
         None
