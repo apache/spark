@@ -138,6 +138,7 @@ case class GetJsonObject(json: Expression, path: Expression)
       try {
         parser.nextToken()
         val matched = evaluatePath(parser, generator, RawStyle, parsed.get)
+        generator.close()
         if (matched) {
           UTF8String.fromBytes(output.toByteArray)
         } else {
@@ -146,7 +147,9 @@ case class GetJsonObject(json: Expression, path: Expression)
       } catch {
         case _: JsonProcessingException => null
       } finally {
-        generator.close()
+        if (!generator.isClosed) {
+          generator.close()
+        }
       }
     } else {
       null
