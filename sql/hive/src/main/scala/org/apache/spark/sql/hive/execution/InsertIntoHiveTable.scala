@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
+import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -62,7 +62,7 @@ case class InsertIntoHiveTable(
 
   def output: Seq[Attribute] = Seq.empty
 
-  def saveAsHiveFile(
+  private def saveAsHiveFile(
       rdd: RDD[InternalRow],
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
@@ -177,6 +177,13 @@ case class InsertIntoHiveTable(
 
     val jobConf = new JobConf(sc.hiveconf)
     val jobConfSer = new SerializableJobConf(jobConf)
+
+    // When speculation is enabled, it's not safe to use customized output committer classes,
+    // especially direct output committees (e.g. `DirectParquetOutputCommitter`).
+    val speculationEnabled = sqlContext.sparkContext.conf.getBoolean("spark.speculation", false)
+    if (speculationEnabled) {
+      jobConf.setOutputCommitter(classOf[FileOutputCommitter])
+    }
 
     val writerContainer = if (numDynamicPartitions > 0) {
       val dynamicPartColNames = partitionColumnNames.takeRight(numDynamicPartitions)
