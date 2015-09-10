@@ -901,7 +901,7 @@ class DAGScheduler(
       // the stage as completed here in case there are no tasks to run
       markStageAsFinished(stage, None)
 
-      val debugString = stage match {
+      def debugString: String = stage match {
         case stage: ShuffleMapStage =>
           s"Stage ${stage} is actually done; " +
             s"(available: ${stage.isAvailable}," +
