@@ -44,6 +44,7 @@ private[spark] class SparkUI private (
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
     val operationGraphListener: RDDOperationGraphListener,
+    var appId: String,
     var appName: String,
     val basePath: String,
     val startTime: Long)
@@ -80,6 +81,10 @@ private[spark] class SparkUI private (
     appName = name
   }
 
+  def setAppId(id: String): Unit = {
+    appId = id
+  }
+
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop() {
     super.stop()
@@ -94,12 +99,12 @@ private[spark] class SparkUI private (
   private[spark] def appUIAddress = s"http://$appUIHostPort"
 
   def getSparkUI(appId: String): Option[SparkUI] = {
-    if (appId == appName) Some(this) else None
+    if (appId == this.appId) Some(this) else None
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
-      id = appName,
+      id = appId,
       name = appName,
       attempts = Seq(new ApplicationAttemptInfo(
         attemptId = None,
@@ -136,9 +141,10 @@ private[spark] object SparkUI {
       listenerBus: SparkListenerBus,
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
+      appId:String,
       appName: String,
       startTime: Long): SparkUI = {
-    create(Some(sc), conf, listenerBus, securityManager, appName,
+    create(Some(sc), conf, listenerBus, securityManager, appId, appName,
       jobProgressListener = Some(jobProgressListener), startTime = startTime)
   }
 
@@ -164,6 +170,7 @@ private[spark] object SparkUI {
       conf: SparkConf,
       listenerBus: SparkListenerBus,
       securityManager: SecurityManager,
+      appId: String,
       appName: String,
       basePath: String = "",
       jobProgressListener: Option[JobProgressListener] = None,
@@ -189,6 +196,6 @@ private[spark] object SparkUI {
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
       executorsListener, _jobProgressListener, storageListener, operationGraphListener,
-      appName, basePath, startTime)
+      appId, appName, basePath, startTime)
   }
 }
