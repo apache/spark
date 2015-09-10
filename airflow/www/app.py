@@ -130,16 +130,31 @@ def pygment_html_render(s, lexer=lexers.TextLexer):
 def wrapped_markdown(s):
     return '<div class="rich_doc">' + markdown.markdown(s) + "</div>"
 
+def render(obj, lexer):
+    out = ""
+    if isinstance(obj, basestring):
+        out += pygment_html_render(obj, lexer)
+    elif isinstance(obj, (tuple, list)):
+        for i, s in enumerate(obj):
+            out += "<div>List item #{}</div>".format(i)
+            out += "<div>" + pygment_html_render(s, lexer) + "</div>"
+    elif isinstance(obj, dict):
+        for k, v in obj.iteritems():
+            out += '<div>Dict item "{}"</div>'.format(k)
+            out += "<div>" + pygment_html_render(v, lexer) + "</div>"
+    return out
+
+
 attr_renderer = {
-    'bash_command': lambda x: pygment_html_render(x, lexers.BashLexer),
-    'hql': lambda x: pygment_html_render(x, lexers.SqlLexer),
-    'sql': lambda x: pygment_html_render(x, lexers.SqlLexer),
-    'doc': lambda x: pygment_html_render(x, lexers.TextLexer),
-    'doc_json': lambda x: pygment_html_render(x, lexers.JsonLexer),
-    'doc_rst': lambda x: pygment_html_render(x, lexers.RstLexer),
-    'doc_yaml': lambda x: pygment_html_render(x, lexers.YamlLexer),
+    'bash_command': lambda x: render(x, lexers.BashLexer),
+    'hql': lambda x: render(x, lexers.SqlLexer),
+    'sql': lambda x: render(x, lexers.SqlLexer),
+    'doc': lambda x: render(x, lexers.TextLexer),
+    'doc_json': lambda x: render(x, lexers.JsonLexer),
+    'doc_rst': lambda x: render(x, lexers.RstLexer),
+    'doc_yaml': lambda x: render(x, lexers.YamlLexer),
     'doc_md': wrapped_markdown,
-    'python_callable': lambda x: pygment_html_render(
+    'python_callable': lambda x: render(
         inspect.getsource(x), lexers.PythonLexer),
 }
 
