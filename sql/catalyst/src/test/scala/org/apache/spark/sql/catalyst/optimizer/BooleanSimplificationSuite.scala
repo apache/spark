@@ -104,7 +104,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
     checkCondition(!('a || 'b), (!('a) && !('b)))
   }
-  
+
   private val caseInsensitiveAnalyzer =
     new Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(false))
 
