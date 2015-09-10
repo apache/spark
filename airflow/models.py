@@ -178,7 +178,7 @@ class DagBag(object):
                     m = imp.load_source(mod_name, filepath)
             except Exception as e:
                 logging.error("Failed to import: " + filepath)
-                self.import_errors[filepath] = e
+                self.import_errors[filepath] = str(e)
                 logging.exception(e)
                 self.file_last_changed[filepath] = dttm
                 return
