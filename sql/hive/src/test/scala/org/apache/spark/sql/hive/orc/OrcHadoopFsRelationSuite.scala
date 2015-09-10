@@ -28,6 +28,14 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
 
+  // ORC does not play well with NullType and UDT.
+  override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: NullType => false
+    case _: CalendarIntervalType => false
+    case _: UserDefinedType[_] => false
+    case _ => true
+  }
+
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
       val basePath = new Path(file.getCanonicalPath)

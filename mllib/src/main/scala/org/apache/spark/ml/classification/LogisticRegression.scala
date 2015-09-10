@@ -468,7 +468,9 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    copyValues(new LogisticRegressionModel(uid, weights, intercept), extra).setParent(parent)
+    val newModel = copyValues(new LogisticRegressionModel(uid, weights, intercept), extra)
+    if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
+    newModel.setParent(parent)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {

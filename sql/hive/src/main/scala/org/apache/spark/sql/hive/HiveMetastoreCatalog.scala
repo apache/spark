@@ -767,7 +767,7 @@ private[hive] case class InsertIntoHiveTable(
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: HiveTable)
-    (@transient sqlContext: SQLContext)
+    (@transient private val sqlContext: SQLContext)
   extends LeafNode with MultiInstanceRelation with FileRelation {
 
   override def equals(other: Any): Boolean = other match {
