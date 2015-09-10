@@ -24,8 +24,10 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.util.{Utils => SparkUtils}
 
 private[spark]
 trait SparkHadoopMapRedUtil {
@@ -64,10 +66,10 @@ trait SparkHadoopMapRedUtil {
 
   private def firstAvailableClass(first: String, second: String): Class[_] = {
     try {
-      Class.forName(first)
+      SparkUtils.classForName(first)
     } catch {
       case e: ClassNotFoundException =>
-        Class.forName(second)
+        SparkUtils.classForName(second)
     }
   }
 }
@@ -92,7 +94,7 @@ object SparkHadoopMapRedUtil extends Logging {
       splitId: Int,
       attemptId: Int): Unit = {
 
-    val mrTaskAttemptID = mrTaskContext.getTaskAttemptID
+    val mrTaskAttemptID = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(mrTaskContext)
 
     // Called after we have decided to commit
     def performCommit(): Unit = {

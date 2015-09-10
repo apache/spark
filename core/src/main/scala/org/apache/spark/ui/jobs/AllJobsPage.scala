@@ -79,6 +79,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         case JobExecutionStatus.SUCCEEDED => "succeeded"
         case JobExecutionStatus.FAILED => "failed"
         case JobExecutionStatus.RUNNING => "running"
+        case JobExecutionStatus.UNKNOWN => "unknown"
       }
 
       // The timeline library treats contents as HTML, so we have to escape them; for the
@@ -231,7 +232,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </td>
         <td>
           <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
-          <a href={detailUrl}>{lastStageName}</a>
+          <a href={detailUrl} class="name-link">{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>
           {formattedSubmissionTime}

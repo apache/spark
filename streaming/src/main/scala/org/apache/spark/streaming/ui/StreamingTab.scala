@@ -30,6 +30,8 @@ import StreamingTab._
 private[spark] class StreamingTab(val ssc: StreamingContext)
   extends SparkUITab(getSparkUI(ssc), "streaming") with Logging {
 
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/streaming/ui/static"
+
   val parent = getSparkUI(ssc)
   val listener = ssc.progressListener
 
@@ -40,10 +42,12 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
 
   def attach() {
     getSparkUI(ssc).attachTab(this)
+    getSparkUI(ssc).addStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
   }
 
   def detach() {
     getSparkUI(ssc).detachTab(this)
+    getSparkUI(ssc).removeStaticHandler("/static/streaming")
   }
 }
 

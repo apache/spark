@@ -17,11 +17,14 @@
 
 package org.apache.spark.streaming.ui
 
+import java.text.SimpleDateFormat
+import java.util.Date
+
 import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
-private[ui] abstract class BatchTableBase(tableId: String) {
+private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) {
 
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
@@ -35,14 +38,15 @@ private[ui] abstract class BatchTableBase(tableId: String) {
 
   protected def baseRow(batch: BatchUIData): Seq[Node] = {
     val batchTime = batch.batchTime.milliseconds
-    val formattedBatchTime = SparkUIUtils.formatDate(batch.batchTime.milliseconds)
+    val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
     val eventCount = batch.numRecords
     val schedulingDelay = batch.schedulingDelay
     val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
     val processingTime = batch.processingDelay
     val formattedProcessingTime = processingTime.map(SparkUIUtils.formatDuration).getOrElse("-")
+    val batchTimeId = s"batch-$batchTime"
 
-    <td sorttable_customkey={batchTime.toString}>
+    <td id={batchTimeId} sorttable_customkey={batchTime.toString}>
       <a href={s"batch?id=$batchTime"}>
         {formattedBatchTime}
       </a>
@@ -79,7 +83,8 @@ private[ui] abstract class BatchTableBase(tableId: String) {
 
 private[ui] class ActiveBatchTable(
     runningBatches: Seq[BatchUIData],
-    waitingBatches: Seq[BatchUIData]) extends BatchTableBase("active-batches-table") {
+    waitingBatches: Seq[BatchUIData],
+    batchInterval: Long) extends BatchTableBase("active-batches-table", batchInterval) {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Status</th>
 
@@ -99,8 +104,8 @@ private[ui] class ActiveBatchTable(
   }
 }
 
-private[ui] class CompletedBatchTable(batches: Seq[BatchUIData])
-  extends BatchTableBase("completed-batches-table") {
+private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: Long)
+  extends BatchTableBase("completed-batches-table", batchInterval) {
 
   override protected def columns: Seq[Node] = super.columns ++
     <th>Total Delay

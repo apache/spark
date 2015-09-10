@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.RegressionModel
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}
 import org.apache.spark.mllib.util.LinearDataGenerator
 
-class GeneralizedLinearPMMLModelExportSuite extends FunSuite {
+class GeneralizedLinearPMMLModelExportSuite extends SparkFunSuite {
 
   test("linear regression PMML export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)

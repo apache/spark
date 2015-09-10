@@ -68,7 +68,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
         retryHeaders, retryRow, Iterable.apply(driverState.description.retryState))
     val content =
       <p>Driver state information for driver id {driverId}</p>
-        <a href="/">Back to Drivers</a>
+        <a href={UIUtils.prependBaseUri("/")}>Back to Drivers</a>
         <div class="row-fluid">
           <div class="span12">
             <h4>Driver state: {driverState.state}</h4>

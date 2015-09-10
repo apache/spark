@@ -17,12 +17,11 @@
 
 package org.apache.spark.mllib.stat
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.TestingUtils._
 
-class MultivariateOnlineSummarizerSuite extends FunSuite {
+class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
 
   test("basic error handing") {
     val summarizer = new MultivariateOnlineSummarizer

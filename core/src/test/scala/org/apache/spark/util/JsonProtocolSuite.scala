@@ -25,7 +25,6 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -33,7 +32,7 @@ import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
-class JsonProtocolSuite extends FunSuite {
+class JsonProtocolSuite extends SparkFunSuite {
 
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
@@ -75,13 +74,18 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"))
+    val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
+      42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
-    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
+    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", Seq(
+      (1L, 2, 3, makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800,
+        hasHadoopInput = true, hasOutput = true))))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -97,9 +101,11 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(blockManagerRemoved, blockManagerRemovedJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
     testEvent(applicationStart, applicationStartJsonString)
+    testEvent(applicationStartWithLogs, applicationStartJsonWithLogUrlsString)
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
+    testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
   }
 
   test("Dependent Classes") {
@@ -157,7 +163,8 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   test("ExceptionFailure backward compatibility") {
-    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null, None)
+    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null,
+      None, None)
     val oldEvent = JsonProtocol.taskEndReasonToJson(exceptionFailure)
       .removeField({ _._1 == "Full Stack Trace" })
     assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
@@ -277,10 +284,12 @@ class JsonProtocolSuite extends FunSuite {
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
     // SparkListenerApplicationStart pre-Spark 1.4 does not have "appAttemptId".
-    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None)
+    // SparkListenerApplicationStart pre-Spark 1.5 does not have "driverLogs
+    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None, None)
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
       .removeField({ _._1 == "App Attempt ID" })
+      .removeField({ _._1 == "Driver Logs"})
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
   }
 
@@ -436,10 +445,20 @@ class JsonProtocolSuite extends FunSuite {
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
       case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
-        assert(e1.executorId == e1.executorId)
+        assert(e1.executorId === e1.executorId)
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
-        assert(e1.executorId == e1.executorId)
+        assert(e1.executorId === e1.executorId)
+      case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
+        assert(e1.execId === e2.execId)
+        assertSeqEquals[(Long, Int, Int, TaskMetrics)](e1.taskMetrics, e2.taskMetrics, (a, b) => {
+          val (taskId1, stageId1, stageAttemptId1, metrics1) = a
+          val (taskId2, stageId2, stageAttemptId2, metrics2) = b
+          assert(taskId1 === taskId2)
+          assert(stageId1 === stageId2)
+          assert(stageAttemptId1 === stageAttemptId2)
+          assertEquals(metrics1, metrics2)
+        })
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -1544,6 +1563,22 @@ class JsonProtocolSuite extends FunSuite {
       |}
     """
 
+  private val applicationStartJsonWithLogUrlsString =
+    """
+      |{
+      |  "Event": "SparkListenerApplicationStart",
+      |  "App Name": "The winner of all",
+      |  "App ID": "appId",
+      |  "Timestamp": 42,
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt",
+      |  "Driver Logs" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |  }
+      |}
+    """
+
   private val applicationEndJsonString =
     """
       |{
@@ -1578,4 +1613,55 @@ class JsonProtocolSuite extends FunSuite {
       |  "Removed Reason": "test reason"
       |}
     """
+
+  private val executorMetricsUpdateJsonString =
+  s"""
+     |{
+     |  "Event": "SparkListenerExecutorMetricsUpdate",
+     |  "Executor ID": "exec3",
+     |  "Metrics Updated": [
+     |  {
+     |    "Task ID": 1,
+     |    "Stage ID": 2,
+     |    "Stage Attempt ID": 3,
+     |    "Task Metrics": {
+     |    "Host Name": "localhost",
+     |    "Executor Deserialize Time": 300,
+     |    "Executor Run Time": 400,
+     |    "Result Size": 500,
+     |    "JVM GC Time": 600,
+     |    "Result Serialization Time": 700,
+     |    "Memory Bytes Spilled": 800,
+     |    "Disk Bytes Spilled": 0,
+     |    "Input Metrics": {
+     |      "Data Read Method": "Hadoop",
+     |      "Bytes Read": 2100,
+     |      "Records Read": 21
+     |    },
+     |    "Output Metrics": {
+     |      "Data Write Method": "Hadoop",
+     |      "Bytes Written": 1200,
+     |      "Records Written": 12
+     |    },
+     |    "Updated Blocks": [
+     |      {
+     |        "Block ID": "rdd_0_0",
+     |        "Status": {
+     |          "Storage Level": {
+     |            "Use Disk": true,
+     |            "Use Memory": true,
+     |            "Use ExternalBlockStore": false,
+     |            "Deserialized": false,
+     |            "Replication": 2
+     |          },
+     |          "Memory Size": 0,
+     |          "ExternalBlockStore Size": 0,
+     |          "Disk Size": 0
+     |        }
+     |      }
+     |    ]
+     |  }
+     |  }]
+     |}
+   """.stripMargin
 }

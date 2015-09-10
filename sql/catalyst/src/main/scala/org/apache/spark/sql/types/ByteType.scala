@@ -27,8 +27,6 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 /**
  * :: DeveloperApi ::
  * The data type representing `Byte` values. Please use the singleton [[DataTypes.ByteType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class ByteType private() extends IntegralType {

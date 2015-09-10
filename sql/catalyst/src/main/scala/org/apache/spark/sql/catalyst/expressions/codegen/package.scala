@@ -27,12 +27,6 @@ import org.apache.spark.util.Utils
  */
 package object codegen {
 
-  /**
-   * A lock to protect invoking the scala compiler at runtime, since it is not thread safe in Scala
-   * 2.10.
-   */
-  protected[codegen] val globalLock = org.apache.spark.sql.catalyst.ScalaReflectionLock
-
   /** Canonicalizes an expression so those that differ only by names can reuse the same code. */
   object ExpressionCanonicalizer extends rules.RuleExecutor[Expression] {
     val batches =
@@ -73,8 +67,10 @@ package object codegen {
       outfile.write(generatedBytes)
       outfile.close()
 
+      // scalastyle:off println
       println(
         s"javap -p -v -classpath ${dumpDirectory.getCanonicalPath} ${generatedClass.getName}".!!)
+      // scalastyle:on println
     }
   }
 }

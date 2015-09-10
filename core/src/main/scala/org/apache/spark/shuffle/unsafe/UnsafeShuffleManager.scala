@@ -56,9 +56,6 @@ private[spark] object UnsafeShuffleManager extends Logging {
     } else if (dependency.aggregator.isDefined) {
       log.debug(s"Can't use UnsafeShuffle for shuffle $shufId because an aggregator is defined")
       false
-    } else if (dependency.keyOrdering.isDefined) {
-      log.debug(s"Can't use UnsafeShuffle for shuffle $shufId because a key ordering is defined")
-      false
     } else if (dependency.partitioner.numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS) {
       log.debug(s"Can't use UnsafeShuffle for shuffle $shufId because it has more than " +
         s"$MAX_SHUFFLE_OUTPUT_PARTITIONS partitions")
@@ -162,7 +159,7 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
       mapId: Int,
       context: TaskContext): ShuffleWriter[K, V] = {
     handle match {
-      case unsafeShuffleHandle: UnsafeShuffleHandle[K, V] =>
+      case unsafeShuffleHandle: UnsafeShuffleHandle[K @unchecked, V @unchecked] =>
         numMapsForShufflesThatUsedNewPath.putIfAbsent(handle.shuffleId, unsafeShuffleHandle.numMaps)
         val env = SparkEnv.get
         new UnsafeShuffleWriter(

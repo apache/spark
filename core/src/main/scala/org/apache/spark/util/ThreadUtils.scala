@@ -20,9 +20,21 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+
+import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 
 private[spark] object ThreadUtils {
+
+  private val sameThreadExecutionContext =
+    ExecutionContext.fromExecutorService(MoreExecutors.sameThreadExecutor())
+
+  /**
+   * An `ExecutionContextExecutor` that runs each task in the thread that invokes `execute/submit`.
+   * The caller should make sure the tasks running in this `ExecutionContextExecutor` are short and
+   * never block.
+   */
+  def sameThread: ExecutionContextExecutor = sameThreadExecutionContext
 
   /**
    * Create a thread factory that names threads with a prefix and also sets the threads to daemon.
@@ -38,6 +50,16 @@ private[spark] object ThreadUtils {
   def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
+  }
+
+  /**
+   * Create a cached thread pool whose max number of threads is `maxThreadNumber`. Thread names
+   * are formatted as prefix-ID, where ID is a unique, sequentially assigned integer.
+   */
+  def newDaemonCachedThreadPool(prefix: String, maxThreadNumber: Int): ThreadPoolExecutor = {
+    val threadFactory = namedThreadFactory(prefix)
+    new ThreadPoolExecutor(
+      0, maxThreadNumber, 60L, TimeUnit.SECONDS, new SynchronousQueue[Runnable], threadFactory)
   }
 
   /**

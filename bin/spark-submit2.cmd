@@ -24,15 +24,4 @@ rem disable randomized hash for string in Python 3.3+
 set PYTHONHASHSEED=0
 
 set CLASS=org.apache.spark.deploy.SparkSubmit
-call %~dp0spark-class2.cmd %CLASS% %*
-set SPARK_ERROR_LEVEL=%ERRORLEVEL%
-if not "x%SPARK_LAUNCHER_USAGE_ERROR%"=="x" (
-  call :usage
-  exit /b 1
-)
-exit /b %SPARK_ERROR_LEVEL%
-
-:usage
-echo %SPARK_LAUNCHER_USAGE_ERROR%
-call %SPARK_HOME%\bin\spark-class2.cmd %CLASS% --help
-goto :eof
+%~dp0spark-class2.cmd %CLASS% %*

@@ -20,7 +20,7 @@ package org.apache.spark.api.java
 import java.util.{Comparator, List => JList, Map => JMap}
 import java.lang.{Iterable => JIterable}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -142,7 +142,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def sampleByKey(withReplacement: Boolean,
       fractions: JMap[K, Double],
       seed: Long): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.sampleByKey(withReplacement, fractions, seed))
+    new JavaPairRDD[K, V](rdd.sampleByKey(withReplacement, fractions.asScala, seed))
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
@@ -173,7 +173,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def sampleByKeyExact(withReplacement: Boolean,
       fractions: JMap[K, Double],
       seed: Long): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.sampleByKeyExact(withReplacement, fractions, seed))
+    new JavaPairRDD[K, V](rdd.sampleByKeyExact(withReplacement, fractions.asScala, seed))
 
   /**
    * ::Experimental::
@@ -768,7 +768,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return the list of values in the RDD for key `key`. This operation is done efficiently if the
    * RDD has a known partitioner by only searching the partition that the key maps to.
    */
-  def lookup(key: K): JList[V] = seqAsJavaList(rdd.lookup(key))
+  def lookup(key: K): JList[V] = rdd.lookup(key).asJava
 
   /** Output the RDD to any Hadoop-supported file system. */
   def saveAsHadoopFile[F <: OutputFormat[_, _]](
@@ -987,30 +987,27 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 object JavaPairRDD {
   private[spark]
   def groupByResultToJava[K: ClassTag, T](rdd: RDD[(K, Iterable[T])]): RDD[(K, JIterable[T])] = {
-    rddToPairRDDFunctions(rdd).mapValues(asJavaIterable)
+    rddToPairRDDFunctions(rdd).mapValues(_.asJava)
   }
 
   private[spark]
   def cogroupResultToJava[K: ClassTag, V, W](
       rdd: RDD[(K, (Iterable[V], Iterable[W]))]): RDD[(K, (JIterable[V], JIterable[W]))] = {
-    rddToPairRDDFunctions(rdd).mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2)))
+    rddToPairRDDFunctions(rdd).mapValues(x => (x._1.asJava, x._2.asJava))
   }
 
   private[spark]
   def cogroupResult2ToJava[K: ClassTag, V, W1, W2](
       rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))])
       : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2]))] = {
-    rddToPairRDDFunctions(rdd)
-      .mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3)))
+    rddToPairRDDFunctions(rdd).mapValues(x => (x._1.asJava, x._2.asJava, x._3.asJava))
   }
 
   private[spark]
   def cogroupResult3ToJava[K: ClassTag, V, W1, W2, W3](
       rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))])
   : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3]))] = {
-    rddToPairRDDFunctions(rdd)
-      .mapValues(x =>
-        (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3), asJavaIterable(x._4)))
+    rddToPairRDDFunctions(rdd).mapValues(x => (x._1.asJava, x._2.asJava, x._3.asJava, x._4.asJava))
   }
 
   def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): JavaPairRDD[K, V] = {

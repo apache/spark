@@ -24,10 +24,12 @@ import org.apache.spark.streaming.util.WriteAheadLogRecordHandle
 /** Information about blocks received by the receiver */
 private[streaming] case class ReceivedBlockInfo(
     streamId: Int,
-    numRecords: Long,
+    numRecords: Option[Long],
     metadataOption: Option[Any],
     blockStoreResult: ReceivedBlockStoreResult
   ) {
+
+  require(numRecords.isEmpty || numRecords.get >= 0, "numRecords must not be negative")
 
   @volatile private var _isBlockIdValid = true
 

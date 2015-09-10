@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.DecimalType
 
 
-class DataFrameAggregateSuite extends QueryTest {
+class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("groupBy") {
     checkAnswer(
@@ -67,12 +66,12 @@ class DataFrameAggregateSuite extends QueryTest {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    TestSQLContext.conf.setConf("spark.sql.retainGroupColumns", "false")
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
       Seq(Row(3), Row(3), Row(3))
     )
-    TestSQLContext.conf.setConf("spark.sql.retainGroupColumns", "true")
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
   }
 
   test("agg without groups") {
@@ -148,12 +147,12 @@ class DataFrameAggregateSuite extends QueryTest {
   test("null count") {
     checkAnswer(
       testData3.groupBy('a).agg(count('b)),
-      Seq(Row(1,0), Row(2, 1))
+      Seq(Row(1, 0), Row(2, 1))
     )
 
     checkAnswer(
       testData3.groupBy('a).agg(count('a + 'b)),
-      Seq(Row(1,0), Row(2, 1))
+      Seq(Row(1, 0), Row(2, 1))
     )
 
     checkAnswer(
@@ -189,5 +188,4 @@ class DataFrameAggregateSuite extends QueryTest {
       emptyTableData.agg(sumDistinct('a)),
       Row(null))
   }
-
 }

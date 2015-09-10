@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
-import org.apache.spark.storage.BlockObjectWriter
+import org.apache.spark.storage.DiskBlockObjectWriter
 
 /**
  * A common interface for size-tracking collections of key-value pairs that
@@ -47,13 +47,20 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
    */
   def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
     : WritablePartitionedIterator = {
-    WritablePartitionedIterator.fromIterator(partitionedDestructiveSortedIterator(keyComparator))
-  }
+    val it = partitionedDestructiveSortedIterator(keyComparator)
+    new WritablePartitionedIterator {
+      private[this] var cur = if (it.hasNext) it.next() else null
 
-  /**
-   * Iterate through the data and write out the elements instead of returning them.
-   */
-  def writablePartitionedIterator(): WritablePartitionedIterator
+      def writeNext(writer: DiskBlockObjectWriter): Unit = {
+        writer.write(cur._1._2, cur._2)
+        cur = if (it.hasNext) it.next() else null
+      }
+
+      def hasNext(): Boolean = cur != null
+
+      def nextPartition(): Int = cur._1._1
+    }
+  }
 }
 
 private[spark] object WritablePartitionedPairCollection {
@@ -84,30 +91,13 @@ private[spark] object WritablePartitionedPairCollection {
 }
 
 /**
- * Iterator that writes elements to a BlockObjectWriter instead of returning them. Each element
+ * Iterator that writes elements to a DiskBlockObjectWriter instead of returning them. Each element
  * has an associated partition.
  */
 private[spark] trait WritablePartitionedIterator {
-  def writeNext(writer: BlockObjectWriter): Unit
+  def writeNext(writer: DiskBlockObjectWriter): Unit
 
   def hasNext(): Boolean
 
   def nextPartition(): Int
-}
-
-private[spark] object WritablePartitionedIterator {
-  def fromIterator(it: Iterator[((Int, _), _)]): WritablePartitionedIterator = {
-    new WritablePartitionedIterator {
-      var cur = if (it.hasNext) it.next() else null
-
-      def writeNext(writer: BlockObjectWriter): Unit = {
-        writer.write(cur._1._2, cur._2)
-        cur = if (it.hasNext) it.next() else null
-      }
-
-      def hasNext(): Boolean = cur != null
-
-      def nextPartition(): Int = cur._1._1
-    }
-  }
 }

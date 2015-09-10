@@ -20,7 +20,7 @@ package org.apache.spark.streaming.flume
 import java.net.InetSocketAddress
 import java.util.concurrent.{LinkedBlockingQueue, Executors}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -46,7 +46,7 @@ import org.apache.spark.streaming.flume.sink._
  * @tparam T Class type of the object of this stream
  */
 private[streaming] class FlumePollingInputDStream[T: ClassTag](
-    @transient _ssc: StreamingContext,
+    _ssc: StreamingContext,
     val addresses: Seq[InetSocketAddress],
     val maxBatchSize: Int,
     val parallelism: Int,
@@ -94,9 +94,7 @@ private[streaming] class FlumePollingReceiver(
   override def onStop(): Unit = {
     logInfo("Shutting down Flume Polling Receiver")
     receiverExecutor.shutdownNow()
-    connections.foreach(connection => {
-      connection.transceiver.close()
-    })
+    connections.asScala.foreach(_.transceiver.close())
     channelFactory.releaseExternalResources()
   }
 
@@ -110,7 +108,7 @@ private[streaming] class FlumePollingReceiver(
 }
 
 /**
- * A wrapper around the transceiver and the Avro IPC API. 
+ * A wrapper around the transceiver and the Avro IPC API.
  * @param transceiver The transceiver to use for communication with Flume
  * @param client The client that the callbacks are received on.
  */

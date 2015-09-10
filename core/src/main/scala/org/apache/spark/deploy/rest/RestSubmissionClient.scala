@@ -57,7 +57,11 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   private val supportedMasterPrefixes = Seq("spark://", "mesos://")
 
-  private val masters: Array[String] = Utils.parseStandaloneMasterUrls(master)
+  private val masters: Array[String] = if (master.startsWith("spark://")) {
+    Utils.parseStandaloneMasterUrls(master)
+  } else {
+    Array(master)
+  }
 
   // Set of masters that lost contact with us, used to keep track of
   // whether there are masters still alive for us to communicate with
@@ -388,15 +392,14 @@ private[spark] object RestSubmissionClient {
       mainClass: String,
       appArgs: Array[String],
       conf: SparkConf,
-      env: Map[String, String] = sys.env): SubmitRestProtocolResponse = {
+      env: Map[String, String] = Map()): SubmitRestProtocolResponse = {
     val master = conf.getOption("spark.master").getOrElse {
       throw new IllegalArgumentException("'spark.master' must be set.")
     }
     val sparkProperties = conf.getAll.toMap
-    val environmentVariables = env.filter { case (k, _) => k.startsWith("SPARK_") }
     val client = new RestSubmissionClient(master)
     val submitRequest = client.constructSubmitRequest(
-      appResource, mainClass, appArgs, sparkProperties, environmentVariables)
+      appResource, mainClass, appArgs, sparkProperties, env)
     client.createSubmission(submitRequest)
   }
 
@@ -409,6 +412,16 @@ private[spark] object RestSubmissionClient {
     val mainClass = args(1)
     val appArgs = args.slice(2, args.size)
     val conf = new SparkConf
-    run(appResource, mainClass, appArgs, conf)
+    val env = filterSystemEnvironment(sys.env)
+    run(appResource, mainClass, appArgs, conf, env)
+  }
+
+  /**
+   * Filter non-spark environment variables from any environment.
+   */
+  private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
+    env.filter { case (k, _) =>
+      (k.startsWith("SPARK_") && k != "SPARK_ENV_LOADED") || k.startsWith("MESOS_")
+    }
   }
 }
