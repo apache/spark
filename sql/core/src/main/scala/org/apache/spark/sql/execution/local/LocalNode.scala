@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.local
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.{SQLConf, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{InterpretedMutableProjection, MutableProjection, Expression, Attribute}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.StructType
 
@@ -33,15 +35,15 @@ import org.apache.spark.sql.types.StructType
  */
 abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging {
 
-  val codegenEnabled: Boolean = conf.codegenEnabled
+  protected val codegenEnabled: Boolean = conf.codegenEnabled
 
-  val unsafeEnabled: Boolean = conf.unsafeEnabled
-
-  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
-
-  def output: Seq[Attribute]
+  protected val unsafeEnabled: Boolean = conf.unsafeEnabled
 
   lazy val schema: StructType = StructType.fromAttributes(output)
+
+  private[this] lazy val isTesting: Boolean = sys.props.contains("spark.testing")
+
+  def output: Seq[Attribute]
 
   /**
    * Initializes the iterator state. Must be called before calling `next()`.
@@ -89,11 +91,11 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
       inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if(codegenEnabled) {
+    if (codegenEnabled) {
       try {
         GenerateMutableProjection.generate(expressions, inputSchema)
       } catch {
-        case e: Exception =>
+        case NonFatal(e) =>
           if (isTesting) {
             throw e
           } else {

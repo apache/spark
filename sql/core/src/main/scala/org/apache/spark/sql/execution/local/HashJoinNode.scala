@@ -23,7 +23,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
-case class HashJoinNode (
+/**
+ * Much of this code is similar to [[org.apache.spark.sql.execution.joins.HashJoin]].
+ */
+case class HashJoinNode(
     conf: SQLConf,
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -31,15 +34,21 @@ case class HashJoinNode (
     left: LocalNode,
     right: LocalNode) extends BinaryLocalNode(conf) {
 
-  private[this] lazy val (buildNode, streamedNode) = buildSide match {
-    case BuildLeft => (left, right)
-    case BuildRight => (right, left)
+  private[this] lazy val (buildNode, buildKeys, streamedNode, streamedKeys) = buildSide match {
+    case BuildLeft => (left, leftKeys, right, rightKeys)
+    case BuildRight => (right, rightKeys, left, leftKeys)
   }
 
-  private[this] lazy val (buildKeys, streamedKeys) = buildSide match {
-    case BuildLeft => (leftKeys, rightKeys)
-    case BuildRight => (rightKeys, leftKeys)
-  }
+  private[this] var currentStreamedRow: InternalRow = _
+  private[this] var currentHashMatches: Seq[InternalRow] = _
+  private[this] var currentMatchPosition: Int = -1
+
+  private[this] var joinRow: JoinedRow = _
+  private[this] var resultProjection: (InternalRow) => InternalRow = _
+
+  private[this] var hashed: HashedRelation = _
+  private[this] var joinKeys: Projection = _
+
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
@@ -49,30 +58,21 @@ case class HashJoinNode (
       && UnsafeProjection.canSupport(schema))
   }
 
-  private[this] def buildSideKeyGenerator: Projection =
+  private[this] def buildSideKeyGenerator: Projection = {
     if (isUnsafeMode) {
       UnsafeProjection.create(buildKeys, buildNode.output)
     } else {
       newMutableProjection(buildKeys, buildNode.output)()
     }
+  }
 
-  private[this] def streamSideKeyGenerator: Projection =
+  private[this] def streamSideKeyGenerator: Projection = {
     if (isUnsafeMode) {
       UnsafeProjection.create(streamedKeys, streamedNode.output)
     } else {
       newMutableProjection(streamedKeys, streamedNode.output)()
     }
-
-  private[this] var currentStreamedRow: InternalRow = _
-  private[this] var currentHashMatches: Seq[InternalRow] = _
-  private[this] var currentMatchPosition: Int = -1
-
-  // Mutable per row objects.
-  private[this] var joinRow: JoinedRow = _
-  private[this] var resultProjection: (InternalRow) => InternalRow = _
-
-  private[this] var hashed: HashedRelation = _
-  private[this] var joinKeys: Projection = _
+  }
 
   override def open(): Unit = {
     buildNode.open()
@@ -91,18 +91,18 @@ case class HashJoinNode (
   }
 
   override def next(): Boolean = {
-    if (currentMatchPosition != -1) {
-      currentMatchPosition += 1
-      if (currentMatchPosition < currentHashMatches.size) {
-        true
-      } else {
-        fetchNextMatch()
-      }
-    } else {
+    currentMatchPosition += 1
+    if (currentHashMatches == null || currentMatchPosition >= currentHashMatches.size) {
       fetchNextMatch()
+    } else {
+      true
     }
   }
 
+  /**
+   * Populate `currentHashMatches` with build-side rows matching the next streamed row.
+   * @return whether matches are found such that subsequent calls to `fetch` are valid.
+   */
   private def fetchNextMatch(): Boolean = {
     currentHashMatches = null
     currentMatchPosition = -1

@@ -29,7 +29,7 @@ case class ConvertToSafeNode(conf: SQLConf, child: LocalNode) extends UnaryLocal
 
   override def open(): Unit = {
     child.open()
-    convertToSafe = FromUnsafeProjection(child.output.map(_.dataType))
+    convertToSafe = FromUnsafeProjection(child.schema)
   }
 
   override def next(): Boolean = child.next()

@@ -38,7 +38,7 @@ class HashJoinNodeSuite extends LocalNodeTest {
   }
 
   def joinSuite(suiteName: String, confPairs: (String, String)*): Unit = {
-    test(s"$suiteName: inner join where, one match per row") {
+    test(s"$suiteName: inner join with one match per row") {
       withConf(confPairs: _*) {
         checkAnswer2(
           upperCaseData,
@@ -57,7 +57,7 @@ class HashJoinNodeSuite extends LocalNodeTest {
       }
     }
 
-    test(s"$suiteName: inner join, where, multiple matches") {
+    test(s"$suiteName: inner join with multiple matches") {
       withConf(confPairs: _*) {
         val x = testData2.where($"a" === 1).as("x")
         val y = testData2.where($"a" === 1).as("y")
