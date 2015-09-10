@@ -124,7 +124,7 @@ import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file, converting it to a DataFrame.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 // Index labels, adding metadata to the label column.
 // Fit on whole dataset to include all labels in index.
@@ -199,8 +199,7 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(), "data/mllib/sample_libsvm_data.txt");
-DataFrame data = jsql.createDataFrame(rdd, LabeledPoint.class);
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
 // Index labels, adding metadata to the label column.
 // Fit on whole dataset to include all labels in index.
@@ -271,7 +270,7 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 # Index labels, adding metadata to the label column.
 # Fit on whole dataset to include all labels in index.
@@ -330,7 +329,7 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file, converting it to a DataFrame.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 // Automatically identify categorical features, and index them.
 // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -393,8 +392,7 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(), "data/mllib/sample_libsvm_data.txt");
-DataFrame data = jsql.createDataFrame(rdd, LabeledPoint.class);
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
 // Automatically identify categorical features, and index them.
 // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -453,7 +451,7 @@ from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 # Automatically identify categorical features, and index them.
 # Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -579,7 +577,7 @@ import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file, converting it to a DataFrame.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 // Index labels, adding metadata to the label column.
 // Fit on whole dataset to include all labels in index.
@@ -654,8 +652,7 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(), "data/mllib/sample_libsvm_data.txt");
-DataFrame data = jsql.createDataFrame(rdd, LabeledPoint.class);
+val data sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
 // Index labels, adding metadata to the label column.
 // Fit on whole dataset to include all labels in index.
@@ -727,7 +724,7 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 # Index labels, adding metadata to the label column.
 # Fit on whole dataset to include all labels in index.
@@ -786,7 +783,7 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file, converting it to a DataFrame.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 // Automatically identify categorical features, and index them.
 // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -850,8 +847,7 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(), "data/mllib/sample_libsvm_data.txt");
-DataFrame data = jsql.createDataFrame(rdd, LabeledPoint.class);
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
 // Automatically identify categorical features, and index them.
 // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -911,7 +907,7 @@ from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 # Automatically identify categorical features, and index them.
 # Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -976,9 +972,8 @@ import org.apache.spark.sql.{Row, SQLContext}
 val sqlContext = new SQLContext(sc)
 
 // parse data into dataframe
-val data = MLUtils.loadLibSVMFile(sc, 
-  "data/mllib/sample_multiclass_classification_data.txt")
-val Array(train, test) = data.toDF().randomSplit(Array(0.7, 0.3))
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_multiclass_classification_data.txt")
+val Array(train, test) = data.randomSplit(Array(0.7, 0.3))
 
 // instantiate multiclass learner and train
 val ovr = new OneVsRest().setClassifier(new LogisticRegression)
