@@ -350,8 +350,8 @@ class CloudPickler(Pickler):
             if new_override:
                 d['__new__'] = obj.__new__
 
-            if '__dict__' in d:
-                # '__dict__' is not writable
+            # workaround for namedtuple
+            if '__dict__' in d or '__new__' in d:
                 self.save_reduce(typ, (obj.__name__, obj.__bases__, d), obj=obj)
                 return
 
