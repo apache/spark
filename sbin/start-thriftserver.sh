@@ -23,8 +23,29 @@
 # Enter posix mode for bash
 set -o posix
 
-# Figure out where Spark is installed
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+realpath () {
+(
+  TARGET_FILE="$1"
+
+  cd "$(dirname "$TARGET_FILE")"
+  TARGET_FILE="$(basename "$TARGET_FILE")"
+
+  COUNT=0
+  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
+  do
+      TARGET_FILE="$(readlink "$TARGET_FILE")"
+      cd $(dirname "$TARGET_FILE")
+      TARGET_FILE="$(basename $TARGET_FILE)"
+      COUNT=$(($COUNT + 1))
+  done
+
+  echo "$(pwd -P)/"$TARGET_FILE""
+)
+}
+
+#Figure out where Spark is installed
+DIR="$(dirname "$(realpath "$0")")"
+FWDIR="$(cd "$DIR/.."; pwd)"
 
 # NOTE: This exact class name is matched downstream by SparkSubmit.
 # Any changes need to be reflected there.

@@ -19,8 +19,28 @@
 
 # Starts a slave instance on each machine specified in the conf/slaves file.
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+realpath () {
+(
+  TARGET_FILE="$1"
+
+  cd "$(dirname "$TARGET_FILE")"
+  TARGET_FILE="$(basename "$TARGET_FILE")"
+
+  COUNT=0
+  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
+  do
+      TARGET_FILE="$(readlink "$TARGET_FILE")"
+      cd $(dirname "$TARGET_FILE")
+      TARGET_FILE="$(basename $TARGET_FILE)"
+      COUNT=$(($COUNT + 1))
+  done
+
+  echo "$(pwd -P)/"$TARGET_FILE""
+)
+}
+
+sbin="$(dirname "$(realpath "$0")")"
+sbin="$(cd "$sbin"; pwd)"
 
 
 START_TACHYON=false
@@ -39,7 +59,6 @@ shift
 done
 
 . "$sbin/spark-config.sh"
-
 . "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 # Find the port number for the master
@@ -55,7 +74,7 @@ if [ "$START_TACHYON" == "true" ]; then
   "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon bootstrap-conf "$SPARK_MASTER_IP"
 
   # set -t so we can call sudo
-  SPARK_SSH_OPTS="-o StrictHostKeyChecking=no -t" "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/../tachyon/bin/tachyon-start.sh" worker SudoMount \; sleep 1
+  SPARK_SSH_OPTS="-o StrictHostKeyChecking=no -t" "$SPARK_HOME/sbin/slaves.sh" cd "$SPARK_HOME" \; "$SPARK_HOME/tachyon/bin/tachyon-start.sh" worker SudoMount \; sleep 1
 fi
 
 # Launch the slaves

@@ -21,14 +21,34 @@
 #
 # Environment variables
 #
-#   SPARK_WORKER_INSTANCES The number of worker instances that should be 
+#   SPARK_WORKER_INSTANCES The number of worker instances that should be
 #                          running on this slave.  Default is 1.
 
 # Usage: stop-slave.sh
 #   Stops all slaves on this worker machine
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+realpath () {
+(
+  TARGET_FILE="$1"
+
+  cd "$(dirname "$TARGET_FILE")"
+  TARGET_FILE="$(basename "$TARGET_FILE")"
+
+  COUNT=0
+  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
+  do
+      TARGET_FILE="$(readlink "$TARGET_FILE")"
+      cd $(dirname "$TARGET_FILE")
+      TARGET_FILE="$(basename $TARGET_FILE)"
+      COUNT=$(($COUNT + 1))
+  done
+
+  echo "$(pwd -P)/"$TARGET_FILE""
+)
+}
+
+sbin="$(dirname "$(realpath "$0")")"
+sbin="$(cd "$sbin"; pwd)"
 
 . "$sbin/spark-config.sh"
 
