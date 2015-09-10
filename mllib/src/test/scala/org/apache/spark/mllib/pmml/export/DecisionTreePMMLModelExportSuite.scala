@@ -130,7 +130,6 @@ with PrivateMethodTester {
     val mlTopNode = new Node(1, new Predict(5.0, 0.1), 0.2, false, Some(split),
       Some(mlLeftNode_L1), Some(mlRightNode_L1), None)
     val decisionTreeModel = new DecisionTreeModel(mlTopNode, Algo.Classification)
-    println(decisionTreeModel.toPMML())
 
     // get the pmml exporter for the DT and verify its the right exporter
     val pmmlExporterForDT = PMMLModelExportFactory.createPMMLModelExport(decisionTreeModel)
@@ -268,9 +267,9 @@ with PrivateMethodTester {
     assert(sortedDataFields(0).getOpType == OpType.CATEGORICAL)
     assert(sortedDataFields(0).getValues != null && sortedDataFields(0).getValues.size() == 3)
     val sortedValues1 = sortedDataFields(0).getValues.asScala.toList.sortBy(value => value.getValue)
-    assert(sortedValues1(0).getValue == "1.0")
-    assert(sortedValues1(1).getValue == "2.0")
-    assert(sortedValues1(2).getValue == "4.0")
+    assert(sortedValues1(0).getValue == "class_1")
+    assert(sortedValues1(1).getValue == "class_2")
+    assert(sortedValues1(2).getValue == "class_4")
 
     assert(sortedDataFields(1).getName.getValue == "field_100")
     assert(sortedDataFields(1).getOpType == OpType.CATEGORICAL)
