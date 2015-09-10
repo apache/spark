@@ -40,6 +40,8 @@ class RandomRDDs(object):
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
+
+    .. addedversion:: 1.1.0
     """
 
     @staticmethod
