@@ -828,6 +828,10 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     >>> myLayers = [2, 5, 2]
     >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=myLayers, blockSize=1, seed=11)
     >>> model = mlp.fit(df)
+    >>> model.layers
+    [2, 5, 2]
+    >>> model.weights.size
+    27
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> model.transform(test0).head().prediction
     1.0
@@ -912,6 +916,13 @@ class MultilayerPerceptronClassificationModel(JavaModel):
     """
     Model fitted by MultilayerPerceptronClassifier.
     """
+
+    @property
+    def layers(self):
+        """
+        array of layer sizes including input and output layers.
+        """
+        return self._call_java("javaLayers")
 
     @property
     def weights(self):
