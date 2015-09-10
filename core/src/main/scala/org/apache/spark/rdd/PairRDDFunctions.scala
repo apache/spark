@@ -59,6 +59,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 {
 
   /**
+   * :: Experimental ::
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
    * Note that V and C can be different -- for example, one might group an RDD of type
@@ -71,6 +72,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
+  @Experimental
   def combineByKeyWithClassTag[C](
       createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -138,8 +140,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * :: Experimental ::
    * Simplified version of combineByKeyWithClassTag that hash-partitions the output RDD.
    */
+  @Experimental
   def combineByKeyWithClassTag[C](
       createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -619,9 +623,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * :: Experimental ::
    * Simplified version of combineByKeyWithClassTag that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
+  @Experimental
   def combineByKeyWithClassTag[C](
       createCombiner: V => C,
       mergeValue: (C, V) => C,
