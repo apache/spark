@@ -192,8 +192,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
-  protected[sql] def executeSql(sql: String): sparkexecution.QueryExecution =
-    executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String): 
+    org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
 
   protected[sql] def executePlan(plan: LogicalPlan) =
     new sparkexecution.QueryExecution(this, plan)
@@ -787,7 +787,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }.toArray
   }
 
-  @deprecated("use org.apache.spark.sql.SparkPlanner", "1.5.0")
+  @deprecated("use org.apache.spark.sql.SparkPlanner", "1.6.0")
   protected[sql] class SparkPlanner extends sparkexecution.SparkPlanner(this)
 
   @transient
@@ -838,7 +838,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected[sql] lazy val conf: SQLConf = new SQLConf
   }
 
-  @deprecated("use org.apache.spark.sql.QueryExecution", "1.5.0")
+  @deprecated("use org.apache.spark.sql.QueryExecution", "1.6.0")
   protected[sql] class QueryExecution(logical: LogicalPlan)
     extends sparkexecution.QueryExecution(this, logical)
 
