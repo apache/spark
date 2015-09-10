@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.source;
+package org.apache.spark.ml.source.libsvm;
 
 import java.io.File;
 import java.io.IOException;
