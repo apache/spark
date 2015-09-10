@@ -629,7 +629,9 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskEnded(
       tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
     // kill other attempts of this task when speculation is enabled.
-    taskAttempts(index).filter(_.taskId != tid).foreach(e=>sched.killSpeculatedTask(e.taskId))
+    for (ta <- taskAttempts(index) if ta.taskId != tid) {
+      sched.killSpeculatedTask(ta.taskId)
+    }
 
     if (!successful(index)) {
       tasksSuccessful += 1
