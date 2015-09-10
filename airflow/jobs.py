@@ -523,7 +523,6 @@ class SchedulerJob(BaseJob):
                 logging.exception(e)
                 logging.error("Tachycardia!")
 
-
     def heartbeat_callback(self):
         if statsd:
             statsd.gauge('scheduler_heartbeat', 1, 1)
