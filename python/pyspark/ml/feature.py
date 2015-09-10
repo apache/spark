@@ -27,11 +27,11 @@ from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
 __all__ = ['Binarizer', 'Bucketizer', 'DCT', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
-           'IndexToString', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
-           'PolynomialExpansion', 'RegexTokenizer', 'RFormula', 'RFormulaModel', 'SQLTransformer',
-           'StandardScaler', 'StandardScalerModel', 'StopWordsRemover', 'StringIndexer',
-           'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'VectorSlicer',
-           'Word2Vec', 'Word2VecModel']
+           'IndexToString', 'MinMaxScaler', 'MinMaxScalerModel', 'NGram', 'Normalizer',
+           'OneHotEncoder', 'PCA', 'PCAModel', 'PolynomialExpansion', 'RegexTokenizer',
+           'RFormula', 'RFormulaModel', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
+           'StopWordsRemover', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
+           'VectorAssembler', 'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel']
 
 
 @inherit_doc
@@ -403,6 +403,100 @@ class IDFModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by IDF.
+    """
+
+
+@inherit_doc
+class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    Rescale each feature individually to a common range [min, max] linearly using column summary
+    statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
+    feature E is calculated as,
+
+    Rescaled(e_i) = (e_i - E_min) / (E_max - E_min) * (max - min) + min
+
+    For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
+
+    Note that since zero values will probably be transformed to non-zero values, output of the
+    transformer will be DenseVector even for sparse input.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
+    >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
+    >>> model = mmScaler.fit(df)
+    >>> model.transform(df).show()
+    +-----+------+
+    |    a|scaled|
+    +-----+------+
+    |[0.0]| [0.0]|
+    |[2.0]| [1.0]|
+    +-----+------+
+    ...
+    """
+
+    # a placeholder to make it appear in the generated doc
+    min = Param(Params._dummy(), "min", "Lower bound of the output feature range")
+    max = Param(Params._dummy(), "max", "Upper bound of the output feature range")
+
+    @keyword_only
+    def __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
+        """
+        __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
+        """
+        super(MinMaxScaler, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
+        self.min = Param(self, "min", "Lower bound of the output feature range")
+        self.max = Param(self, "max", "Upper bound of the output feature range")
+        self._setDefault(min=0.0, max=1.0)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
+        """
+        setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
+        Sets params for this MinMaxScaler.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setMin(self, value):
+        """
+        Sets the value of :py:attr:`min`.
+        """
+        self._paramMap[self.min] = value
+        return self
+
+    def getMin(self):
+        """
+        Gets the value of min or its default value.
+        """
+        return self.getOrDefault(self.min)
+
+    def setMax(self, value):
+        """
+        Sets the value of :py:attr:`max`.
+        """
+        self._paramMap[self.max] = value
+        return self
+
+    def getMax(self):
+        """
+        Gets the value of max or its default value.
+        """
+        return self.getOrDefault(self.max)
+
+    def _create_model(self, java_model):
+        return MinMaxScalerModel(java_model)
+
+
+class MinMaxScalerModel(JavaModel):
+    """
+    .. note:: Experimental
+
+    Model fitted by :py:class:`MinMaxScaler`.
     """
 
 
@@ -1674,96 +1768,6 @@ class RFormulaModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by :py:class:`RFormula`.
-    """
-
-
-@inherit_doc
-class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
-    """
-    Rescale each feature individually to a common range [min, max] linearly using column summary
-    statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
-    feature E is calculated as,
-
-    Rescaled(e_i) = (e_i - E_min) / (E_max - E_min) * (max - min) + min
-
-    For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
-
-    Note that since zero values will probably be transformed to non-zero values, output of the
-    transformer will be DenseVector even for sparse input.
-
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
-    >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
-    >>> model = mmScaler.fit(df)
-    >>> model.transform(df).show()
-    +-----+------+
-    |    a|scaled|
-    +-----+------+
-    |[0.0]| [0.0]|
-    |[2.0]| [1.0]|
-    +-----+------+
-    ...
-    """
-
-    # a placeholder to make it appear in the generated doc
-    min = Param(Params._dummy(), "min", "Lower bound of the output feature range")
-    max = Param(Params._dummy(), "max", "Upper bound of the output feature range")
-
-    @keyword_only
-    def __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
-        """
-        __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
-        """
-        super(MinMaxScaler, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
-        self.min = Param(self, "min", "Lower bound of the output feature range")
-        self.max = Param(self, "max", "Upper bound of the output feature range")
-        self._setDefault(min=0.0, max=1.0)
-        kwargs = self.__init__._input_kwargs
-        self.setParams(**kwargs)
-
-    @keyword_only
-    def setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
-        """
-        setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
-        Sets params for this MinMaxScaler.
-        """
-        kwargs = self.setParams._input_kwargs
-        return self._set(**kwargs)
-
-    def setMin(self, value):
-        """
-        Sets the value of :py:attr:`min`.
-        """
-        self._paramMap[self.min] = value
-        return self
-
-    def getMin(self):
-        """
-        Gets the value of min or its default value.
-        """
-        return self.getOrDefault(self.min)
-
-    def setMax(self, value):
-        """
-        Sets the value of :py:attr:`max`.
-        """
-        self._paramMap[self.max] = value
-        return self
-
-    def getMax(self):
-        """
-        Gets the value of max or its default value.
-        """
-        return self.getOrDefault(self.max)
-
-    def _create_model(self, java_model):
-        return MinMaxScalerModel(java_model)
-
-
-class MinMaxScalerModel(JavaModel):
-    """
-    Model fitted by MinMaxScaler.
     """
 
 
