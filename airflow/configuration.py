@@ -56,6 +56,7 @@ defaults = {
         'demo_mode': False,
         'secret_key': 'airflowified',
         'expose_config': False,
+        'threads': 4,
     },
     'scheduler': {
         'statsd_on': False,
@@ -126,6 +127,9 @@ web_server_port = 8080
 
 # Secret key used to run your flask app
 secret_key = temporary_key
+
+# number of threads to run the Gunicorn web server
+thread = 4
 
 # Expose the configuration file in the web server
 expose_config = true
