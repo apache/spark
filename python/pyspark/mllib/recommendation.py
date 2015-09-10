@@ -184,7 +184,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 class ALS(object):
     """Alternating Least Squares matrix factorization
 
-    .. addedversion:: 1.1.0
+    .. addedversion:: 0.9.0
     """
 
     @classmethod
@@ -206,7 +206,7 @@ class ALS(object):
         return ratings
 
     @classmethod
-    @since("1.0.0")
+    @since("0.9.0")
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,
               seed=None):
         """
@@ -221,7 +221,7 @@ class ALS(object):
         return MatrixFactorizationModel(model)
 
     @classmethod
-    @since("1.0.0")
+    @since("0.9.0")
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
                       nonnegative=False, seed=None):
         """
