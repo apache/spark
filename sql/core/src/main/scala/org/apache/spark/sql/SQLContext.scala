@@ -78,6 +78,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
   sparkContext.addSparkListener(listener)
   sparkContext.ui.foreach(new SQLTab(this, _))
 
+  // Ensure query execution IDs are not inherited across the thread hierarchy, which is
+  // the default behavior for SparkContext local properties. Otherwise, we may confuse
+  // the listener as to which query is being executed. (SPARK-10548)
+  sparkContext.nonInheritedLocalProperties.add(SQLExecution.EXECUTION_ID_KEY)
+
   /**
    * Set Spark SQL configuration properties.
    *

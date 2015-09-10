@@ -29,7 +29,7 @@ import java.util.UUID.randomUUID
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
@@ -348,9 +348,18 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // Thread Local variable that can be used by users to pass information down the stack
   private val localProperties = new InheritableThreadLocal[Properties] {
-    override protected def childValue(parent: Properties): Properties = new Properties(parent)
+    override protected def childValue(parent: Properties): Properties = {
+      val p = new Properties(parent)
+      nonInheritedLocalProperties.foreach(p.remove)
+      p
+    }
     override protected def initialValue(): Properties = new Properties()
   }
+
+  /**
+   * Keys of local properties that should not be inherited by children threads.
+   */
+  private[spark] val nonInheritedLocalProperties: HashSet[String] = new HashSet[String]
 
   /* ------------------------------------------------------------------------------------- *
    | Initialization. This code initializes the context in a manner that is exception-safe. |
