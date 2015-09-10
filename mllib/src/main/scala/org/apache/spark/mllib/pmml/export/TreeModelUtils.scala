@@ -116,7 +116,7 @@ private[mllib] object TreeModelUtils {
         rootPMMLNode.withNodes(rightNode)
       }
 
-      //add to the list of classes
+      // add to the list of classes
       if (rootNode.isLeaf && (algo == Algo.Classification)) {
         classes += rootNode.predict.predict
       }
