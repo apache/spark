@@ -20,10 +20,11 @@ package org.apache.spark.ml.source.libsvm
 import com.google.common.base.Objects
 
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.annotation.Since
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{DataFrameReader, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
@@ -68,13 +69,42 @@ private[libsvm] class LibSVMRelation(val path: String, val numFeatures: Int, val
 }
 
 /**
- * This is used for creating DataFrame from LibSVM format file.
- * The LibSVM file path must be specified to DefaultSource.
+ * `libsvm` package implements Spark SQL data source API for loading LIBSVM data as [[DataFrame]].
+ * The loaded [[DataFrame]] has two columns: `label` containing labels stored as doubles and
+ * `features` containing feature vectors stored as [[Vector]]s.
+ *
+ * To use LIBSVM data source, you need to set "libsvm" as the format in [[DataFrameReader]] and
+ * optionally specify options, for example:
+ * {{{
+ *   // Scala
+ *   val df = sqlContext.read.format("libsvm")
+ *     .option("numFeatures", "780")
+ *     .load("data/mllib/sample_libsvm_data.txt")
+ *
+ *   // Java
+ *   DataFrame df = sqlContext.read.format("libsvm")
+ *     .option("numFeatures, "780")
+ *     .load("data/mllib/sample_libsvm_data.txt");
+ * }}}
+ *
+ * LIBSVM data source supports the following options:
+ *  - "numFeatures": number of features.
+ *    If unspecified or nonpositive, the number of features will be determined automatically at the
+ *    cost of one additional pass.
+ *    This is also useful when the dataset is already split into multiple files and you want to load
+ *    them separately, because some features may not present in certain files, which leads to
+ *    inconsistent feature dimensions.
+ *  - "vectorType": feature vector type, "sparse" (default) or "dense".
+ *
+ *  @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]
  */
-private[spark] class DefaultSource extends RelationProvider with DataSourceRegister {
+@Since("1.6.0")
+class DefaultSource extends RelationProvider with DataSourceRegister {
 
+  @Since("1.6.0")
   override def shortName(): String = "libsvm"
 
+  @Since("1.6.0")
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String])
     : BaseRelation = {
     val path = parameters.getOrElse("path",
