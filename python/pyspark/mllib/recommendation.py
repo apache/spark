@@ -156,6 +156,18 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return list(self.call("recommendProducts", user, num))
 
+    def recommendProductsForUsers(self, num):
+        """
+        Recommends topK products for all users.
+        """
+        return list(self.call("recommendProductsForUsers", num))
+
+    def recommendUsersForProducts(self, num):
+        """
+        Recommends topK users for all products.
+        """
+        return list(self.call("recommendUsersForProducts", num))
+
     @property
     def rank(self):
         return self.call("rank")
