@@ -1316,7 +1316,7 @@ def real_main():
     try:
         if opts.profile != "default":
             conn = ec2.connect_to_region(opts.region, profile_name=opts.profile)
-	else:
+        else:
             conn = ec2.connect_to_region(opts.region)
     except Exception as e:
         print((e), file=stderr)
