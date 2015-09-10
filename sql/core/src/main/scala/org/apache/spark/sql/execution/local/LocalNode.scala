@@ -129,3 +129,32 @@ abstract class BinaryLocalNode(conf: SQLConf) extends LocalNode(conf) {
 
   override def children: Seq[LocalNode] = Seq(left, right)
 }
+
+/**
+ * An thin wrapper around a [[LocalNode]] that provides an `Iterator` interface.
+ */
+private[local] class LocalNodeIterator(localNode: LocalNode) extends Iterator[InternalRow] {
+  private var nextRow: InternalRow = _
+
+  override def hasNext: Boolean = {
+    if (nextRow == null) {
+      val res = localNode.next()
+      if (res) {
+        nextRow = localNode.fetch()
+      }
+      res
+    } else {
+      true
+    }
+  }
+
+  override def next(): InternalRow = {
+    if (hasNext) {
+      val res = nextRow
+      nextRow = null
+      res
+    } else {
+      throw new NoSuchElementException
+    }
+  }
+}

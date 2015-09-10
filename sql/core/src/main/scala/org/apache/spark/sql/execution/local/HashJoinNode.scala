@@ -21,6 +21,7 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 case class HashJoinNode (
     conf: SQLConf,
@@ -75,7 +76,8 @@ case class HashJoinNode (
 
   override def open(): Unit = {
     buildNode.open()
-    hashed = HashedRelation.createLocalHashedRelation(buildNode, buildSideKeyGenerator)
+    hashed = HashedRelation.apply(
+      new LocalNodeIterator(buildNode), SQLMetrics.nullLongMetric, buildSideKeyGenerator)
     streamedNode.open()
     joinRow = new JoinedRow
     resultProjection = {

@@ -22,7 +22,9 @@ import org.apache.spark.sql.execution.joins
 
 class HashJoinNodeSuite extends LocalNodeTest {
 
-  def wrapForUnsafe(f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
+  import testImplicits._
+
+  private def wrapForUnsafe(f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
     if (conf.unsafeEnabled) {
       (left: LocalNode, right: LocalNode) => {
         val _left = ConvertToUnsafeNode(conf, left)
