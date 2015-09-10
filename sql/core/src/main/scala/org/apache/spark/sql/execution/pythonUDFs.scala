@@ -374,7 +374,8 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
         }
       }
 
-      val dataOut = new DataOutputStream(new BufferedOutputStream(worker.getOutputStream, bufferSize))
+      val dataOut = new DataOutputStream(
+        new BufferedOutputStream(worker.getOutputStream, bufferSize))
       val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
 
       PythonRDD.writeHeaderToStream(
@@ -403,7 +404,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       // Add a sentinel at the end so that we can know when to finish the pyspark protocol
       val groupedIteratorWithEnd = groupedIterator ++ Seq(BatchPythonEvaluation.SentinelEnd)
 
-      groupedIteratorWithEnd.map { inputRows  =>
+      groupedIteratorWithEnd.map { inputRows =>
         if (inputRows == BatchPythonEvaluation.SentinelEnd) {
           // Finish
           dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)

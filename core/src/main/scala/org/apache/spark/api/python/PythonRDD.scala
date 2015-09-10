@@ -158,7 +158,14 @@ private[spark] class PythonRDD(
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
 
-        PythonRDD.writeHeaderToStream(dataOut, pythonIncludes, broadcastVars, worker, pythonVer, split.index, command)
+        PythonRDD.writeHeaderToStream(
+          dataOut,
+          pythonIncludes,
+          broadcastVars,
+          worker,
+          pythonVer,
+          split.index,
+          command)
 
         // RDD mode
         dataOut.writeInt(PySparkMode.RDD)
@@ -235,12 +242,12 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends RDD[(Long, Array[Byte]
   val asJavaPairRDD : JavaPairRDD[Long, Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
 
-object PySparkMode {
+private[spark] object PySparkMode {
   val RDD = 0
   val UDF = 1
 }
 
-object SpecialLengths {
+private[spark] object SpecialLengths {
   val END_OF_DATA_SECTION = -1
   val PYTHON_EXCEPTION_THROWN = -2
   val TIMING_DATA = -3
@@ -424,7 +431,16 @@ private[spark] object PythonRDD extends Logging {
           val diskBytesSpilled = stream.readLong()
           TaskContext.get.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
           TaskContext.get.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
-          readPythonProcessSocket(stream, startTime, reuseWorker, accumulator, envVars, pythonExec, worker, released, writerThreadException)
+          readPythonProcessSocket(
+            stream,
+            startTime,
+            reuseWorker,
+            accumulator,
+            envVars,
+            pythonExec,
+            worker,
+            released,
+            writerThreadException)
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
           // Signals that an exception has been thrown in python
           val exLength = stream.readInt()
