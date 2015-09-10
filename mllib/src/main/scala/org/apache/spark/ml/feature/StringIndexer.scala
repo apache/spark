@@ -102,7 +102,7 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
  * [[StringIndexerModel.transform]] would return the input dataset unmodified.
  * This is a temporary fix for the case when target labels do not exist during prediction.
  *
- * @param labels  Ordered list of labels, corresponding to indices to be assigned
+ * @param labels  Ordered list of labels, corresponding to indices to be assigned.
  */
 @Experimental
 class StringIndexerModel (
@@ -212,8 +212,8 @@ class IndexToString private[ml] (
 
   /**
    * Param for array of labels.
-   * Optional labels to be provided by the user, if not supplied column
-   * metadata is read for labels.
+   * Optional labels to be provided by the user.
+   * Default: Empty array, in which case column metadata is used for labels.
    * @group param
    */
   final val labels: StringArrayParam = new StringArrayParam(this, "labels",

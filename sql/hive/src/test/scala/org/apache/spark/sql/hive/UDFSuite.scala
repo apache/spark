@@ -18,18 +18,18 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest {
-  private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
+class UDFSuite extends QueryTest with TestHiveSingleton {
 
   test("UDF case insensitive") {
-    ctx.udf.register("random0", () => { Math.random() })
-    ctx.udf.register("RANDOM1", () => { Math.random() })
-    ctx.udf.register("strlenScala", (_: String).length + (_: Int))
-    assert(ctx.sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-    assert(ctx.sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-    assert(ctx.sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
+    hiveContext.udf.register("random0", () => { Math.random() })
+    hiveContext.udf.register("RANDOM1", () => { Math.random() })
+    hiveContext.udf.register("strlenScala", (_: String).length + (_: Int))
+    assert(hiveContext.sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
+    assert(hiveContext.sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
+    assert(hiveContext.sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
   }
 }
