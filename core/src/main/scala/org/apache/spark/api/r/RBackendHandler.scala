@@ -125,7 +125,7 @@ private[r] class RBackendHandler(server: RBackend)
       val methods = cls.getMethods
       val selectedMethods = methods.filter(m => m.getName == methodName)
       if (selectedMethods.length > 0) {
-        val index = matchMethod(
+        val index = findMatchedSignature(
           selectedMethods.map(_.getParameterTypes),
           args)
 
@@ -146,7 +146,7 @@ private[r] class RBackendHandler(server: RBackend)
       } else if (methodName == "<init>") {
         // methodName should be "<init>" for constructor
         val ctors = cls.getConstructors
-        val index = matchMethod(
+        val index = findMatchedSignature(
           ctors.map(_.getParameterTypes),
           args)
 
@@ -183,13 +183,17 @@ private[r] class RBackendHandler(server: RBackend)
     }.toArray
   }
 
-  // Find a matching method in all methods of the same name of a class
-  // according to the passed arguments. Arguments may be converted in
-  // order to match a method.
+  // Find a matching method signature in an array of signatures of constructors
+  // or methods of the same name according to the passed arguments. Arguments
+  // may be converted in order to match a signature.
   //
-  // Returns an Option[Int] which is the index of the matched method in
-  // the list of the methods of the same name.
-  def matchMethod(
+  // Note that in Java reflection, constructors and normal methods are of different
+  // classes, and share no parent class that provides methods for reflection uses.
+  // There is no unified way to handle them in this function. So an array of signatures
+  // is passed in instead of an array of candidate constructors or methods.
+  //
+  // Returns an Option[Int] which is the index of the matched signature in the array.
+  def findMatchedSignature(
       parameterTypesOfMethods: Array[Array[Class[_]]],
       args: Array[Object]): Option[Int] = {
     val numArgs = args.length
