@@ -142,13 +142,14 @@ class HivePrestoTest(unittest.TestCase):
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_hive2samba(self):
-        t = operators.Hive2SambaOperator(
-            task_id='hive2samba_check',
-            samba_conn_id='tableau_samba',
-            hql="SELECT * FROM airflow.static_babynames LIMIT 10000",
-            destination_filepath='test_airflow.csv',
-            dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        if 'Hive2SambaOperator' in dir(operators):
+            t = operators.Hive2SambaOperator(
+                task_id='hive2samba_check',
+                samba_conn_id='tableau_samba',
+                hql="SELECT * FROM airflow.static_babynames LIMIT 10000",
+                destination_filepath='test_airflow.csv',
+                dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_hive_to_mysql(self):
         t = operators.HiveToMySqlTransfer(
