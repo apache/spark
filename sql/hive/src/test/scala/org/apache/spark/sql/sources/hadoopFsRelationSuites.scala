@@ -172,11 +172,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .load(file.getCanonicalPath)
             .select(selectedColumns: _*)
 
-        // Read the data back and manually order by data to make sure UDT values are properly
-        // sorted.
+        // Read the data back
         checkAnswer(
-          loadedDF.orderBy(selectedColumns: _*),
-          dfToBeSaved.orderBy(selectedColumns: _*)
+          loadedDF,
+          dfToBeSaved
         )
       }
     }
