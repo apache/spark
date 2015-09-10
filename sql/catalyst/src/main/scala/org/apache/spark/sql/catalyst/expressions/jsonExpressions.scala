@@ -275,7 +275,9 @@ case class GetJsonObject(json: Expression, path: Expression)
 
           dirty > 0
         } finally {
-          flattenGenerator.close()
+          if (!flattenGenerator.isClosed) {
+            flattenGenerator.close()
+          }
         }
 
       case (START_ARRAY, Subscript :: Wildcard :: xs) =>
