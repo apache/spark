@@ -32,7 +32,7 @@ import org.apache.spark.{SecurityManager, SparkContext, SparkEnv, SparkException
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcAddress
-import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
@@ -364,7 +364,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         if (slaveIdToTaskId.containsKey(slaveId)) {
           val taskId: Int = slaveIdToTaskId.get(slaveId)
           taskIdToSlaveId.remove(taskId)
-          removeExecutor(sparkExecutorId(slaveId, taskId.toString), reason)
+          removeExecutor(sparkExecutorId(slaveId, taskId.toString), SlaveLost(reason))
         }
         // TODO: This assumes one Spark executor per Mesos slave,
         // which may no longer be true after SPARK-5095
