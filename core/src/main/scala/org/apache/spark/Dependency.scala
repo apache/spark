@@ -66,7 +66,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  */
 @DeveloperApi
 class ShuffleDependency[K, V, C](
-    @transient _rdd: RDD[_ <: Product2[K, V]],
+    @transient private val _rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
     val serializer: Option[Serializer] = None,
     val keyOrdering: Option[Ordering[K]] = None,

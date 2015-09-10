@@ -431,6 +431,32 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
   expect_equal(ncol(collect(df)), ncol(take(df, 10)))
 })
 
+test_that("collect() support Unicode characters", {
+  markUtf8 <- function(s) {
+    Encoding(s) <- "UTF-8"
+    s
+  }
+
+  lines <- c("{\"name\":\"안녕하세요\"}",
+             "{\"name\":\"您好\", \"age\":30}",
+             "{\"name\":\"こんにちは\", \"age\":19}",
+             "{\"name\":\"Xin chào\"}")
+
+  jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(lines, jsonPath)
+
+  df <- read.df(sqlContext, jsonPath, "json")
+  rdf <- collect(df)
+  expect_true(is.data.frame(rdf))
+  expect_equal(rdf$name[1], markUtf8("안녕하세요"))
+  expect_equal(rdf$name[2], markUtf8("您好"))
+  expect_equal(rdf$name[3], markUtf8("こんにちは"))
+  expect_equal(rdf$name[4], markUtf8("Xin chào"))
+
+  df1 <- createDataFrame(sqlContext, rdf)
+  expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
+})
+
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
   df <- jsonFile(sqlContext, jsonPath)
   first <- lapply(df, function(row) {

@@ -22,9 +22,9 @@ if sys.version >= '3':
     basestring = str
     long = int
 
+from pyspark import since
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql import since
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "Column", "SchemaRDD", "DataFrameNaFunctions",
@@ -225,6 +225,9 @@ class Column(object):
         if item.startswith("__"):
             raise AttributeError(item)
         return self.getField(item)
+
+    def __iter__(self):
+        raise TypeError("Column is not iterable")
 
     # string methods
     rlike = _bin_op("rlike")

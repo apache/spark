@@ -32,7 +32,7 @@ import org.apache.spark.streaming.receiver.Receiver
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](
-    @transient ssc_ : StreamingContext,
+    ssc_ : StreamingContext,
     host: String,
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
