@@ -628,6 +628,9 @@ private[spark] class TaskSetManager(
     // here "result.value()" just returns the value and won't block other threads.
     sched.dagScheduler.taskEnded(
       tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
+    // kill other attempts of this task when speculation is enabled.
+    taskAttempts(index).filter(_.taskId != tid).foreach(e=>sched.killSpeculatedTask(e.taskId))
+
     if (!successful(index)) {
       tasksSuccessful += 1
       logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(

@@ -220,6 +220,15 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  def killSpeculatedTask(taskId:Long) : Unit = synchronized {
+    taskIdToExecutorId.get(taskId) match {
+      case Some(execId) =>
+        logInfo("Kill speculated task " + taskId)
+        backend.killTask(taskId, execId, true)
+      case None => log.debug("Ignore killing speculated task {}, due to it has not been started", taskId)
+    }
+  }
+
   /**
    * Called to indicate that all task attempts (including speculated tasks) associated with the
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
