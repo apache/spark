@@ -194,7 +194,7 @@ private[r] class RBackendHandler(server: RBackend)
       args: Array[Object]): Option[Int] = {
     val numArgs = args.length
 
-    for (index <- 0 to parameterTypesOfMethods.length - 1) {
+    for (index <- 0 until parameterTypesOfMethods.length) {
       val parameterTypes = parameterTypesOfMethods(index)
 
       if (parameterTypes.length == numArgs) {
