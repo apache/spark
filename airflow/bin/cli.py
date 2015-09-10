@@ -249,7 +249,7 @@ def webserver(args):
             'on host {args.hostname} and port '
             '{args.port}...'.format(**locals()))
         subprocess.Popen([
-            'gunicorn', '-w', str(args.threads), '-b',
+            'gunicorn', '-w', str(args.threads), '-t', '120', '-b',
             args.hostname + ':' + str(args.port), 'airflow.www.app:app'])
 
 
