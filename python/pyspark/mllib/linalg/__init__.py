@@ -266,6 +266,7 @@ class DenseVector(Vector):
         if ar.dtype != np.float64:
             ar = ar.astype(np.float64)
         self.array = ar
+        self.values = ar
 
     @staticmethod
     def parse(s):
