@@ -218,8 +218,8 @@ class SerializationTestCase(unittest.TestCase):
         p2 = loads(dumps(p1, 2))
         self.assertEqual(p1, p2)
 
-        import cloudpickle
-        P2 = loads(cloudpickle.dumps(P))
+        from pyspark.cloudpickle import dumps
+        P2 = loads(dumps(P))
         p3 = P2(1, 3)
         self.assertEqual(p1, p3)
 
