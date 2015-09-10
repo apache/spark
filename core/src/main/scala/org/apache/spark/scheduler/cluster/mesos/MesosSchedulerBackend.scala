@@ -32,6 +32,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
 
+
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
  * separate Mesos task, allowing multiple applications to share cluster nodes both in space (tasks
@@ -126,7 +127,7 @@ private[spark] class MesosSchedulerBackend(
     }
     val builder = MesosExecutorInfo.newBuilder()
     val (resourcesAfterCpu, usedCpuResources) =
-      partitionResources(availableResources, "cpus", mesosExecutorCores)
+      partitionResources(availableResources, "cpus", scheduler.CPUS_PER_TASK)
     val (resourcesAfterMem, usedMemResources) =
       partitionResources(resourcesAfterCpu, "mem", calculateTotalMemory(sc))
 
