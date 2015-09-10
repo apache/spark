@@ -271,7 +271,7 @@ setMethod("names<-",
           signature(x = "DataFrame"),
           function(x, value) {
             if (!is.null(value)) {
-              sdf <- callJMethod(x@sdf, "toDF", listToSeq(as.list(value)))
+              sdf <- callJMethod(x@sdf, "toDF", as.list(value))
               dataFrame(sdf)
             }
           })
@@ -843,10 +843,10 @@ setMethod("groupBy",
            function(x, ...) {
              cols <- list(...)
              if (length(cols) >= 1 && class(cols[[1]]) == "character") {
-               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], listToSeq(cols[-1]))
+               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], cols[-1])
              } else {
                jcol <- lapply(cols, function(c) { c@jc })
-               sgd <- callJMethod(x@sdf, "groupBy", listToSeq(jcol))
+               sgd <- callJMethod(x@sdf, "groupBy", jcol)
              }
              groupedData(sgd)
            })
@@ -1079,7 +1079,7 @@ setMethod("subset", signature(x = "DataFrame"),
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
-            sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
+            sdf <- callJMethod(x@sdf, "select", col, list(...))
             dataFrame(sdf)
           })
 
@@ -1090,7 +1090,7 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             jcols <- lapply(list(col, ...), function(c) {
               c@jc
             })
-            sdf <- callJMethod(x@sdf, "select", listToSeq(jcols))
+            sdf <- callJMethod(x@sdf, "select", jcols)
             dataFrame(sdf)
           })
 
@@ -1106,7 +1106,7 @@ setMethod("select",
                 col(c)@jc
               }
             })
-            sdf <- callJMethod(x@sdf, "select", listToSeq(cols))
+            sdf <- callJMethod(x@sdf, "select", cols)
             dataFrame(sdf)
           })
 
@@ -1133,7 +1133,7 @@ setMethod("selectExpr",
           signature(x = "DataFrame", expr = "character"),
           function(x, expr, ...) {
             exprList <- list(expr, ...)
-            sdf <- callJMethod(x@sdf, "selectExpr", listToSeq(exprList))
+            sdf <- callJMethod(x@sdf, "selectExpr", exprList)
             dataFrame(sdf)
           })
 
@@ -1311,12 +1311,12 @@ setMethod("arrange",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col, ...) {
             if (class(col) == "character") {
-              sdf <- callJMethod(x@sdf, "sort", col, toSeq(...))
+              sdf <- callJMethod(x@sdf, "sort", col, list(...))
             } else if (class(col) == "Column") {
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
               })
-              sdf <- callJMethod(x@sdf, "sort", listToSeq(jcols))
+              sdf <- callJMethod(x@sdf, "sort", jcols)
             }
             dataFrame(sdf)
           })
@@ -1664,7 +1664,7 @@ setMethod("describe",
           signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
             colList <- list(col, ...)
-            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            sdf <- callJMethod(x@sdf, "describe", colList)
             dataFrame(sdf)
           })
 
@@ -1674,7 +1674,7 @@ setMethod("describe",
           signature(x = "DataFrame"),
           function(x) {
             colList <- as.list(c(columns(x)))
-            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            sdf <- callJMethod(x@sdf, "describe", colList)
             dataFrame(sdf)
           })
 
@@ -1731,7 +1731,7 @@ setMethod("dropna",
 
             naFunctions <- callJMethod(x@sdf, "na")
             sdf <- callJMethod(naFunctions, "drop",
-                               as.integer(minNonNulls), listToSeq(as.list(cols)))
+                               as.integer(minNonNulls), as.list(cols))
             dataFrame(sdf)
           })
 
@@ -1815,7 +1815,7 @@ setMethod("fillna",
             sdf <- if (length(cols) == 0) {
               callJMethod(naFunctions, "fill", value)
             } else {
-              callJMethod(naFunctions, "fill", value, listToSeq(as.list(cols)))
+              callJMethod(naFunctions, "fill", value, as.list(cols))
             }
             dataFrame(sdf)
           })
