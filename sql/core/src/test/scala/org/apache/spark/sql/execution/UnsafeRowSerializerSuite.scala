@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{DataOutputStream, ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{File, DataOutputStream, ByteArrayInputStream, ByteArrayOutputStream}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
+import org.apache.spark._
 
 
 /**
@@ -86,5 +89,43 @@ class UnsafeRowSerializerSuite extends SparkFunSuite {
     val deserializerIter = serializer.deserializeStream(input).asKeyValueIterator
     assert(!deserializerIter.hasNext)
     assert(input.closed)
+  }
+
+  test("SPARK-10466: external sorter spilling with unsafe row serializer") {
+    val conf = new SparkConf()
+      .set("spark.shuffle.spill.initialMemoryThreshold", "1024")
+      .set("spark.shuffle.sort.bypassMergeThreshold", "0")
+      .set("spark.shuffle.memoryFraction", "0.0001")
+    var sc: SparkContext = null
+    var outputFile: File = null
+    try {
+      sc = new SparkContext("local", "test", conf)
+      outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
+      val data = (1 to 1000).iterator.map { i =>
+        (i, toUnsafeRow(Row(i), Array(IntegerType)))
+      }
+      val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
+        partitioner = Some(new HashPartitioner(10)),
+        serializer = Some(new UnsafeRowSerializer(numFields = 1)))
+
+      // Ensure we spilled something and have to merge them later
+      assert(sorter.numSpills === 0)
+      sorter.insertAll(data)
+      assert(sorter.numSpills > 0)
+
+      // Merging spilled files should not throw assertion error
+      val taskContext = new TaskContextImpl(0, 0, 0, 0, null, null, InternalAccumulator.create(sc))
+      taskContext.taskMetrics.shuffleWriteMetrics = Some(new ShuffleWriteMetrics)
+      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), taskContext, outputFile)
+
+    } finally {
+      // Clean up
+      if (sc != null) {
+        sc.stop()
+      }
+      if (outputFile != null) {
+        outputFile.delete()
+      }
+    }
   }
 }
