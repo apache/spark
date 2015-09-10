@@ -39,9 +39,9 @@ utf8_deserializer = UTF8Deserializer()
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
-    write_long(1000 * boot, outfile)
-    write_long(1000 * init, outfile)
-    write_long(1000 * finish, outfile)
+    write_long(int(1000 * boot), outfile)
+    write_long(int(1000 * init), outfile)
+    write_long(int(1000 * finish), outfile)
 
 
 def add_path(path):
