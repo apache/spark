@@ -487,8 +487,10 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     checkPushedFilter("select * from timetypes where B > '1998-09-10'", "B > 1998-09-10")
     checkPushedFilter("select * from timetypes where B > 'abcd'", "")
     checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue.toLong + 1L}'", "")
-    checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue.toLong}'", s"A > ${Int.MaxValue.toLong}")
+    checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue.toLong}'",
+      s"A > ${Int.MaxValue.toLong}")
     checkPushedFilter(s"select * from inttypes where C <= '${Int.MinValue.toLong - 1L}'", "")
-    checkPushedFilter(s"select * from inttypes where C <= '${Int.MinValue.toLong}'", s"C <= ${Int.MinValue.toLong}")
+    checkPushedFilter(s"select * from inttypes where C <= '${Int.MinValue.toLong}'",
+      s"C <= ${Int.MinValue.toLong}")
   }
 }
