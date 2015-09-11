@@ -77,7 +77,7 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
   /**
    * Returns the content of the iterator from the beginning to the end in the form of a Scala Seq.
    */
-  def collect(): Seq[Row] = {
+  final def collect(): Seq[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(StructType.fromAttributes(output))
     val result = new scala.collection.mutable.ArrayBuffer[Row]
     open()
@@ -140,7 +140,7 @@ abstract class BinaryLocalNode(conf: SQLConf) extends LocalNode(conf) {
 /**
  * An thin wrapper around a [[LocalNode]] that provides an `Iterator` interface.
  */
-private[local] class LocalNodeIterator(localNode: LocalNode) extends Iterator[InternalRow] {
+private class LocalNodeIterator(localNode: LocalNode) extends Iterator[InternalRow] {
   private var nextRow: InternalRow = _
 
   override def hasNext: Boolean = {
