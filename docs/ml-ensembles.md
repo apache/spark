@@ -121,7 +121,6 @@ import org.apache.spark.ml.classification.RandomForestClassifier
 import org.apache.spark.ml.classification.RandomForestClassificationModel
 import org.apache.spark.ml.feature.{StringIndexer, IndexToString, VectorIndexer}
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file, converting it to a DataFrame.
 val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -193,9 +192,6 @@ import org.apache.spark.ml.classification.RandomForestClassifier;
 import org.apache.spark.ml.classification.RandomForestClassificationModel;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
@@ -267,7 +263,6 @@ from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
-from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
 data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -326,7 +321,6 @@ import org.apache.spark.ml.regression.RandomForestRegressor
 import org.apache.spark.ml.regression.RandomForestRegressionModel
 import org.apache.spark.ml.feature.VectorIndexer
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file, converting it to a DataFrame.
 val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -386,9 +380,6 @@ import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.ml.regression.RandomForestRegressionModel;
 import org.apache.spark.ml.regression.RandomForestRegressor;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
@@ -448,7 +439,6 @@ from pyspark.ml import Pipeline
 from pyspark.ml.regression import RandomForestRegressor
 from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
 data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -574,7 +564,6 @@ import org.apache.spark.ml.classification.GBTClassifier
 import org.apache.spark.ml.classification.GBTClassificationModel
 import org.apache.spark.ml.feature.{StringIndexer, IndexToString, VectorIndexer}
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file, converting it to a DataFrame.
 val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -646,9 +635,6 @@ import org.apache.spark.ml.classification.GBTClassifier;
 import org.apache.spark.ml.classification.GBTClassificationModel;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
@@ -721,7 +707,6 @@ from pyspark.ml import Pipeline
 from pyspark.ml.classification import GBTClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
-from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
 data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -780,7 +765,6 @@ import org.apache.spark.ml.regression.GBTRegressor
 import org.apache.spark.ml.regression.GBTRegressionModel
 import org.apache.spark.ml.feature.VectorIndexer
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file, converting it to a DataFrame.
 val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -841,9 +825,6 @@ import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.ml.regression.GBTRegressionModel;
 import org.apache.spark.ml.regression.GBTRegressor;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
@@ -904,7 +885,6 @@ from pyspark.ml import Pipeline
 from pyspark.ml.regression import GBTRegressor
 from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
 data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -966,7 +946,6 @@ Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classifie
 {% highlight scala %}
 import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Row, SQLContext}
 
 val sqlContext = new SQLContext(sc)
@@ -1011,9 +990,6 @@ import org.apache.spark.ml.classification.OneVsRest;
 import org.apache.spark.ml.classification.OneVsRestModel;
 import org.apache.spark.mllib.evaluation.MulticlassMetrics;
 import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 
