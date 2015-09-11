@@ -38,7 +38,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
  * Interface for a hashed relation by some key. Use [[HashedRelation.apply]] to create a concrete
  * object.
  */
-private[joins] sealed trait HashedRelation {
+private[execution] sealed trait HashedRelation {
   def get(key: InternalRow): Seq[InternalRow]
 
   // This is a helper method to implement Externalizable, and is used by
@@ -111,7 +111,7 @@ final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalR
 // TODO(rxin): a version of [[HashedRelation]] backed by arrays for consecutive integer keys.
 
 
-private[joins] object HashedRelation {
+private[execution] object HashedRelation {
 
   def apply(
       input: Iterator[InternalRow],

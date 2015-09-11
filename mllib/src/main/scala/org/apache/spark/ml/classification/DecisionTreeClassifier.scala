@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasCheckpointInterval
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
