@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.Logging
 
@@ -38,8 +38,8 @@ private[spark] class JobWaiter[T](
   @volatile
   private var _originalHandler: SignalHandler = null
 
-  def attachSigintHandler(): SignalHandler = {
-    Signal.handle(sigint, new SignalHandler with Logging {
+  def attachSigintHandler(): Unit = {
+    _originalHandler = Signal.handle(sigint, new SignalHandler with Logging {
       override def handle(signal: Signal): Unit = {
         logInfo("Cancelling running job.. This might take some time, so be patient. " +
           "Press Ctrl-C again to kill JVM.")
@@ -97,11 +97,14 @@ private[spark] class JobWaiter[T](
   }
 
   def awaitResult(): JobResult = synchronized {
-    Try(_originalHandler = attachSigintHandler())
+    val attachTry = Try(attachSigintHandler())
     while (!_jobFinished) {
       this.wait()
     }
-    Try(detachSigintHandler())
+    attachTry match {
+      case _: Success[_] => detachSigintHandler()
+      case _: Failure[_] => // Ignore error. Signal handler is on a best effort basis.
+    }
     return jobResult
   }
 }
