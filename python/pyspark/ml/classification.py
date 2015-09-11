@@ -818,26 +818,29 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     Number of inputs has to be equal to the size of feature vectors.
     Number of outputs has to be equal to the total number of labels.
 
-    >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sc.parallelize([
-    ...     Row(label=0.0, features=Vectors.dense([0.0, 0.0])),
-    ...     Row(label=1.0, features=Vectors.dense([0.0, 1.0])),
-    ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0])),
-    ...     Row(label=0.0, features=Vectors.dense([1.0, 1.0]))]).toDF()
-    >>> myLayers = [2, 5, 2]
-    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=myLayers, blockSize=1, seed=11)
+    >>> df = sqlContext.createDataFrame([
+    ...     (0.0, Vectors.dense([0.0, 0.0])),
+    ...     (1.0, Vectors.dense([0.0, 1.0])),
+    ...     (1.0, Vectors.dense([1.0, 0.0])),
+    ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
+    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 5, 2], blockSize=1, seed=11)
     >>> model = mlp.fit(df)
     >>> model.layers
     [2, 5, 2]
     >>> model.weights.size
     27
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
-    >>> model.transform(test0).head().prediction
-    1.0
-    >>> test1 = sc.parallelize([Row(features=Vectors.dense([0.0, 0.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
-    0.0
+    >>> testDF = sqlContext.createDataFrame([
+    ...     (Vectors.dense([1.0, 0.0]),),
+    ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
+    >>> model.transform(testDF).show()
+    +---------+----------+
+    | features|prediction|
+    +---------+----------+
+    |[1.0,0.0]|       1.0|
+    |[0.0,0.0]|       0.0|
+    +---------+----------+
+    ...
     """
 
     # a placeholder to make it appear in the generated doc
@@ -851,9 +854,9 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128):
+                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
         """
         super(MultilayerPerceptronClassifier, self).__init__()
@@ -873,14 +876,17 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128):
+                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set(**kwargs)
+        if layers is None:
+            return self._set(**kwargs).setLayers([1, 1])
+        else:
+            return self._set(**kwargs)
 
     def _create_model(self, java_model):
         return MultilayerPerceptronClassificationModel(java_model)
