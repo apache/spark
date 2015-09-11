@@ -158,7 +158,7 @@ class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
     val ssc = setupStreams(
       input,
       (inputDStream: DStream[(Boolean, Double)]) => model.summarizeByKeyAndWindow(inputDStream))
-    val outputBatches = runStreams[(Boolean, StatCounter)](ssc, numBatches, 4)
+    val outputBatches = runStreams[(Boolean, StatCounter)](ssc, numBatches, numBatches)
     val outputCounts = outputBatches.flatten.map(_._2.count)
 
     // number of batches seen so far does not exceed testWindow, expect counts to continue growing

@@ -53,7 +53,7 @@ import org.apache.spark.util.StatCounter
 class StreamingTest(
     @Since("1.6.0") var peacePeriod: Int = 0,
     @Since("1.6.0") var windowSize: Int = 0,
-    @Since("1.6.0") var testMethod: StreamingTestMethod  = WelchTTest)
+    @Since("1.6.0") var testMethod: StreamingTestMethod = WelchTTest)
   extends Logging with Serializable {
 
   /** Set the number of initial batches to ignore. */
