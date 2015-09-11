@@ -349,17 +349,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Thread Local variable that can be used by users to pass information down the stack
   private val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = {
-      if (nonInheritedLocalProperties.nonEmpty) {
-        // If there are properties that should not be inherited, filter them out
-        val p = new Properties
-        val filtered = parent.asScala.filter { case (k, _) =>
-          !nonInheritedLocalProperties.contains(k)
-        }
-        p.putAll(filtered.asJava)
-        p
-      } else {
-        new Properties(parent)
+      // Note: make a clone such that changes in the parent properties aren't reflected in
+      // the those of the children threads, which has confusing semantics (SPARK-10564).
+      val p = new Properties
+      val filtered = parent.asScala.filter { case (k, _) =>
+        !nonInheritedLocalProperties.contains(k)
       }
+      p.putAll(filtered.asJava)
+      p
     }
     override protected def initialValue(): Properties = new Properties()
   }
