@@ -154,6 +154,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     val threads = (1 to 5).map { i =>
       new Thread() {
         override def run() {
+          // TODO: these assertion failures don't actually fail the test...
           sc.setLocalProperty("test", i.toString)
           assert(sc.getLocalProperty("test") === i.toString)
           sem.release()
@@ -175,6 +176,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     val threads = (1 to 5).map { i =>
       new Thread() {
         override def run() {
+          // TODO: these assertion failures don't actually fail the test...
           assert(sc.getLocalProperty("test") === "parent")
           sc.setLocalProperty("test", i.toString)
           assert(sc.getLocalProperty("test") === i.toString)
@@ -188,6 +190,30 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     sem.acquire(5)
     assert(sc.getLocalProperty("test") === "parent")
     assert(sc.getLocalProperty("Foo") === null)
+  }
+
+  test("inheritance exclusions (SPARK-10548)") {
+    sc = new SparkContext("local", "test")
+    sc.nonInheritedLocalProperties.add("do-not-inherit-me")
+    sc.setLocalProperty("do-inherit-me", "parent")
+    sc.setLocalProperty("do-not-inherit-me", "parent")
+    var throwable: Option[Throwable] = None
+    val threads = (1 to 5).map { i =>
+      new Thread() {
+        override def run() {
+          // only the ones we intend to inherit will be passed to the children
+          try {
+            assert(sc.getLocalProperty("do-inherit-me") === "parent")
+            assert(sc.getLocalProperty("do-not-inherit-me") === null)
+          } catch {
+            case t: Throwable => throwable = Some(t)
+          }
+        }
+      }
+    }
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+    throwable.foreach { t => throw t }
   }
 
   test("mutations to local properties should not affect submitted jobs (SPARK-6629)") {
@@ -210,6 +236,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     // Create a new thread which will inherit the current thread's properties
     val thread = new Thread() {
       override def run(): Unit = {
+        // TODO: these assertion failures don't actually fail the test...
         assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "originalJobGroupId")
         // Sleeps for a total of 10 seconds, but allows cancellation to interrupt the task
         try {

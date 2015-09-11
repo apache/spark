@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicIntege
 import java.util.UUID.randomUUID
 
 import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.{HashMap, HashSet}
@@ -349,9 +350,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Thread Local variable that can be used by users to pass information down the stack
   private val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = {
-      val p = new Properties(parent)
-      nonInheritedLocalProperties.foreach(p.remove)
-      p
+      if (nonInheritedLocalProperties.nonEmpty) {
+        // If there are properties that should not be inherited, filter them out
+        val p = new Properties
+        val filtered = parent.filter { case (k, _) =>
+          !nonInheritedLocalProperties.contains(k)
+        }
+        p.putAll(filtered)
+        p
+      } else {
+        new Properties(parent)
+      }
     }
     override protected def initialValue(): Properties = new Properties()
   }
