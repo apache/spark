@@ -248,9 +248,10 @@ def webserver(args):
             'Running the Gunicorn server with {threads}'
             'on host {args.hostname} and port '
             '{args.port}...'.format(**locals()))
-        subprocess.Popen([
+        sp = subprocess.Popen([
             'gunicorn', '-w', str(args.threads), '-t', '120', '-b',
             args.hostname + ':' + str(args.port), 'airflow.www.app:app'])
+        sp.wait()
 
 
 def scheduler(args):
