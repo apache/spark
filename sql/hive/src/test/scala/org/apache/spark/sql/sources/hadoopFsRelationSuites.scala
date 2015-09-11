@@ -100,7 +100,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  test("test all data types") {
+  ignore("test all data types") {
     withTempPath { file =>
       // Create the schema.
       val struct =

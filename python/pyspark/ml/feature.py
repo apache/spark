@@ -27,11 +27,11 @@ from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
 __all__ = ['Binarizer', 'Bucketizer', 'DCT', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
-           'IndexToString', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
-           'PolynomialExpansion', 'RegexTokenizer', 'RFormula', 'RFormulaModel', 'SQLTransformer',
-           'StandardScaler', 'StandardScalerModel', 'StopWordsRemover', 'StringIndexer',
-           'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'VectorSlicer',
-           'Word2Vec', 'Word2VecModel']
+           'IndexToString', 'MinMaxScaler', 'MinMaxScalerModel', 'NGram', 'Normalizer',
+           'OneHotEncoder', 'PCA', 'PCAModel', 'PolynomialExpansion', 'RegexTokenizer',
+           'RFormula', 'RFormulaModel', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
+           'StopWordsRemover', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
+           'VectorAssembler', 'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel']
 
 
 @inherit_doc
@@ -403,6 +403,100 @@ class IDFModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by IDF.
+    """
+
+
+@inherit_doc
+class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    Rescale each feature individually to a common range [min, max] linearly using column summary
+    statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
+    feature E is calculated as,
+
+    Rescaled(e_i) = (e_i - E_min) / (E_max - E_min) * (max - min) + min
+
+    For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
+
+    Note that since zero values will probably be transformed to non-zero values, output of the
+    transformer will be DenseVector even for sparse input.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
+    >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
+    >>> model = mmScaler.fit(df)
+    >>> model.transform(df).show()
+    +-----+------+
+    |    a|scaled|
+    +-----+------+
+    |[0.0]| [0.0]|
+    |[2.0]| [1.0]|
+    +-----+------+
+    ...
+    """
+
+    # a placeholder to make it appear in the generated doc
+    min = Param(Params._dummy(), "min", "Lower bound of the output feature range")
+    max = Param(Params._dummy(), "max", "Upper bound of the output feature range")
+
+    @keyword_only
+    def __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
+        """
+        __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
+        """
+        super(MinMaxScaler, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
+        self.min = Param(self, "min", "Lower bound of the output feature range")
+        self.max = Param(self, "max", "Upper bound of the output feature range")
+        self._setDefault(min=0.0, max=1.0)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
+        """
+        setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
+        Sets params for this MinMaxScaler.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setMin(self, value):
+        """
+        Sets the value of :py:attr:`min`.
+        """
+        self._paramMap[self.min] = value
+        return self
+
+    def getMin(self):
+        """
+        Gets the value of min or its default value.
+        """
+        return self.getOrDefault(self.min)
+
+    def setMax(self, value):
+        """
+        Sets the value of :py:attr:`max`.
+        """
+        self._paramMap[self.max] = value
+        return self
+
+    def getMax(self):
+        """
+        Gets the value of max or its default value.
+        """
+        return self.getOrDefault(self.max)
+
+    def _create_model(self, java_model):
+        return MinMaxScalerModel(java_model)
+
+
+class MinMaxScalerModel(JavaModel):
+    """
+    .. note:: Experimental
+
+    Model fitted by :py:class:`MinMaxScaler`.
     """
 
 
@@ -920,7 +1014,7 @@ class StandardScalerModel(JavaModel):
 
 
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
+class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
     """
     .. note:: Experimental
 
@@ -943,19 +1037,20 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None):
+    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, inputCol=None, outputCol=None)
+        __init__(self, inputCol=None, outputCol=None, handleInvalid="error")
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
+        self._setDefault(handleInvalid="error")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol=None, outputCol=None):
+    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, inputCol=None, outputCol=None)
+        setParams(self, inputCol=None, outputCol=None, handleInvalid="error")
         Sets params for this StringIndexer.
         """
         kwargs = self.setParams._input_kwargs
@@ -984,17 +1079,17 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
 
-    A :py:class:`Transformer` that maps a column of string indices back to a new column of
-    corresponding string values using either the ML attributes of the input column, or if
-    provided using the labels supplied by the user.
-    All original columns are kept during transformation.
+    A :py:class:`Transformer` that maps a column of indices back to a new column of
+    corresponding string values.
+    The index-string mapping is either from the ML attributes of the input column,
+    or from user-supplied labels (which take precedence over ML attributes).
     See L{StringIndexer} for converting strings into indices.
     """
 
     # a placeholder to make the labels show up in generated doc
     labels = Param(Params._dummy(), "labels",
-                   "Optional array of labels to be provided by the user, if not supplied or " +
-                   "empty, column metadata is read for labels")
+                   "Optional array of labels specifying index-string mapping." +
+                   " If not provided or if empty, then metadata from inputCol is used instead.")
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, labels=None):
@@ -1005,8 +1100,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
         self.labels = Param(self, "labels",
-                            "Optional array of labels to be provided by the user, if not " +
-                            "supplied or empty, column metadata is read for labels")
+                            "Optional array of labels specifying index-string mapping. If not" +
+                            " provided or if empty, then metadata from inputCol is used instead.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1235,6 +1330,10 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> model = indexer.fit(df)
     >>> model.transform(df).head().indexed
     DenseVector([1.0, 0.0])
+    >>> model.numFeatures
+    2
+    >>> model.categoryMaps
+    {0: {0.0: 0, -1.0: 1}}
     >>> indexer.setParams(outputCol="test").fit(df).transform(df).collect()[1].test
     DenseVector([0.0, 1.0])
     >>> params = {indexer.maxCategories: 3, indexer.outputCol: "vector"}
@@ -1296,6 +1395,22 @@ class VectorIndexerModel(JavaModel):
 
     Model fitted by VectorIndexer.
     """
+
+    @property
+    def numFeatures(self):
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
+
+    @property
+    def categoryMaps(self):
+        """
+        Feature value index.  Keys are categorical feature indices (column indices).
+        Values are maps from original features values to 0-based category indices.
+        If a feature is not in this map, it is treated as continuous.
+        """
+        return self._call_java("javaCategoryMaps")
 
 
 @inherit_doc
