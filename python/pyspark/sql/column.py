@@ -95,7 +95,7 @@ def _bin_func_op(name, reverse=False, doc="binary function"):
     def _(self, other):
         sc = SparkContext._active_spark_context
         fn = getattr(sc._jvm.functions, name)
-        jc = other._jc if isinstance(other, Column) else float(other)
+        jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
         njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
         return Column(njc)
     _.__doc__ = doc
