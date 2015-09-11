@@ -199,7 +199,7 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+DataFrame data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
 // Index labels, adding metadata to the label column.
 // Fit on whole dataset to include all labels in index.
@@ -392,7 +392,7 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+DataFrame data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
 // Automatically identify categorical features, and index them.
 // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -652,7 +652,7 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-val data sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+DataFrame data sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
 // Index labels, adding metadata to the label column.
 // Fit on whole dataset to include all labels in index.
@@ -847,7 +847,7 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+DataFrame data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
 // Automatically identify categorical features, and index them.
 // Set maxCategories so features with > 4 distinct values are treated as continuous.
