@@ -78,7 +78,7 @@ object Bagel extends Logging {
       val startTime = System.currentTimeMillis
 
       val aggregated = agg(verts, aggregator)
-      val combinedMsgs = msgs.combineByKey(
+      val combinedMsgs = msgs.combineByKeyWithClassTag(
         combiner.createCombiner _, combiner.mergeMsg _, combiner.mergeCombiners _, partitioner)
       val grouped = combinedMsgs.groupWith(verts)
       val superstep_ = superstep  // Create a read-only copy of superstep for capture in closure

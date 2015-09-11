@@ -45,7 +45,7 @@ frameworks.  You can install Mesos either from source or using prebuilt packages
 To install Apache Mesos from source, follow these steps:
 
 1. Download a Mesos release from a
-   [mirror](http://www.apache.org/dyn/closer.cgi/mesos/{{site.MESOS_VERSION}}/)
+   [mirror](http://www.apache.org/dyn/closer.lua/mesos/{{site.MESOS_VERSION}}/)
 2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
    installing Mesos
 
@@ -156,6 +156,8 @@ passing in the Mesos master url (e.g: mesos://host:5050).
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master url
 to the url of the MesosClusterDispatcher (e.g: mesos://dispatcher:7077). You can view driver statuses on the
 Spark cluster Web UI.
+
+Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos slaves.
 
 # Mesos Run Modes
 

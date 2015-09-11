@@ -271,7 +271,7 @@ setMethod("names<-",
           signature(x = "DataFrame"),
           function(x, value) {
             if (!is.null(value)) {
-              sdf <- callJMethod(x@sdf, "toDF", listToSeq(as.list(value)))
+              sdf <- callJMethod(x@sdf, "toDF", as.list(value))
               dataFrame(sdf)
             }
           })
@@ -661,15 +661,15 @@ setMethod("collect",
               # listCols is a list of columns
               listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
               stopifnot(length(listCols) == ncol)
-              
+
               # An empty data.frame with 0 columns and number of rows as collected
               nrow <- length(listCols[[1]])
               if (nrow <= 0) {
                 df <- data.frame()
               } else {
-                df <- data.frame(row.names = 1 : nrow)                
+                df <- data.frame(row.names = 1 : nrow)
               }
-              
+
               # Append columns one by one
               for (colIndex in 1 : ncol) {
                 # Note: appending a column of list type into a data.frame so that
@@ -683,7 +683,7 @@ setMethod("collect",
                   # TODO: more robust check on column of primitive types
                   vec <- do.call(c, col)
                   if (class(vec) != "list") {
-                    df[[names[colIndex]]] <- vec                  
+                    df[[names[colIndex]]] <- vec
                   } else {
                     # For columns of complex type, be careful to access them.
                     # Get a column of complex type returns a list.
@@ -843,10 +843,10 @@ setMethod("groupBy",
            function(x, ...) {
              cols <- list(...)
              if (length(cols) >= 1 && class(cols[[1]]) == "character") {
-               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], listToSeq(cols[-1]))
+               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], cols[-1])
              } else {
                jcol <- lapply(cols, function(c) { c@jc })
-               sgd <- callJMethod(x@sdf, "groupBy", listToSeq(jcol))
+               sgd <- callJMethod(x@sdf, "groupBy", jcol)
              }
              groupedData(sgd)
            })
@@ -987,7 +987,7 @@ setMethod("$<-", signature(x = "DataFrame"),
 
 setClassUnion("numericOrcharacter", c("numeric", "character"))
 
-#' @rdname select
+#' @rdname subset
 #' @name [[
 setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
           function(x, i) {
@@ -998,7 +998,7 @@ setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
             getColumn(x, i)
           })
 
-#' @rdname select
+#' @rdname subset
 #' @name [
 setMethod("[", signature(x = "DataFrame", i = "missing"),
           function(x, i, j, ...) {
@@ -1012,7 +1012,7 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
             select(x, j)
           })
 
-#' @rdname select
+#' @rdname subset
 #' @name [
 setMethod("[", signature(x = "DataFrame", i = "Column"),
           function(x, i, j, ...) {
@@ -1020,10 +1020,41 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
             # https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extract.data.frame.html
             filtered <- filter(x, i)
             if (!missing(j)) {
-              filtered[, j]
+              filtered[, j, ...]
             } else {
               filtered
             }
+          })
+
+#' Subset
+#'
+#' Return subsets of DataFrame according to given conditions
+#' @param x A DataFrame
+#' @param subset A logical expression to filter on rows
+#' @param select expression for the single Column or a list of columns to select from the DataFrame
+#' @return A new DataFrame containing only the rows that meet the condition with selected columns
+#' @export
+#' @rdname subset
+#' @name subset
+#' @aliases [
+#' @family subsetting functions
+#' @examples
+#' \dontrun{
+#'   # Columns can be selected using `[[` and `[`
+#'   df[[2]] == df[["age"]]
+#'   df[,2] == df[,"age"]
+#'   df[,c("name", "age")]
+#'   # Or to filter rows
+#'   df[df$age > 20,]
+#'   # DataFrame can be subset on both rows and Columns
+#'   df[df$name == "Smith", c(1,2)]
+#'   df[df$age %in% c(19, 30), 1:2]
+#'   subset(df, df$age %in% c(19, 30), 1:2)
+#'   subset(df, df$age %in% c(19), select = c(1,2))
+#' }
+setMethod("subset", signature(x = "DataFrame"),
+          function(x, subset, select, ...) {
+            x[subset, select, ...]
           })
 
 #' Select
@@ -1034,6 +1065,8 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #' @return A new DataFrame with selected columns
 #' @export
 #' @rdname select
+#' @name select
+#' @family subsetting functions
 #' @examples
 #' \dontrun{
 #'   select(df, "*")
@@ -1041,19 +1074,12 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #'   select(df, df$name, df$age + 1)
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
-#'   # Columns can also be selected using `[[` and `[`
-#'   df[[2]] == df[["age"]]
-#'   df[,2] == df[,"age"]
-#'   df[,c("name", "age")]
 #'   # Similar to R data frames columns can also be selected using `$`
 #'   df$age
-#'   # It can also be subset on rows and Columns
-#'   df[df$name == "Smith", c(1,2)]
-#'   df[df$age %in% c(19, 30), 1:2]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
-            sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
+            sdf <- callJMethod(x@sdf, "select", col, list(...))
             dataFrame(sdf)
           })
 
@@ -1064,7 +1090,7 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             jcols <- lapply(list(col, ...), function(c) {
               c@jc
             })
-            sdf <- callJMethod(x@sdf, "select", listToSeq(jcols))
+            sdf <- callJMethod(x@sdf, "select", jcols)
             dataFrame(sdf)
           })
 
@@ -1080,7 +1106,7 @@ setMethod("select",
                 col(c)@jc
               }
             })
-            sdf <- callJMethod(x@sdf, "select", listToSeq(cols))
+            sdf <- callJMethod(x@sdf, "select", cols)
             dataFrame(sdf)
           })
 
@@ -1107,7 +1133,7 @@ setMethod("selectExpr",
           signature(x = "DataFrame", expr = "character"),
           function(x, expr, ...) {
             exprList <- list(expr, ...)
-            sdf <- callJMethod(x@sdf, "selectExpr", listToSeq(exprList))
+            sdf <- callJMethod(x@sdf, "selectExpr", exprList)
             dataFrame(sdf)
           })
 
@@ -1121,7 +1147,7 @@ setMethod("selectExpr",
 #' @return A DataFrame with the new column added.
 #' @rdname withColumn
 #' @name withColumn
-#' @aliases mutate
+#' @aliases mutate transform
 #' @export
 #' @examples
 #'\dontrun{
@@ -1141,11 +1167,12 @@ setMethod("withColumn",
 #'
 #' Return a new DataFrame with the specified columns added.
 #'
-#' @param x A DataFrame
+#' @param .data A DataFrame
 #' @param col a named argument of the form name = col
 #' @return A new DataFrame with the new columns added.
 #' @rdname withColumn
 #' @name mutate
+#' @aliases withColumn transform
 #' @export
 #' @examples
 #'\dontrun{
@@ -1155,10 +1182,12 @@ setMethod("withColumn",
 #' df <- jsonFile(sqlContext, path)
 #' newDF <- mutate(df, newCol = df$col1 * 5, newCol2 = df$col1 * 2)
 #' names(newDF) # Will contain newCol, newCol2
+#' newDF2 <- transform(df, newCol = df$col1 / 5, newCol2 = df$col1 * 2)
 #' }
 setMethod("mutate",
-          signature(x = "DataFrame"),
-          function(x, ...) {
+          signature(.data = "DataFrame"),
+          function(.data, ...) {
+            x <- .data
             cols <- list(...)
             stopifnot(length(cols) > 0)
             stopifnot(class(cols[[1]]) == "Column")
@@ -1171,6 +1200,16 @@ setMethod("mutate",
               }
             }
             do.call(select, c(x, x$"*", cols))
+          })
+
+#' @export
+#' @rdname withColumn
+#' @name transform
+#' @aliases withColumn mutate
+setMethod("transform",
+          signature(`_data` = "DataFrame"),
+          function(`_data`, ...) {
+            mutate(`_data`, ...)
           })
 
 #' WithColumnRenamed
@@ -1272,12 +1311,12 @@ setMethod("arrange",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col, ...) {
             if (class(col) == "character") {
-              sdf <- callJMethod(x@sdf, "sort", col, toSeq(...))
+              sdf <- callJMethod(x@sdf, "sort", col, list(...))
             } else if (class(col) == "Column") {
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
               })
-              sdf <- callJMethod(x@sdf, "sort", listToSeq(jcols))
+              sdf <- callJMethod(x@sdf, "sort", jcols)
             }
             dataFrame(sdf)
           })
@@ -1300,6 +1339,7 @@ setMethod("orderBy",
 #' @return A DataFrame containing only the rows that meet the condition.
 #' @rdname filter
 #' @name filter
+#' @family subsetting functions
 #' @export
 #' @examples
 #'\dontrun{
@@ -1624,7 +1664,7 @@ setMethod("describe",
           signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
             colList <- list(col, ...)
-            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            sdf <- callJMethod(x@sdf, "describe", colList)
             dataFrame(sdf)
           })
 
@@ -1634,7 +1674,7 @@ setMethod("describe",
           signature(x = "DataFrame"),
           function(x) {
             colList <- as.list(c(columns(x)))
-            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            sdf <- callJMethod(x@sdf, "describe", colList)
             dataFrame(sdf)
           })
 
@@ -1691,7 +1731,7 @@ setMethod("dropna",
 
             naFunctions <- callJMethod(x@sdf, "na")
             sdf <- callJMethod(naFunctions, "drop",
-                               as.integer(minNonNulls), listToSeq(as.list(cols)))
+                               as.integer(minNonNulls), as.list(cols))
             dataFrame(sdf)
           })
 
@@ -1699,9 +1739,9 @@ setMethod("dropna",
 #' @name na.omit
 #' @export
 setMethod("na.omit",
-          signature(x = "DataFrame"),
-          function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
-            dropna(x, how, minNonNulls, cols)
+          signature(object = "DataFrame"),
+          function(object, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+            dropna(object, how, minNonNulls, cols)
           })
 
 #' fillna
@@ -1775,7 +1815,7 @@ setMethod("fillna",
             sdf <- if (length(cols) == 0) {
               callJMethod(naFunctions, "fill", value)
             } else {
-              callJMethod(naFunctions, "fill", value, listToSeq(as.list(cols)))
+              callJMethod(naFunctions, "fill", value, as.list(cols))
             }
             dataFrame(sdf)
           })

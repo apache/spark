@@ -49,6 +49,14 @@ mockLinesNa <- c("{\"name\":\"Bob\",\"age\":16,\"height\":176.5}",
 jsonPathNa <- tempfile(pattern="sparkr-test", fileext=".tmp")
 writeLines(mockLinesNa, jsonPathNa)
 
+# For test complex types in DataFrame
+mockLinesComplexType <-
+  c("{\"c1\":[1, 2, 3], \"c2\":[\"a\", \"b\", \"c\"], \"c3\":[1.0, 2.0, 3.0]}",
+    "{\"c1\":[4, 5, 6], \"c2\":[\"d\", \"e\", \"f\"], \"c3\":[4.0, 5.0, 6.0]}",
+    "{\"c1\":[7, 8, 9], \"c2\":[\"g\", \"h\", \"i\"], \"c3\":[7.0, 8.0, 9.0]}")
+complexTypeJsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+writeLines(mockLinesComplexType, complexTypeJsonPath)
+
 test_that("infer types", {
   expect_equal(infer_type(1L), "integer")
   expect_equal(infer_type(1.0), "double")
@@ -56,10 +64,8 @@ test_that("infer types", {
   expect_equal(infer_type(TRUE), "boolean")
   expect_equal(infer_type(as.Date("2015-03-11")), "date")
   expect_equal(infer_type(as.POSIXlt("2015-03-11 12:13:04.043")), "timestamp")
-  expect_equal(infer_type(c(1L, 2L)),
-               list(type = "array", elementType = "integer", containsNull = TRUE))
-  expect_equal(infer_type(list(1L, 2L)),
-               list(type = "array", elementType = "integer", containsNull = TRUE))
+  expect_equal(infer_type(c(1L, 2L)), "array<integer>")
+  expect_equal(infer_type(list(1L, 2L)), "array<integer>")
   testStruct <- infer_type(list(a = 1L, b = "2"))
   expect_equal(class(testStruct), "structType")
   checkStructField(testStruct$fields()[[1]], "a", "IntegerType", TRUE)
@@ -236,8 +242,7 @@ test_that("create DataFrame with different data types", {
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
 })
 
-# TODO: enable this test after fix serialization for nested object
-#test_that("create DataFrame with nested array and struct", {
+test_that("create DataFrame with nested array and struct", {
 #  e <- new.env()
 #  assign("n", 3L, envir = e)
 #  l <- list(1:10, list("a", "b"), e, list(a="aa", b=3L))
@@ -247,7 +252,32 @@ test_that("create DataFrame with different data types", {
 #  expect_equal(count(df), 1)
 #  ldf <- collect(df)
 #  expect_equal(ldf[1,], l[[1]])
-#})
+
+
+  #  ArrayType only for now
+  l <- list(as.list(1:10), list("a", "b"))
+  df <- createDataFrame(sqlContext, list(l), c("a", "b"))
+  expect_equal(dtypes(df), list(c("a", "array<int>"), c("b", "array<string>")))
+  expect_equal(count(df), 1)
+  ldf <- collect(df)
+  expect_equal(names(ldf), c("a", "b"))
+  expect_equal(ldf[1, 1][[1]], l[[1]])
+  expect_equal(ldf[1, 2][[1]], l[[2]])
+})
+
+test_that("Collect DataFrame with complex types", {
+  # only ArrayType now
+  # TODO: tests for StructType and MapType after they are supported
+  df <- jsonFile(sqlContext, complexTypeJsonPath)
+
+  ldf <- collect(df)
+  expect_equal(nrow(ldf), 3)
+  expect_equal(ncol(ldf), 3)
+  expect_equal(names(ldf), c("c1", "c2", "c3"))
+  expect_equal(ldf$c1, list(list(1, 2, 3), list(4, 5, 6), list (7, 8, 9)))
+  expect_equal(ldf$c2, list(list("a", "b", "c"), list("d", "e", "f"), list ("g", "h", "i")))
+  expect_equal(ldf$c3, list(list(1.0, 2.0, 3.0), list(4.0, 5.0, 6.0), list (7.0, 8.0, 9.0)))
+})
 
 test_that("jsonFile() on a local file returns a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
@@ -431,6 +461,32 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
   expect_equal(ncol(collect(df)), ncol(take(df, 10)))
 })
 
+test_that("collect() support Unicode characters", {
+  markUtf8 <- function(s) {
+    Encoding(s) <- "UTF-8"
+    s
+  }
+
+  lines <- c("{\"name\":\"안녕하세요\"}",
+             "{\"name\":\"您好\", \"age\":30}",
+             "{\"name\":\"こんにちは\", \"age\":19}",
+             "{\"name\":\"Xin chào\"}")
+
+  jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(lines, jsonPath)
+
+  df <- read.df(sqlContext, jsonPath, "json")
+  rdf <- collect(df)
+  expect_true(is.data.frame(rdf))
+  expect_equal(rdf$name[1], markUtf8("안녕하세요"))
+  expect_equal(rdf$name[2], markUtf8("您好"))
+  expect_equal(rdf$name[3], markUtf8("こんにちは"))
+  expect_equal(rdf$name[4], markUtf8("Xin chào"))
+
+  df1 <- createDataFrame(sqlContext, rdf)
+  expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
+})
+
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
   df <- jsonFile(sqlContext, jsonPath)
   first <- lapply(df, function(row) {
@@ -608,10 +664,14 @@ test_that("subsetting", {
   df4 <- df[df$age %in% c(19, 30), 1:2]
   expect_equal(count(df4), 2)
   expect_equal(columns(df4), c("name", "age"))
-  
+
   df5 <- df[df$age %in% c(19), c(1,2)]
   expect_equal(count(df5), 1)
   expect_equal(columns(df5), c("name", "age"))
+
+  df6 <- subset(df, df$age %in% c(30), c(1,2))
+  expect_equal(count(df6), 1)
+  expect_equal(columns(df6), c("name", "age"))
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -1028,7 +1088,7 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF2)[1], "newerAge")
 })
 
-test_that("mutate(), rename() and names()", {
+test_that("mutate(), transform(), rename() and names()", {
   df <- jsonFile(sqlContext, jsonPath)
   newDF <- mutate(df, newAge = df$age + 2)
   expect_equal(length(columns(newDF)), 3)
@@ -1042,6 +1102,20 @@ test_that("mutate(), rename() and names()", {
   names(newDF2) <- c("newerName", "evenNewerAge")
   expect_equal(length(names(newDF2)), 2)
   expect_equal(names(newDF2)[1], "newerName")
+
+  transformedDF <- transform(df, newAge = -df$age, newAge2 = df$age / 2)
+  expect_equal(length(columns(transformedDF)), 4)
+  expect_equal(columns(transformedDF)[3], "newAge")
+  expect_equal(columns(transformedDF)[4], "newAge2")
+  expect_equal(first(filter(transformedDF, transformedDF$name == "Andy"))$newAge, -30)
+
+  # test if transform on local data frames works
+  # ensure the proper signature is used - otherwise this will fail to run
+  attach(airquality)
+  result <- transform(Ozone, logOzone = log(Ozone))
+  expect_equal(nrow(result), 153)
+  expect_equal(ncol(result), 2)
+  detach(airquality)
 })
 
 test_that("write.df() on DataFrame and works with parquetFile", {
@@ -1060,6 +1134,12 @@ test_that("parquetFile works with multiple input paths", {
   parquetDF <- parquetFile(sqlContext, parquetPath, parquetPath2)
   expect_is(parquetDF, "DataFrame")
   expect_equal(count(parquetDF), count(df) * 2)
+
+  # Test if varargs works with variables
+  saveMode <- "overwrite"
+  mergeSchema <- "true"
+  parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
+  write.df(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
@@ -1077,7 +1157,7 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats2)[5, "age"], "30")
 })
 
-test_that("dropna() on a DataFrame", {
+test_that("dropna() and na.omit() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPathNa)
   rows <- collect(df)
 
@@ -1085,6 +1165,8 @@ test_that("dropna() on a DataFrame", {
 
   expected <- rows[!is.na(rows$name),]
   actual <- collect(dropna(df, cols = "name"))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, cols = "name"))
   expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age),]
@@ -1095,13 +1177,18 @@ test_that("dropna() on a DataFrame", {
   expect_identical(expected$age, actual$age)
   expect_identical(expected$height, actual$height)
   expect_identical(expected$name, actual$name)
+  actual <- collect(na.omit(df, cols = "age"))
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df))
   expect_identical(expected, actual)
 
   # drop with how
@@ -1109,21 +1196,31 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) | !is.na(rows$height) | !is.na(rows$name),]
   actual <- collect(dropna(df, "all"))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "all"))
   expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df, "any"))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "any"))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, "any", cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "any", cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) | !is.na(rows$height),]
   actual <- collect(dropna(df, "all", cols = c("age", "height")))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "all", cols = c("age", "height")))
   expect_identical(expected, actual)
 
   # drop with threshold
@@ -1131,11 +1228,15 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[as.integer(!is.na(rows$age)) + as.integer(!is.na(rows$height)) >= 2,]
   actual <- collect(dropna(df, minNonNulls = 2, cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, minNonNulls = 2, cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[as.integer(!is.na(rows$age)) +
                    as.integer(!is.na(rows$height)) +
                    as.integer(!is.na(rows$name)) >= 3,]
   actual <- collect(dropna(df, minNonNulls = 3, cols = c("name", "age", "height")))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, minNonNulls = 3, cols = c("name", "age", "height")))
   expect_identical(expected, actual)
 })
 

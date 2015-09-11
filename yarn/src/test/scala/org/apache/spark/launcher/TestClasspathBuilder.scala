@@ -15,23 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.nio
+package org.apache.spark.launcher
 
-import java.net.InetSocketAddress
+import java.util.{List => JList, Map => JMap}
 
-import org.apache.spark.util.Utils
+/**
+ * Exposes AbstractCommandBuilder to the YARN tests, so that they can build classpaths the same
+ * way other cluster managers do.
+ */
+private[spark] class TestClasspathBuilder extends AbstractCommandBuilder {
 
-private[nio] case class ConnectionManagerId(host: String, port: Int) {
-  // DEBUG code
-  Utils.checkHost(host)
-  assert (port > 0)
+  childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, sys.props("spark.test.home"))
 
-  def toSocketAddress(): InetSocketAddress = new InetSocketAddress(host, port)
-}
+  override def buildClassPath(extraCp: String): JList[String] = super.buildClassPath(extraCp)
 
+  /** Not used by the YARN tests. */
+  override def buildCommand(env: JMap[String, String]): JList[String] =
+    throw new UnsupportedOperationException()
 
-private[nio] object ConnectionManagerId {
-  def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
-    new ConnectionManagerId(socketAddress.getHostName, socketAddress.getPort)
-  }
 }

@@ -383,17 +383,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.blockTransferService</code></td>
-  <td>netty</td>
-  <td>
-    Implementation to use for transferring shuffle and cached blocks between executors. There
-    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
-    block transfer is intended to be simpler but equally efficient and is the default option
-    starting in 1.2, and <code>nio</code> block transfer is deprecated in Spark 1.5.0 and will
-    be removed in Spark 1.6.0.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -458,9 +447,12 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.manager</code></td>
   <td>sort</td>
   <td>
-    Implementation to use for shuffling data. There are two implementations available:
-    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
-    the default option starting in 1.2.
+    Implementation to use for shuffling data. There are three implementations available:
+    <code>sort</code>, <code>hash</code> and the new (1.5+) <code>tungsten-sort</code>.
+    Sort-based shuffle is more memory-efficient and is the default option starting in 1.2.
+    Tungsten-sort is similar to the sort based shuffle, with a direct binary cache-friendly
+    implementation with a fall back to regular sort based shuffle if its requirements are not
+    met.
   </td>
 </tr>
 <tr>
@@ -907,16 +899,6 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.akka.failure-detector.threshold</code></td>
-  <td>300.0</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
-     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
-     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
-  </td>
-</tr>
-<tr>
   <td><code>spark.akka.frameSize</code></td>
   <td>128</td>
   <td>
@@ -1025,7 +1007,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
-    Default maximum number of retries when binding to a port before giving up.
+    Maximum number of retries when binding to a port before giving up.
+    When a port is given a specific value (non 0), each subsequent retry will
+    increment the port used in the previous attempt by 1 before retrying. This 
+    essentially allows it to try a range of ports from the start port specified 
+    to port + maxRetries.
   </td>
 </tr>
 <tr>
@@ -1126,10 +1112,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0.8 for YARN mode; 0.0 otherwise</td>
+  <td>0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone mode)
+    (resources are executors in yarn mode, CPU cores in standalone mode and Mesos coarsed-grained
+     mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config
@@ -1296,7 +1283,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users/administrators that have view and modify access to all Spark jobs.
     This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work.
+    help debug when things work. Putting a "*" in the list means any user can have the priviledge
+    of admin.
   </td>
 </tr>
 <tr>
@@ -1337,7 +1325,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>Empty</td>
   <td>
     Comma separated list of users that have modify access to the Spark job. By default only the
-    user that started the Spark job has access to modify it (kill it for example).
+    user that started the Spark job has access to modify it (kill it for example). Putting a "*" in
+    the list means any user can have access to modify it.
   </td>
 </tr>
 <tr>
@@ -1359,7 +1348,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>Empty</td>
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
-    user that started the Spark job has view access.
+    user that started the Spark job has view access. Putting a "*" in the list means any user can
+    have view access to this Spark job.
   </td>
 </tr>
 </table>
@@ -1447,6 +1437,19 @@ Apart from these, the following properties are also available, and may be useful
 #### Spark Streaming
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.streaming.backpressure.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables or disables Spark Streaming's internal backpressure mechanism (since 1.5).
+    This enables the Spark Streaming to control the receiving rate based on the 
+    current batch scheduling delays and processing times so that the system receives
+    only as fast as the system can process. Internally, this dynamically sets the 
+    maximum receiving rate of receivers. This rate is upper bounded by the values
+    `spark.streaming.receiver.maxRate` and `spark.streaming.kafka.maxRatePerPartition`
+    if they are set (see below).
+  </td>
+</tr>
 <tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>
