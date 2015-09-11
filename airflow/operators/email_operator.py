@@ -28,13 +28,13 @@ class EmailOperator(BaseOperator):
             to,
             subject,
             html_content,
-            files=[],
+            files=None,
             *args, **kwargs):
         super(EmailOperator, self).__init__(*args, **kwargs)
         self.to = to
         self.subject = subject
         self.html_content = html_content
-        self.files = files
+        self.files = files or []
 
     def execute(self, context):
         send_email(self.to, self.subject, self.html_content, files=self.files)
