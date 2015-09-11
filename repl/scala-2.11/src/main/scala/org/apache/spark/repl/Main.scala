@@ -35,7 +35,7 @@ object Main extends Logging {
   s.processArguments(List("-Yrepl-class-based",
     "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
     "-classpath", getAddedJars.mkString(File.pathSeparator)), true)
-  val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
+  lazy val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
   var interp = new SparkILoop // this is a public var because tests reset it.
