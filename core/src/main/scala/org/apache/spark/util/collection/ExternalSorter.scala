@@ -291,13 +291,8 @@ private[spark] class ExternalSorter[K, V, C](
       val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
       while (it.hasNext) {
         val partitionId = it.nextPartition()
-        if (partitionId < 0) {
-          throw new IllegalArgumentException("Encountered negative partition Id: " + partitionId)
-        }
-        if (partitionId >= numPartitions) {
-          throw new IllegalArgumentException("Encountered partition Id: " + partitionId +
-            " which is >= " + numPartitions)
-        }
+        require(partitionId >= 0 && partitionId < numPartitions,
+          s"partition Id: ${partitionId} should be in the range (0, ${numPartitions})")
         it.writeNext(writer)
         elementsPerPartition(partitionId) += 1
         objectsWritten += 1
