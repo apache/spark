@@ -21,7 +21,6 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.sql.{Timestamp, Date, Time}
 
 import scala.collection.JavaConverters._
-import scala.collection.JavaConversions._
 import scala.collection.mutable.WrappedArray
 
 /**
@@ -337,7 +336,7 @@ private[spark] object SerDe {
           v.foreach { case (key, value) =>
             writeKeyValue(dos, key.asInstanceOf[Object], value.asInstanceOf[Object])
           }
- 
+
         case _ =>
           writeType(dos, "jobj")
           writeJObj(dos, value)
