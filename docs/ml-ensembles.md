@@ -1021,10 +1021,8 @@ SparkConf conf = new SparkConf().setAppName("JavaOneVsRestExample");
 JavaSparkContext jsc = new JavaSparkContext(conf);
 SQLContext jsql = new SQLContext(jsc);
 
-RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(),
-  "data/mllib/sample_multiclass_classification_data.txt");
+DataFrame dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_multiclass_classification_data.txt");
 
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
 DataFrame[] splits = dataFrame.randomSplit(new double[] {0.7, 0.3}, 12345);
 DataFrame train = splits[0];
 DataFrame test = splits[1];
