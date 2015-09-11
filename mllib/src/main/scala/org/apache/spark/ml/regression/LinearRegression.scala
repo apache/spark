@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -61,11 +61,12 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *  - L1 (Lasso)
  *  - L2 + L1 (elastic net)
  */
+@Since("1.3.0")
 @Experimental
-class LinearRegression(override val uid: String)
+class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String)
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with Logging {
-
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("linReg"))
 
   /**
@@ -73,6 +74,7 @@ class LinearRegression(override val uid: String)
    * Default is 0.0.
    * @group setParam
    */
+  @Since("1.3.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
   setDefault(regParam -> 0.0)
 
@@ -81,6 +83,7 @@ class LinearRegression(override val uid: String)
    * Default is true.
    * @group setParam
    */
+  @Since("1.5.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
 
@@ -93,6 +96,7 @@ class LinearRegression(override val uid: String)
    * Default is true.
    * @group setParam
    */
+  @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
   setDefault(standardization -> true)
 
@@ -103,6 +107,7 @@ class LinearRegression(override val uid: String)
    * Default is 0.0 which is an L2 penalty.
    * @group setParam
    */
+  @Since("1.4.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
   setDefault(elasticNetParam -> 0.0)
 
@@ -111,6 +116,7 @@ class LinearRegression(override val uid: String)
    * Default is 100.
    * @group setParam
    */
+  @Since("1.3.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   setDefault(maxIter -> 100)
 
@@ -120,6 +126,7 @@ class LinearRegression(override val uid: String)
    * Default is 1E-6.
    * @group setParam
    */
+  @Since("1.4.0")
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
@@ -254,7 +261,7 @@ class LinearRegression(override val uid: String)
       objectiveHistory)
     model.setSummary(trainingSummary)
   }
-
+  @Since("1.3.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }
 
