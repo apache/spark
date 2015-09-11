@@ -21,14 +21,23 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.StringUtils._
 
 class StringUtilsSuite extends SparkFunSuite {
-
   test("escapeLikeRegex") {
-    assert(escapeLikeRegex("abdef") === "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E")
-    assert(escapeLikeRegex("a\\__b") === "(?s)\\Qa\\E_.\\Qb\\E")
-    assert(escapeLikeRegex("a_%b") === "(?s)\\Qa\\E..*\\Qb\\E")
-    assert(escapeLikeRegex("a%\\%b") === "(?s)\\Qa\\E.*%\\Qb\\E")
-    assert(escapeLikeRegex("a%") === "(?s)\\Qa\\E.*")
-    assert(escapeLikeRegex("**") === "(?s)\\Q*\\E\\Q*\\E")
-    assert(escapeLikeRegex("a_b") === "(?s)\\Qa\\E.\\Qb\\E")
+    assert(escapeLikeRegex("abdef".getBytes()) === "abdef".getBytes())
+    assert(escapeLikeRegex("a\\__b".getBytes()) === "a_.b".getBytes())
+    assert(escapeLikeRegex("a_%b".getBytes()) === "a..*b".getBytes())
+    assert(escapeLikeRegex("a%\\%b".getBytes()) === "a.*%b".getBytes())
+    assert(escapeLikeRegex("a%".getBytes()) === "a.*".getBytes())
+    assert(escapeLikeRegex("**".getBytes()) === "**".getBytes())
+    assert(escapeLikeRegex("a_b".getBytes()) === "a.b".getBytes())
+  }
+
+  test("escapeLikeRegexJavaFallback") {
+    assert(escapeLikeRegexJavaFallback("abdef") === "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E")
+    assert(escapeLikeRegexJavaFallback("a\\__b") === "(?s)\\Qa\\E_.\\Qb\\E")
+    assert(escapeLikeRegexJavaFallback("a_%b") === "(?s)\\Qa\\E..*\\Qb\\E")
+    assert(escapeLikeRegexJavaFallback("a%\\%b") === "(?s)\\Qa\\E.*%\\Qb\\E")
+    assert(escapeLikeRegexJavaFallback("a%") === "(?s)\\Qa\\E.*")
+    assert(escapeLikeRegexJavaFallback("**") === "(?s)\\Q*\\E\\Q*\\E")
+    assert(escapeLikeRegexJavaFallback("a_b") === "(?s)\\Qa\\E.\\Qb\\E")
   }
 }

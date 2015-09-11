@@ -67,6 +67,7 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution ::
       WindowsSubstitution ::
+      RegexSubstitution ::
       Nil : _*),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
@@ -133,6 +134,23 @@ class Analyzer(
               WindowExpression(c, windowSpecDefinition)
           }
         }
+    }
+  }
+
+  /**
+   * Substitute Like/RLike/RegExpReplace/RegExpExtract with LikeJavaFallback/RLikeJavaFallback/
+   * RegExpReplaceJavaFallback/RegExpExtractJavaFallback when use java as regular expression engine.
+   */
+  object RegexSubstitution extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case Like(left, right) if (conf.regexEngine == "java") =>
+        LikeJavaFallback(left, right)
+      case RLike(left, right) if (conf.regexEngine == "java") =>
+        RLikeJavaFallback(left, right)
+      case RegExpReplace(subject, regexp, rep) if (conf.regexEngine == "java") =>
+        RegExpReplaceJavaFallback(subject, regexp, rep)
+      case RegExpExtract(subject, regexp, idx) if (conf.regexEngine == "java") =>
+        RegExpExtractJavaFallback(subject, regexp, idx)
     }
   }
 

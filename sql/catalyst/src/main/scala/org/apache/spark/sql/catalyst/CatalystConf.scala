@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
+  def regexEngine: String = ""
 }
 
 /**

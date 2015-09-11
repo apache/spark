@@ -298,20 +298,26 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val contains = "%([^_%]+)%".r
   private val equalTo = "([^_%]*)".r
 
+  def change(l: Expression, utf: Any): BinaryExpression = {
+    utf.toString match {
+      case startsWith(pattern) if !pattern.endsWith("\\") =>
+        StartsWith(l, Literal(pattern))
+      case endsWith(pattern) =>
+        EndsWith(l, Literal(pattern))
+      case contains(pattern) if !pattern.endsWith("\\") =>
+        Contains(l, Literal(pattern))
+      case equalTo(pattern) =>
+        EqualTo(l, Literal(pattern))
+      case _ =>
+        Like(l, Literal.create(utf, StringType))
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(l, Literal(utf, StringType)) =>
-      utf.toString match {
-        case startsWith(pattern) if !pattern.endsWith("\\") =>
-          StartsWith(l, Literal(pattern))
-        case endsWith(pattern) =>
-          EndsWith(l, Literal(pattern))
-        case contains(pattern) if !pattern.endsWith("\\") =>
-          Contains(l, Literal(pattern))
-        case equalTo(pattern) =>
-          EqualTo(l, Literal(pattern))
-        case _ =>
-          Like(l, Literal.create(utf, StringType))
-      }
+      change(l, utf)
+    case LikeJavaFallback(l, Literal(utf, StringType)) =>
+      change(l, utf)
   }
 }
 
