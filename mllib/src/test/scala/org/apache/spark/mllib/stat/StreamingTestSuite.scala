@@ -18,14 +18,13 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.StatCounter
-
-import org.apache.spark.mllib.stat.test.{OnlineABTest, OnlineABTestResult, StudentTTest, WelchTTest}
+import org.apache.spark.mllib.stat.test.{StreamingTest, StreamingTestResult, StudentTTest, WelchTTest}
 import org.apache.spark.streaming.TestSuiteBase
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.StatCounter
 import org.apache.spark.util.random.XORShiftRandom
 
-class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
+class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
 
   override def maxWaitTimeMillis : Int = 30000
 
@@ -39,7 +38,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     val meanB = 0
     val stdevB = 0.001
 
-    val model = new OnlineABTest()
+    val model = new StreamingTest()
       .setWindowSize(0)
       .setPeacePeriod(0)
       .setTestMethod(testMethod)
@@ -50,7 +49,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     // setup and run the model
     val ssc = setupStreams(
       input, (inputDStream: DStream[(Boolean, Double)]) => model.registerStream(inputDStream))
-    val outputBatches = runStreams[OnlineABTestResult](ssc, numBatches, numBatches)
+    val outputBatches = runStreams[StreamingTestResult](ssc, numBatches, numBatches)
 
     assert(outputBatches.flatten.forall(res =>
       res.pValue > 0.05 && res.method == WelchTTest.MethodName))
@@ -66,7 +65,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     val meanB = 10
     val stdevB = 1
 
-    val model = new OnlineABTest()
+    val model = new StreamingTest()
       .setWindowSize(0)
       .setPeacePeriod(0)
       .setTestMethod(testMethod)
@@ -77,7 +76,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     // setup and run the model
     val ssc = setupStreams(
       input, (inputDStream: DStream[(Boolean, Double)]) => model.registerStream(inputDStream))
-    val outputBatches = runStreams[OnlineABTestResult](ssc, numBatches, numBatches)
+    val outputBatches = runStreams[StreamingTestResult](ssc, numBatches, numBatches)
 
     assert(outputBatches.flatten.forall(res =>
       res.pValue < 0.05 && res.method == WelchTTest.MethodName))
@@ -93,7 +92,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     val meanB = 0
     val stdevB = 0.001
 
-    val model = new OnlineABTest()
+    val model = new StreamingTest()
       .setWindowSize(0)
       .setPeacePeriod(0)
       .setTestMethod(testMethod)
@@ -104,7 +103,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     // setup and run the model
     val ssc = setupStreams(
       input, (inputDStream: DStream[(Boolean, Double)]) => model.registerStream(inputDStream))
-    val outputBatches = runStreams[OnlineABTestResult](ssc, numBatches, numBatches)
+    val outputBatches = runStreams[StreamingTestResult](ssc, numBatches, numBatches)
 
 
     assert(outputBatches.flatten.forall(res =>
@@ -121,7 +120,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     val meanB = 10
     val stdevB = 1
 
-    val model = new OnlineABTest()
+    val model = new StreamingTest()
       .setWindowSize(0)
       .setPeacePeriod(0)
       .setTestMethod(testMethod)
@@ -132,7 +131,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     // setup and run the model
     val ssc = setupStreams(
       input, (inputDStream: DStream[(Boolean, Double)]) => model.registerStream(inputDStream))
-    val outputBatches = runStreams[OnlineABTestResult](ssc, numBatches, numBatches)
+    val outputBatches = runStreams[StreamingTestResult](ssc, numBatches, numBatches)
 
     assert(outputBatches.flatten.forall(res =>
       res.pValue < 0.05 && res.method == StudentTTest.MethodName))
@@ -148,7 +147,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     val meanB = 10
     val stdevB = 1
 
-    val model = new OnlineABTest()
+    val model = new StreamingTest()
       .setWindowSize(testWindow)
       .setPeacePeriod(0)
 
@@ -182,7 +181,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     val meanB = 10
     val stdevB = 1
 
-    val model = new OnlineABTest()
+    val model = new StreamingTest()
       .setWindowSize(0)
       .setPeacePeriod(peacePeriod)
 
@@ -206,7 +205,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     val meanB = 0
     val stdevB = 0.001
 
-    val model = new OnlineABTest()
+    val model = new StreamingTest()
       .setWindowSize(0)
       .setPeacePeriod(0)
 
@@ -216,7 +215,7 @@ class OnlineABTestSuite extends SparkFunSuite with TestSuiteBase {
     // setup and run the model
     val ssc = setupStreams(
       input, (inputDStream: DStream[(Boolean, Double)]) => model.registerStream(inputDStream))
-    val outputBatches = runStreams[OnlineABTestResult](ssc, numBatches, numBatches)
+    val outputBatches = runStreams[StreamingTestResult](ssc, numBatches, numBatches)
 
     assert(outputBatches.flatten.forall(result => (result.pValue - 1.0).abs < 0.001))
   }

@@ -18,40 +18,46 @@
 package org.apache.spark.mllib.stat.test
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.StatCounter
 
 /**
- * :: DeveloperApi ::
- * Performs online significance testing for a stream of A/B testing results.
+ * :: Experimental ::
+ * Performs online 2-sample significance testing for a stream of (Boolean, Double) pairs. The
+ * Boolean identifies which sample each observation comes from, and the Double is the numeric value
+ * of the observation.
  *
- * To address novelty affects, the peacePeriod specifies a set number of initial
+ * To address novelty affects, the `peacePeriod` specifies a set number of initial
  * [[org.apache.spark.rdd.RDD]] batches of the [[DStream]] to be dropped from significance testing.
  *
- * The windowSize sets the number of batches each significance test is to be performed over. The
+ * The `windowSize` sets the number of batches each significance test is to be performed over. The
  * window is sliding with a stride length of 1 batch. Setting windowSize to 0 will perform
  * cumulative processing, using all batches seen so far.
  *
  * Different tests may be used for assessing statistical significance depending on assumptions
- * satisfied by data. For more details, see [[OnlineABTestMethod]]. The testMethod specifies which
- * test will be used.
+ * satisfied by data. For more details, see [[StreamingTestMethod]]. The `testMethod` specifies
+ * which test will be used.
  *
- * Use a builder pattern to construct an online A/B test in an application, like:
- *
- * val model = new OnlineABTest()
- *   .setPeacePeriod(10)
- *   .setWindowSize(0)
- *   .setTestMethod("welch")
- *   .registerStream(DStream)
+ * Use a builder pattern to construct a streaming test in an application, for example:
+ *   ```
+ *   val model = new OnlineABTest()
+ *     .setPeacePeriod(10)
+ *     .setWindowSize(0)
+ *     .setTestMethod("welch")
+ *     .registerStream(DStream)
+ *   ```
  */
-@DeveloperApi
-class OnlineABTest(
-    var peacePeriod: Int = 0,
-    var windowSize: Int = 0,
-    var testMethod: OnlineABTestMethod = WelchTTest) extends Logging with Serializable {
+@Experimental
+@Since("1.6.0")
+class StreamingTest(
+    @Since("1.6.0") var peacePeriod: Int = 0,
+    @Since("1.6.0") var windowSize: Int = 0,
+    @Since("1.6.0") var testMethod: StreamingTestMethod  = WelchTTest)
+  extends Logging with Serializable {
 
   /** Set the number of initial batches to ignore. */
+  @Since("1.6.0")
   def setPeacePeriod(peacePeriod: Int): this.type = {
     this.peacePeriod = peacePeriod
     this
@@ -61,14 +67,16 @@ class OnlineABTest(
    * Set the number of batches to compute significance tests over.
    * A value of 0 will use all batches seen so far.
    */
+  @Since("1.6.0")
   def setWindowSize(windowSize: Int): this.type = {
     this.windowSize = windowSize
     this
   }
 
   /** Set the statistical method used for significance testing. */
+  @Since("1.6.0")
   def setTestMethod(method: String): this.type = {
-    this.testMethod = OnlineABTestMethodNames.getTestMethodFromName(method)
+    this.testMethod = StreamingTestMethod.getTestMethodFromName(method)
     this
   }
 
@@ -79,7 +87,8 @@ class OnlineABTest(
    *             treatment) and the value is the numerical metric to test for significance
    * @return stream of significance testing results
    */
-  def registerStream(data: DStream[(Boolean, Double)]): DStream[OnlineABTestResult] = {
+  @Since("1.6.0")
+  def registerStream(data: DStream[(Boolean, Double)]): DStream[StreamingTestResult] = {
     val dataAfterPeacePeriod = dropPeacePeriod(data)
     val summarizedData = summarizeByKeyAndWindow(dataAfterPeacePeriod)
     val pairedSummaries = pairSummaries(summarizedData)

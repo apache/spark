@@ -118,11 +118,11 @@ class KolmogorovSmirnovTestResult private[stat] (
 
 /**
  * :: Experimental ::
- * Object containing the test results for online A/B testing.
+ * Object containing the test results for streaming testing.
  */
 @Experimental
 @Since("1.6.0")
-private[stat] class OnlineABTestResult(
+private[stat] class StreamingTestResult(
     @Since("1.6.0") override val pValue: Double,
     @Since("1.6.0") override val degreesOfFreedom: Double,
     @Since("1.6.0") override val statistic: Double,
@@ -131,7 +131,7 @@ private[stat] class OnlineABTestResult(
   extends TestResult[Double] with Serializable {
 
   override def toString: String = {
-    "A/B test summary:\n" +
+    "Streaming test summary:\n" +
       s"method: $method\n" +
       super.toString
   }
