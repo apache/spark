@@ -29,23 +29,21 @@ case class TakeOrderedAndProjectNode(
     projectList: Option[Seq[NamedExpression]],
     child: LocalNode) extends UnaryLocalNode(conf) {
 
+  private[this] var projection: Option[Projection] = _
+  private[this] var ord: InterpretedOrdering = _
+  private[this] var iterator: Iterator[InternalRow] = _
+  private[this] var currentRow: InternalRow = _
+
   override def output: Seq[Attribute] = {
     val projectOutput = projectList.map(_.map(_.toAttribute))
     projectOutput.getOrElse(child.output)
   }
 
-  private[this] var projection: Option[Projection] = _
-
-  private[this] var ord: InterpretedOrdering = _
-
-  private[this] var iterator: Iterator[InternalRow] = _
-
-  private[this] var currentRow: InternalRow = _
-
   override def open(): Unit = {
     child.open()
     projection = projectList.map(new InterpretedProjection(_, child.output))
     ord = new InterpretedOrdering(sortOrder, child.output)
+    // Priority keeps the largest elements, so let's reverse the ordering.
     val queue = new BoundedPriorityQueue[InternalRow](limit)(ord.reverse)
     while (child.next()) {
       queue += child.fetch()
@@ -58,7 +56,10 @@ case class TakeOrderedAndProjectNode(
   override def next(): Boolean = {
     if (iterator.hasNext) {
       val _currentRow = iterator.next()
-      currentRow = projection.map(p => p(_currentRow)).getOrElse(_currentRow)
+      currentRow = projection match {
+        case Some(p) => p(_currentRow)
+        case None => _currentRow
+      }
       true
     } else {
       false

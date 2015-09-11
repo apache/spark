@@ -24,7 +24,7 @@ class TakeOrderedAndProjectNodeSuite extends LocalNodeTest {
 
   import testImplicits._
 
-  def columnToSortOrder(sortExprs: Column*): Seq[SortOrder] = {
+  private def columnToSortOrder(sortExprs: Column*): Seq[SortOrder] = {
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>
@@ -36,22 +36,19 @@ class TakeOrderedAndProjectNodeSuite extends LocalNodeTest {
     sortOrder
   }
 
-  test("asc") {
-    val input = (1 to 10).map(i => (i, i.toString)).toDF("key", "value")
-    checkAnswer(
-      input,
-      node => TakeOrderedAndProjectNode(conf, 5, columnToSortOrder(input.col("key")), None, node),
-      input.sort(input.col("key")).limit(5).collect()
-    )
+  private def testTakeOrderedAndProjectNode(desc: Boolean): Unit = {
+    val testCaseName = if (desc) "desc" else "asc"
+    test(testCaseName) {
+      val input = (1 to 10).map(i => (i, i.toString)).toDF("key", "value")
+      val sortColumn = if (desc) input.col("key").desc else input.col("key")
+      checkAnswer(
+        input,
+        node => TakeOrderedAndProjectNode(conf, 5, columnToSortOrder(sortColumn), None, node),
+        input.sort(sortColumn).limit(5).collect()
+      )
+    }
   }
 
-  test("desc") {
-    val input = (1 to 10).map(i => (i, i.toString)).toDF("key", "value")
-    checkAnswer(
-      input,
-      node =>
-        TakeOrderedAndProjectNode(conf, 5, columnToSortOrder(input.col("key").desc), None, node),
-      input.sort(input.col("key").desc).limit(5).collect()
-    )
-  }
+  testTakeOrderedAndProjectNode(desc = false)
+  testTakeOrderedAndProjectNode(desc = true)
 }

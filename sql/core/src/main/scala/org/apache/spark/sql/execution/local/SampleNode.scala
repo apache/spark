@@ -63,7 +63,7 @@ case class SampleNode(
         (new BernoulliCellSampler[InternalRow](lowerBound, upperBound), seed)
       }
     sampler.setSeed(_seed)
-    iterator = sampler.sample(child.toIterator)
+    iterator = sampler.sample(child.asIterator)
   }
 
   override def next(): Boolean = {

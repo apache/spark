@@ -17,46 +17,24 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrder}
-
 class SampleNodeSuite extends LocalNodeTest {
 
   import testImplicits._
 
-  def columnToSortOrder(sortExprs: Column*): Seq[SortOrder] = {
-    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
-      col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
-      }
+  private def testSample(withReplacement: Boolean): Unit = {
+    test(s"withReplacement: $withReplacement") {
+      val seed = 0L
+      val input = sqlContext.sparkContext.
+        parallelize((1 to 10).map(i => (i, i.toString)), 1). // Should be only 1 partition
+        toDF("key", "value")
+      checkAnswer(
+        input,
+        node => SampleNode(conf, 0.0, 0.3, withReplacement, seed, node),
+        input.sample(withReplacement, 0.3, seed).collect()
+      )
     }
-    sortOrder
   }
 
-  test("withReplacement: true") {
-    val seed = 0L
-    val input = sqlContext.sparkContext.
-      parallelize((1 to 10).map(i => (i, i.toString)), 1). // Should be only 1 partition
-      toDF("key", "value")
-    checkAnswer(
-      input,
-      node => SampleNode(conf, 0.0, 0.3, true, seed, node),
-      input.sample(true, 0.3, seed).collect()
-    )
-  }
-
-  test("withReplacement: false") {
-    val seed = 0L
-    val input = sqlContext.sparkContext.
-      parallelize((1 to 10).map(i => (i, i.toString)), 1). // Should be only 1 partition
-      toDF("key", "value")
-    checkAnswer(
-      input,
-      node => SampleNode(conf, 0.0, 0.3, false, seed, node),
-      input.sample(false, 0.3, seed).collect()
-    )
-  }
+  testSample(withReplacement = true)
+  testSample(withReplacement = false)
 }
