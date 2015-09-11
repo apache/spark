@@ -27,7 +27,6 @@ import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicIntege
 import java.util.UUID.randomUUID
 
 import scala.collection.JavaConverters._
-import scala.collection.JavaConversions._
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.{HashMap, HashSet}
@@ -353,10 +352,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (nonInheritedLocalProperties.nonEmpty) {
         // If there are properties that should not be inherited, filter them out
         val p = new Properties
-        val filtered = parent.filter { case (k, _) =>
+        val filtered = parent.asScala.filter { case (k, _) =>
           !nonInheritedLocalProperties.contains(k)
         }
-        p.putAll(filtered)
+        p.putAll(filtered.asJava)
         p
       } else {
         new Properties(parent)
