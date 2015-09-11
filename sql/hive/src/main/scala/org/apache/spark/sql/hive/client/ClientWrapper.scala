@@ -504,7 +504,7 @@ class SharedWrapper(
     val err = session.err
     session.out = new PrintStream(outputBuffer, true, "UTF-8")
     session.err = new PrintStream(outputBuffer, true, "UTF-8")
-    try f finally {
+    try super.withHiveState(session, f) finally {
       session.out = out
       session.err = err
     }

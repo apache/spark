@@ -27,8 +27,9 @@ import java.util.{Properties, Collections}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
-import scala.language.implicitConversions
 import scala.concurrent.duration._
+import scala.language.implicitConversions
+import scala.None
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -162,11 +163,12 @@ class HiveContext(sc: SparkContext, optionConf: Map[String, String] = Map.empty)
   @transient
   protected[hive] lazy val executionMetaHive: ClientWrapper = {
     logInfo(s"Initializing execution meta hive, version $hiveExecutionVersion")
+    // uses embedded hive but allows access to metastore (for meta calls from hiveserver2)
     // todo: with embedded derby, it will throw exception. let's pray users not to do that
     new SharedWrapper(IsolatedClientLoader.hiveVersion(hiveExecutionVersion), this)
   }
 
-  def execute[A](hiveConf: HiveConf, f: => A): A =
+  protected[hive] def execute[A](hiveConf: HiveConf, f: => A): A =
     executionHive.withHiveState(new SessionState(hiveConf), f)
 
   /**
@@ -186,12 +188,15 @@ class HiveContext(sc: SparkContext, optionConf: Map[String, String] = Map.empty)
       override protected[hive] def withHiveState[A](session: SessionState, f: => A): A = {
         // Hive.getHive() compares metavars in Hive.getConf and SessionState.getConf
         val execConf = session.getConf
-        val copyConf = execOverrides.map {
-          case (key, value) => (key, Option(execConf.get(key)).getOrElse(""))}
-        copyConf.foreach {
-          case (key, value) => execConf.set(key, Option(dummyConf.get(key)).getOrElse(""))}
+        val copyConf = execOverrides.keys.map { case key => (key, Option(execConf.get(key))) }
+
+        execOverrides.foreach { case (key, value) => execConf.set(key, value) }
         try super.withHiveState(session, f) finally {
-          copyConf.foreach {case (key, value) => execConf.set(key, value)}
+          val sessionConf = SessionState.get().getConf
+          copyConf.foreach {
+            case (key, Some(value)) => sessionConf.set(key, value)
+            case (key, None) => sessionConf.unset(key)
+          }
         }
       }
     }
@@ -501,8 +506,7 @@ class HiveContext(sc: SparkContext, optionConf: Map[String, String] = Map.empty)
 
   override protected[sql] def createSession(): SQLSession = {
     val config = configure(hiveconf)
-    val current: SQLSession = newSession(sequencer.incrementAndGet(), config)
-    return current
+    newSession(sequencer.incrementAndGet(), config)
   }
 
   def newSession(sessionID: Int, config: Map[String, String]): SQLSession = {

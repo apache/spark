@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.hadoop.hive.ql.session.SessionState
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -37,7 +35,7 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.{Logging, SparkContext}
 
 
