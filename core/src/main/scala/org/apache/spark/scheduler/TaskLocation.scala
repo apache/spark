@@ -69,7 +69,7 @@ private[spark] object TaskLocation {
 
   // Check if SPARK_LOCAL_HOSTNAME is set. If not set, host names for task locations will be
   // resolved to IP addresses to fix the issue mentioned in SPARK-10149.
-  def sparkLocalHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
+  val sparkLocalHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   def apply(host: String, executorId: String): TaskLocation = {
     new ExecutorCacheTaskLocation(host, executorId)
