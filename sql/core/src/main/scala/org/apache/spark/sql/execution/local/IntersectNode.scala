@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.local
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
-case class IntersectNode(left: LocalNode, right: LocalNode) extends BinaryLocalNode {
+case class IntersectNode(conf: SQLConf, left: LocalNode, right: LocalNode)
+  extends BinaryLocalNode(conf) {
 
   override def output: Seq[Attribute] = left.output
 

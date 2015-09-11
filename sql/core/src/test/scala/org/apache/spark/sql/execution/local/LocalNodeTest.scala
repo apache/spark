@@ -17,29 +17,15 @@
 
 package org.apache.spark.sql.execution.local
 
-import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
 
-  /**
-   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
-   */
-  implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
-    DataFrameHolder(_sqlContext.createDataFrame(rdd))
-  }
-
-  /**
-   * Creates a DataFrame from a local Seq of Product.
-   */
-  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
-    sqlContext.implicits.localSeqToDataFrameHolder(data)
-  }
+  def conf: SQLConf = sqlContext.conf
 
   /**
    * Runs the LocalNode and makes sure the answer matches the expected result.
@@ -108,6 +94,7 @@ class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
 
   protected def dataFrameToSeqScanNode(df: DataFrame): SeqScanNode = {
     new SeqScanNode(
+      conf,
       df.queryExecution.sparkPlan.output,
       df.queryExecution.toRdd.map(_.copy()).collect())
   }

@@ -1066,6 +1066,15 @@ class SQLTests(ReusedPySparkTestCase):
         keys = self.df.withColumn("key", self.df.key).select("key").collect()
         self.assertEqual([r.key for r in keys], list(range(100)))
 
+    # regression test for SPARK-10417
+    def test_column_iterator(self):
+
+        def foo():
+            for x in self.df.key:
+                break
+
+        self.assertRaises(TypeError, foo)
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.local
 
 import java.util.Random
 
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -26,6 +27,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 /**
  * Sample the dataset.
  *
+ * @param conf the SQLConf
  * @param lowerBound Lower-bound of the sampling probability (usually 0.0)
  * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
  *                   will be ub - lb.
@@ -34,11 +36,12 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
  * @param child the LocalNode
  */
 case class SampleNode(
+    conf: SQLConf,
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: LocalNode) extends UnaryLocalNode {
+    child: LocalNode) extends UnaryLocalNode(conf) {
 
   override def output: Seq[Attribute] = child.output
 

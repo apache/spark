@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.local
 
 class IntersectNodeSuite extends LocalNodeTest {
 
+  import testImplicits._
+
   test("basic") {
     val input1 = (1 to 10).map(i => (i, i.toString)).toDF("key", "value")
     val input2 = (1 to 10).filter(_ % 2 == 0).map(i => (i, i.toString)).toDF("key", "value")
@@ -26,7 +28,7 @@ class IntersectNodeSuite extends LocalNodeTest {
     checkAnswer2(
       input1,
       input2,
-      (node1, node2) => IntersectNode(node1, node2),
+      (node1, node2) => IntersectNode(conf, node1, node2),
       input1.intersect(input2).collect()
     )
   }

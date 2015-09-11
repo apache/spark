@@ -96,6 +96,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       }
 
       numExecutors = initialNumExecutors
+    } else {
+      val numExecutorsConf = "spark.executor.instances"
+      numExecutors = sparkConf.getInt(numExecutorsConf, numExecutors)
     }
     principal = Option(principal)
       .orElse(sparkConf.getOption("spark.yarn.principal"))

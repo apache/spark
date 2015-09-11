@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrd
 
 class SampleNodeSuite extends LocalNodeTest {
 
+  import testImplicits._
+
   def columnToSortOrder(sortExprs: Column*): Seq[SortOrder] = {
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
@@ -41,7 +43,7 @@ class SampleNodeSuite extends LocalNodeTest {
       toDF("key", "value")
     checkAnswer(
       input,
-      node => SampleNode(0.0, 0.3, true, seed, node),
+      node => SampleNode(conf, 0.0, 0.3, true, seed, node),
       input.sample(true, 0.3, seed).collect()
     )
   }
@@ -53,7 +55,7 @@ class SampleNodeSuite extends LocalNodeTest {
       toDF("key", "value")
     checkAnswer(
       input,
-      node => SampleNode(0.0, 0.3, false, seed, node),
+      node => SampleNode(conf, 0.0, 0.3, false, seed, node),
       input.sample(false, 0.3, seed).collect()
     )
   }
