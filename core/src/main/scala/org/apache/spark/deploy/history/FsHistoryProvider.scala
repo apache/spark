@@ -146,7 +146,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appId,
+            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appId, "",
               HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
@@ -154,8 +154,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           replayBus.addListener(appListener)
           val appInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)), replayBus)
           appInfo.map { info =>
-            ui.setAppName(s"${info.name} ($appId)")
-
+            ui.setAppName(info.name)
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
             // make sure to set admin acls before view acls so they are properly picked up

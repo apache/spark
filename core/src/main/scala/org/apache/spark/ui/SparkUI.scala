@@ -152,10 +152,11 @@ private[spark] object SparkUI {
       conf: SparkConf,
       listenerBus: SparkListenerBus,
       securityManager: SecurityManager,
+      appId: String,
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    create(None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
+    create(None, conf, listenerBus, securityManager, appId, appName, basePath, startTime = startTime)
   }
 
   /**
