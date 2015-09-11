@@ -5,6 +5,7 @@ from copy import copy
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 import errno
 from functools import wraps
 import imp
@@ -379,7 +380,7 @@ def ask_yesno(question):
             print("Please respond by yes or no.")
 
 
-def send_email(to, subject, html_content):
+def send_email(to, subject, html_content, files=None):
     SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
 
     if isinstance(to, basestring):
@@ -396,6 +397,15 @@ def send_email(to, subject, html_content):
     msg['To'] = ", ".join(to)
     mime_text = MIMEText(html_content, 'html')
     msg.attach(mime_text)
+
+    for fname in files or []:
+        basename = os.path.basename(fname)
+        with open(fname, "rb") as f:
+            msg.attach(MIMEApplication(
+                f.read(),
+                Content_Disposition='attachment; filename="%s"' % basename,
+                Name=basename
+            ))
 
     send_MIME_email(SMTP_MAIL_FROM, to, msg)
 
