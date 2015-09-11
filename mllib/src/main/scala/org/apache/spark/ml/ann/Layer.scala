@@ -595,14 +595,35 @@ private[ml] class FeedForwardModel private(
     }
     // update cumulative gradients
     val cumGradientArray = cumGradient.toArray
-    grads.flatten.zipWithIndex.foreach { case (newGrad, i) =>
-      cumGradientArray(i) += newGrad
+    var offset = 0
+    // TODO: extract roll
+    for (i <- 0 until grads.length) {
+      val gradArray = grads(i)
+      var k = 0
+      while (k < gradArray.length) {
+        cumGradientArray(offset + k) += gradArray(k)
+        k += 1
+      }
+      offset += gradArray.length
     }
     newError
   }
 
+  // TODO: do we really need to copy the weights? they should be read-only
   override def weights(): Vector = {
-    Vectors.dense(layerModels.flatMap(_.weights().toArray))
+    // TODO: extract roll
+    var size = 0
+    for (i <- 0 until layerModels.length) {
+      size += layerModels(i).size
+    }
+    val array = new Array[Double](size)
+    var offset = 0
+    for (i <- 0 until layerModels.length) {
+      val layerWeights = layerModels(i).weights().toArray
+      System.arraycopy(layerWeights, 0, array, offset, layerWeights.length)
+      offset += layerWeights.length
+    }
+    Vectors.dense(array)
   }
 
   override def predict(data: Vector): Vector = {
