@@ -985,17 +985,17 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
 
-    A :py:class:`Transformer` that maps a column of string indices back to a new column of
-    corresponding string values using either the ML attributes of the input column, or if
-    provided using the labels supplied by the user.
-    All original columns are kept during transformation.
+    A :py:class:`Transformer` that maps a column of indices back to a new column of
+    corresponding string values.
+    The index-string mapping is either from the ML attributes of the input column,
+    or from user-supplied labels (which take precedence over ML attributes).
     See L{StringIndexer} for converting strings into indices.
     """
 
     # a placeholder to make the labels show up in generated doc
     labels = Param(Params._dummy(), "labels",
-                   "Optional array of labels to be provided by the user, if not supplied or " +
-                   "empty, column metadata is read for labels")
+                   "Optional array of labels specifying index-string mapping." +
+                   " If not provided or if empty, then metadata from inputCol is used instead.")
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, labels=None):
@@ -1006,8 +1006,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
         self.labels = Param(self, "labels",
-                            "Optional array of labels to be provided by the user, if not " +
-                            "supplied or empty, column metadata is read for labels")
+                            "Optional array of labels specifying index-string mapping. If not" +
+                            " provided or if empty, then metadata from inputCol is used instead.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
