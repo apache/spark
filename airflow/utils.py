@@ -3,6 +3,7 @@ from builtins import str, input, object
 from past.builtins import basestring
 from copy import copy
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta  # for doctest
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -525,6 +526,13 @@ def round_time(dt, delta, start_date=datetime.min):
     """
     Returns the datetime of the form start_date + i * delta
     which is closest to dt for any non-negative integer i.
+
+    Note that delta may be a datetime.timedelta or a dateutil.relativedelta
+
+    >>> round_time(datetime(2015, 1, 1, 6), timedelta(days=1))
+    datetime.datetime(2015, 1, 1, 0, 0)
+    >>> round_time(datetime(2015, 1, 2), relativedelta(months=1))
+    datetime.datetime(2015, 1, 1, 0, 0)
     """
     # Ignore the microseconds of dt
     dt -= timedelta(microseconds = dt.microsecond)

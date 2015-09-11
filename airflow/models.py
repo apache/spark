@@ -1768,8 +1768,11 @@ class DAG(object):
 
     :param dag_id: The id of the DAG
     :type dag_id: string
-    :param schedule_interval: Defines how often that DAG runs
-    :type schedule_interval: datetime.timedelta
+    :param schedule_interval: Defines how often that DAG runs, this
+        timedelta object gets added to your latest task instance's
+        execution_date to figure out the next schedule
+    :type schedule_interval: datetime.timedelta or
+        dateutil.relativedelta.relativedelta
     :param start_date: The timestamp from which the scheduler will
         attempt to backfill
     :type start_date: datetime.datetime
