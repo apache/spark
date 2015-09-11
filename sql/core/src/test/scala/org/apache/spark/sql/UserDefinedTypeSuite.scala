@@ -37,6 +37,10 @@ private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
       java.util.Arrays.equals(this.data, v.data)
     case _ => false
   }
+
+  override def toString: String = {
+    data.mkString("[", ",", "]")
+  }
 }
 
 @BeanInfo
