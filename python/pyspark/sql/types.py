@@ -34,6 +34,8 @@ from py4j.java_gateway import JavaClass
 
 from pyspark.serializers import CloudPickleSerializer
 
+from pyspark.resultiterable import ResultIterable
+
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
     "TimestampType", "DecimalType", "DoubleType", "FloatType", "ByteType", "IntegerType",
@@ -1075,7 +1077,7 @@ _acceptable_types = {
     BinaryType: (bytearray,),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
-    ArrayType: (list, tuple, array),
+    ArrayType: (list, tuple, array, ResultIterable),
     MapType: (dict,),
     StructType: (tuple, list),
 }
