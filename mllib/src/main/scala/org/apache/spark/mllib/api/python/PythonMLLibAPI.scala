@@ -218,7 +218,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector,
       regType: String,
       intercept: Boolean,
-      validateData: Boolean, convergenceTol: Double): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val SVMAlg = new SVMWithSGD()
     SVMAlg.setIntercept(intercept)
       .setValidateData(validateData)
