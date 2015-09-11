@@ -195,7 +195,8 @@ import org.apache.spark.ml.feature.*;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-DataFrame data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+DataFrame data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 
 // Index labels, adding metadata to the label column.
 // Fit on whole dataset to include all labels in index.
@@ -383,7 +384,8 @@ import org.apache.spark.ml.regression.RandomForestRegressor;
 import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-DataFrame data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+DataFrame data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 
 // Automatically identify categorical features, and index them.
 // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -951,7 +953,8 @@ import org.apache.spark.sql.{Row, SQLContext}
 val sqlContext = new SQLContext(sc)
 
 // parse data into dataframe
-val data = sqlContext.read.format("libsvm").load("data/mllib/sample_multiclass_classification_data.txt")
+val data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_multiclass_classification_data.txt")
 val Array(train, test) = data.randomSplit(Array(0.7, 0.3))
 
 // instantiate multiclass learner and train
@@ -997,7 +1000,8 @@ SparkConf conf = new SparkConf().setAppName("JavaOneVsRestExample");
 JavaSparkContext jsc = new JavaSparkContext(conf);
 SQLContext jsql = new SQLContext(jsc);
 
-DataFrame dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_multiclass_classification_data.txt");
+DataFrame dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_multiclass_classification_data.txt");
 
 DataFrame[] splits = dataFrame.randomSplit(new double[] {0.7, 0.3}, 12345);
 DataFrame train = splits[0];
