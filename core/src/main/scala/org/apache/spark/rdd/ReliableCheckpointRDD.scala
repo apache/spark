@@ -32,7 +32,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * An RDD that reads from checkpoint files previously written to reliable storage.
  */
 private[spark] class ReliableCheckpointRDD[T: ClassTag](
-    @transient sc: SparkContext,
+    sc: SparkContext,
     val checkpointPath: String)
   extends CheckpointRDD[T](sc) {
 

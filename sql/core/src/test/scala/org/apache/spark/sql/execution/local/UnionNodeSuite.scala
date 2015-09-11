@@ -25,7 +25,7 @@ class UnionNodeSuite extends LocalNodeTest with SharedSQLContext {
     checkAnswer2(
       testData,
       testData,
-      (node1, node2) => UnionNode(Seq(node1, node2)),
+      (node1, node2) => UnionNode(conf, Seq(node1, node2)),
       testData.unionAll(testData).collect()
     )
   }
@@ -34,7 +34,7 @@ class UnionNodeSuite extends LocalNodeTest with SharedSQLContext {
     checkAnswer2(
       emptyTestData,
       emptyTestData,
-      (node1, node2) => UnionNode(Seq(node1, node2)),
+      (node1, node2) => UnionNode(conf, Seq(node1, node2)),
       emptyTestData.unionAll(emptyTestData).collect()
     )
   }
@@ -44,7 +44,7 @@ class UnionNodeSuite extends LocalNodeTest with SharedSQLContext {
       emptyTestData, emptyTestData, testData, emptyTestData)
     doCheckAnswer(
       dfs,
-      nodes => UnionNode(nodes),
+      nodes => UnionNode(conf, nodes),
       dfs.reduce(_.unionAll(_)).collect()
     )
   }

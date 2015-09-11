@@ -55,16 +55,10 @@ import org.apache.spark.sql.{AnalysisException, SQLConf}
  *        to old style non-standard behaviors.
  */
 private[parquet] class CatalystSchemaConverter(
-    private val assumeBinaryIsString: Boolean,
-    private val assumeInt96IsTimestamp: Boolean,
-    private val followParquetFormatSpec: Boolean) {
-
-  // Only used when constructing converter for converting Spark SQL schema to Parquet schema, in
-  // which case `assumeInt96IsTimestamp` and `assumeBinaryIsString` are irrelevant.
-  def this() = this(
-    assumeBinaryIsString = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
-    assumeInt96IsTimestamp = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
-    followParquetFormatSpec = SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get)
+    assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
+    assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
+    followParquetFormatSpec: Boolean = SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get
+) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
@@ -432,13 +426,14 @@ private[parquet] class CatalystSchemaConverter(
       // ArrayType and MapType (for Spark versions <= 1.4.x)
       // ===================================================
 
-      // Spark 1.4.x and prior versions convert ArrayType with nullable elements into a 3-level
-      // LIST structure.  This behavior mimics parquet-hive (1.6.0rc3).  Note that this case is
-      // covered by the backwards-compatibility rules implemented in `isElementType()`.
+      // Spark 1.4.x and prior versions convert `ArrayType` with nullable elements into a 3-level
+      // `LIST` structure.  This behavior is somewhat a hybrid of parquet-hive and parquet-avro
+      // (1.6.0rc3): the 3-level structure is similar to parquet-hive while the 3rd level element
+      // field name "array" is borrowed from parquet-avro.
       case ArrayType(elementType, nullable @ true) if !followParquetFormatSpec =>
         // <list-repetition> group <name> (LIST) {
         //   optional group bag {
-        //     repeated <element-type> element;
+        //     repeated <element-type> array;
         //   }
         // }
         ConversionPatterns.listType(
@@ -447,8 +442,8 @@ private[parquet] class CatalystSchemaConverter(
           Types
             .buildGroup(REPEATED)
             // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
-            .addField(convertField(StructField("array_element", elementType, nullable)))
-            .named(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME))
+            .addField(convertField(StructField("array", elementType, nullable)))
+            .named("bag"))
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
       // LIST structure.  This behavior mimics parquet-avro (1.6.0rc3).  Note that this case is
