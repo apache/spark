@@ -86,10 +86,14 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     True
 
     >>> products_for_users = model.recommendProductsForUsers(1).collect()
-    ...
+    >>> len(products_for_users) == 2
+    >>> products_for_users[0]
+    (1, (Rating(user=1, product=1, rating=1.1....),))
 
     >>> users_for_products = model.recommendUsersForProducts(1).collect()
-    ...
+    >>> len(users_for_products) == 2
+    >>> users_for_products[0]
+    (1, (Rating(user=1, product=1, rating=1.1....),))
 
     >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2, 2)
@@ -166,13 +170,13 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         Recommends topK products for all users.
         """
-        return self.call("recommendProductsForUsers", num)
+        return self.call("wrappedRecommendProductsForUsers", num)
 
     def recommendUsersForProducts(self, num):
         """
         Recommends topK users for all products.
         """
-        return self.call("recommendUsersForProducts", num)
+        return self.call("wrappedRecommendUsersForProducts", num)
 
     @property
     def rank(self):
