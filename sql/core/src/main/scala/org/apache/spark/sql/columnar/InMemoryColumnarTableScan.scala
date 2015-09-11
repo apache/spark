@@ -268,6 +268,8 @@ private[sql] case class InMemoryColumnarTableScan(
       readBatches.setValue(0)
     }
 
+    // Using these variables here to avoid serialization of entire objects (if referenced directly)
+    // within the map Partitions closure.
     val schema = relation.partitionStatistics.schema
     val schemaIndex = schema.zipWithIndex
     val relOutput = relation.output
