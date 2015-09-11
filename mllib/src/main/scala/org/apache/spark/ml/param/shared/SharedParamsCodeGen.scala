@@ -56,7 +56,8 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
-      ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
+      ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1). E.g. 10 means that " +
+        "the cache will get checkpointed every 10 iterations.",
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[String]("handleInvalid", "how to handle invalid entries. Options are skip (which " +
