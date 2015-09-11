@@ -131,8 +131,8 @@ private[spark] class StreamInputFormat extends StreamFileInputFormat[PortableDat
  */
 @Experimental
 class PortableDataStream(
-    @transient isplit: CombineFileSplit,
-    @transient context: TaskAttemptContext,
+    isplit: CombineFileSplit,
+    context: TaskAttemptContext,
     index: Integer)
   extends Serializable {
 

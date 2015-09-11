@@ -25,12 +25,6 @@ case class ConvertToUnsafeNode(conf: SQLConf, child: LocalNode) extends UnaryLoc
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputsUnsafeRows: Boolean = true
-
-  override def canProcessUnsafeRows: Boolean = false
-
-  override def canProcessSafeRows: Boolean = true
-
   private[this] var convertToUnsafe: Projection = _
 
   override def open(): Unit = {

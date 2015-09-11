@@ -17,38 +17,28 @@
 
 package org.apache.spark.sql.execution.local
 
-import scala.reflect.runtime.universe.TypeTag
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row, SQLConf}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
 
-  protected val conf = new SQLConf
+  def conf: SQLConf = sqlContext.conf
 
-  /**
-   * Sets all configurations specified in `pairs`, calls `f`, and then restore all configurations.
-   */
-  protected def withConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(conf.getConfString(key)).toOption)
-    (keys, values).zipped.foreach(conf.setConfString)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConfString(key, value)
-        case (key, None) => conf.unsetConf(key)
+  protected def wrapForUnsafe(
+      f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
+    if (conf.unsafeEnabled) {
+      (left: LocalNode, right: LocalNode) => {
+        val _left = ConvertToUnsafeNode(conf, left)
+        val _right = ConvertToUnsafeNode(conf, right)
+        val r = f(_left, _right)
+        ConvertToSafeNode(conf, r)
       }
+    } else {
+      f
     }
-  }
-
-  /**
-   * Creates a DataFrame from a local Seq of Product.
-   */
-  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
-    sqlContext.implicits.localSeqToDataFrameHolder(data)
   }
 
   /**
@@ -123,19 +113,6 @@ class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
       df.queryExecution.toRdd.map(_.copy()).collect())
   }
 
-  protected def wrapForUnsafe(
-      f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
-    if (conf.unsafeEnabled) {
-      (left: LocalNode, right: LocalNode) => {
-        val _left = ConvertToUnsafeNode(conf, left)
-        val _right = ConvertToUnsafeNode(conf, right)
-        val r = f(_left, _right)
-        ConvertToSafeNode(conf, r)
-      }
-    } else {
-      f
-    }
-  }
 }
 
 /**

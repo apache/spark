@@ -81,7 +81,7 @@ case class NestedLoopJoinNode(
     val resultProj = genResultProjection
     streamed.open()
 
-    val matchesOrStreamedRowsWithNulls = streamed.toIterator.flatMap { streamedRow =>
+    val matchesOrStreamedRowsWithNulls = streamed.asIterator.flatMap { streamedRow =>
       val matchedRows = new CompactBuffer[InternalRow]
 
       var i = 0

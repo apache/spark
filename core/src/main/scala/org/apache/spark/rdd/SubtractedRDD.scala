@@ -63,15 +63,17 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    Seq(rdd1, rdd2).map { rdd =>
+    def rddDependency[T1: ClassTag, T2: ClassTag](rdd: RDD[_ <: Product2[T1, T2]])
+      : Dependency[_] = {
       if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency(rdd, part, serializer)
+        new ShuffleDependency[T1, T2, Any](rdd, part, serializer)
       }
     }
+    Seq(rddDependency[K, V](rdd1), rddDependency[K, W](rdd2))
   }
 
   override def getPartitions: Array[Partition] = {
@@ -105,7 +107,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
         seq
       }
     }
-    def integrate(depNum: Int, op: Product2[K, V] => Unit) = {
+    def integrate(depNum: Int, op: Product2[K, V] => Unit): Unit = {
       dependencies(depNum) match {
         case oneToOneDependency: OneToOneDependency[_] =>
           val dependencyPartition = partition.narrowDeps(depNum).get.split

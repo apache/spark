@@ -25,17 +25,11 @@ case class ConvertToSafeNode(conf: SQLConf, child: LocalNode) extends UnaryLocal
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputsUnsafeRows: Boolean = false
-
-  override def canProcessUnsafeRows: Boolean = true
-
-  override def canProcessSafeRows: Boolean = false
-
   private[this] var convertToSafe: Projection = _
 
   override def open(): Unit = {
     child.open()
-    convertToSafe = FromUnsafeProjection(child.output.map(_.dataType))
+    convertToSafe = FromUnsafeProjection(child.schema)
   }
 
   override def next(): Boolean = child.next()

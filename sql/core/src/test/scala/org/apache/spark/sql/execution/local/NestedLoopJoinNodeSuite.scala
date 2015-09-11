@@ -27,7 +27,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
 
   def joinSuite(suiteName: String, confPairs: (String, String)*): Unit = {
     test(s"$suiteName: left outer join") {
-      withConf(confPairs: _*) {
+      withSQLConf(confPairs: _*) {
         checkAnswer2(
           upperCaseData,
           lowerCaseData,
@@ -93,7 +93,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
     }
 
     test(s"$suiteName: right outer join") {
-      withConf(confPairs: _*) {
+      withSQLConf(confPairs: _*) {
         checkAnswer2(
           lowerCaseData,
           upperCaseData,
@@ -156,7 +156,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
     }
 
     test(s"$suiteName: full outer join") {
-      withConf(confPairs: _*) {
+      withSQLConf(confPairs: _*) {
         checkAnswer2(
           lowerCaseData,
           upperCaseData,

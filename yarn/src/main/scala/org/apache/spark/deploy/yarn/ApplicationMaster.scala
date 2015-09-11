@@ -590,6 +590,13 @@ private[spark] class ApplicationMaster(
           case None => logWarning("Container allocator is not ready to kill executors yet.")
         }
         context.reply(true)
+
+      case GetExecutorLossReason(eid) =>
+        Option(allocator) match {
+          case Some(a) => a.enqueueGetLossReasonRequest(eid, context)
+          case None => logWarning(s"Container allocator is not ready to find" +
+            s" executor loss reasons yet.")
+        }
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
