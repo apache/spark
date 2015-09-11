@@ -33,7 +33,6 @@ import org.apache.spark.sql.{SaveMode, Strategy, execution, sources, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
-
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
