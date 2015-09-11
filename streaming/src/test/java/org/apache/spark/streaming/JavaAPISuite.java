@@ -1818,25 +1818,23 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     ssc.socketTextStream("localhost", 12345);
   }
 
-  static class Converter implements Function<InputStream, Iterable<String>> {
-    @Override
-    public Iterable<String> call(InputStream in) throws IOException {
-      List<String> out = new ArrayList<>();
-      try (BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
-        for (String line; (line = reader.readLine()) != null;) {
-          out.add(line);
-        }
-      }
-      return out;
-    }
-  }
-
   @Test
   public void testSocketString() {
     ssc.socketStream(
       "localhost",
       12345,
-      new Converter(),
+      new Function<InputStream, Iterable<String>>() {
+        @Override
+        public Iterable<String> call(InputStream in) throws IOException {
+          List<String> out = new ArrayList<>();
+          try (BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
+            for (String line; (line = reader.readLine()) != null;) {
+              out.add(line);
+            }
+          }
+          return out;
+        }
+      },
       StorageLevel.MEMORY_ONLY());
   }
 

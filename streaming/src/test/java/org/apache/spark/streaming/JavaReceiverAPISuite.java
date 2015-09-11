@@ -95,7 +95,7 @@ public class JavaReceiverAPISuite implements Serializable {
     }
   }
 
-  static class JavaSocketReceiver extends Receiver<String> {
+  private static class JavaSocketReceiver extends Receiver<String> {
 
     String host = null;
     int port = -1;

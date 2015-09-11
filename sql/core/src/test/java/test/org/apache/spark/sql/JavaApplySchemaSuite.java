@@ -131,12 +131,12 @@ public class JavaApplySchemaSuite implements Serializable {
     personList.add(person2);
 
     JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
-            new Function<Person, Row>() {
-              @Override
-              public Row call(Person person) {
-                return RowFactory.create(person.getName(), person.getAge());
-              }
-            });
+        new Function<Person, Row>() {
+          @Override
+          public Row call(Person person) {
+            return RowFactory.create(person.getName(), person.getAge());
+          }
+        });
 
     List<StructField> fields = new ArrayList<>(2);
     fields.add(DataTypes.createStructField("", DataTypes.StringType, false));

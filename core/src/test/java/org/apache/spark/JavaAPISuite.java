@@ -216,10 +216,10 @@ public class JavaAPISuite implements Serializable {
     Assert.assertTrue(repartitioned.partitioner().isPresent());
     Assert.assertEquals(repartitioned.partitioner().get(), partitioner);
     List<List<Tuple2<Integer, Integer>>> partitions = repartitioned.glom().collect();
-    Assert.assertEquals(partitions.get(0), Arrays.asList(new Tuple2<>(0, 5),
-                                                         new Tuple2<>(0, 8), new Tuple2<>(2, 6)));
-    Assert.assertEquals(partitions.get(1), Arrays.asList(new Tuple2<>(1, 3),
-                                                         new Tuple2<>(3, 8), new Tuple2<>(3, 8)));
+    Assert.assertEquals(partitions.get(0),
+        Arrays.asList(new Tuple2<>(0, 5), new Tuple2<>(0, 8), new Tuple2<>(2, 6)));
+    Assert.assertEquals(partitions.get(1),
+        Arrays.asList(new Tuple2<>(1, 3), new Tuple2<>(3, 8), new Tuple2<>(3, 8)));
   }
 
   @Test
@@ -404,8 +404,7 @@ public class JavaAPISuite implements Serializable {
     ));
     JavaPairRDD<String, Tuple2<Iterable<String>, Iterable<Integer>>> cogrouped =
         categories.cogroup(prices);
-    Assert.assertEquals("[Fruit, Citrus]",
-                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[Fruit, Citrus]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
     Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
 
     cogrouped.collect();
@@ -430,8 +429,7 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<String, Tuple3<Iterable<String>, Iterable<Integer>, Iterable<Integer>>> cogrouped =
         categories.cogroup(prices, quantities);
-    Assert.assertEquals("[Fruit, Citrus]",
-                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[Fruit, Citrus]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
     Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
     Assert.assertEquals("[42]", Iterables.toString(cogrouped.lookup("Apples").get(0)._3()));
 
@@ -462,8 +460,7 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<String, Tuple4<Iterable<String>, Iterable<Integer>, Iterable<Integer>, Iterable<String>>> cogrouped =
         categories.cogroup(prices, quantities, countries);
-    Assert.assertEquals("[Fruit, Citrus]",
-                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[Fruit, Citrus]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
     Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
     Assert.assertEquals("[42]", Iterables.toString(cogrouped.lookup("Apples").get(0)._3()));
     Assert.assertEquals("[BR]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._4()));
@@ -877,7 +874,6 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<String, String> pairsRDD = rdd.flatMapToPair(
       new PairFlatMapFunction<String, String, String>() {
-
         @Override
         public Iterable<Tuple2<String, String>> call(String s) {
           List<Tuple2<String, String>> pairs = new LinkedList<>();
@@ -908,30 +904,30 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void mapsFromPairsToPairs() {
-      List<Tuple2<Integer, String>> pairs = Arrays.asList(
-        new Tuple2<>(1, "a"),
-        new Tuple2<>(2, "aa"),
-        new Tuple2<>(3, "aaa")
-      );
-      JavaPairRDD<Integer, String> pairRDD = sc.parallelizePairs(pairs);
+    List<Tuple2<Integer, String>> pairs = Arrays.asList(
+      new Tuple2<>(1, "a"),
+      new Tuple2<>(2, "aa"),
+      new Tuple2<>(3, "aaa")
+    );
+    JavaPairRDD<Integer, String> pairRDD = sc.parallelizePairs(pairs);
 
-      // Regression test for SPARK-668:
-      JavaPairRDD<String, Integer> swapped = pairRDD.flatMapToPair(
-          new PairFlatMapFunction<Tuple2<Integer, String>, String, Integer>() {
-          @Override
-          public Iterable<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) {
-              return Collections.singletonList(item.swap());
-          }
+    // Regression test for SPARK-668:
+    JavaPairRDD<String, Integer> swapped = pairRDD.flatMapToPair(
+      new PairFlatMapFunction<Tuple2<Integer, String>, String, Integer>() {
+        @Override
+        public Iterable<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) {
+          return Collections.singletonList(item.swap());
+        }
       });
-      swapped.collect();
+    swapped.collect();
 
-      // There was never a bug here, but it's worth testing:
-      pairRDD.mapToPair(new PairFunction<Tuple2<Integer, String>, String, Integer>() {
-          @Override
-          public Tuple2<String, Integer> call(Tuple2<Integer, String> item) {
-              return item.swap();
-          }
-      }).collect();
+    // There was never a bug here, but it's worth testing:
+    pairRDD.mapToPair(new PairFunction<Tuple2<Integer, String>, String, Integer>() {
+      @Override
+      public Tuple2<String, Integer> call(Tuple2<Integer, String> item) {
+        return item.swap();
+      }
+    }).collect();
   }
 
   @Test
@@ -977,8 +973,8 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> repartitioned1 = in1.repartition(4);
     List<List<Integer>> result1 = repartitioned1.glom().collect();
     Assert.assertEquals(4, result1.size());
-    for (List<Integer> l: result1) {
-      Assert.assertTrue(!l.isEmpty());
+    for (List<Integer> l : result1) {
+      Assert.assertFalse(l.isEmpty());
     }
 
     // Growing number of partitions
@@ -987,7 +983,7 @@ public class JavaAPISuite implements Serializable {
     List<List<Integer>> result2 = repartitioned2.glom().collect();
     Assert.assertEquals(2, result2.size());
     for (List<Integer> l: result2) {
-      Assert.assertTrue(!l.isEmpty());
+      Assert.assertFalse(l.isEmpty());
     }
   }
 
@@ -1196,13 +1192,12 @@ public class JavaAPISuite implements Serializable {
       public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<>(new IntWritable(pair._1()), new Text(pair._2()));
       }
-    }).saveAsNewAPIHadoopFile(outputDir, IntWritable.class, Text.class,
-      org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat.class);
+    }).saveAsNewAPIHadoopFile(
+        outputDir, IntWritable.class, Text.class,
+        org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat.class);
 
-    JavaPairRDD<IntWritable, Text> output = sc.sequenceFile(outputDir, IntWritable.class,
-      Text.class);
-    Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>,
-      String>() {
+    JavaPairRDD<IntWritable, Text> output = sc.sequenceFile(outputDir, IntWritable.class, Text.class);
+    Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>, String>() {
       @Override
       public String call(Tuple2<IntWritable, Text> x) {
         return x.toString();
@@ -1229,10 +1224,9 @@ public class JavaAPISuite implements Serializable {
     }).saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
 
     JavaPairRDD<IntWritable, Text> output = sc.newAPIHadoopFile(outputDir,
-      org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat.class, IntWritable.class,
-      Text.class, new Job().getConfiguration());
-    Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>,
-      String>() {
+        org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat.class,
+        IntWritable.class, Text.class, new Job().getConfiguration());
+    Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>, String>() {
       @Override
       public String call(Tuple2<IntWritable, Text> x) {
         return x.toString();
@@ -1286,9 +1280,8 @@ public class JavaAPISuite implements Serializable {
     }).saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
 
     JavaPairRDD<IntWritable, Text> output = sc.hadoopFile(outputDir,
-      SequenceFileInputFormat.class, IntWritable.class, Text.class);
-    Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>,
-      String>() {
+        SequenceFileInputFormat.class, IntWritable.class, Text.class);
+    Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>, String>() {
       @Override
       public String call(Tuple2<IntWritable, Text> x) {
         return x.toString();
@@ -1318,8 +1311,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<IntWritable, Text> output = sc.hadoopFile(outputDir,
         SequenceFileInputFormat.class, IntWritable.class, Text.class);
 
-    Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>,
-        String>() {
+    Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>, String>() {
       @Override
       public String call(Tuple2<IntWritable, Text> x) {
         return x.toString();
@@ -1506,11 +1498,11 @@ public class JavaAPISuite implements Serializable {
         });
     JavaPairRDD<Integer, Integer> rdd3 = rdd2.mapToPair(
         new PairFunction<Tuple2<Integer, Integer>, Integer, Integer>() {
-      @Override
-      public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> in) {
-        return new Tuple2<>(in._2(), in._1());
-      }
-    });
+          @Override
+          public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> in) {
+            return new Tuple2<>(in._2(), in._1());
+          }
+        });
     Assert.assertEquals(Arrays.asList(
         new Tuple2<>(1, 1),
         new Tuple2<>(0, 2),
