@@ -70,7 +70,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
                  standardization=True):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  standardization=True)
         """
         super(LinearRegression, self).__init__()
@@ -86,7 +86,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
                   standardization=True):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   standardization=True)
         Sets params for linear regression.
         """

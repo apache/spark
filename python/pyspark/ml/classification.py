@@ -102,7 +102,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  threshold=0.5, thresholds=None, probabilityCol="probability",
+                  threshold=0.5, thresholds=None, probabilityCol="probability", \
                   rawPredictionCol="rawPrediction", standardization=True)
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
