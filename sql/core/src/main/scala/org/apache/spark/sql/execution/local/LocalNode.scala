@@ -70,6 +70,11 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
   def close(): Unit
 
   /**
+   * Returns the content through the [[Iterator]] interface.
+   */
+  final def asIterator: Iterator[InternalRow] = new LocalNodeIterator(this)
+
+  /**
    * Returns the content of the iterator from the beginning to the end in the form of a Scala Seq.
    */
   def collect(): Seq[Row] = {
