@@ -135,12 +135,13 @@ private[ml] object DecisionTreeRegressionModel {
   def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeRegressor,
-      categoricalFeatures: Map[Int, Int]): DecisionTreeRegressionModel = {
+      categoricalFeatures: Map[Int, Int],
+      numFeatures: Int = -1): DecisionTreeRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
-    new DecisionTreeRegressionModel(uid, rootNode, -1)
+    new DecisionTreeRegressionModel(uid, rootNode, numFeatures)
   }
 }

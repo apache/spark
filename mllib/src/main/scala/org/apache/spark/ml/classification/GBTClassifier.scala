@@ -33,7 +33,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.loss.{LogLoss => OldLogLoss, Loss => OldLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
@@ -138,10 +138,11 @@ final class GBTClassifier(override val uid: String)
     require(numClasses == 2,
       s"GBTClassifier only supports binary classification but was given numClasses = $numClasses")
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val oldGBT = new OldGBT(boostingStrategy)
     val oldModel = oldGBT.run(oldDataset)
-    GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures)
+    GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
   }
 
   override def copy(extra: ParamMap): GBTClassifier = defaultCopy(extra)
@@ -217,7 +218,8 @@ private[ml] object GBTClassificationModel {
   def fromOld(
       oldModel: OldGBTModel,
       parent: GBTClassifier,
-      categoricalFeatures: Map[Int, Int]): GBTClassificationModel = {
+      categoricalFeatures: Map[Int, Int],
+      numFeatures: Int = -1): GBTClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
@@ -225,6 +227,6 @@ private[ml] object GBTClassificationModel {
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtc")
-    new GBTClassificationModel(parent.uid, newTrees, oldModel.treeWeights, -1)
+    new GBTClassificationModel(parent.uid, newTrees, oldModel.treeWeights, numFeatures)
   }
 }

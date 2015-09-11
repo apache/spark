@@ -128,10 +128,11 @@ final class GBTRegressor(override val uid: String)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val oldGBT = new OldGBT(boostingStrategy)
     val oldModel = oldGBT.run(oldDataset)
-    GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures)
+    GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
   }
 
   override def copy(extra: ParamMap): GBTRegressor = defaultCopy(extra)
@@ -206,7 +207,8 @@ private[ml] object GBTRegressionModel {
   def fromOld(
       oldModel: OldGBTModel,
       parent: GBTRegressor,
-      categoricalFeatures: Map[Int, Int]): GBTRegressionModel = {
+      categoricalFeatures: Map[Int, Int],
+      numFeatures: Int = -1): GBTRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTRegressionModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
@@ -214,6 +216,6 @@ private[ml] object GBTRegressionModel {
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtr")
-    new GBTRegressionModel(parent.uid, newTrees, oldModel.treeWeights, -1)
+    new GBTRegressionModel(parent.uid, newTrees, oldModel.treeWeights, numFeatures)
   }
 }

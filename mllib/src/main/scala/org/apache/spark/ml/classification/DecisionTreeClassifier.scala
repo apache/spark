@@ -162,13 +162,14 @@ private[ml] object DecisionTreeClassificationModel {
   def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeClassifier,
-      categoricalFeatures: Map[Int, Int]): DecisionTreeClassificationModel = {
+      categoricalFeatures: Map[Int, Int],
+      numFeatures: Int = -1): DecisionTreeClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
     // Can't infer number of features from old model, so default to -1
-    new DecisionTreeClassificationModel(uid, rootNode, -1, -1)
+    new DecisionTreeClassificationModel(uid, rootNode, numFeatures, -1)
   }
 }

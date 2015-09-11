@@ -225,7 +225,8 @@ private[ml] object RandomForestClassificationModel {
       oldModel: OldRandomForestModel,
       parent: RandomForestClassifier,
       categoricalFeatures: Map[Int, Int],
-      numClasses: Int): RandomForestClassificationModel = {
+      numClasses: Int,
+      numFeatures: Int = -1): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
@@ -233,6 +234,6 @@ private[ml] object RandomForestClassificationModel {
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
-    new RandomForestClassificationModel(uid, newTrees, -1, numClasses)
+    new RandomForestClassificationModel(uid, newTrees, numFeatures, numClasses)
   }
 }

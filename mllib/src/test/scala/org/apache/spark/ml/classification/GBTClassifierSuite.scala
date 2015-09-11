@@ -156,6 +156,7 @@ private object GBTClassifierSuite {
       validationData: Option[RDD[LabeledPoint]],
       gbt: GBTClassifier,
       categoricalFeatures: Map[Int, Int]): Unit = {
+    val numFeatures = data.first().features.size
     val oldBoostingStrategy =
       gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val oldGBT = new OldGBT(oldBoostingStrategy)
@@ -164,10 +165,11 @@ private object GBTClassifierSuite {
     val newModel = gbt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTClassificationModel.fromOld(
-      oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures)
+      oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures, numFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
     // numFeatures can't be inferred since GTBClassifier uses fromOld method to construct trees.
     // TODO: when GBT implementation has been ported to ML, update this check
-    assert(newModel.numFeatures == -1)
+    assert(newModel.numFeatures == numFeatures)
+    assert(oldModelAsNew.numFeatures == numFeatures)
   }
 }
