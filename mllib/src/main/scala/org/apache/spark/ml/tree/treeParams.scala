@@ -388,6 +388,10 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
   // validationTol -> 1e-5
 
+  override def validateParams(): Unit = {
+    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)
+  }
+
   setDefault(maxIter -> 20, stepSize -> 0.1)
 
   /** @group setParam */

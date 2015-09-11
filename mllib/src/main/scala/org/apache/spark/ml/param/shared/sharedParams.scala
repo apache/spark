@@ -337,7 +337,7 @@ private[ml] trait HasStepSize extends Params {
    * Param for Step size to be used for each iteration of optimization..
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.", ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
