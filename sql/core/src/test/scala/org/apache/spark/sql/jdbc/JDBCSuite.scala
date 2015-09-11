@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
+import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 
@@ -146,6 +148,19 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement("create table test.decimals (a DECIMAL(7, 2), b DECIMAL(4, 0))").
+      executeUpdate()
+    conn.prepareStatement("insert into test.decimals values (12345.67, 1234)").executeUpdate()
+    conn.prepareStatement("insert into test.decimals values (34567.89, 1428)").executeUpdate()
+    conn.commit()
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE decimals
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.DECIMALS', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
 
     conn.prepareStatement(
       s"""
@@ -449,5 +464,31 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+  }
+
+  test("SPARK-9182: filters are not passed through to jdbc source") {
+    def checkPushedFilter(query: String, filterStr: String): Unit = {
+      val rddOpt = sql(query).queryExecution.executedPlan.collectFirst {
+        case PhysicalRDD(_, rdd: JDBCRDD, _) => rdd
+      }
+      assert(rddOpt.isDefined)
+      val pushedFilterStr = rddOpt.get.filterWhereClause
+      assert(pushedFilterStr.contains(filterStr),
+        s"Expected to push [$filterStr], actually we pushed [$pushedFilterStr]")
+    }
+
+    checkPushedFilter("select * from foobar where NAME = 'fred'", "NAME = 'fred'")
+    checkPushedFilter("select * from inttypes where A > '15'", "A > 15")
+    checkPushedFilter("select * from inttypes where C <= 20", "C <= 20")
+    checkPushedFilter("select * from decimals where A > 1000", "A > 1000.00")
+    checkPushedFilter("select * from decimals where A > 1000 AND A < 2000",
+      "A > 1000.00 AND A < 2000.00")
+    checkPushedFilter("select * from decimals where A = 2000 AND B > 20", "A = 2000.00 AND B > 20")
+    checkPushedFilter("select * from timetypes where B > '1998-09-10'", "B > 1998-09-10")
+    checkPushedFilter("select * from timetypes where B > 'abcd'", "")
+    checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue.toLong + 1L}'", "")
+    checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue.toLong}'", s"A > ${Int.MaxValue.toLong}")
+    checkPushedFilter(s"select * from inttypes where C <= '${Int.MinValue.toLong - 1L}'", "")
+    checkPushedFilter(s"select * from inttypes where C <= '${Int.MinValue.toLong}'", s"C <= ${Int.MinValue.toLong}")
   }
 }

@@ -28,10 +28,11 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -347,36 +348,95 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    * and convert them.
    */
   protected[sql] def selectFilters(filters: Seq[Expression]) = {
+    def isCastable(a: Attribute, l: Literal): Boolean = {
+      (l.dataType, a.dataType) match {
+        case (from: DecimalType, to: NumericType) =>
+          Cast(Cast(l, to), from).eval().asInstanceOf[Decimal]
+            .compare(l.value.asInstanceOf[Decimal]) == 0
+        case (from: NumericType, to: NumericType) =>
+          Cast(l, a.dataType).eval() == l.value
+        case _ => true
+      }
+    }
+
     def translate(predicate: Expression): Option[Filter] = predicate match {
       case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
         Some(sources.EqualTo(a.name, convertToScala(v, t)))
       case expressions.EqualTo(Literal(v, t), a: Attribute) =>
         Some(sources.EqualTo(a.name, convertToScala(v, t)))
+      case expressions.EqualTo(Cast(a: Attribute, _), Literal(v, t))
+        if isCastable(a, Literal.create(v, t)) =>
+          Some(sources.EqualTo(a.name,
+            convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
+      case expressions.EqualTo(Literal(v, t), Cast(a: Attribute, _))
+        if isCastable(a, Literal.create(v, t)) =>
+          Some(sources.EqualTo(a.name,
+            convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
 
       case expressions.EqualNullSafe(a: Attribute, Literal(v, t)) =>
         Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
       case expressions.EqualNullSafe(Literal(v, t), a: Attribute) =>
         Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
+      case expressions.EqualNullSafe(Cast(a: Attribute, _), Literal(v, t))
+        if isCastable(a, Literal.create(v, t)) =>
+          Some(sources.EqualNullSafe(a.name,
+           convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
+      case expressions.EqualNullSafe(Literal(v, t), Cast(a: Attribute, _))
+        if isCastable(a, Literal.create(v, t)) =>
+          Some(sources.EqualNullSafe(a.name,
+            convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
 
       case expressions.GreaterThan(a: Attribute, Literal(v, t)) =>
         Some(sources.GreaterThan(a.name, convertToScala(v, t)))
       case expressions.GreaterThan(Literal(v, t), a: Attribute) =>
         Some(sources.LessThan(a.name, convertToScala(v, t)))
+      case expressions.GreaterThan(Cast(a: Attribute, _), Literal(v, t))
+        if isCastable(a, Literal.create(v, t)) =>
+        Some(sources.GreaterThan(a.name,
+          convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
+      case expressions.GreaterThan(Literal(v, t), Cast(a: Attribute, _))
+        if isCastable(a, Literal.create(v, t)) =>
+        Some(sources.LessThan(a.name,
+          convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
 
       case expressions.LessThan(a: Attribute, Literal(v, t)) =>
         Some(sources.LessThan(a.name, convertToScala(v, t)))
       case expressions.LessThan(Literal(v, t), a: Attribute) =>
         Some(sources.GreaterThan(a.name, convertToScala(v, t)))
+      case expressions.LessThan(Cast(a: Attribute, _), Literal(v, t))
+        if isCastable(a, Literal.create(v, t)) =>
+        Some(sources.LessThan(a.name,
+          convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
+      case expressions.LessThan(Literal(v, t), Cast(a: Attribute, _))
+        if isCastable(a, Literal.create(v, t)) =>
+        Some(sources.GreaterThan(a.name,
+          convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
 
       case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, t)) =>
         Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
       case expressions.GreaterThanOrEqual(Literal(v, t), a: Attribute) =>
         Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
+      case expressions.GreaterThanOrEqual(Cast(a: Attribute, _), Literal(v, t))
+        if isCastable(a, Literal.create(v, t)) =>
+        Some(sources.GreaterThanOrEqual(a.name,
+          convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
+      case expressions.GreaterThanOrEqual(Literal(v, t), Cast(a: Attribute, _))
+        if isCastable(a, Literal.create(v, t)) =>
+        Some(sources.LessThanOrEqual(a.name,
+          convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
 
       case expressions.LessThanOrEqual(a: Attribute, Literal(v, t)) =>
         Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
       case expressions.LessThanOrEqual(Literal(v, t), a: Attribute) =>
         Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
+      case expressions.LessThanOrEqual(Cast(a: Attribute, _), Literal(v, t))
+        if isCastable(a, Literal.create(v, t)) =>
+        Some(sources.LessThanOrEqual(a.name,
+          convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
+      case expressions.LessThanOrEqual(Literal(v, t), Cast(a: Attribute, _))
+        if isCastable(a, Literal.create(v, t)) =>
+        Some(sources.GreaterThanOrEqual(a.name,
+          convertToScala(Cast(Literal.create(v, t), a.dataType).eval(), a.dataType)))
 
       case expressions.InSet(a: Attribute, set) =>
         val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
