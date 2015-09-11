@@ -32,7 +32,6 @@ case class ExpandNode(
   private[this] var result: InternalRow = _
   private[this] var idx: Int = _
   private[this] var input: InternalRow = _
-
   private[this] var groups: Array[Projection] = _
 
   override def open(): Unit = {
@@ -42,17 +41,19 @@ case class ExpandNode(
   }
 
   override def next(): Boolean = {
-    idx += 1
-    if (idx < groups.length) {
-      result = groups(idx)(input)
-      true
-    } else if (child.next()) {
-      input = child.fetch()
-      idx = 0
-      result = groups(idx)(input)
-      true
+    if (idx < 0 || idx >= groups.length) {
+      if (child.next()) {
+        input = child.fetch()
+        result = groups(0)(input)
+        idx = 1
+        true
+      } else {
+        false
+      }
     } else {
-      false
+      result = groups(idx)(input)
+      idx += 1
+      true
     }
   }
 
