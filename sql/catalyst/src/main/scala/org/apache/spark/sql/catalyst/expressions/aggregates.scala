@@ -696,11 +696,7 @@ case class LastFunction(expr: Expression, base: AggregateExpression1) extends Ag
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 abstract class StddevAgg1(child: Expression) extends UnaryExpression with PartialAggregate1 {
   override def nullable: Boolean = true
-  override def dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(p, s) =>
-      DecimalType.bounded(p + 14, s + 4)
-    case _ => DoubleType
-  }
+  override def dataType: DataType = DoubleType
 
   def isSample: Boolean
 
@@ -742,10 +738,7 @@ case class ComputePartialStd(child: Expression) extends UnaryExpression with Agg
 
     override def children: Seq[Expression] = child :: Nil
     override def nullable: Boolean = false
-    override def dataType: DataType = child.dataType match {
-      case DecimalType.Fixed(p, s) => ArrayType(DecimalType.bounded(p + 10, s + 4))
-      case _ => ArrayType(DoubleType)
-    }
+    override def dataType: DataType = ArrayType(DoubleType)
     override def toString: String = s"computePartialStddev($child)"
     override def newInstance(): ComputePartialStdFunction =
       new ComputePartialStdFunction(child, this)
@@ -757,10 +750,7 @@ case class ComputePartialStdFunction (
 ) extends AggregateFunction1 {
   def this() = this(null, null)  // Required for serialization
 
-  private val computeType = expr.dataType match {
-    case DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s + 4)
-    case _ => DoubleType
-  }
+  private val computeType = DoubleType
   private val zero = Cast(Literal(0), computeType)
   private var partialCount: Long = 0L
 
@@ -811,10 +801,7 @@ case class MergePartialStd(
 
   override def children: Seq[Expression] = child:: Nil
   override def nullable: Boolean = false
-  override def dataType: DataType = child.dataType match {
-    case ArrayType(DecimalType.Fixed(p, s), _) => DecimalType.bounded(p + 14, s + 4)
-    case _ => DoubleType
-  }
+  override def dataType: DataType = DoubleType
   override def toString: String = s"MergePartialStd($child)"
   override def newInstance(): MergePartialStdFunction = {
     new MergePartialStdFunction(child, this, isSample)
@@ -828,10 +815,7 @@ case class MergePartialStdFunction(
 ) extends AggregateFunction1 {
   def this() = this (null, null, false) // Required for serialization
 
-  private val computeType = expr.dataType match {
-    case ArrayType(DecimalType.Fixed(p, s), _) => DecimalType.bounded(p + 14, s + 4)
-    case _ => DoubleType
-  }
+  private val computeType = DoubleType
   private val zero = Cast(Literal(0), computeType)
   private val combineCount = MutableLiteral(zero.eval(null), computeType)
   private val combineAvg = MutableLiteral(zero.eval(null), computeType)
@@ -906,10 +890,7 @@ case class StddevFunction(
 
   def this() = this(null, null, false) // Required for serialization
 
-  private val computeType = expr.dataType match {
-    case DecimalType.Fixed(p, s) => DecimalType.bounded(p + 14, s + 4)
-    case _ => DoubleType
-  }
+  private val computeType = DoubleType
   private var curCount: Long = 0L
   private val zero = Cast(Literal(0), computeType)
   private val curAvg = MutableLiteral(zero.eval(null), computeType)

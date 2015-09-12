@@ -291,13 +291,7 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
   // we remove the old aggregate functions. Then, we will not need NullType at here.
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
 
-  private val resultType = child.dataType match {
-    case DecimalType.Fixed(p, s) =>
-      DecimalType.bounded(p + 14, s + 4)
-    case _ => DoubleType
-  }
-
-  private val zero = Cast(Literal(0), resultType)
+  private val resultType = DoubleType
 
   private val preCount = AttributeReference("preCount", resultType)()
   private val currentCount = AttributeReference("currentCount", resultType)()
