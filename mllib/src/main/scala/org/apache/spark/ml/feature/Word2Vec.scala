@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -152,6 +153,8 @@ class Word2VecModel private[ml] (
   extends Model[Word2VecModel] with Word2VecBase {
 
 
+  private var bcWordVectors: Option[Broadcast[feature.Word2VecModel]] = None
+
   /**
    * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and
    * and the vector the DenseVector that it is mapped to.
@@ -197,16 +200,20 @@ class Word2VecModel private[ml] (
    */
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val bWordVectors = dataset.sqlContext.sparkContext.broadcast(wordVectors)
+    bcWordVectors match {
+      case None => bcWordVectors = Some(dataset.sqlContext.sparkContext.broadcast(wordVectors))
+      case _ =>
+    }
+    val localBcWordVectors = bcWordVectors.get
     val word2Vec = udf { sentence: Seq[String] =>
       if (sentence.size == 0) {
         Vectors.sparse($(vectorSize), Array.empty[Int], Array.empty[Double])
       } else {
         val cum = Vectors.zeros($(vectorSize))
-        val model = bWordVectors.value.getVectors
+        val model = localBcWordVectors.value.getVectors
         for (word <- sentence) {
           if (model.contains(word)) {
-            axpy(1.0, bWordVectors.value.transform(word), cum)
+            axpy(1.0, localBcWordVectors.value.transform(word), cum)
           } else {
             // pass words which not belong to model
           }
