@@ -57,7 +57,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   with SparkHadoopMapReduceUtil
   with Serializable
 {
+
   /**
+   * :: Experimental ::
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
    * Note that V and C can be different -- for example, one might group an RDD of type
@@ -70,12 +72,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
-  def combineByKey[C](createCombiner: V => C,
+  @Experimental
+  def combineByKeyWithClassTag[C](
+      createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
-      serializer: Serializer = null): RDD[(K, C)] = self.withScope {
+      serializer: Serializer = null)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (keyClass.isArray) {
       if (mapSideCombine) {
@@ -103,13 +107,50 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Simplified version of combineByKey that hash-partitions the output RDD.
+   * Generic function to combine the elements for each key using a custom set of aggregation
+   * functions. This method is here for backward compatibility. It does not provide combiner
+   * classtag information to the shuffle.
+   *
+   * @see [[combineByKeyWithClassTag]]
    */
-  def combineByKey[C](createCombiner: V => C,
+  def combineByKey[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      partitioner: Partitioner,
+      mapSideCombine: Boolean = true,
+      serializer: Serializer = null): RDD[(K, C)] = self.withScope {
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners,
+      partitioner, mapSideCombine, serializer)(null)
+  }
+
+  /**
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the output RDD.
+   * This method is here for backward compatibility. It does not provide combiner
+   * classtag information to the shuffle.
+   *
+   * @see [[combineByKeyWithClassTag]]
+   */
+  def combineByKey[C](
+      createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       numPartitions: Int): RDD[(K, C)] = self.withScope {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numPartitions))
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners, numPartitions)(null)
+  }
+
+  /**
+   * :: Experimental ::
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the output RDD.
+   */
+  @Experimental
+  def combineByKeyWithClassTag[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      numPartitions: Int)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners,
+      new HashPartitioner(numPartitions))
   }
 
   /**
@@ -133,7 +174,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     // We will clean the combiner closure later in `combineByKey`
     val cleanedSeqOp = self.context.clean(seqOp)
-    combineByKey[U]((v: V) => cleanedSeqOp(createZero(), v), cleanedSeqOp, combOp, partitioner)
+    combineByKeyWithClassTag[U]((v: V) => cleanedSeqOp(createZero(), v),
+      cleanedSeqOp, combOp, partitioner)
   }
 
   /**
@@ -182,7 +224,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val createZero = () => cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
 
     val cleanedFunc = self.context.clean(func)
-    combineByKey[V]((v: V) => cleanedFunc(createZero(), v), cleanedFunc, cleanedFunc, partitioner)
+    combineByKeyWithClassTag[V]((v: V) => cleanedFunc(createZero(), v),
+      cleanedFunc, cleanedFunc, partitioner)
   }
 
   /**
@@ -268,7 +311,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * "combiner" in MapReduce.
    */
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
-    combineByKey[V]((v: V) => v, func, func, partitioner)
+    combineByKeyWithClassTag[V]((v: V) => v, func, func, partitioner)
   }
 
   /**
@@ -392,7 +435,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       h1
     }
 
-    combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).mapValues(_.cardinality())
+    combineByKeyWithClassTag(createHLL, mergeValueHLL, mergeHLL, partitioner)
+      .mapValues(_.cardinality())
   }
 
   /**
@@ -466,7 +510,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val createCombiner = (v: V) => CompactBuffer(v)
     val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v
     val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2
-    val bufs = combineByKey[CompactBuffer[V]](
+    val bufs = combineByKeyWithClassTag[CompactBuffer[V]](
       createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine = false)
     bufs.asInstanceOf[RDD[(K, Iterable[V])]]
   }
@@ -565,12 +609,30 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Simplified version of combineByKey that hash-partitions the resulting RDD using the
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the resulting RDD using the
+   * existing partitioner/parallelism level. This method is here for backward compatibility. It
+   * does not provide combiner classtag information to the shuffle.
+   *
+   * @see [[combineByKeyWithClassTag]]
+   */
+  def combineByKey[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C): RDD[(K, C)] = self.withScope {
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners)(null)
+  }
+
+  /**
+   * :: Experimental ::
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
-  def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
-    : RDD[(K, C)] = self.withScope {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
+  @Experimental
+  def combineByKeyWithClassTag[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
   }
 
   /**

@@ -447,9 +447,12 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.manager</code></td>
   <td>sort</td>
   <td>
-    Implementation to use for shuffling data. There are two implementations available:
-    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
-    the default option starting in 1.2.
+    Implementation to use for shuffling data. There are three implementations available:
+    <code>sort</code>, <code>hash</code> and the new (1.5+) <code>tungsten-sort</code>.
+    Sort-based shuffle is more memory-efficient and is the default option starting in 1.2.
+    Tungsten-sort is similar to the sort based shuffle, with a direct binary cache-friendly
+    implementation with a fall back to regular sort based shuffle if its requirements are not
+    met.
   </td>
 </tr>
 <tr>
@@ -1109,10 +1112,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0.8 for YARN mode; 0.0 otherwise</td>
+  <td>0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone mode)
+    (resources are executors in yarn mode, CPU cores in standalone mode and Mesos coarsed-grained
+     mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config
@@ -1433,6 +1437,19 @@ Apart from these, the following properties are also available, and may be useful
 #### Spark Streaming
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.streaming.backpressure.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables or disables Spark Streaming's internal backpressure mechanism (since 1.5).
+    This enables the Spark Streaming to control the receiving rate based on the 
+    current batch scheduling delays and processing times so that the system receives
+    only as fast as the system can process. Internally, this dynamically sets the 
+    maximum receiving rate of receivers. This rate is upper bounded by the values
+    `spark.streaming.receiver.maxRate` and `spark.streaming.kafka.maxRatePerPartition`
+    if they are set (see below).
+  </td>
+</tr>
 <tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>

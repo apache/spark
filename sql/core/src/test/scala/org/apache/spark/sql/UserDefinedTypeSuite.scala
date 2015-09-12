@@ -157,4 +157,10 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
         Nil
     )
   }
+
+  test("SPARK-10472 UserDefinedType.typeName") {
+    assert(IntegerType.typeName === "integer")
+    assert(new MyDenseVectorUDT().typeName === "mydensevector")
+    assert(new OpenHashSetUDT(IntegerType).typeName === "openhashset")
+  }
 }
