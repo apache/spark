@@ -996,8 +996,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
     job.setOutputFormatClass(outputFormatClass)
-    job.getConfiguration.set("mapred.output.dir", path)
-    saveAsNewAPIHadoopDataset(job.getConfiguration)
+    val jobConfiguration = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    jobConfiguration.set("mapred.output.dir", path)
+    saveAsNewAPIHadoopDataset(jobConfiguration)
   }
 
   /**
@@ -1064,7 +1065,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
-    val wrappedConf = new SerializableConfiguration(job.getConfiguration)
+    val jobConfiguration = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val wrappedConf = new SerializableConfiguration(jobConfiguration)
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
