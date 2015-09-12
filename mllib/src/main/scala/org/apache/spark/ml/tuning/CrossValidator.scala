@@ -20,7 +20,7 @@ package org.apache.spark.ml.tuning
 import com.github.fommil.netlib.F2jBLAS
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
@@ -51,26 +51,32 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
  * :: Experimental ::
  * K-fold cross validation.
  */
+@Since("1.2.0")
 @Experimental
-class CrossValidator(override val uid: String) extends Estimator[CrossValidatorModel]
+class CrossValidator @Since("1.2.0") (@Since("1.2.0") override val uid: String)
+  extends Estimator[CrossValidatorModel]
   with CrossValidatorParams with Logging {
-
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("cv"))
 
   private val f2jBLAS = new F2jBLAS
 
   /** @group setParam */
+  @Since("1.2.0")
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setNumFolds(value: Int): this.type = set(numFolds, value)
-
+  @Since("1.2.0")
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
@@ -108,11 +114,11 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
-
+  @Since("1.2.0")
   override def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
   }
-
+  @Since("1.4.0")
   override def validateParams(): Unit = {
     super.validateParams()
     val est = $(estimator)
@@ -120,7 +126,7 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
       est.copy(paramMap).validateParams()
     }
   }
-
+  @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidator = {
     val copied = defaultCopy(extra).asInstanceOf[CrossValidator]
     if (copied.isDefined(estimator)) {

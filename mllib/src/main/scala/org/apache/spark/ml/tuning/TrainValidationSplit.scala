@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
@@ -51,24 +51,30 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
  * and uses evaluation metric on the validation set to select the best model.
  * Similar to [[CrossValidator]], but only splits the set once.
  */
+@Since("1.5.0")
 @Experimental
-class TrainValidationSplit(override val uid: String) extends Estimator[TrainValidationSplitModel]
+class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: String)
+  extends Estimator[TrainValidationSplitModel]
   with TrainValidationSplitParams with Logging {
-
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("tvs"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setTrainRatio(value: Double): this.type = set(trainRatio, value)
-
+  @Since("1.5.0")
   override def fit(dataset: DataFrame): TrainValidationSplitModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
@@ -107,11 +113,11 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
   }
-
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
   }
-
+  @Since("1.5.0")
   override def validateParams(): Unit = {
     super.validateParams()
     val est = $(estimator)
@@ -119,7 +125,7 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
       est.copy(paramMap).validateParams()
     }
   }
-
+  @Since("1.5.0")
   override def copy(extra: ParamMap): TrainValidationSplit = {
     val copied = defaultCopy(extra).asInstanceOf[TrainValidationSplit]
     if (copied.isDefined(estimator)) {
