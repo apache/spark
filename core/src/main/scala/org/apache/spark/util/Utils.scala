@@ -659,7 +659,8 @@ private[spark] object Utils extends Logging {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
-    } else if (conf.getenv("MESOS_DIRECTORY") != null && !conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+    } else if (conf.getenv("MESOS_DIRECTORY") != null
+      && !conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
       // running inside Mesos and have a local directory to use
       Array(conf.getenv("MESOS_DIRECTORY"))
     } else {
