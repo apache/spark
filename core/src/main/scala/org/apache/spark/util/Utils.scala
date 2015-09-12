@@ -655,18 +655,18 @@ private[spark] object Utils extends Logging {
       // created the directories already, and that they are secured so that only the
       // user has access to them.
       getYarnLocalDirs(conf).split(",")
-    } else if (conf.getenv("MESOS_DIRECTORY") != null) {
-      // running inside mesos and have a local directory to use
-      Array(conf.getenv("MESOS_DIRECTORY"))
+    } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
+      conf.getenv("SPARK_LOCAL_DIRS").split(",")
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
+    } else if (conf.getenv("MESOS_DIRECTORY") != null && !conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      // running inside Mesos and have a local directory to use
+      Array(conf.getenv("MESOS_DIRECTORY"))
     } else {
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
       // permissions under each listed directory.
-      Option(conf.getenv("SPARK_LOCAL_DIRS"))
-        .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-        .split(",")
+      conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")).split(",")
     }
   }
 
