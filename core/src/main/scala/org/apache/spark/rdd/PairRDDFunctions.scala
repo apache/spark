@@ -1052,10 +1052,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
     val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
-    if (speculationEnabled &&
-      hadoopConf.get("mapred.output.committer.class", "").contains("Direct")) {
-      logWarning("We may loss data when use direct output committer with speculation enabled, " +
-        "please make sure your output committer doesn't write data directly.")
+    val outputCommitterClass = hadoopConf.get("mapred.output.committer.class", "")
+    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+      val warningMessage =
+        s"$outputCommitterClass may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
     }
 
     FileOutputFormat.setOutputPath(hadoopConf,
@@ -1135,9 +1139,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
     val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
-    if (speculationEnabled && jobCommitter.getClass.getSimpleName.contains("Direct")) {
-      logWarning("We may loss data when use direct output committer with speculation enabled, " +
-        "please make sure your output committer doesn't write data directly.")
+    val outputCommitterClass = jobCommitter.getClass.getSimpleName
+    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+      val warningMessage =
+        s"$outputCommitterClass may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
     }
 
     jobCommitter.setupJob(jobTaskContext)

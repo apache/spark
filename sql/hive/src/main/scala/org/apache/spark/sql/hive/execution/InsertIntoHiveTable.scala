@@ -178,11 +178,17 @@ case class InsertIntoHiveTable(
     val jobConf = new JobConf(sc.hiveconf)
     val jobConfSer = new SerializableJobConf(jobConf)
 
-    // When speculation is enabled, it's not safe to use customized output committer classes,
-    // especially direct output committees (e.g. `DirectParquetOutputCommitter`).
+    // When speculation is on and output committer class name contains "Direct", we should warn
+    // users that they may loss data if they are using a direct output committer.
     val speculationEnabled = sqlContext.sparkContext.conf.getBoolean("spark.speculation", false)
-    if (speculationEnabled) {
-      jobConf.setOutputCommitter(classOf[FileOutputCommitter])
+    val outputCommitterClass = jobConf.get("mapred.output.committer.class", "")
+    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+      val warningMessage =
+        s"$outputCommitterClass may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
     }
 
     val writerContainer = if (numDynamicPartitions > 0) {
