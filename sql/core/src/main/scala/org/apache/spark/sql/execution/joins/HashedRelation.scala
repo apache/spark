@@ -25,7 +25,8 @@ import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.local.LocalNode
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.{MemoryLocation, ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
@@ -112,6 +113,10 @@ final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalR
 
 
 private[execution] object HashedRelation {
+
+  def apply(localNode: LocalNode, keyGenerator: Projection): HashedRelation = {
+    apply(localNode.asIterator, SQLMetrics.nullLongMetric, keyGenerator)
+  }
 
   def apply(
       input: Iterator[InternalRow],
