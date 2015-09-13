@@ -478,7 +478,7 @@ abstract class RDD[T: ClassTag](
     require(num >= 0, "Negative number of elements requested")
     require(num <= (Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt),
       "Cannot support a sample size > Int.MaxValue - " +
-        s"$numStDev * math.sqrt(Int.MaxValue)")
+      s"$numStDev * math.sqrt(Int.MaxValue)")
 
     val initialCount = this.count()
     if (num == 0 || initialCount == 0 ) {
