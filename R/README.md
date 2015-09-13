@@ -23,11 +23,11 @@ SparkContext, you can run
 
     ./bin/sparkR --master "local[2]"
 
-To set other options like driver memory, executor memory etc. you can pass in the [spark-submit](http://spark.apache.org/docs/latest/submitting-applications.html) arguments to `./bin/sparkR`
+To set other options like driver memory, executor memory etc. You can pass in the [spark-submit](http://spark.apache.org/docs/latest/submitting-applications.html) arguments to `./bin/sparkR`
 
 #### Using SparkR from RStudio
 
-If you wish to use SparkR from RStudio or other R frontends you will need to set some environment variables which point SparkR to your Spark installation. For example 
+If you wish to use SparkR from RStudio or other R frontends you will need to set some environment variables which point SparkR to your Spark installation path. For example 
 ```
 # Set this to where Spark is installed
 Sys.setenv(SPARK_HOME="/Users/shivaram/spark")
