@@ -30,6 +30,7 @@ import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, Tree
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 
@@ -294,8 +295,12 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(topNode.impurity !== -1.0)
 
     // set impurity and predict for child nodes
-    assert(topNode.leftNode.get.predict.predict === 0.0)
-    assert(topNode.rightNode.get.predict.predict === 1.0)
+    if (topNode.leftNode.get.predict.predict === 0.0) {
+      assert(topNode.rightNode.get.predict.predict === 1.0)
+    } else {
+      assert(topNode.leftNode.get.predict.predict === 1.0)
+      assert(topNode.rightNode.get.predict.predict === 0.0)
+    }
     assert(topNode.leftNode.get.impurity === 0.0)
     assert(topNode.rightNode.get.impurity === 0.0)
   }
@@ -337,12 +342,62 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(topNode.impurity !== -1.0)
 
     // set impurity and predict for child nodes
-    assert(topNode.leftNode.get.predict.predict === 0.0)
-    assert(topNode.rightNode.get.predict.predict === 1.0)
+    if (topNode.leftNode.get.predict.predict === 0.0) {
+      assert(topNode.rightNode.get.predict.predict === 1.0)
+    } else {
+      assert(topNode.leftNode.get.predict.predict === 1.0)
+      assert(topNode.rightNode.get.predict.predict === 0.0)
+    }
     assert(topNode.leftNode.get.impurity === 0.0)
     assert(topNode.rightNode.get.impurity === 0.0)
   }
 
+  test("Use soft prediction for binary classification with ordered categorical features") {
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0)), // left node
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)), // right node
+      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)), // left node
+      LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)), // right node
+      LabeledPoint(1.0, Vectors.dense(1.0, 1.0, 0.0)), // left node
+      LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 2.0))) // left node
+    val input = sc.parallelize(arr)
+
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 1,
+      numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+
+    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
+
+    val topNode = Node.emptyNode(nodeIndex = 1)
+    assert(topNode.predict.predict === Double.MinValue)
+    assert(topNode.impurity === -1.0)
+    assert(topNode.isLeaf === false)
+
+    val nodesForGroup = Map((0, Array(topNode)))
+    val treeToNodeToIndexInfo = Map((0, Map(
+      (topNode.id, new RandomForest.NodeIndexInfo(0, None))
+    )))
+    val nodeQueue = new mutable.Queue[(Int, Node)]()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(topNode),
+      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
+
+    // don't enqueue leaf nodes into node queue
+    assert(nodeQueue.isEmpty)
+
+    // set impurity and predict for topNode
+    assert(topNode.predict.predict !== Double.MinValue)
+    assert(topNode.impurity !== -1.0)
+
+    val impurityForRightNode = Gini.calculate(Array(0.0, 3.0, 1.0), 4.0)
+
+    // set impurity and predict for child nodes
+    assert(topNode.leftNode.get.predict.predict === 0.0)
+    assert(topNode.rightNode.get.predict.predict === 1.0)
+    assert(topNode.leftNode.get.impurity ~== 0.44 absTol impurityForRightNode)
+    assert(topNode.rightNode.get.impurity === 0.0)
+  }
   test("Second level node building with vs. without groups") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
     assert(arr.length === 1000)
@@ -442,7 +497,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
     val split = rootNode.split.get
-    assert(split.categories === List(1.0))
+    assert(split.categories === List(0.0))
     assert(split.featureType === Categorical)
     assert(split.threshold === Double.MinValue)
 
@@ -471,7 +526,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val split = rootNode.split.get
     assert(split.categories.length === 1)
-    assert(split.categories.contains(1.0))
+    assert(split.categories.contains(0.0))
     assert(split.featureType === Categorical)
     assert(split.threshold === Double.MinValue)
 

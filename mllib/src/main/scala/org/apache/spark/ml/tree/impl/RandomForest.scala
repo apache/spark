@@ -776,7 +776,7 @@ private[ml] object RandomForest extends Logging {
               val categoryStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
               val centroid = if (categoryStats.count != 0) {
-                categoryStats.predict
+                categoryStats.calculate()
               } else {
                 Double.MaxValue
               }
