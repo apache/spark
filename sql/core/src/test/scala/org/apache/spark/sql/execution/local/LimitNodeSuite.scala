@@ -24,7 +24,7 @@ class LimitNodeSuite extends LocalNodeTest with SharedSQLContext {
   test("basic") {
     checkAnswer(
       testData,
-      node => LimitNode(10, node),
+      node => LimitNode(conf, 10, node),
       testData.limit(10).collect()
     )
   }
@@ -32,7 +32,7 @@ class LimitNodeSuite extends LocalNodeTest with SharedSQLContext {
   test("empty") {
     checkAnswer(
       emptyTestData,
-      node => LimitNode(10, node),
+      node => LimitNode(conf, 10, node),
       emptyTestData.limit(10).collect()
     )
   }

@@ -1331,7 +1331,7 @@ setMethod("countDistinct",
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              listToSeq(jcol))
+                              jcol)
             column(jc)
           })
 
@@ -1348,7 +1348,7 @@ setMethod("concat",
           signature(x = "Column"),
           function(x, ...) {
             jcols <- lapply(list(x, ...), function(x) { x@jc })
-            jc <- callJStatic("org.apache.spark.sql.functions", "concat", listToSeq(jcols))
+            jc <- callJStatic("org.apache.spark.sql.functions", "concat", jcols)
             column(jc)
           })
 
@@ -1366,7 +1366,7 @@ setMethod("greatest",
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
             jcols <- lapply(list(x, ...), function(x) { x@jc })
-            jc <- callJStatic("org.apache.spark.sql.functions", "greatest", listToSeq(jcols))
+            jc <- callJStatic("org.apache.spark.sql.functions", "greatest", jcols)
             column(jc)
           })
 
@@ -1384,7 +1384,7 @@ setMethod("least",
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
             jcols <- lapply(list(x, ...), function(x) { x@jc })
-            jc <- callJStatic("org.apache.spark.sql.functions", "least", listToSeq(jcols))
+            jc <- callJStatic("org.apache.spark.sql.functions", "least", jcols)
             column(jc)
           })
 
@@ -1675,7 +1675,7 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
 #' @export
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
-            jcols <- listToSeq(lapply(list(x, ...), function(x) { x@jc }))
+            jcols <- lapply(list(x, ...), function(x) { x@jc })
             jc <- callJStatic("org.apache.spark.sql.functions", "concat_ws", sep, jcols)
             column(jc)
           })
@@ -1723,7 +1723,7 @@ setMethod("expr", signature(x = "character"),
 #' @export
 setMethod("format_string", signature(format = "character", x = "Column"),
           function(format, x, ...) {
-            jcols <- listToSeq(lapply(list(x, ...), function(arg) { arg@jc }))
+            jcols <- lapply(list(x, ...), function(arg) { arg@jc })
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "format_string",
                               format, jcols)

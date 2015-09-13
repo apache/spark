@@ -121,7 +121,19 @@ if __name__ == "__main__":
         ("checkpointInterval", "checkpoint interval (>= 1)", None),
         ("seed", "random seed", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms", None),
-        ("stepSize", "Step size to be used for each iteration of optimization.", None)]
+        ("stepSize", "Step size to be used for each iteration of optimization.", None),
+        ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
+         "out rows with bad values), or error (which will throw an errror). More options may be " +
+         "added later.", None),
+        ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
+         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0"),
+        ("fitIntercept", "whether to fit an intercept term.", "True"),
+        ("standardization", "whether to standardize the training features before fitting the " +
+         "model.", "True"),
+        ("thresholds", "Thresholds in multi-class classification to adjust the probability of " +
+         "predicting each class. Array must have length equal to the number of classes, with " +
+         "values >= 0. The class with largest value p/t is predicted, where p is the original " +
+         "probability of that class and t is the class' threshold.", None)]
     code = []
     for name, doc, defaultValueStr in shared:
         param_code = _gen_param_header(name, doc, defaultValueStr)

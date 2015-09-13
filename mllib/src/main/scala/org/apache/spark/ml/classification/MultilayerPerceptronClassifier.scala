@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
@@ -32,6 +34,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   with HasSeed with HasMaxIter with HasTol {
   /**
    * Layer sizes including input size and output size.
+   * Default: Array(1, 1)
    * @group param
    */
   final val layers: IntArrayParam = new IntArrayParam(this, "layers",
@@ -50,6 +53,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    * Data is stacked within partitions. If block size is more than remaining data in
    * a partition then it is adjusted to the size of this data.
    * Recommended size is between 10 and 1000.
+   * Default: 128
    * @group expertParam
    */
   final val blockSize: IntParam = new IntParam(this, "blockSize",
@@ -178,6 +182,13 @@ class MultilayerPerceptronClassificationModel private[ml] (
   with Serializable {
 
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)
+
+  /**
+   * Returns layers in a Java List.
+   */
+  private[ml] def javaLayers: java.util.List[Int] = {
+    layers.toList.asJava
+  }
 
   /**
    * Predict label for the given features.

@@ -24,10 +24,17 @@ import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
+  import testImplicits._
+
   override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
 
-  import sqlContext._
-  import sqlContext.implicits._
+  // ORC does not play well with NullType and UDT.
+  override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: NullType => false
+    case _: CalendarIntervalType => false
+    case _: UserDefinedType[_] => false
+    case _ => true
+  }
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
@@ -48,7 +55,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.options(Map(
+        hiveContext.read.options(Map(
           "path" -> file.getCanonicalPath,
           "dataSchema" -> dataSchemaWithPartition.json)).format(dataSourceName).load())
     }

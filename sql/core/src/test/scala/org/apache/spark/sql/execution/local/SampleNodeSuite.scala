@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.nio
+package org.apache.spark.sql.execution.local
 
-import java.net.InetSocketAddress
+class SampleNodeSuite extends LocalNodeTest {
 
-import org.apache.spark.util.Utils
+  import testImplicits._
 
-private[nio] case class ConnectionManagerId(host: String, port: Int) {
-  // DEBUG code
-  Utils.checkHost(host)
-  assert (port > 0)
-
-  def toSocketAddress(): InetSocketAddress = new InetSocketAddress(host, port)
-}
-
-
-private[nio] object ConnectionManagerId {
-  def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
-    new ConnectionManagerId(socketAddress.getHostName, socketAddress.getPort)
+  private def testSample(withReplacement: Boolean): Unit = {
+    test(s"withReplacement: $withReplacement") {
+      val seed = 0L
+      val input = sqlContext.sparkContext.
+        parallelize((1 to 10).map(i => (i, i.toString)), 1). // Should be only 1 partition
+        toDF("key", "value")
+      checkAnswer(
+        input,
+        node => SampleNode(conf, 0.0, 0.3, withReplacement, seed, node),
+        input.sample(withReplacement, 0.3, seed).collect()
+      )
+    }
   }
+
+  testSample(withReplacement = true)
+  testSample(withReplacement = false)
 }
