@@ -475,7 +475,7 @@ abstract class RDD[T: ClassTag](
       seed: Long = Utils.random.nextLong): Array[T] = withScope {
     val numStDev = 10.0
 
-    require(num > 0, "Negative number of elements requested")
+    require(num >= 0, "Negative number of elements requested")
     require(num <= (Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt),
       "Cannot support a sample size > Int.MaxValue - " +
         s"$numStDev * math.sqrt(Int.MaxValue)")
