@@ -872,7 +872,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updateConf = job.getConfiguration
+    val updateConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
     new WholeTextFileRDD(
       this,
       classOf[WholeTextFileInputFormat],
@@ -924,7 +924,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updateConf = job.getConfiguration
+    val updateConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
     new BinaryFileRDD(
       this,
       classOf[StreamInputFormat],
@@ -1106,7 +1106,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updatedConf = job.getConfiguration
+    val updatedConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
 

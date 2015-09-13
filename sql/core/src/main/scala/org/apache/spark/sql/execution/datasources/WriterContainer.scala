@@ -47,7 +47,8 @@ private[sql] abstract class BaseWriterContainer(
 
   protected val dataSchema = relation.dataSchema
 
-  protected val serializableConf = new SerializableConfiguration(job.getConfiguration)
+  protected val serializableConf =
+    new SerializableConfiguration(SparkHadoopUtil.get.getConfigurationFromJobContext(job))
 
   // This UUID is used to avoid output file name collision between different appending write jobs.
   // These jobs may belong to different SparkContext instances. Concrete data source implementations
@@ -89,7 +90,8 @@ private[sql] abstract class BaseWriterContainer(
     // This UUID is sent to executor side together with the serialized `Configuration` object within
     // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
     // unique task output files.
-    job.getConfiguration.set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
+    SparkHadoopUtil.get.getConfigurationFromJobContext(job).
+      set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
 
     // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
     // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
@@ -182,7 +184,9 @@ private[sql] abstract class BaseWriterContainer(
   private def setupIDs(jobId: Int, splitId: Int, attemptId: Int): Unit = {
     this.jobId = SparkHadoopWriter.createJobID(new Date, jobId)
     this.taskId = new TaskID(this.jobId, true, splitId)
+    // scalastyle:off jobcontext
     this.taskAttemptId = new TaskAttemptID(taskId, attemptId)
+    // scalastyle:on jobcontext
   }
 
   private def setupConf(): Unit = {
