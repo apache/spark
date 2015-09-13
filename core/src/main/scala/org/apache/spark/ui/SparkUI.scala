@@ -53,6 +53,7 @@ private[spark] class SparkUI private (
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
+  var appId: String = ""
 
   val stagesTab = new StagesTab(this)
 
@@ -80,6 +81,11 @@ private[spark] class SparkUI private (
     appName = name
   }
 
+  /** Set the app id for this UI. */
+  def setApplicationId(id: String) {
+    appId = id
+  }
+
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop() {
     super.stop()
@@ -99,7 +105,7 @@ private[spark] class SparkUI private (
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
-      id = appName,
+      id = appId,
       name = appName,
       attempts = Seq(new ApplicationAttemptInfo(
         attemptId = None,

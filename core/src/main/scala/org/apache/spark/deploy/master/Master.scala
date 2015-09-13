@@ -945,6 +945,7 @@ private[deploy] class Master(
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
+      ui.setApplicationId(app.id)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
