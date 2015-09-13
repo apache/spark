@@ -3,7 +3,7 @@
 Airflow is a platform to programmatically author, schedule and monitor 
 data pipelines.
 
-When workflows are defined as code, they becomes more maintainable, 
+When workflows are defined as code, they become more maintainable, 
 versionable, testable, and collaborative.
 
 ![img] (http://i.imgur.com/6Gs4hxT.gif)
