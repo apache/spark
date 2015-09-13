@@ -92,17 +92,17 @@ import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
  * To recover from failures, the same stage might need to run multiple times, which are called
  * "attempts". If the TaskScheduler reports that a task failed because a map output file from a
  * previous stage was lost, the DAGScheduler resubmits that lost stage. This is detected through a
- * through a CompletionEvent with FetchFailed, or an ExecutorLost event. The DAGScheduler will wait
- * a small amount of time to see whether other nodes or tasks fail, then resubmit TaskSets for any
- * lost stage(s) that compute the missing tasks. As part of this process, we might also have to
- * create Stage objects for old (finished) stages where we previously cleaned up the Stage object.
- * Since tasks from the old attempt of a stage could still be running, care must be taken to map
- * any events received in the correct Stage object.
+ * CompletionEvent with FetchFailed, or an ExecutorLost event. The DAGScheduler will wait a small
+ * amount of time to see whether other nodes or tasks fail, then resubmit TaskSets for any lost
+ * stage(s) that compute the missing tasks. As part of this process, we might also have to create
+ * Stage objects for old (finished) stages where we previously cleaned up the Stage object. Since
+ * tasks from the old attempt of a stage could still be running, care must be taken to map any
+ * events received in the correct Stage object.
  *
  * Here's a checklist to use when making or reviewing changes to this class:
  *
  *  - All data structures should be cleared when the jobs involving them end to avoid indefinite
- *    accumulation of state in long-runnin programs.
+ *    accumulation of state in long-running programs.
  *
  *  - When adding a new data structure, update `DAGSchedulerSuite.assertDataStructuresEmpty` to
  *    include the new structure. This will help to catch memory leaks.
@@ -911,12 +911,7 @@ class DAGScheduler(
 
     // If the whole stage has already finished, tell the listener and remove it
     if (!finalStage.outputLocs.contains(Nil)) {
-      job.finished(0) = true
-      job.numFinished += 1
-      listener.taskSucceeded(0, mapOutputTracker.getStatistics(dependency))
-      cleanupStateForJobAndIndependentStages(job)
-      listenerBus.post(
-        SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+      markMapStageJobAsFinished(job, mapOutputTracker.getStatistics(dependency))
     }
 
     submitWaitingStages()
@@ -1233,12 +1228,7 @@ class DAGScheduler(
                 if (shuffleStage.mapStageJobs.nonEmpty) {
                   val stats = mapOutputTracker.getStatistics(shuffleStage.shuffleDep)
                   for (job <- shuffleStage.mapStageJobs) {
-                    job.finished(0) = true
-                    job.numFinished += 1
-                    job.listener.taskSucceeded(0, stats)
-                    cleanupStateForJobAndIndependentStages(job)
-                    listenerBus.post(
-                      SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+                    markMapStageJobAsFinished(job, stats)
                   }
                 }
               }
@@ -1597,6 +1587,17 @@ class DAGScheduler(
       }
     }
     Nil
+  }
+
+  /** Mark a map stage job as finished with the given output stats, and report to its listener. */
+  def markMapStageJobAsFinished(job: ActiveJob, stats: MapOutputStatistics): Unit = {
+    // In map stage jobs, we only create a single "task", which is to finish all of the stage
+    // (including reusing any previous map outputs, etc); so we just mark task 0 as done
+    job.finished(0) = true
+    job.numFinished += 1
+    job.listener.taskSucceeded(0, stats)
+    cleanupStateForJobAndIndependentStages(job)
+    listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
   }
 
   def stop() {
