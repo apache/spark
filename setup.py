@@ -48,7 +48,7 @@ setup(
         'flask>=0.10.1',
         'flask-admin==1.2.0',
         'flask-cache>=0.13.1',
-        'flask-login>=0.2.11',
+        'flask-login==0.2.11',
         'flower>=0.7.3',
         'future>=0.15.0',
         'gunicorn>=19.3.0',
