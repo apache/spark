@@ -361,10 +361,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     override protected def initialValue(): Properties = new Properties()
   }
 
+  // Keys of local properties that should not be inherited by children threads
+  private val nonInheritedLocalProperties: HashSet[String] = new HashSet[String]
+
   /**
-   * Keys of local properties that should not be inherited by children threads.
+   * Mark a local property such that its values are never inherited across the thread hierarchy.
    */
-  private[spark] val nonInheritedLocalProperties: HashSet[String] = new HashSet[String]
+  private[spark] def markLocalPropertyNonInherited(key: String): Unit = {
+    nonInheritedLocalProperties += key
+  }
 
   /* ------------------------------------------------------------------------------------- *
    | Initialization. This code initializes the context in a manner that is exception-safe. |

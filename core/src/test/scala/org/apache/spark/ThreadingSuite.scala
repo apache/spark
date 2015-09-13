@@ -214,7 +214,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
 
   test("inheritance exclusions (SPARK-10548)") {
     sc = new SparkContext("local", "test")
-    sc.nonInheritedLocalProperties.add("do-not-inherit-me")
+    sc.markLocalPropertyNonInherited("do-not-inherit-me")
     sc.setLocalProperty("do-inherit-me", "parent")
     sc.setLocalProperty("do-not-inherit-me", "parent")
     var throwable: Option[Throwable] = None
