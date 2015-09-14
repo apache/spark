@@ -123,6 +123,16 @@ private[parquet] class CatalystRowConverter(
     updater: ParentContainerUpdater)
   extends CatalystGroupConverter(updater) with Logging {
 
+  assert(
+    parquetType.getFieldCount == catalystType.length,
+    s"""Field counts of the Parquet schema and the Catalyst schema don't match:
+       |
+       |Parquet schema:
+       |$parquetType
+       |Catalyst schema:
+       |${catalystType.prettyJson}
+     """.stripMargin)
+
   logDebug(
     s"""Building row converter for the following schema:
        |

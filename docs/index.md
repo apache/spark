@@ -90,7 +90,6 @@ options for deployment:
   * [Spark SQL and DataFrames](sql-programming-guide.html): support for structured data and relational queries
   * [MLlib](mllib-guide.html): built-in machine learning library
   * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
-  * [Bagel (Pregel on Spark)](bagel-programming-guide.html): older, simple graph processing model
 
 **API Docs:**
 

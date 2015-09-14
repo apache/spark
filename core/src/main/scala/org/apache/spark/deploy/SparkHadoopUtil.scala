@@ -192,7 +192,9 @@ class SparkHadoopUtil extends Logging {
    * while it's interface in Hadoop 2.+.
    */
   def getConfigurationFromJobContext(context: JobContext): Configuration = {
+    // scalastyle:off jobconfig
     val method = context.getClass.getMethod("getConfiguration")
+    // scalastyle:on jobconfig
     method.invoke(context).asInstanceOf[Configuration]
   }
 
@@ -204,7 +206,9 @@ class SparkHadoopUtil extends Logging {
    */
   def getTaskAttemptIDFromTaskAttemptContext(
       context: MapReduceTaskAttemptContext): MapReduceTaskAttemptID = {
+    // scalastyle:off jobconfig
     val method = context.getClass.getMethod("getTaskAttemptID")
+    // scalastyle:on jobconfig
     method.invoke(context).asInstanceOf[MapReduceTaskAttemptID]
   }
 
