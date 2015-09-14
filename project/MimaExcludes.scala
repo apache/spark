@@ -73,7 +73,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticAggregator.count")
+          "org.apache.spark.ml.classification.LogisticAggregator.count"),
           // SQL execution is considered private.
         excludePackage("org.apache.spark.sql.execution"),
         // The old JSON RDD is removed in favor of streaming Jackson
