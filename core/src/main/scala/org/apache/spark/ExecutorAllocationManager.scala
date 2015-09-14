@@ -235,7 +235,7 @@ private[spark] class ExecutorAllocationManager(
   /**
    * Change the value of numExecutorsTarget.
    */
-  def reSetNumExecutorsTarget(): Unit ={
+  def reSetNumExecutorsTarget(): Unit = {
    logDebug(s"Now reset the value of numExecutorsTarget.")
     numExecutorsTarget = conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
   }
