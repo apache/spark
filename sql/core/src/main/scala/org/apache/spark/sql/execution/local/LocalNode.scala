@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.{SQLConf, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.StructType
 
@@ -69,6 +69,18 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
    */
   def close(): Unit
 
+  /** Specifies whether this operator outputs UnsafeRows */
+  def outputsUnsafeRows: Boolean = false
+
+  /** Specifies whether this operator is capable of processing UnsafeRows */
+  def canProcessUnsafeRows: Boolean = false
+
+  /**
+   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
+   * that are not UnsafeRows).
+   */
+  def canProcessSafeRows: Boolean = true
+
   /**
    * Returns the content through the [[Iterator]] interface.
    */
@@ -89,6 +101,28 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
       close()
     }
     result
+  }
+
+  protected def newProjection(
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute]): Projection = {
+    log.debug(
+      s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
+    if (codegenEnabled) {
+      try {
+        GenerateProjection.generate(expressions, inputSchema)
+      } catch {
+        case NonFatal(e) =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate projection, fallback to interpret", e)
+            new InterpretedProjection(expressions, inputSchema)
+          }
+      }
+    } else {
+      new InterpretedProjection(expressions, inputSchema)
+    }
   }
 
   protected def newMutableProjection(
@@ -113,6 +147,25 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
     }
   }
 
+  protected def newPredicate(
+      expression: Expression,
+      inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
+    if (codegenEnabled) {
+      try {
+        GeneratePredicate.generate(expression, inputSchema)
+      } catch {
+        case NonFatal(e) =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate predicate, fallback to interpreted", e)
+            InterpretedPredicate.create(expression, inputSchema)
+          }
+      }
+    } else {
+      InterpretedPredicate.create(expression, inputSchema)
+    }
+  }
 }
 
 

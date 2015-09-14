@@ -52,15 +52,14 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(ns === 0)
     assert(fromJulianDay(d, ns) == 0L)
 
-    val t = Timestamp.valueOf("2015-06-11 10:10:10.100")
-    val (d1, ns1) = toJulianDay(fromJavaTimestamp(t))
-    val t1 = toJavaTimestamp(fromJulianDay(d1, ns1))
-    assert(t.equals(t1))
-
-    val t2 = Timestamp.valueOf("2015-06-11 20:10:10.100")
-    val (d2, ns2) = toJulianDay(fromJavaTimestamp(t2))
-    val t22 = toJavaTimestamp(fromJulianDay(d2, ns2))
-    assert(t2.equals(t22))
+    Seq(Timestamp.valueOf("2015-06-11 10:10:10.100"),
+      Timestamp.valueOf("2015-06-11 20:10:10.100"),
+      Timestamp.valueOf("1900-06-11 20:10:10.100")).foreach { t =>
+      val (d, ns) = toJulianDay(fromJavaTimestamp(t))
+      assert(ns > 0)
+      val t1 = toJavaTimestamp(fromJulianDay(d, ns))
+      assert(t.equals(t1))
+    }
   }
 
   test("SPARK-6785: java date conversion before and after epoch") {
