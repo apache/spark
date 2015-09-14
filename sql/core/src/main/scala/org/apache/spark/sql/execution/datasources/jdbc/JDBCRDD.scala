@@ -275,6 +275,11 @@ private[sql] class JDBCRDD(
    */
   private def compileFilter(f: Filter): String = f match {
     case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+    // Since the null-safe equality operator is not a standard SQL operator,
+    // This was written as using is-null and normal equality.
+    case EqualNullSafe(attr, value) =>
+      s"(NOT ($attr <> ${compileValue(value)} OR $attr IS NULL OR " +
+        s"${compileValue(value)} IS NULL) OR ($attr IS NULL AND ${compileValue(value)} IS NULL))"
     case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
     case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
     case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
