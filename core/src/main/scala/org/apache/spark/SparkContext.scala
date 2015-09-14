@@ -351,8 +351,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
-      // the those of the children threads, which has confusing semantics (SPARK-10564).
-      SerializationUtils.clone(parent).asInstanceOf[Properties]
+      // the those of the children threads, which has confusing semantics (SPARK-10563).
+      if (conf.get("spark.localProperties.clone", "false").toBoolean) {
+        SerializationUtils.clone(parent).asInstanceOf[Properties]
+      } else {
+        new Properties(parent)
+      }
     }
     override protected def initialValue(): Properties = new Properties()
   }

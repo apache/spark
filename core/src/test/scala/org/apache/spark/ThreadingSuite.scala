@@ -214,6 +214,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
 
   test("mutation in parent local property does not affect child (SPARK-10563)") {
     sc = new SparkContext("local", "test")
+    sc.conf.set("spark.localProperties.clone", "true")
     val originalTestValue: String = "original-value"
     var threadTestValue: String = null
     sc.setLocalProperty("test", originalTestValue)
