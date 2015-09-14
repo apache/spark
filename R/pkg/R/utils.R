@@ -361,16 +361,6 @@ numToInt <- function(num) {
   as.integer(num)
 }
 
-# create a Seq in JVM
-toSeq <- function(...) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", list(...))
-}
-
-# create a Seq in JVM from a list
-listToSeq <- function(l) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", l)
-}
-
 # Utility function to recursively traverse the Abstract Syntax Tree (AST) of a
 # user defined function (UDF), and to examine variables in the UDF to decide
 # if their values should be included in the new function environment.

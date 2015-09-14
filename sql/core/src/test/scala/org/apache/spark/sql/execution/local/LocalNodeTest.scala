@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.local
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.{DataFrame, Row, SQLConf}
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
-class LocalNodeTest extends SparkFunSuite {
+class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
+
+  def conf: SQLConf = sqlContext.conf
 
   /**
    * Runs the LocalNode and makes sure the answer matches the expected result.
@@ -92,6 +94,7 @@ class LocalNodeTest extends SparkFunSuite {
 
   protected def dataFrameToSeqScanNode(df: DataFrame): SeqScanNode = {
     new SeqScanNode(
+      conf,
       df.queryExecution.sparkPlan.output,
       df.queryExecution.toRdd.map(_.copy()).collect())
   }
