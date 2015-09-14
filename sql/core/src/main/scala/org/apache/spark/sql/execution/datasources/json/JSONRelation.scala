@@ -81,7 +81,7 @@ private[sql] class JSONRelation(
 
   private def createBaseRdd(inputPaths: Array[FileStatus]): RDD[String] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = job.getConfiguration
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
     val paths = inputPaths.map(_.getPath)
 

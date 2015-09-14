@@ -46,7 +46,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @note vertex ids are unique.
    * @return an RDD containing the vertices in this graph
    */
-  @transient val vertices: VertexRDD[VD]
+  val vertices: VertexRDD[VD]
 
   /**
    * An RDD containing the edges and their associated attributes.  The entries in the RDD contain
@@ -59,7 +59,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * along with their vertex data.
    *
    */
-  @transient val edges: EdgeRDD[ED]
+  val edges: EdgeRDD[ED]
 
   /**
    * An RDD containing the edge triplets, which are edges along with the vertex data associated with
@@ -77,7 +77,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * val numInvalid = graph.triplets.map(e => if (e.src.data == e.dst.data) 1 else 0).sum
    * }}}
    */
-  @transient val triplets: RDD[EdgeTriplet[VD, ED]]
+  val triplets: RDD[EdgeTriplet[VD, ED]]
 
   /**
    * Caches the vertices and edges associated with this graph at the specified storage level,
