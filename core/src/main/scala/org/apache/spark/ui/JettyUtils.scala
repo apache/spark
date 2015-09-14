@@ -68,6 +68,8 @@ private[spark] object JettyUtils extends Logging {
             response.setStatus(HttpServletResponse.SC_OK)
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+            // SPARK-10589 avoid frame-related click-jacking vulnerability
+            response.setHeader("X-Frame-Options", "SAMEORIGIN")
             // scalastyle:off println
             response.getWriter.println(servletParams.extractFn(result))
             // scalastyle:on println
