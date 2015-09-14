@@ -175,6 +175,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Extracts a vocabulary from document collections and generates a :py:attr:`CountVectorizerModel`.
     >>> df = sqlContext.createDataFrame(
     ...    [(0, ["a", "b", "c"]), (1, ["a", "b", "b", "c", "a"])],
@@ -292,6 +294,8 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
 
 class CountVectorizerModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by CountVectorizer.
     """
 
