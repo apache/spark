@@ -231,7 +231,7 @@ private[spark] class ExecutorAllocationManager(
     }
     executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
   }
-  
+
   /**
    * Change the value of numExecutorsTarget.
    */
