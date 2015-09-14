@@ -653,25 +653,25 @@ class DataFrame(object):
         guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         >>> df.describe().show()
-        +-------+---+
-        |summary|age|
-        +-------+---+
-        |  count|  2|
-        |   mean|3.5|
-        | stddev|1.5|
-        |    min|  2|
-        |    max|  5|
-        +-------+---+
+        +-------+------------------+
+        |summary|               age|
+        +-------+------------------+
+        |  count|                 2|
+        |   mean|               3.5|
+        | stddev|2.1213203435596424|
+        |    min|                 2|
+        |    max|                 5|
+        +-------+------------------+
         >>> df.describe(['age', 'name']).show()
-        +-------+---+-----+
-        |summary|age| name|
-        +-------+---+-----+
-        |  count|  2|    2|
-        |   mean|3.5| null|
-        | stddev|1.5| null|
-        |    min|  2|Alice|
-        |    max|  5|  Bob|
-        +-------+---+-----+
+        +-------+------------------+-----+
+        |summary|               age| name|
+        +-------+------------------+-----+
+        |  count|                 2|    2|
+        |   mean|               3.5| null|
+        | stddev|2.1213203435596424| null|
+        |    min|                 2|Alice|
+        |    max|                 5|  Bob|
+        +-------+------------------+-----+
         """
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]

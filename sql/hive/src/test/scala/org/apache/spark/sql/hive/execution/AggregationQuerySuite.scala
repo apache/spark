@@ -507,41 +507,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       }.getMessage
       assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
     }
-
-    // TODO: once we support Hive UDAF in the new interface,
-    // we can remove the following two tests.
-    withSQLConf("spark.sql.useAggregate2" -> "true") {
-      val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
-          """
-            |SELECT
-            |  key,
-            |  mydoublesum(value + 1.5 * key),
-            |  stddev_samp(value)
-            |FROM agg1
-            |GROUP BY key
-          """.stripMargin).collect()
-      }.getMessage
-      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-      // This will fall back to the old aggregate
-      val newAggregateOperators = sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  sum(value + 1.5 * key),
-          |  stddev_samp(value)
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin).queryExecution.executedPlan.collect {
-        case agg: aggregate.SortBasedAggregate => agg
-        case agg: aggregate.TungstenAggregate => agg
-      }
-      val message =
-        "We should fallback to the old aggregation code path if " +
-          "there is any aggregate function that cannot be converted to the new interface."
-      assert(newAggregateOperators.isEmpty, message)
-    }
   }
 }
 

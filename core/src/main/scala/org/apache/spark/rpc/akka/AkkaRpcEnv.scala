@@ -87,9 +87,9 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     @volatile var endpointRef: AkkaRpcEndpointRef = null
-    // Use lazy because the Actor needs to use `endpointRef`.
+    // Use defered function because the Actor needs to use `endpointRef`.
     // So `actorRef` should be created after assigning `endpointRef`.
-    lazy val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
+    val actorRef = () => actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
       assert(endpointRef != null)
 
@@ -272,13 +272,20 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
 }
 
 private[akka] class AkkaRpcEndpointRef(
-    @transient defaultAddress: RpcAddress,
-    @transient _actorRef: => ActorRef,
-    @transient conf: SparkConf,
-    @transient initInConstructor: Boolean = true)
+    @transient private val defaultAddress: RpcAddress,
+    @transient private val _actorRef: () => ActorRef,
+    conf: SparkConf,
+    initInConstructor: Boolean)
   extends RpcEndpointRef(conf) with Logging {
 
-  lazy val actorRef = _actorRef
+  def this(
+      defaultAddress: RpcAddress,
+      _actorRef: ActorRef,
+      conf: SparkConf) = {
+    this(defaultAddress, () => _actorRef, conf, true)
+  }
+
+  lazy val actorRef = _actorRef()
 
   override lazy val address: RpcAddress = {
     val akkaAddress = actorRef.path.address
