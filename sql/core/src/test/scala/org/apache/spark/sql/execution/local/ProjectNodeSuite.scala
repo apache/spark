@@ -26,7 +26,7 @@ class ProjectNodeSuite extends LocalNodeTest with SharedSQLContext {
     val columns = Seq(output(1), output(0))
     checkAnswer(
       testData,
-      node => ProjectNode(columns, node),
+      node => ProjectNode(conf, columns, node),
       testData.select("value", "key").collect()
     )
   }
@@ -36,7 +36,7 @@ class ProjectNodeSuite extends LocalNodeTest with SharedSQLContext {
     val columns = Seq(output(1), output(0))
     checkAnswer(
       emptyTestData,
-      node => ProjectNode(columns, node),
+      node => ProjectNode(conf, columns, node),
       emptyTestData.select("value", "key").collect()
     )
   }

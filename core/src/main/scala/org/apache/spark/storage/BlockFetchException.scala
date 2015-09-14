@@ -15,27 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.nio
+package org.apache.spark.storage
 
-import java.nio.ByteBuffer
+import org.apache.spark.SparkException
 
-import scala.collection.mutable.ArrayBuffer
-
-private[nio]
-class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
-
-  val size: Int = if (buffer == null) 0 else buffer.remaining
-
-  lazy val buffers: ArrayBuffer[ByteBuffer] = {
-    val ab = new ArrayBuffer[ByteBuffer]()
-    ab += header.buffer
-    if (buffer != null) {
-      ab += buffer
-    }
-    ab
-  }
-
-  override def toString: String = {
-    "" + this.getClass.getSimpleName + " (id = " + header.id + ", size = " + size + ")"
-  }
-}
+private[spark]
+case class BlockFetchException(messages: String, throwable: Throwable)
+  extends SparkException(messages, throwable)

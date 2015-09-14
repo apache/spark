@@ -49,7 +49,7 @@ infer_type <- function(x) {
     stopifnot(length(x) > 0)
     names <- names(x)
     if (is.null(names)) {
-      list(type = "array", elementType = infer_type(x[[1]]), containsNull = TRUE)
+      paste0("array<", infer_type(x[[1]]), ">")
     } else {
       # StructType
       types <- lapply(x, infer_type)
@@ -59,7 +59,7 @@ infer_type <- function(x) {
       do.call(structType, fields)
     }
   } else if (length(x) > 1) {
-    list(type = "array", elementType = type, containsNull = TRUE)
+    paste0("array<", infer_type(x[[1]]), ">")
   } else {
     type
   }

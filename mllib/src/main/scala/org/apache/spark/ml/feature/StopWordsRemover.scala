@@ -98,6 +98,7 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * the stop words set to be filtered out
+   * Default: [[StopWords.English]]
    * @group param
    */
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
@@ -110,6 +111,7 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * whether to do a case sensitive comparison over the stop words
+   * Default: false
    * @group param
    */
   val caseSensitive: BooleanParam = new BooleanParam(this, "caseSensitive",
