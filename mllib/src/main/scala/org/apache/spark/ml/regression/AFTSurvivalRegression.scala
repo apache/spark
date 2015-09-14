@@ -38,7 +38,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for Accelerated Failure Time regression.
  */
-private[regression] trait AFTRegressionParams extends Params
+private[regression] trait AFTSurvivalRegressionParams extends Params
   with HasFeaturesCol with HasLabelCol with HasPredictionCol with HasMaxIter
   with HasTol with HasFitIntercept {
 
@@ -82,8 +82,8 @@ private[regression] trait AFTRegressionParams extends Params
 }
 
 @Experimental
-class AFTRegression(override val uid: String)
-  extends Estimator[AFTRegressionModel] with AFTRegressionParams with Logging {
+class AFTSurvivalRegression(override val uid: String)
+  extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with Logging {
 
   def this() = this(Identifiable.randomUID("aftReg"))
 
@@ -136,7 +136,7 @@ class AFTRegression(override val uid: String)
     }
   }
 
-  override def fit(dataset: DataFrame): AFTRegressionModel = {
+  override def fit(dataset: DataFrame): AFTSurvivalRegressionModel = {
     validateAndTransformSchema(dataset.schema, fitting = true)
     val instances = extractCensoredLabeledPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -179,7 +179,7 @@ class AFTRegression(override val uid: String)
     val realWeights = Vectors.dense(weights.slice(2, weights.length))
     val intercept = weights(1)
     val scale = math.exp(weights(0))
-    val model = new AFTRegressionModel(uid, realWeights, intercept, scale)
+    val model = new AFTSurvivalRegressionModel(uid, realWeights, intercept, scale)
     copyValues(model.setParent(this))
   }
 
@@ -187,20 +187,20 @@ class AFTRegression(override val uid: String)
     validateAndTransformSchema(schema, fitting = true)
   }
 
-  override def copy(extra: ParamMap): AFTRegression = defaultCopy(extra)
+  override def copy(extra: ParamMap): AFTSurvivalRegression = defaultCopy(extra)
 }
 
 /**
  * :: Experimental ::
- * Model produced by [[AFTRegression]].
+ * Model produced by [[AFTSurvivalRegression]].
  */
 @Experimental
-class AFTRegressionModel private[ml] (
+class AFTSurvivalRegressionModel private[ml] (
     override val uid: String,
     val weights: Vector,
     val intercept: Double,
     val scale: Double)
-  extends Model[AFTRegressionModel] with AFTRegressionParams {
+  extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams {
 
   /** @group setParam */
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -231,8 +231,8 @@ class AFTRegressionModel private[ml] (
     validateAndTransformSchema(schema, fitting = false)
   }
 
-  override def copy(extra: ParamMap): AFTRegressionModel = {
-    copyValues(new AFTRegressionModel(uid, weights, intercept, scale), extra).setParent(parent)
+  override def copy(extra: ParamMap): AFTSurvivalRegressionModel = {
+    copyValues(new AFTSurvivalRegressionModel(uid, weights, intercept, scale), extra).setParent(parent)
   }
 }
 

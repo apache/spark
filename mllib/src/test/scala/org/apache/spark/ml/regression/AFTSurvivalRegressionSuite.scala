@@ -34,7 +34,7 @@ case class AFTExamplePoint(stage: Double, time: Double, age: Int, year: Int, cen
 
 case class AFTPoint(features: Vector, censored: Double, label: Double)
 
-class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var datasetUnivariate: DataFrame = _
   @transient var datasetMultivariate: DataFrame = _
@@ -50,13 +50,13 @@ class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new AFTRegression)
-    val model = new AFTRegressionModel("aftReg", Vectors.dense(0.0), 0.0, 0.0)
+    ParamsSuite.checkParams(new AFTSurvivalRegression)
+    val model = new AFTSurvivalRegressionModel("aftReg", Vectors.dense(0.0), 0.0, 0.0)
     ParamsSuite.checkParams(model)
   }
 
   test("aft regression: default params") {
-    val aftr = new AFTRegression
+    val aftr = new AFTSurvivalRegression
     assert(aftr.getLabelCol === "label")
     assert(aftr.getFeaturesCol === "features")
     assert(aftr.getPredictionCol === "prediction")
@@ -114,7 +114,7 @@ class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("aft regression with univariate") {
-    val trainer = new AFTRegression
+    val trainer = new AFTSurvivalRegression
     val model = trainer.fit(datasetUnivariate)
 
     /*
@@ -156,7 +156,7 @@ class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("aft regression with multivariate") {
-    val trainer = new AFTRegression
+    val trainer = new AFTSurvivalRegression
     val model = trainer.fit(datasetMultivariate)
 
     /*
