@@ -119,27 +119,35 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     val nums = sc.parallelize(1 to 2, 2)
     val sem = new Semaphore(0)
     ThreadingSuiteState.clear()
+    var throwable: Option[Throwable] = None
     for (i <- 0 until 2) {
       new Thread {
         override def run() {
-          val ans = nums.map(number => {
-            val running = ThreadingSuiteState.runningThreads
-            running.getAndIncrement()
-            val time = System.currentTimeMillis()
-            while (running.get() != 4 && System.currentTimeMillis() < time + 1000) {
-              Thread.sleep(100)
-            }
-            if (running.get() != 4) {
-              ThreadingSuiteState.failed.set(true)
-            }
-            number
-          }).collect()
-          assert(ans.toList === List(1, 2))
-          sem.release()
+          try {
+            val ans = nums.map(number => {
+              val running = ThreadingSuiteState.runningThreads
+              running.getAndIncrement()
+              val time = System.currentTimeMillis()
+              while (running.get() != 4 && System.currentTimeMillis() < time + 1000) {
+                Thread.sleep(100)
+              }
+              if (running.get() != 4) {
+                ThreadingSuiteState.failed.set(true)
+              }
+              number
+            }).collect()
+            assert(ans.toList === List(1, 2))
+          } catch {
+            case t: Throwable =>
+              throwable = Some(t)
+          } finally {
+            sem.release()
+          }
         }
       }.start()
     }
     sem.acquire(2)
+    throwable.foreach { t => throw t }
     if (ThreadingSuiteState.failed.get()) {
       logError("Waited 1 second without seeing runningThreads = 4 (it was " +
                 ThreadingSuiteState.runningThreads.get() + "); failing test")
@@ -150,13 +158,19 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
   test("set local properties in different thread") {
     sc = new SparkContext("local", "test")
     val sem = new Semaphore(0)
-
+    var throwable: Option[Throwable] = None
     val threads = (1 to 5).map { i =>
       new Thread() {
         override def run() {
-          sc.setLocalProperty("test", i.toString)
-          assert(sc.getLocalProperty("test") === i.toString)
-          sem.release()
+          try {
+            sc.setLocalProperty("test", i.toString)
+            assert(sc.getLocalProperty("test") === i.toString)
+          } catch {
+            case t: Throwable =>
+              throwable = Some(t)
+          } finally {
+            sem.release()
+          }
         }
       }
     }
@@ -164,6 +178,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     threads.foreach(_.start())
 
     sem.acquire(5)
+    throwable.foreach { t => throw t }
     assert(sc.getLocalProperty("test") === null)
   }
 
@@ -171,14 +186,20 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     sc = new SparkContext("local", "test")
     sc.setLocalProperty("test", "parent")
     val sem = new Semaphore(0)
-
+    var throwable: Option[Throwable] = None
     val threads = (1 to 5).map { i =>
       new Thread() {
         override def run() {
-          assert(sc.getLocalProperty("test") === "parent")
-          sc.setLocalProperty("test", i.toString)
-          assert(sc.getLocalProperty("test") === i.toString)
-          sem.release()
+          try {
+            assert(sc.getLocalProperty("test") === "parent")
+            sc.setLocalProperty("test", i.toString)
+            assert(sc.getLocalProperty("test") === i.toString)
+          } catch {
+            case t: Throwable =>
+              throwable = Some(t)
+          } finally {
+            sem.release()
+          }
         }
       }
     }
@@ -186,6 +207,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     threads.foreach(_.start())
 
     sem.acquire(5)
+    throwable.foreach { t => throw t }
     assert(sc.getLocalProperty("test") === "parent")
     assert(sc.getLocalProperty("Foo") === null)
   }
@@ -194,6 +216,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     val jobStarted = new Semaphore(0)
     val jobEnded = new Semaphore(0)
     @volatile var jobResult: JobResult = null
+    var throwable: Option[Throwable] = None
 
     sc = new SparkContext("local", "test")
     sc.setJobGroup("originalJobGroupId", "description")
@@ -210,14 +233,19 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     // Create a new thread which will inherit the current thread's properties
     val thread = new Thread() {
       override def run(): Unit = {
-        assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "originalJobGroupId")
-        // Sleeps for a total of 10 seconds, but allows cancellation to interrupt the task
         try {
-          sc.parallelize(1 to 100).foreach { x =>
-            Thread.sleep(100)
+          assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "originalJobGroupId")
+          // Sleeps for a total of 10 seconds, but allows cancellation to interrupt the task
+          try {
+            sc.parallelize(1 to 100).foreach { x =>
+              Thread.sleep(100)
+            }
+          } catch {
+            case s: SparkException => // ignored so that we don't print noise in test logs
           }
         } catch {
-          case s: SparkException => // ignored so that we don't print noise in test logs
+          case t: Throwable =>
+            throwable = Some(t)
         }
       }
     }
@@ -230,6 +258,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     // modification of the properties object should not affect the properties of running jobs
     sc.cancelJobGroup("originalJobGroupId")
     jobEnded.tryAcquire(10, TimeUnit.SECONDS)
+    throwable.foreach { t => throw t }
     assert(jobResult.isInstanceOf[JobFailed])
   }
 }

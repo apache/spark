@@ -68,6 +68,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     // Train a model
     val lda = new LDA()
     lda.setK(k)
+      .setOptimizer(new EMLDAOptimizer)
       .setDocConcentration(topicSmoothing)
       .setTopicConcentration(termSmoothing)
       .setMaxIterations(5)
@@ -423,7 +424,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val k = 2
     val docs = sc.parallelize(toyData)
     val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
-      .setGammaShape(100).setOptimzeAlpha(true).setSampleWithReplacement(false)
+      .setGammaShape(100).setOptimizeDocConcentration(true).setSampleWithReplacement(false)
     val lda = new LDA().setK(k)
       .setDocConcentration(1D / k)
       .setTopicConcentration(0.01)

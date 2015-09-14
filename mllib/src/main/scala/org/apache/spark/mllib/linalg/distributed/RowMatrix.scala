@@ -47,8 +47,8 @@ import org.apache.spark.storage.StorageLevel
  */
 @Since("1.0.0")
 @Experimental
-class RowMatrix(
-    val rows: RDD[Vector],
+class RowMatrix @Since("1.0.0") (
+    @Since("1.0.0") val rows: RDD[Vector],
     private var nRows: Long,
     private var nCols: Int) extends DistributedMatrix with Logging {
 
@@ -519,6 +519,7 @@ class RowMatrix(
    * @param computeQ whether to computeQ
    * @return QRDecomposition(Q, R), Q = null if computeQ = false.
    */
+  @Since("1.5.0")
   def tallSkinnyQR(computeQ: Boolean = false): QRDecomposition[RowMatrix, Matrix] = {
     val col = numCols().toInt
     // split rows horizontally into smaller matrices, and compute QR for each of them
@@ -677,7 +678,8 @@ object RowMatrix {
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
    */
-  private def dspr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
+  // TODO: SPARK-10491 - move this method to linalg.BLAS
+  private[spark] def dspr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
     // TODO: Find a better home (breeze?) for this method.
     val n = v.size
     v match {

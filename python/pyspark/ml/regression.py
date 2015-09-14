@@ -28,7 +28,8 @@ __all__ = ['DecisionTreeRegressor', 'DecisionTreeRegressionModel', 'GBTRegressor
 
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                       HasRegParam, HasTol):
+                       HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
+                       HasStandardization):
     """
     Linear regression.
 
@@ -63,38 +64,30 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     TypeError: Method setParams forces keyword arguments.
     """
 
-    # a placeholder to make it appear in the generated doc
-    elasticNetParam = \
-        Param(Params._dummy(), "elasticNetParam",
-              "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-              "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6):
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                 standardization=True):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                 standardization=True)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
-        #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty
-        #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
-        self.elasticNetParam = \
-            Param(self, "elasticNetParam",
-                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty " +
-                  "is an L2 penalty. For alpha = 1, it is an L1 penalty.")
-        self._setDefault(maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6):
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                  standardization=True):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                  standardization=True)
         Sets params for linear regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -102,19 +95,6 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
 
     def _create_model(self, java_model):
         return LinearRegressionModel(java_model)
-
-    def setElasticNetParam(self, value):
-        """
-        Sets the value of :py:attr:`elasticNetParam`.
-        """
-        self._paramMap[self.elasticNetParam] = value
-        return self
-
-    def getElasticNetParam(self):
-        """
-        Gets the value of elasticNetParam or its default value.
-        """
-        return self.getOrDefault(self.elasticNetParam)
 
 
 class LinearRegressionModel(JavaModel):

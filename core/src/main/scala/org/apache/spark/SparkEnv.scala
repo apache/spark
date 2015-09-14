@@ -33,7 +33,6 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
-import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcEnv}
 import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.{OutputCommitCoordinator, LiveListenerBus}
@@ -326,15 +325,7 @@ object SparkEnv extends Logging {
 
     val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)
 
-    val blockTransferService =
-      conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
-        case "netty" =>
-          new NettyBlockTransferService(conf, securityManager, numUsableCores)
-        case "nio" =>
-          logWarning("NIO-based block transfer service is deprecated, " +
-            "and will be removed in Spark 1.6.0.")
-          new NioBlockTransferService(conf, securityManager)
-      }
+    val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,

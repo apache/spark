@@ -68,8 +68,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   // if we find that it's okay.
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
-  private val displayPeakExecutionMemory =
-    parent.conf.getOption("spark.sql.unsafe.enabled").exists(_.toBoolean)
+  private val displayPeakExecutionMemory = parent.conf.getBoolean("spark.sql.unsafe.enabled", true)
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
@@ -369,7 +368,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val peakExecutionMemory = validTasks.map { case TaskUIData(info, _, _) =>
             info.accumulables
               .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-              .map { acc => acc.value.toLong }
+              .map { acc => acc.update.getOrElse("0").toLong }
               .getOrElse(0L)
               .toDouble
           }
@@ -1193,8 +1192,7 @@ private[ui] class TaskPagedTable(
     desc: Boolean) extends PagedTable[TaskTableRowData] {
 
   // We only track peak memory used for unsafe operators
-  private val displayPeakExecutionMemory =
-    conf.getOption("spark.sql.unsafe.enabled").exists(_.toBoolean)
+  private val displayPeakExecutionMemory = conf.getBoolean("spark.sql.unsafe.enabled", true)
 
   override def tableId: String = "task-table"
 
