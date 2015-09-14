@@ -100,7 +100,12 @@ private[spark] class SparkUI private (
   private[spark] def appUIAddress = s"http://$appUIHostPort"
 
   def getSparkUI(appId: String): Option[SparkUI] = {
-    if (appId == appName) Some(this) else None
+    // SPARK-10571: appId == this.appName is a backwards-compatibility rule
+    if (appId == this.appId || appId == this.appName) {
+      Some(this)
+    } else {
+      None
+    }
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {

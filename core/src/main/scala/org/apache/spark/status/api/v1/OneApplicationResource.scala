@@ -24,7 +24,9 @@ private[v1] class OneApplicationResource(uiRoot: UIRoot) {
 
   @GET
   def getApp(@PathParam("appId") appId: String): ApplicationInfo = {
-    val apps = uiRoot.getApplicationInfoList.find { _.id == appId }
+    // SPARK-10571: appId and appName are mixed up in previous release,
+    // To ensure backwards-compatibility, here we find both app.id == appId and app.name == appId
+    val apps = uiRoot.getApplicationInfoList.find { app => app.id == appId || app.name == appId }
     apps.getOrElse(throw new NotFoundException("unknown app: " + appId))
   }
 

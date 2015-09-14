@@ -120,10 +120,10 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         tableRowText should contain (StorageLevels.DISK_ONLY.description)
       }
 
-      val storageJson = getJson(ui, "storage/rdd")
+      val storageJson = getJson(sc, ui, "storage/rdd")
       storageJson.children.length should be (1)
       (storageJson \ "storageLevel").extract[String] should be (StorageLevels.DISK_ONLY.description)
-      val rddJson = getJson(ui, "storage/rdd/0")
+      val rddJson = getJson(sc, ui, "storage/rdd/0")
       (rddJson  \ "storageLevel").extract[String] should be (StorageLevels.DISK_ONLY.description)
 
       rdd.unpersist()
@@ -139,11 +139,11 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         tableRowText should contain (StorageLevels.MEMORY_ONLY.description)
       }
 
-      val updatedStorageJson = getJson(ui, "storage/rdd")
+      val updatedStorageJson = getJson(sc, ui, "storage/rdd")
       updatedStorageJson.children.length should be (1)
       (updatedStorageJson \ "storageLevel").extract[String] should be (
         StorageLevels.MEMORY_ONLY.description)
-      val updatedRddJson = getJson(ui, "storage/rdd/0")
+      val updatedRddJson = getJson(sc, ui, "storage/rdd/0")
       (updatedRddJson  \ "storageLevel").extract[String] should be (
         StorageLevels.MEMORY_ONLY.description)
     }
@@ -160,7 +160,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         find(id("active")) should be(None)  // Since we hide empty tables
         find(id("failed")).get.text should be("Failed Stages (1)")
       }
-      val stageJson = getJson(sc.ui.get, "stages")
+      val stageJson = getJson(sc, sc.ui.get, "stages")
       stageJson.children.length should be (1)
       (stageJson \ "status").extract[String] should be (StageStatus.FAILED.name())
 
@@ -178,7 +178,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         find(id("failed")).get.text should be("Failed Stages (1)")
       }
 
-      val updatedStageJson = getJson(sc.ui.get, "stages")
+      val updatedStageJson = getJson(sc, sc.ui.get, "stages")
       updatedStageJson should be (stageJson)
     }
   }
@@ -224,7 +224,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         tableHeaders should contain ("Job Id (Job Group)")
       }
 
-      val jobJson = getJson(sc.ui.get, "jobs")
+      val jobJson = getJson(sc, sc.ui.get, "jobs")
       for {
         job @ JObject(_) <- jobJson
         JInt(jobId) <- job \ "jobId"
@@ -270,13 +270,13 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         // of completed tasks may be higher:
         find(cssSelector(".progress-cell .progress")).get.text should be ("3/2 (1 failed)")
       }
-      val jobJson = getJson(sc.ui.get, "jobs")
+      val jobJson = getJson(sc, sc.ui.get, "jobs")
       (jobJson \ "numTasks").extract[Int]should be (2)
       (jobJson \ "numCompletedTasks").extract[Int] should be (3)
       (jobJson \ "numFailedTasks").extract[Int] should be (1)
       (jobJson \ "numCompletedStages").extract[Int] should be (2)
       (jobJson \ "numFailedStages").extract[Int] should be (1)
-      val stageJson = getJson(sc.ui.get, "stages")
+      val stageJson = getJson(sc, sc.ui.get, "stages")
 
       for {
         stage @ JObject(_) <- stageJson
@@ -293,7 +293,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         attemptId <- 0 to 1
       } {
         val exp = if (attemptId == 0 && stageId == 1) StageStatus.FAILED else StageStatus.COMPLETE
-        val stageJson = getJson(sc.ui.get, s"stages/$stageId/$attemptId")
+        val stageJson = getJson(sc, sc.ui.get, s"stages/$stageId/$attemptId")
         (stageJson \ "status").extract[String] should be (exp.name())
       }
     }
@@ -509,7 +509,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         }
       }
 
-      val jobsJson = getJson(sc.ui.get, "jobs")
+      val jobsJson = getJson(sc, sc.ui.get, "jobs")
       jobsJson.children.size should be (expJobInfo.size)
       for {
         (job @ JObject(_), idx) <- jobsJson.children.zipWithIndex
@@ -526,7 +526,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       goToUi(sc, "/jobs/job/?id=7")
       find("no-info").get.text should be ("No information to display for job 7")
 
-      val badJob = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "jobs/7"))
+      val badJob = HistoryServerSuite.getContentAndCode(apiUrl(sc, "jobs/7"))
       badJob._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badJob._2 should be (None)
       badJob._3 should be (Some("unknown job: 7"))
@@ -554,7 +554,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         }
       }
 
-      val stagesJson = getJson(sc.ui.get, "stages")
+      val stagesJson = getJson(sc, sc.ui.get, "stages")
       stagesJson.children.size should be (3)
       for {
         (stage @ JObject(_), idx) <- stagesJson.children.zipWithIndex
@@ -569,18 +569,18 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
       goToUi(sc, "/stages/stage/?id=12&attempt=0")
       find("no-info").get.text should be ("No information to display for Stage 12 (Attempt 0)")
-      val badStage = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "stages/12/0"))
+      val badStage = HistoryServerSuite.getContentAndCode(apiUrl(sc, "stages/12/0"))
       badStage._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badStage._2 should be (None)
       badStage._3 should be (Some("unknown stage: 12"))
 
-      val badAttempt = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "stages/19/15"))
+      val badAttempt = HistoryServerSuite.getContentAndCode(apiUrl(sc, "stages/19/15"))
       badAttempt._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badAttempt._2 should be (None)
       badAttempt._3 should be (Some("unknown attempt for stage 19.  Found attempts: [0]"))
 
       val badStageAttemptList = HistoryServerSuite.getContentAndCode(
-        apiUrl(sc.ui.get, "stages/12"))
+        apiUrl(sc, "stages/12"))
       badStageAttemptList._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badStageAttemptList._2 should be (None)
       badStageAttemptList._3 should be (Some("unknown stage: 12"))
@@ -598,7 +598,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       (attempts(0) \ "completed").extract[Boolean] should be (false)
       parseDate(attempts(0) \ "startTime") should be (sc.startTime)
       parseDate(attempts(0) \ "endTime") should be (-1)
-      val oneAppJsonAst = getJson(sc.ui.get, "")
+      val oneAppJsonAst = getJson(sc, sc.ui.get, "")
       oneAppJsonAst should be (appListJsonAst.children(0))
     }
   }
@@ -653,11 +653,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     JacksonMessageWriter.makeISODateFormat.parse(json.extract[String]).getTime
   }
 
-  def getJson(ui: SparkUI, path: String): JValue = {
-    JsonMethods.parse(HistoryServerSuite.getUrl(apiUrl(ui, path)))
+  def getJson(sc: SparkContext, ui: SparkUI, path: String): JValue = {
+    JsonMethods.parse(HistoryServerSuite.getUrl(apiUrl(sc, path)))
   }
 
-  def apiUrl(ui: SparkUI, path: String): URL = {
-    new URL(ui.appUIAddress + "/api/v1/applications/test/" + path)
+  def apiUrl(sc: SparkContext, path: String): URL = {
+    val ui = sc.ui.get
+    new URL(ui.appUIAddress + s"/api/v1/applications/${sc.applicationId}/" + path)
   }
 }
