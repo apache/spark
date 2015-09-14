@@ -203,20 +203,15 @@ private[hive] abstract class ClientWrapper(
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
    */
-  protected[hive] def withHiveState[A](f: => A): A = {
+  private def withHiveState[A](f: => A): A = {
     withHiveState(state, f)
   }
 
   protected[hive] def withHiveState[A](session: SessionState, f: => A): A = {
-    val currentLoader = Thread.currentThread().getContextClassLoader
-    Thread.currentThread().setContextClassLoader(session.getConf.getClassLoader)
-
     shim.setCurrentSessionState(session)
     Hive.set(client)
 
-    try retryLocked(f) finally {
-      Thread.currentThread().setContextClassLoader(currentLoader)
-    }
+    retryLocked(f)
   }
 
   override def setOut(stream: PrintStream): Unit = withHiveState {
@@ -581,7 +576,12 @@ class IsolatedWrapper(
 
   override protected[hive] def withHiveState[A](session: SessionState, f: => A): A = {
     session.setCurrentDatabase(hiveContext.getCurrentDatabase)
+
+    val currentLoader = Thread.currentThread().getContextClassLoader
+    Thread.currentThread().setContextClassLoader(session.getConf.getClassLoader)
+
     try super.withHiveState(session, f) finally {
+      Thread.currentThread().setContextClassLoader(currentLoader)
       hiveContext.setCurrentDatabase(session.getCurrentDatabase)
     }
   }
