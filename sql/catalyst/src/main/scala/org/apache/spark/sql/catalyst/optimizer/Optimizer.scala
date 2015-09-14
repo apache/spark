@@ -136,30 +136,12 @@ object SetOperationPushDown extends Rule[LogicalPlan] {
         Filter(condition, left),
         Filter(pushToRight(condition, rewrites), right))
 
-    // Push down projection into intersect
-    // SPARK-10539: Pushed down empty project list would make all the rows
-    // in both child to empty row, which is against Intersect's semantic
-    case Project(projectList, i @ Intersect(left, right)) if projectList.length > 0 =>
-      val rewrites = buildRewrites(i)
-      Intersect(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
-
     // Push down filter into except
     case Filter(condition, e @ Except(left, right)) =>
       val rewrites = buildRewrites(e)
       Except(
         Filter(condition, left),
         Filter(pushToRight(condition, rewrites), right))
-
-    // Push down projection into except
-    // SPARK-10539: Pushed down empty project list would make all the rows
-    // in both child to empty row, which is against Except's semantic
-    case Project(projectList, e @ Except(left, right)) if projectList.length > 0 =>
-      val rewrites = buildRewrites(e)
-      Except(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
   }
 }
 
