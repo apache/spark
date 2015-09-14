@@ -173,7 +173,7 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer.count === 6)
   }
 
-  test("merging summarizes with empty summarizer") {
+  test("merging summarizer with empty summarizer") {
     // If one of two is non-empty, this should return the non-empty summarizer.
     // If both of them are empty, then just return the empty summarizer.
     val summarizer1 = (new MultivariateOnlineSummarizer)
@@ -219,7 +219,7 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(s0.mean(0) ~== 1.0 absTol 1e-14)
   }
 
-  test("merging summarizers with weighted samples") {
+  test("merging summarizer with weighted samples") {
     val summarizer = (new MultivariateOnlineSummarizer)
       .add(instance = Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))), weight = 0.1)
       .add(Vectors.dense(0.0, -1.2, -1.7), 0.2).merge(
