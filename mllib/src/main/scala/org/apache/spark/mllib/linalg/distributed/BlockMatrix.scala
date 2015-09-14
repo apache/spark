@@ -353,7 +353,7 @@ class BlockMatrix @Since("1.3.0") (
     }
   }
 
-  private type BlockDestinations =  Map[(Int, Int), Set[Int]]
+  private type BlockDestinations = Map[(Int, Int), Set[Int]]
 
   /**
    * Simulate the multiplication with just indices in order to cut costs on communication, when
