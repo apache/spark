@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
@@ -26,10 +28,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
-
-import scala.util.Random
-
-case class WeightedLabeledPoint(label: Double, weight: Double, features: Vector)
 
 class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -221,61 +219,61 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("MultiClassSummarizer") {
     val summarizer1 = (new MultiClassSummarizer)
       .add(0.0).add(3.0).add(4.0).add(3.0).add(6.0)
-    assert(summarizer1.histogram.zip(Array[Double](1, 0, 0, 2, 1, 0, 1)).forall(x => x._1 === x._2))
+    assert(summarizer1.histogram === Array[Double](1, 0, 0, 2, 1, 0, 1))
     assert(summarizer1.countInvalid === 0)
     assert(summarizer1.numClasses === 7)
 
     val summarizer2 = (new MultiClassSummarizer)
       .add(1.0).add(5.0).add(3.0).add(0.0).add(4.0).add(1.0)
-    assert(summarizer2.histogram.zip(Array[Double](1, 2, 0, 1, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizer2.histogram === Array[Double](1, 2, 0, 1, 1, 1))
     assert(summarizer2.countInvalid === 0)
     assert(summarizer2.numClasses === 6)
 
     val summarizer3 = (new MultiClassSummarizer)
       .add(0.0).add(1.3).add(5.2).add(2.5).add(2.0).add(4.0).add(4.0).add(4.0).add(1.0)
-    assert(summarizer3.histogram.zip(Array[Double](1, 1, 1, 0, 3)).forall(x => x._1 === x._2))
+    assert(summarizer3.histogram === Array[Double](1, 1, 1, 0, 3))
     assert(summarizer3.countInvalid === 3)
     assert(summarizer3.numClasses === 5)
 
     val summarizer4 = (new MultiClassSummarizer)
       .add(3.1).add(4.3).add(2.0).add(1.0).add(3.0)
-    assert(summarizer4.histogram.zip(Array[Double](0, 1, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizer4.histogram === Array[Double](0, 1, 1, 1))
     assert(summarizer4.countInvalid === 2)
     assert(summarizer4.numClasses === 4)
 
     // small map merges large one
     val summarizerA = summarizer1.merge(summarizer2)
     assert(summarizerA.hashCode() === summarizer2.hashCode())
-    assert(summarizerA.histogram.zip(Array[Double](2, 2, 0, 3, 2, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizerA.histogram === Array[Double](2, 2, 0, 3, 2, 1, 1))
     assert(summarizerA.countInvalid === 0)
     assert(summarizerA.numClasses === 7)
 
     // large map merges small one
     val summarizerB = summarizer3.merge(summarizer4)
     assert(summarizerB.hashCode() === summarizer3.hashCode())
-    assert(summarizerB.histogram.zip(Array[Double](1, 2, 2, 1, 3)).forall(x => x._1 === x._2))
+    assert(summarizerB.histogram === Array[Double](1, 2, 2, 1, 3))
     assert(summarizerB.countInvalid === 5)
     assert(summarizerB.numClasses === 5)
   }
 
   test("MultiClassSummarizer with weighted samples") {
     val summarizer1 = (new MultiClassSummarizer)
-      .add(0.0, 0.2).add(3.0, 0.8).add(4.0, 3.2).add(3.0, 1.3).add(6.0, 3.1)
-    assert(summarizer1.histogram.zip(
-      Array[Double](0.2, 0, 0, 2.1, 3.2, 0, 3.1)).forall(x => x._1 === x._2))
+      .add(label = 0.0, weight = 0.2).add(3.0, 0.8).add(4.0, 3.2).add(3.0, 1.3).add(6.0, 3.1)
+    assert(Vectors.dense(summarizer1.histogram) ~==
+      Vectors.dense(Array(0.2, 0, 0, 2.1, 3.2, 0, 3.1)) absTol 1E-10)
     assert(summarizer1.countInvalid === 0)
     assert(summarizer1.numClasses === 7)
 
     val summarizer2 = (new MultiClassSummarizer)
       .add(1.0, 1.1).add(5.0, 2.3).add(3.0).add(0.0).add(4.0).add(1.0).add(2, 0.0)
-    assert(summarizer2.histogram.zip(
-      Array[Double](1, 2.1, 0, 1, 1, 2.3)).forall(x => x._1 === x._2))
+    assert(Vectors.dense(summarizer2.histogram) ~==
+      Vectors.dense(Array[Double](1.0, 2.1, 0.0, 1, 1, 2.3)) absTol 1E-10)
     assert(summarizer2.countInvalid === 0)
     assert(summarizer2.numClasses === 6)
 
     val summarizer = summarizer1.merge(summarizer2)
-    assert(summarizer.histogram.zip(
-      Array[Double](1.2, 2.1, 0, 3.1, 4.2, 2.3, 3.1)).forall(x => x._1 === x._2))
+    assert(Vectors.dense(summarizer.histogram) ~==
+      Vectors.dense(Array(1.2, 2.1, 0.0, 3.1, 4.2, 2.3, 3.1)) absTol 1E-10)
     assert(summarizer.countInvalid === 0)
     assert(summarizer.numClasses === 7)
   }
@@ -810,7 +808,6 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("binary logistic regression with weighted samples") {
-    // The following two datasets will result the same model with weighted sample feature.
     val (dataset, weightedDataset) = {
       val nPoints = 1000
       val weights = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
@@ -832,21 +829,21 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         if (rnd.nextGaussian() > 0.0) {
           if (label == 1.0) {
             Iterator(
-              WeightedLabeledPoint(label, 1.2, features),
-              WeightedLabeledPoint(label, 0.8, features),
-              WeightedLabeledPoint(0.0, 0.0, features))
+              Instance(label, 1.2, features),
+              Instance(label, 0.8, features),
+              Instance(0.0, 0.0, features))
           } else {
             Iterator(
-              WeightedLabeledPoint(label, 0.3, features),
-              WeightedLabeledPoint(1.0, 0.0, features),
-              WeightedLabeledPoint(label, 0.1, features),
-              WeightedLabeledPoint(label, 0.6, features))
+              Instance(label, 0.3, features),
+              Instance(1.0, 0.0, features),
+              Instance(label, 0.1, features),
+              Instance(label, 0.6, features))
           }
         } else {
           if (label == 1.0) {
-            Iterator(WeightedLabeledPoint(label, 2.0, features))
+            Iterator(Instance(label, 2.0, features))
           } else {
-            Iterator(WeightedLabeledPoint(label, 1.0, features))
+            Iterator(Instance(label, 1.0, features))
           }
         }
       }
@@ -856,69 +853,16 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     val trainer1a = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
+      .setRegParam(0.0).setStandardization(true)
     val trainer1b = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
+      .setRegParam(0.0).setStandardization(true)
     val model1a0 = trainer1a.fit(dataset)
     val model1a1 = trainer1a.fit(weightedDataset)
     val model1b = trainer1b.fit(weightedDataset)
     assert(model1a0.weights !~= model1a1.weights absTol 1E-3)
     assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
-    assert(model1a0.weights ~== model1b.weights absTol 1E-10)
-    assert(model1a0.intercept ~== model1b.intercept absTol 1E-10)
+    assert(model1a0.weights ~== model1b.weights absTol 1E-3)
+    assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
 
-    val trainer2a = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
-    val trainer2b = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
-    val model2a0 = trainer2a.fit(dataset)
-    val model2a1 = trainer2a.fit(weightedDataset)
-    val model2b = trainer2b.fit(weightedDataset)
-    assert(model2a0.weights !~= model2a1.weights absTol 1E-3)
-    assert(model2a0.intercept !~= model2a1.intercept absTol 1E-3)
-    assert(model2a0.weights ~== model2b.weights absTol 1E-10)
-    assert(model2a0.intercept ~== model2b.intercept absTol 1E-10)
-
-    val trainer3a = (new LogisticRegression).setFitIntercept(false)
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
-    val trainer3b = (new LogisticRegression).setFitIntercept(false).setWeightCol("weight")
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
-    val model3a0 = trainer3a.fit(dataset)
-    val model3a1 = trainer3a.fit(weightedDataset)
-    val model3b = trainer3b.fit(weightedDataset)
-    assert(model3a0.weights !~= model3a1.weights absTol 1E-3)
-    assert(model3a0.weights ~== model3b.weights absTol 1E-10)
-
-    val trainer4a = (new LogisticRegression).setFitIntercept(false)
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
-    val trainer4b = (new LogisticRegression).setFitIntercept(false).setWeightCol("weight")
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
-    val model4a0 = trainer4a.fit(dataset)
-    val model4a1 = trainer4a.fit(weightedDataset)
-    val model4b = trainer4b.fit(weightedDataset)
-    assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
-    assert(model4a0.weights ~== model4b.weights absTol 1E-10)
-
-    // binary logistic regression with intercept with strong L1 regularization
-    val trainer5 = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(1.0).setRegParam(6.0).setWeightCol("weight")
-    val model5 = trainer5.fit(weightedDataset)
-
-    val histogram = weightedDataset.map { case Row(label: Double, sampleWeight: Double,
-      features: Vector) => (label, sampleWeight) }.treeAggregate(new MultiClassSummarizer)(
-        seqOp = (c, v) => (c, v) match {
-          case (classSummarizer: MultiClassSummarizer, (label: Double, sampleWeight: Double)) =>
-            classSummarizer.add(label, sampleWeight)
-        },
-        combOp = (c1, c2) => (c1, c2) match {
-          case (classSummarizer1: MultiClassSummarizer, classSummarizer2: MultiClassSummarizer) =>
-            classSummarizer1.merge(classSummarizer2)
-        }).histogram
-
-    val interceptTheory = math.log(histogram(1) / histogram(0))
-    val weightsTheory = Vectors.dense(0.0, 0.0, 0.0, 0.0)
-
-    assert(model5.intercept ~== interceptTheory relTol 1E-5)
-    assert(model5.weights ~= weightsTheory absTol 1E-6)
   }
 }
