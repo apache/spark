@@ -799,7 +799,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Reads in a directory of Avro files from HDFS, a local file system (available on all nodes), or
    * any Hadoop-supported file system URI. The records are read in as Generic Avro records. This
-   * also allows a user to register a schema with Kryo, if they so choose to.
+   * also allows a user to register a schema with Kryo, if they so choose to. Users can also specify
+   * multiple schemas if they need to.
    *
    * You can do the following if you know the schema ahead of time:
    * {{{

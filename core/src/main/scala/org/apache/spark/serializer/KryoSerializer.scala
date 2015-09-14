@@ -21,6 +21,8 @@ import java.io.{EOFException, IOException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 import javax.annotation.Nullable
 
+import org.apache.avro.util.Utf8
+
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoException}
@@ -345,7 +347,8 @@ private[serializer] object KryoSerializer {
     classOf[Array[Short]],
     classOf[Array[Long]],
     classOf[BoundedPriorityQueue[_]],
-    classOf[SparkConf]
+    classOf[SparkConf],
+    classOf[Utf8]
   )
 }
 

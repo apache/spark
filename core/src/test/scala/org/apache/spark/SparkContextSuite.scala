@@ -20,6 +20,13 @@ package org.apache.spark
 import java.io.File
 import java.util.concurrent.TimeUnit
 
+import org.apache.avro.util.Utf8
+import org.apache.spark.serializer.KryoSerializer
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+import scala.util.Random
+
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
 
@@ -31,15 +38,12 @@ import org.apache.avro.specific.SpecificDatumWriter
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.scalatest.Matchers._
 
 import org.apache.spark.avro.{Income, Rating}
 import org.apache.spark.util.Utils
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
-import org.scalatest.Matchers._
 
-import scala.util.Random
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -227,7 +231,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
   test("Generic Avro Records as input") {
     withTempDir { dir =>
       try {
-        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        val conf = new SparkConf()
+          .setAppName("test")
+          .setMaster("local")
+          .set("spark.serializer", classOf[KryoSerializer].getName)
+        sc = new SparkContext(conf)
         val schemaStr = """
           |{
           |  "type" : "record",
@@ -249,15 +257,23 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
         val datumWriter = new GenericDatumWriter[GenericRecord](schema)
         val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
         dataFileWriter.create(schema, outputFile)
+        val builder = new StringBuilder()
         for (i <- 1 to 10) {
           val avroRec = new GenericData.Record(schema)
-          avroRec.put("string", Random.nextString(10))
+          val newStr = Random.nextString(10)
+          builder.append(newStr)
+          avroRec.put("string", newStr)
           avroRec.put("int", 10)
           dataFileWriter.append(avroRec)
         }
         dataFileWriter.close()
         val sum = sc.avroFile(dir.getCanonicalPath, schema).map(_.get("int")
           .asInstanceOf[Int]).sum()
+        val str = sc.avroFile(dir.getCanonicalPath, schema)
+          .sortBy(_.get("int").asInstanceOf[Int], true, 1)
+          .map(_.get("string").asInstanceOf[Utf8].toString).collect()
+          .foldLeft(new StringBuilder())((builder, str) => builder.append(str)).toString
+        assert(str.equals(builder.toString()))
         assert(sum == 100)
       } finally {
         sc.stop()
