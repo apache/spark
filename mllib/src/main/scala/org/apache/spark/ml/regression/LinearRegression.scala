@@ -298,11 +298,7 @@ class LinearRegressionModel private[ml] (
    */
   // TODO: decide on a good name before exposing to public API
   private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
-    val t = udf { features: Vector => predict(features) }
-    val predictionAndObservations = dataset
-      .withColumn($(predictionCol), t(col($(featuresCol))))
-
-    new LinearRegressionSummary(predictionAndObservations, $(predictionCol), $(labelCol))
+    new LinearRegressionSummary(transform(dataset), $(predictionCol), $(labelCol))
   }
 
   override protected def predict(features: Vector): Double = {

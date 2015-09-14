@@ -460,17 +460,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Training results for the model should be available
     assert(model.hasSummary)
 
-    // Feature column should be equal
-    val expectedFeature = dataset.select("features").collect()
-    val resultFeature = model.summary.predictions.select("features").collect()
-    resultFeature.zip(expectedFeature).foreach{ case (r1, r2) =>
-      val result1 = r1.getAs[DenseVector](0)(0)
-      val result2 = r1.getAs[DenseVector](0)(1)
-      val expected1 = r2.getAs[DenseVector](0)(0)
-      val expected2 = r2.getAs[DenseVector](0)(1)
-      assert(result1 ~== expected1 relTol 1E-5)
-      assert(result2 ~== expected2 relTol 1E-5)
-    }
+    // Schema should be a superset of the input dataset
+    assert(model.summary.predictions.schema.fieldNames.toSet ===
+      dataset.schema.fieldNames.toSet ++ Set("prediction"))
 
     // Residuals in [[LinearRegressionResults]] should equal those manually computed
     val expectedResiduals = dataset.select("features", "label")
