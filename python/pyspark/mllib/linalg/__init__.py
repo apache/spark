@@ -414,19 +414,6 @@ class DenseVector(Vector):
         return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
-        """
-        Test DenseVector for equality.
-
-        >>> v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
-        >>> v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        >>> v1 == v2
-        True
-        >>> v1 != v2
-        False
-        >>> v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
-        >>> v1 == v3
-        True
-        """
         if isinstance(other, DenseVector):
             return np.array_equal(self.array, other.array)
         elif isinstance(other, SparseVector):
@@ -439,20 +426,6 @@ class DenseVector(Vector):
         return not self == other
 
     def __hash__(self):
-        """
-        Compute hashcode
-
-        >>> v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
-        >>> v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        >>> hash(v1) == hash(v2)
-        True
-        >>> v2 = DenseVector([0.0, 1.0, 0.0, 5.5])
-        >>> hash(v1) == hash(v2)
-        True
-        >>> v2 = DenseVector([1.0, 1.0, 0.0, 5.5])
-        >>> hash(v1) == hash(v2)
-        False
-        """
         size = len(self)
         result = 31 + size
         nnz = 0
@@ -761,19 +734,6 @@ class SparseVector(Vector):
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
-        """
-        Test SparseVectors for equality.
-
-        >>> v1 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        >>> v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        >>> v1 == v2
-        True
-        >>> v1 != v2
-        False
-        >>> v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
-        >>> v1 == v3
-        True
-        """
         if isinstance(other, SparseVector):
             return other.size == self.size and np.array_equal(other.indices, self.indices) \
                 and np.array_equal(other.values, self.values)
@@ -804,20 +764,6 @@ class SparseVector(Vector):
         return not self.__eq__(other)
 
     def __hash__(self):
-        """
-        Compute hashcode
-
-        >>> v1 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        >>> v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        >>> hash(v1) == hash(v2)
-        True
-        >>> v2 = SparseVector(4, [(1, 1.0), (3, 2.5)])
-        >>> hash(v1) == hash(v2)
-        False
-        >>> v2 = SparseVector(4, [(2, 1.0), (3, 5.5)])
-        >>> hash(v1) == hash(v2)
-        False
-        """
         result = 31 + self.size
         nnz = 0
         i = 0
