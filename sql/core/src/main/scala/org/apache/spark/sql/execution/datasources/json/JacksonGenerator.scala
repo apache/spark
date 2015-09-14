@@ -67,7 +67,6 @@ private[sql] object JacksonGenerator {
       case (StructType(ty), v: Row) =>
         gen.writeStartObject()
         ty.zip(v.toSeq).foreach {
-          case (_, null) =>
           case (field, v) =>
             gen.writeFieldName(field.name)
             valWriter(field.dataType, v)
@@ -126,10 +125,8 @@ private[sql] object JacksonGenerator {
         while (i < ty.length) {
           val field = ty(i)
           val value = v.get(i, field.dataType)
-          if (value != null) {
-            gen.writeFieldName(field.name)
-            valWriter(field.dataType, value)
-          }
+          gen.writeFieldName(field.name)
+          valWriter(field.dataType, value)
           i += 1
         }
         gen.writeEndObject()
