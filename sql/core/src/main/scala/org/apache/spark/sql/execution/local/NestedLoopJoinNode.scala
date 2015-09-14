@@ -22,8 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, RightOuter, LeftOuter, JoinType}
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.util.collection.BitSet
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
 case class NestedLoopJoinNode(
     conf: SQLConf,
@@ -77,65 +76,64 @@ case class NestedLoopJoinNode(
     val leftNulls = new GenericMutableRow(left.output.size)
     val rightNulls = new GenericMutableRow(right.output.size)
     val joinedRow = new JoinedRow
-    val includedBuildTuples = new BitSet(buildRelation.size)
+    val matchedBuildTuples = new BitSet(buildRelation.size)
     val resultProj = genResultProjection
     streamed.open()
 
-    val matchesOrStreamedRowsWithNulls = streamed.asIterator.flatMap { streamedRow =>
+    // streamedRowMatches also contains null rows if using outer join
+    val streamedRowMatches: Iterator[InternalRow] = streamed.asIterator.flatMap { streamedRow =>
       val matchedRows = new CompactBuffer[InternalRow]
 
       var i = 0
       var streamRowMatched = false
 
+      // Scan the build relation to look for matches for each streamed row
       while (i < buildRelation.size) {
         val buildRow = buildRelation(i)
         buildSide match {
-          case BuildRight if boundCondition(joinedRow(streamedRow, buildRow)) =>
-            matchedRows += resultProj(joinedRow(streamedRow, buildRow)).copy()
-            streamRowMatched = true
-            includedBuildTuples.set(i)
-          case BuildLeft if boundCondition(joinedRow(buildRow, streamedRow)) =>
-            matchedRows += resultProj(joinedRow(buildRow, streamedRow)).copy()
-            streamRowMatched = true
-            includedBuildTuples.set(i)
-          case _ =>
+          case BuildRight => joinedRow(streamedRow, buildRow)
+          case BuildLeft => joinedRow(buildRow, streamedRow)
+        }
+        if (boundCondition(joinedRow)) {
+          matchedRows += resultProj(joinedRow).copy()
+          streamRowMatched = true
+          matchedBuildTuples.set(i)
         }
         i += 1
       }
 
-      (streamRowMatched, joinType, buildSide) match {
-        case (false, LeftOuter | FullOuter, BuildRight) =>
-          matchedRows += resultProj(joinedRow(streamedRow, rightNulls)).copy()
-        case (false, RightOuter | FullOuter, BuildLeft) =>
-          matchedRows += resultProj(joinedRow(leftNulls, streamedRow)).copy()
-        case _ =>
+      // If this row had no matches and we're using outer join, join it with the null rows
+      if (!streamRowMatched) {
+        (joinType, buildSide) match {
+          case (LeftOuter | FullOuter, BuildRight) =>
+            matchedRows += resultProj(joinedRow(streamedRow, rightNulls)).copy()
+          case (RightOuter | FullOuter, BuildLeft) =>
+            matchedRows += resultProj(joinedRow(leftNulls, streamedRow)).copy()
+          case _ =>
+        }
       }
 
       matchedRows.iterator
     }
 
+    // If we're using outer join, find rows on the build side that didn't match anything
+    // and join them with the null row
+    lazy val unmatchedBuildRows: Iterator[InternalRow] = {
+      var i = 0
+      buildRelation.filter { row =>
+        val r = !matchedBuildTuples.get(i)
+        i += 1
+        r
+      }.iterator
+    }
     iterator = (joinType, buildSide) match {
       case (RightOuter | FullOuter, BuildRight) =>
-        var i = 0
-        matchesOrStreamedRowsWithNulls ++ buildRelation.filter { row =>
-          val r = !includedBuildTuples.get(i)
-          i += 1
-          r
-        }.iterator.map { buildRow =>
-          joinedRow.withLeft(leftNulls)
-          resultProj(joinedRow.withRight(buildRow))
-        }
+        streamedRowMatches ++
+          unmatchedBuildRows.map { buildRow => resultProj(joinedRow(leftNulls, buildRow)) }
       case (LeftOuter | FullOuter, BuildLeft) =>
-        var i = 0
-        matchesOrStreamedRowsWithNulls ++ buildRelation.filter { row =>
-          val r = !includedBuildTuples.get(i)
-          i += 1
-          r
-        }.iterator.map { buildRow =>
-          joinedRow.withRight(rightNulls)
-          resultProj(joinedRow.withLeft(buildRow))
-        }
-      case _ => matchesOrStreamedRowsWithNulls
+        streamedRowMatches ++
+          unmatchedBuildRows.map { buildRow => resultProj(joinedRow(buildRow, rightNulls)) }
+      case _ => streamedRowMatches
     }
   }
 

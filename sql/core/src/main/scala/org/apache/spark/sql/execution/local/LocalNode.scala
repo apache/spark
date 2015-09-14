@@ -87,11 +87,6 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
   final def asIterator: Iterator[InternalRow] = new LocalNodeIterator(this)
 
   /**
-   * Returns the content through the [[Iterator]] interface.
-   */
-  final def asIterator: Iterator[InternalRow] = new LocalNodeIterator(this)
-
-  /**
    * Returns the content of the iterator from the beginning to the end in the form of a Scala Seq.
    */
   final def collect(): Seq[Row] = {
@@ -109,7 +104,8 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
   }
 
   protected def newProjection(
-      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
@@ -152,7 +148,8 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
   }
 
   protected def newPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
+      expression: Expression,
+      inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
     if (codegenEnabled) {
       try {
         GeneratePredicate.generate(expression, inputSchema)

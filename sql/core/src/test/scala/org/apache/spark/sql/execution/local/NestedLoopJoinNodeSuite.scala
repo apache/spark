@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, RightOuter}
-import org.apache.spark.sql.execution.joins.BuildRight
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 
 class NestedLoopJoinNodeSuite extends LocalNodeTest {
 
   import testImplicits._
 
-  def joinSuite(suiteName: String, confPairs: (String, String)*): Unit = {
+  private def joinSuite(
+      suiteName: String, buildSide: BuildSide, confPairs: (String, String)*): Unit = {
     test(s"$suiteName: left outer join") {
       withSQLConf(confPairs: _*) {
         checkAnswer2(
@@ -36,7 +37,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               LeftOuter,
               Some((upperCaseData.col("N") === lowerCaseData.col("n")).expr))
           ),
@@ -50,7 +51,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               LeftOuter,
               Some(
                 (upperCaseData.col("N") === lowerCaseData.col("n") &&
@@ -66,7 +67,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               LeftOuter,
               Some(
                 (upperCaseData.col("N") === lowerCaseData.col("n") &&
@@ -82,7 +83,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               LeftOuter,
               Some(
                 (upperCaseData.col("N") === lowerCaseData.col("n") &&
@@ -102,7 +103,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               RightOuter,
               Some((lowerCaseData.col("n") === upperCaseData.col("N")).expr))
           ),
@@ -116,7 +117,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               RightOuter,
               Some((lowerCaseData.col("n") === upperCaseData.col("N") &&
                 lowerCaseData.col("n") > 1).expr))
@@ -131,7 +132,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               RightOuter,
               Some((lowerCaseData.col("n") === upperCaseData.col("N") &&
                 upperCaseData.col("N") > 1).expr))
@@ -146,7 +147,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               RightOuter,
               Some((lowerCaseData.col("n") === upperCaseData.col("N") &&
                 lowerCaseData.col("l") > upperCaseData.col("L")).expr))
@@ -165,7 +166,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               FullOuter,
               Some((lowerCaseData.col("n") === upperCaseData.col("N")).expr))
           ),
@@ -179,7 +180,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               FullOuter,
               Some((lowerCaseData.col("n") === upperCaseData.col("N") &&
                 lowerCaseData.col("n") > 1).expr))
@@ -194,7 +195,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               FullOuter,
               Some((lowerCaseData.col("n") === upperCaseData.col("N") &&
                 upperCaseData.col("N") > 1).expr))
@@ -209,7 +210,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
               conf,
               node1,
               node2,
-              BuildRight,
+              buildSide,
               FullOuter,
               Some((lowerCaseData.col("n") === upperCaseData.col("N") &&
                 lowerCaseData.col("l") > upperCaseData.col("L")).expr))
@@ -220,6 +221,19 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
   }
 
   joinSuite(
-    "general", SQLConf.CODEGEN_ENABLED.key -> "false", SQLConf.UNSAFE_ENABLED.key -> "false")
-  joinSuite("tungsten", SQLConf.CODEGEN_ENABLED.key -> "true", SQLConf.UNSAFE_ENABLED.key -> "true")
+    "general-build-left",
+    BuildLeft,
+    SQLConf.CODEGEN_ENABLED.key -> "false", SQLConf.UNSAFE_ENABLED.key -> "false")
+  joinSuite(
+    "general-build-right",
+    BuildRight,
+    SQLConf.CODEGEN_ENABLED.key -> "false", SQLConf.UNSAFE_ENABLED.key -> "false")
+  joinSuite(
+    "tungsten-build-left",
+    BuildLeft,
+    SQLConf.CODEGEN_ENABLED.key -> "true", SQLConf.UNSAFE_ENABLED.key -> "true")
+  joinSuite(
+    "tungsten-build-right",
+    BuildRight,
+    SQLConf.CODEGEN_ENABLED.key -> "true", SQLConf.UNSAFE_ENABLED.key -> "true")
 }

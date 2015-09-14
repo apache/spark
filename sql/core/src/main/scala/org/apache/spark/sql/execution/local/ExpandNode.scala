@@ -36,25 +36,22 @@ case class ExpandNode(
 
   override def open(): Unit = {
     child.open()
-    idx = -1
     groups = projections.map(ee => newProjection(ee, child.output)).toArray
+    idx = groups.length
   }
 
   override def next(): Boolean = {
-    if (idx < 0 || idx >= groups.length) {
+    if (idx >= groups.length) {
       if (child.next()) {
         input = child.fetch()
-        result = groups(0)(input)
-        idx = 1
-        true
+        idx = 0
       } else {
-        false
+        return false
       }
-    } else {
-      result = groups(idx)(input)
-      idx += 1
-      true
     }
+    result = groups(idx)(input)
+    idx += 1
+    true
   }
 
   override def fetch(): InternalRow = result
