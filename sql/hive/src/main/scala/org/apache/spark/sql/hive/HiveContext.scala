@@ -194,8 +194,8 @@ class HiveContext(sc: SparkContext, optionConf: Map[String, String] = Map.empty)
         try super.withHiveState(session, f) finally {
           val sessionConf = SessionState.get().getConf
           copyConf.foreach {
-            case (key, Some(value)) => sessionConf.set(key, value)
-            case (key, None) => sessionConf.unset(key)
+            case (key, Some(value)) => sessionConf.set(key, value); execConf.set(key, value)
+            case (key, None) => sessionConf.unset(key); execConf.unset(key)
           }
         }
       }
