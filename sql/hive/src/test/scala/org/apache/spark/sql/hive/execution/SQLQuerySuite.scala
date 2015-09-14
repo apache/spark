@@ -67,8 +67,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import hiveContext.implicits._
 
-  def dropTable(t: String): Unit = {
-    sql(s"DROP TABLE IF EXISTS $t")
+  def dropTable(table: String): Unit = {
+    sql(s"DROP TABLE IF EXISTS $table")
   }
 
   test("UDTF") {
@@ -286,9 +286,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val originalConf = convertCTAS
 
     setConf(HiveContext.CONVERT_CTAS, true)
-    dropTable("ctas1")
 
-    try {
+    withTable("ctas1") try {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       var message = intercept[AnalysisException] {
@@ -331,7 +330,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("DROP TABLE ctas1")
     } finally {
       setConf(HiveContext.CONVERT_CTAS, originalConf)
-      sql("DROP TABLE IF EXISTS ctas1")
     }
   }
 
@@ -646,7 +644,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("DROP TABLE nullValuesInInnerComplexTypes")
       dropTempTable("testTable")
     }
-
   }
 
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
@@ -705,6 +702,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(rdd).registerTempTable("data")
     val originalConf = convertCTAS
     setConf(HiveContext.CONVERT_CTAS, false)
+
     withTable("explodeTest")  try {
       sql("CREATE TABLE explodeTest (key bigInt)")
       table("explodeTest").queryExecution.analyzed match {
