@@ -44,7 +44,6 @@ private[spark] class SparkUI private (
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
     val operationGraphListener: RDDOperationGraphListener,
-    var appId: String,
     var appName: String,
     val basePath: String,
     val startTime: Long)
@@ -56,6 +55,8 @@ private[spark] class SparkUI private (
 
 
   val stagesTab = new StagesTab(this)
+
+  var appId: String = _
 
   /** Initialize all components of the server. */
   def initialize() {
@@ -141,10 +142,9 @@ private[spark] object SparkUI {
       listenerBus: SparkListenerBus,
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
-      appId: String,
       appName: String,
       startTime: Long): SparkUI = {
-    create(Some(sc), conf, listenerBus, securityManager, appId, appName,
+    create(Some(sc), conf, listenerBus, securityManager, appName,
       jobProgressListener = Some(jobProgressListener), startTime = startTime)
   }
 
@@ -152,12 +152,10 @@ private[spark] object SparkUI {
       conf: SparkConf,
       listenerBus: SparkListenerBus,
       securityManager: SecurityManager,
-      appId: String,
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    create(None, conf, listenerBus, securityManager, appId, appName, basePath,
-      startTime = startTime)
+    create(None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
   }
 
   /**
@@ -172,7 +170,6 @@ private[spark] object SparkUI {
       conf: SparkConf,
       listenerBus: SparkListenerBus,
       securityManager: SecurityManager,
-      appId: String,
       appName: String,
       basePath: String = "",
       jobProgressListener: Option[JobProgressListener] = None,
@@ -198,6 +195,6 @@ private[spark] object SparkUI {
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
       executorsListener, _jobProgressListener, storageListener, operationGraphListener,
-      appId, appName, basePath, startTime)
+      appName, basePath, startTime)
   }
 }
