@@ -24,20 +24,6 @@ class HashJoinNodeSuite extends LocalNodeTest {
 
   import testImplicits._
 
-  private def wrapForUnsafe(
-      f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
-    if (conf.unsafeEnabled) {
-      (left: LocalNode, right: LocalNode) => {
-        val _left = ConvertToUnsafeNode(conf, left)
-        val _right = ConvertToUnsafeNode(conf, right)
-        val r = f(_left, _right)
-        ConvertToSafeNode(conf, r)
-      }
-    } else {
-      f
-    }
-  }
-
   def joinSuite(suiteName: String, confPairs: (String, String)*): Unit = {
     test(s"$suiteName: inner join with one match per row") {
       withSQLConf(confPairs: _*) {
