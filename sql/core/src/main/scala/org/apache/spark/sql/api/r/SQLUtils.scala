@@ -65,6 +65,9 @@ private[r] object SQLUtils {
         org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
       }
       case r"\Amap<(.*)${keyType},(.*)${valueType}>\Z" => {
+        if (keyType != "string" && keyType != "character") {
+          throw new IllegalArgumentException("Key type of a map must be string or character")
+        }
         org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
       }
       case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
