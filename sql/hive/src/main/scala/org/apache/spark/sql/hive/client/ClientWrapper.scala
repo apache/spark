@@ -53,10 +53,7 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * must use reflection after matching on `version`.
  *
  * @param version the version of hive used when pick function calls that are not compatible.
- * @param config  a collection of configuration options that will be added to the hive conf before
- *                opening the hive client.
- * @param initClassLoader the classloader used when creating the `state` field of
- *                        this ClientWrapper.
+ * @param hiveContext  hive context which will be associated with this client wrapper
  */
 private[hive] abstract class ClientWrapper(
     override val version: HiveVersion,
@@ -491,6 +488,7 @@ private[hive] abstract class ClientWrapper(
   }
 }
 
+// this uses hive embedded with spark
 class SharedWrapper(
     version: HiveVersion,
     hiveContext: HiveContext)
@@ -527,6 +525,7 @@ class SharedWrapper(
   def closeSession(sessionID: Int): Unit = { /* Nothing to be done */ }
 }
 
+// this uses isolated class loader and so hive things are not shared to outside of it
 class IsolatedWrapper(
     version: HiveVersion,
     initClassLoader: ClassLoader,
@@ -534,6 +533,7 @@ class IsolatedWrapper(
     hiveContext: HiveContext)
   extends ClientWrapper(version, hiveContext) {
 
+  // map context id to internal session state
   private val mapping: mutable.HashMap[Int, SessionState] = mutable.HashMap.empty
 
   private def newConf: HiveConf = {
