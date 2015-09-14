@@ -605,8 +605,14 @@ class ConnectionTest(unittest.TestCase):
         os.environ['AIRFLOW_CONN_TEST_URI'] = \
             'postgres://username:password@ec2.compute.com:5432/the_database'
 
+    def tearDown(self):
+        env_vars = ['AIRFLOW_CONN_TEST_URI', 'AIRFLOW_CONN_AIRFLOW_DB']
+        for ev in env_vars:
+            if ev in os.environ:
+                del os.environ[ev]
+
     def test_using_env_var(self):
-        c = hooks.PostgresHook.get_connection(conn_id='test_uri')
+        c = hooks.SqliteHook.get_connection(conn_id='test_uri')
         assert c.host == 'ec2.compute.com'
         assert c.schema == 'the_database'
         assert c.login == 'username'
@@ -614,7 +620,7 @@ class ConnectionTest(unittest.TestCase):
         assert c.port == 5432
 
     def test_using_unix_socket_env_var(self):
-        c = hooks.PostgresHook.get_connection(conn_id='test_uri')
+        c = hooks.SqliteHook.get_connection(conn_id='test_uri')
         assert c.host == '/var/postgresql'
         assert c.schema == 'the_database'
         assert c.login is None
@@ -632,12 +638,12 @@ class ConnectionTest(unittest.TestCase):
         assert c.port is None
 
     def test_env_var_priority(self):
-        c = hooks.PostgresHook.get_connection(conn_id='airflow_db')
+        c = hooks.SqliteHook.get_connection(conn_id='airflow_db')
         assert c.host != 'ec2.compute.com'
 
         os.environ['AIRFLOW_CONN_AIRFLOW_DB'] = \
             'postgres://username:password@ec2.compute.com:5432/the_database'
-        c = hooks.PostgresHook.get_connection(conn_id='airflow_db')
+        c = hooks.SqliteHook.get_connection(conn_id='airflow_db')
         assert c.host == 'ec2.compute.com'
         assert c.schema == 'the_database'
         assert c.login == 'username'
