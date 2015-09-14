@@ -91,6 +91,7 @@ private[spark] abstract class YarnSchedulerBackend(
       filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
       scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
+    scheduler.sc.executorAllocationManager.foreach(_.reSetNumExecutorsTarget())
   }
 
   override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
