@@ -128,7 +128,7 @@ abstract class BaseYarnClusterSuite
     val master = if (clientMode) "yarn-client" else "yarn-cluster"
     val props = new Properties()
 
-    props.setProperty("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
+    props.setProperty(YarnConfigParameter.CONF_SPARK_JAR, "local:" + fakeSparkJar.getAbsolutePath())
 
     val testClasspath = new TestClasspathBuilder()
       .buildClassPath(

@@ -995,7 +995,6 @@ object Client extends Logging {
   val SPARK_STAGING: String = ".sparkStaging"
 
   // Location of any user-defined Spark jars
-  val CONF_SPARK_JAR = "spark.yarn.jar"
   val ENV_SPARK_JAR = "SPARK_JAR"
 
   // Internal config to propagate the location of the user's jar to the driver/executors
@@ -1037,6 +1036,7 @@ object Client extends Logging {
    * user environment if that is not found (for backwards compatibility).
    */
   private def sparkJar(conf: SparkConf): String = {
+    import YarnConfigParameter.CONF_SPARK_JAR
     if (conf.contains(CONF_SPARK_JAR)) {
       conf.get(CONF_SPARK_JAR)
     } else if (System.getenv(ENV_SPARK_JAR) != null) {
@@ -1047,7 +1047,7 @@ object Client extends Logging {
     } else {
       SparkContext.jarOfClass(this.getClass).getOrElse(throw new SparkException("Could not "
         + "find jar containing Spark classes. The jar can be defined using the "
-        + "spark.yarn.jar configuration option. If testing Spark, either set that option or "
+        + s"$CONF_SPARK_JAR configuration option. If testing Spark, either set that option or "
         + "make sure SPARK_PREPEND_CLASSES is not set."))
     }
   }
