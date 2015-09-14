@@ -1687,7 +1687,7 @@ The following options can be used to configure the version of Hive that is used 
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
-    <td><code>0.13.1</code></td>
+    <td><code>1.2.1</code></td>
     <td>
       Version of the Hive metastore. Available
       options are <code>0.12.0</code> through <code>1.2.1</code>.
