@@ -1820,6 +1820,9 @@ class DAG(object):
         self.tasks = []
         self.dag_id = dag_id
         self.start_date = start_date
+        if not isinstance(start_date, datetime):
+            logging.warning(
+                "start_date for {} isn't datetime.datetime".format(self))
         self.end_date = end_date or datetime.now()
         self.schedule_interval = schedule_interval
         self.full_filepath = full_filepath if full_filepath else ''
