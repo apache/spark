@@ -441,6 +441,7 @@ class DenseVector(Vector):
     def __hash__(self):
         """
         Compute hashcode
+
         >>> v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
         >>> v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
         >>> hash(v1) == hash(v2)
@@ -454,14 +455,14 @@ class DenseVector(Vector):
         """
         size = len(self)
         result = 31 + size
-        count = 0
+        nnz = 0
         i = 0
-        while i < size and count < 16:
+        while i < size and nnz < 128:
             if self.array[i] != 0:
-                bits = _double_to_long_bits(self.array[i] + i)
+                result = 31 * result + i
+                bits = _double_to_long_bits(self.array[i])
                 result = 31 * result + (bits ^ (bits >> 32))
-
-            count += 1
+                nnz += 1
             i += 1
         return result
 
@@ -805,6 +806,7 @@ class SparseVector(Vector):
     def __hash__(self):
         """
         Compute hashcode
+
         >>> v1 = SparseVector(4, [(1, 1.0), (3, 5.5)])
         >>> v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
         >>> hash(v1) == hash(v2)
@@ -817,14 +819,14 @@ class SparseVector(Vector):
         False
         """
         result = 31 + self.size
-        count = 0
+        nnz = 0
         i = 0
-        while i < len(self.values) and count < 16:
+        while i < len(self.values) and nnz < 128:
             if self.values[i] != 0:
-                bits = _double_to_long_bits(self.values[i] + self.indices[i])
+                result = 31 * result + int(self.indices[i])
+                bits = _double_to_long_bits(self.values[i])
                 result = 31 * result + (bits ^ (bits >> 32))
-
-            count += 1
+                nnz += 1
             i += 1
         return result
 
