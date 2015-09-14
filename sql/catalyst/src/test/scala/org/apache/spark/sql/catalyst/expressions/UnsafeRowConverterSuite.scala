@@ -43,7 +43,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     row.setInt(2, 2)
 
     val unsafeRow: UnsafeRow = converter.apply(row)
-    assert(converter.apply(row).getSizeInBytes === 8 + (3 * 8))
+    assert(unsafeRow.getSizeInBytes === 8 + (3 * 8))
     assert(unsafeRow.getLong(0) === 0)
     assert(unsafeRow.getLong(1) === 1)
     assert(unsafeRow.getInt(2) === 2)
@@ -62,6 +62,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(unsafeRowCopy.getLong(0) === 0)
     assert(unsafeRowCopy.getLong(1) === 1)
     assert(unsafeRowCopy.getInt(2) === 2)
+
+    // Make sure the converter can be reused, i.e. we correctly reset all states.
+    val unsafeRow2: UnsafeRow = converter.apply(row)
+    assert(unsafeRow2.getSizeInBytes === 8 + (3 * 8))
+    assert(unsafeRow2.getLong(0) === 0)
+    assert(unsafeRow2.getLong(1) === 1)
+    assert(unsafeRow2.getInt(2) === 2)
   }
 
   test("basic conversion with primitive, string and binary types") {
@@ -176,7 +183,6 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       r
     }
 
-    // todo: we reuse the UnsafeRow in projection, so these tests are meaningless.
     val setToNullAfterCreation = converter.apply(rowWithNoNullColumns)
     assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
     assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))
@@ -192,7 +198,6 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       rowWithNoNullColumns.getDecimal(10, 10, 0))
     assert(setToNullAfterCreation.getDecimal(11, 38, 18) ===
       rowWithNoNullColumns.getDecimal(11, 38, 18))
-    // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
 
     for (i <- fieldTypes.indices) {
       // Cann't call setNullAt() on DecimalType
@@ -202,8 +207,6 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
         setToNullAfterCreation.setNullAt(i)
       }
     }
-    // There are some garbage left in the var-length area
-    assert(Arrays.equals(createdFromNull.getBytes, setToNullAfterCreation.getBytes()))
 
     setToNullAfterCreation.setNullAt(0)
     setToNullAfterCreation.setBoolean(1, false)
