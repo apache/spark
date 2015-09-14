@@ -97,25 +97,25 @@ class KMeansModel(Saveable, Loader):
     >>> model.clusterCenters
     [array([-1000., -1000.]), array([ 5.,  5.]), array([ 1000.,  1000.])]
 
-    .. versionadded:: 0.9
+    .. versionadded:: 0.9.1
     """
 
     def __init__(self, centers):
         self.centers = centers
 
     @property
-    @since(1.0)
+    @since('1.0.0')
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return self.centers
 
     @property
-    @since(1.4)
+    @since('1.4.0')
     def k(self):
         """Total number of clusters."""
         return len(self.centers)
 
-    @since(0.9)
+    @since('0.9.1')
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
         best = 0
@@ -131,7 +131,7 @@ class KMeansModel(Saveable, Loader):
                 best_distance = distance
         return best
 
-    @since(1.4)
+    @since('1.4.0')
     def computeCost(self, rdd):
         """
         Return the K-means cost (sum of squared distances of points to
@@ -151,7 +151,7 @@ class KMeansModel(Saveable, Loader):
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
-    @since(1.4)
+    @since('1.4.0')
     def load(cls, sc, path):
         """
         Load a model from the given path.
@@ -162,11 +162,11 @@ class KMeansModel(Saveable, Loader):
 
 class KMeans(object):
     """
-    .. versionadded:: 0.9
+    .. versionadded:: 0.9.1
     """
 
     @classmethod
-    @since(0.9)
+    @since('0.9.1')
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
               seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
         """Train a k-means clustering model."""
@@ -241,11 +241,11 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> labels[3]==labels[4]
     True
 
-    .. versionadded:: 1.3
+    .. versionadded:: 1.3.0
     """
 
     @property
-    @since(1.4)
+    @since('1.4.0')
     def weights(self):
         """
         Weights for each Gaussian distribution in the mixture, where weights[i] is
@@ -254,7 +254,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return array(self.call("weights"))
 
     @property
-    @since(1.4)
+    @since('1.4.0')
     def gaussians(self):
         """
         Array of MultivariateGaussian where gaussians[i] represents
@@ -265,12 +265,12 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
             for gaussian in zip(*self.call("gaussians"))]
 
     @property
-    @since(1.4)
+    @since('1.4.0')
     def k(self):
         """Number of gaussians in mixture."""
         return len(self.weights)
 
-    @since(1.3)
+    @since('1.3.0')
     def predict(self, x):
         """
         Find the cluster to which the points in 'x' has maximum membership
@@ -286,7 +286,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
             raise TypeError("x should be represented by an RDD, "
                             "but got %s." % type(x))
 
-    @since(1.3)
+    @since('1.3.0')
     def predictSoft(self, x):
         """
         Find the membership of each point in 'x' to all mixture components.
@@ -304,7 +304,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
                             "but got %s." % type(x))
 
     @classmethod
-    @since(1.5)
+    @since('1.5.0')
     def load(cls, sc, path):
         """Load the GaussianMixtureModel from disk.
 
@@ -329,10 +329,10 @@ class GaussianMixture(object):
     :param seed:            Random Seed
     :param initialModel:    GaussianMixtureModel for initializing learning
 
-    .. versionadded:: 1.3
+    .. versionadded:: 1.3.0
     """
     @classmethod
-    @since(1.3)
+    @since('1.3.0')
     def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None, initialModel=None):
         """Train a Gaussian Mixture clustering model."""
         initialModelWeights = None
@@ -388,18 +388,18 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ... except OSError:
     ...     pass
 
-    .. versionadded:: 1.5
+    .. versionadded:: 1.5.0
     """
 
     @property
-    @since(1.5)
+    @since('1.5.0')
     def k(self):
         """
         Returns the number of clusters.
         """
         return self.call("k")
 
-    @since(1.5)
+    @since('1.5.0')
     def assignments(self):
         """
         Returns the cluster assignments of this model.
@@ -408,7 +408,7 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
             lambda x: (PowerIterationClustering.Assignment(*x)))
 
     @classmethod
-    @since(1.5)
+    @since('1.5.0')
     def load(cls, sc, path):
         """
         Load a model from the given path.
@@ -428,11 +428,11 @@ class PowerIterationClustering(object):
     dataset using truncated power iteration on a normalized pair-wise
     similarity matrix of the data.
 
-    .. versionadded:: 1.5
+    .. versionadded:: 1.5.0
     """
 
     @classmethod
-    @since(1.5)
+    @since('1.5.0')
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
         """
         :param rdd: an RDD of (i, j, s,,ij,,) tuples representing the
@@ -456,7 +456,7 @@ class PowerIterationClustering(object):
         """
         Represents an (id, cluster) tuple.
 
-        .. versionadded:: 1.5
+        .. versionadded:: 1.5.0
         """
 
 
@@ -517,20 +517,20 @@ class StreamingKMeansModel(KMeansModel):
     >>> stkm.predict([1.5, 1.5])
     1
 
-    .. versionadded:: 1.5
+    .. versionadded:: 1.5.0
     """
     def __init__(self, clusterCenters, clusterWeights):
         super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
         self._clusterWeights = list(clusterWeights)
 
     @property
-    @since(1.5)
+    @since('1.5.0')
     def clusterWeights(self):
         """Return the cluster weights."""
         return self._clusterWeights
 
     @ignore_unicode_prefix
-    @since(1.5)
+    @since('1.5.0')
     def update(self, data, decayFactor, timeUnit):
         """Update the centroids, according to data
 
@@ -570,7 +570,7 @@ class StreamingKMeans(object):
     :param timeUnit: can be "batches" or "points". If points, then the
                      decayfactor is raised to the power of no. of new points.
 
-    .. versionadded:: 1.5
+    .. versionadded:: 1.5.0
     """
     def __init__(self, k=2, decayFactor=1.0, timeUnit="batches"):
         self._k = k
@@ -581,7 +581,7 @@ class StreamingKMeans(object):
         self._timeUnit = timeUnit
         self._model = None
 
-    @since(1.5)
+    @since('1.5.0')
     def latestModel(self):
         """Return the latest model"""
         return self._model
@@ -596,19 +596,19 @@ class StreamingKMeans(object):
                 "Expected dstream to be of type DStream, "
                 "got type %s" % type(dstream))
 
-    @since(1.5)
+    @since('1.5.0')
     def setK(self, k):
         """Set number of clusters."""
         self._k = k
         return self
 
-    @since(1.5)
+    @since('1.5.0')
     def setDecayFactor(self, decayFactor):
         """Set decay factor."""
         self._decayFactor = decayFactor
         return self
 
-    @since(1.5)
+    @since('1.5.0')
     def setHalfLife(self, halfLife, timeUnit):
         """
         Set number of batches after which the centroids of that
@@ -618,7 +618,7 @@ class StreamingKMeans(object):
         self._decayFactor = exp(log(0.5) / halfLife)
         return self
 
-    @since(1.5)
+    @since('1.5.0')
     def setInitialCenters(self, centers, weights):
         """
         Set initial centers. Should be set before calling trainOn.
@@ -626,7 +626,7 @@ class StreamingKMeans(object):
         self._model = StreamingKMeansModel(centers, weights)
         return self
 
-    @since(1.5)
+    @since('1.5.0')
     def setRandomCenters(self, dim, weight, seed):
         """
         Set the initial centres to be random samples from
@@ -638,7 +638,7 @@ class StreamingKMeans(object):
         self._model = StreamingKMeansModel(clusterCenters, clusterWeights)
         return self
 
-    @since(1.5)
+    @since('1.5.0')
     def trainOn(self, dstream):
         """Train the model on the incoming dstream."""
         self._validate(dstream)
@@ -648,7 +648,7 @@ class StreamingKMeans(object):
 
         dstream.foreachRDD(update)
 
-    @since(1.5)
+    @since('1.5.0')
     def predictOn(self, dstream):
         """
         Make predictions on a dstream.
@@ -657,7 +657,7 @@ class StreamingKMeans(object):
         self._validate(dstream)
         return dstream.map(lambda x: self._model.predict(x))
 
-    @since(1.5)
+    @since('1.5.0')
     def predictOnValues(self, dstream):
         """
         Make predictions on a keyed dstream.
@@ -707,20 +707,20 @@ class LDAModel(JavaModelWrapper):
     ... except OSError:
     ...     pass
 
-    .. versionadded:: 1.5
+    .. versionadded:: 1.5.0
     """
 
-    @since(1.5)
+    @since('1.5.0')
     def topicsMatrix(self):
         """Inferred topics, where each topic is represented by a distribution over terms."""
         return self.call("topicsMatrix").toArray()
 
-    @since(1.5)
+    @since('1.5.0')
     def vocabSize(self):
         """Vocabulary size (number of terms or terms in the vocabulary)"""
         return self.call("vocabSize")
 
-    @since(1.5)
+    @since('1.5.0')
     def save(self, sc, path):
         """Save the LDAModel on to disk.
 
@@ -734,7 +734,7 @@ class LDAModel(JavaModelWrapper):
         self._java_model.save(sc._jsc.sc(), path)
 
     @classmethod
-    @since(1.5)
+    @since('1.5.0')
     def load(cls, sc, path):
         """Load the LDAModel from disk.
 
@@ -752,11 +752,11 @@ class LDAModel(JavaModelWrapper):
 
 class LDA(object):
     """
-    .. versionadded:: 1.5
+    .. versionadded:: 1.5.0
     """
 
     @classmethod
-    @since(1.5)
+    @since('1.5.0')
     def train(cls, rdd, k=10, maxIterations=20, docConcentration=-1.0,
               topicConcentration=-1.0, seed=None, checkpointInterval=10, optimizer="em"):
         """Train a LDA model.
