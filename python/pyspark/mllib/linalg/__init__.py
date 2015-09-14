@@ -418,9 +418,9 @@ class DenseVector(Vector):
             return np.array_equal(self.array, other.array)
         elif isinstance(other, SparseVector):
             if len(self) != other.size:
-                return false
-            return Vectors.equals(list(xrange(len(self))), self.array, other.indices, other.values)
-        return NotImplemented
+                return False
+            return Vectors._equals(list(xrange(len(self))), self.array, other.indices, other.values)
+        return False
 
     def __ne__(self, other):
         return not self == other
@@ -739,9 +739,9 @@ class SparseVector(Vector):
                 and np.array_equal(other.values, self.values)
         elif isinstance(other, DenseVector):
             if self.size != len(other):
-                return false
-            return Vectors.equals(self.indices, self.values, list(xrange(len(other))), other.array)
-        return NotImplemented
+                return False
+            return Vectors._equals(self.indices, self.values, list(xrange(len(other))), other.array)
+        return False
 
     def __getitem__(self, index):
         inds = self.indices
@@ -879,21 +879,10 @@ class Vectors(object):
         return DenseVector(np.zeros(size))
 
     @staticmethod
-    def equals(v1_indices, v1_values, v2_indices, v2_values):
+    def _equals(v1_indices, v1_values, v2_indices, v2_values):
         """
         Check equality between sparse/dense vectors,
         v1_indices and v2_indices assume to be strictly increasing.
-
-        >>> indices = [1, 2, 4]
-        >>> values = [1., 3., 2.]
-        >>> Vectors.equals(indices, values, list(range(5)), [0., 1., 3., 0., 2.])
-        True
-        >>> Vectors.equals(indices, values, list(range(5)), [0., 3., 1., 0., 2.])
-        False
-        >>> Vectors.equals(indices, values, list(range(5)), [0., 3., 0., 2.])
-        False
-        >>> Vectors.equals(indices, values, list(range(5)), [0., 1., 3., 2., 2.])
-        False
         """
         v1_size = len(v1_values)
         v2_size = len(v2_values)
