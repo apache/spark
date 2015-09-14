@@ -625,11 +625,15 @@ class BackfillJob(BaseJob):
                     continue
                 ti = tasks_to_run[key]
                 ti.refresh_from_db()
-                if ti.state == State.FAILED:
-                    failed.append(key)
-                    logging.error("Task instance " + str(key) + " failed")
+                if ti.state in (State.FAILED, State.SKIPPED):
+                    if ti.state == State.FAILED:
+                        failed.append(key)
+                        logging.error("Task instance " + str(key) + " failed")
+                    elif ti.state == State.SKIPPED:
+                        wont_run.append(key)
+                        logging.error("Skipping " + str(key) + " failed")
                     del tasks_to_run[key]
-                    # Removing downstream tasks from the one that has failed
+                    # Removing downstream tasks that also shouldn't run
                     for t in self.dag.get_task(task_id).get_flat_relatives(
                             upstream=False):
                         key = (ti.dag_id, t.task_id, execution_date)
@@ -646,7 +650,7 @@ class BackfillJob(BaseJob):
                 "succeeded: {1} | "
                 "kicked_off: {2} | "
                 "failed: {3} | "
-                "skipped: {4} ").format(
+                "wont_run: {4} ").format(
                     len(tasks_to_run),
                     len(succeeded),
                     len(started),
