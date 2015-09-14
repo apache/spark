@@ -33,7 +33,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
 from pyspark import shuffle
 
 
-class PySparkMode(object):
+class _PySparkMode(object):
     RDD = 0
     UDF = 1
 
@@ -108,7 +108,7 @@ def main(infile, outfile):
 
         pyspark_mode = read_int(infile)
 
-        if pyspark_mode == PySparkMode.RDD:
+        if pyspark_mode == _PySparkMode.RDD:
             def process():
                 iterator = deserializer.load_stream(infile)
                 serializer.dump_stream(func(split_index, iterator), outfile)
@@ -117,7 +117,7 @@ def main(infile, outfile):
                 profiler.profile(process)
             else:
                 process()
-        elif pyspark_mode == PySparkMode.UDF:
+        elif pyspark_mode == _PySparkMode.UDF:
             pickle_serializer = PickleSerializer()
 
             batch_length = read_int(infile)
