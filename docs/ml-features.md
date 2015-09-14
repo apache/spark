@@ -1179,9 +1179,9 @@ In the example below, we read in a dataset of labeled points and then use `Vecto
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.feature.VectorIndexer
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 val indexer = new VectorIndexer()
   .setInputCol("features")
   .setOutputCol("indexed")
@@ -1200,16 +1200,12 @@ val indexedData = indexerModel.transform(data)
 {% highlight java %}
 import java.util.Map;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(),
-  "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+DataFrame data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 VectorIndexer indexer = new VectorIndexer()
   .setInputCol("features")
   .setOutputCol("indexed")
@@ -1230,9 +1226,9 @@ DataFrame indexedData = indexerModel.transform(data);
 <div data-lang="python" markdown="1">
 {% highlight python %}
 from pyspark.ml.feature import VectorIndexer
-from pyspark.mllib.util import MLUtils
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 indexer = VectorIndexer(inputCol="features", outputCol="indexed", maxCategories=10)
 indexerModel = indexer.fit(data)
 
@@ -1253,10 +1249,9 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.ml.feature.Normalizer
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
+val dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 
 // Normalize each Vector using $L^1$ norm.
 val normalizer = new Normalizer()
@@ -1272,15 +1267,11 @@ val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.Positi
 
 <div data-lang="java">
 {% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Normalizer;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+DataFrame dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 
 // Normalize each Vector using $L^1$ norm.
 Normalizer normalizer = new Normalizer()
@@ -1297,11 +1288,10 @@ DataFrame lInfNormData =
 
 <div data-lang="python">
 {% highlight python %}
-from pyspark.mllib.util import MLUtils
 from pyspark.ml.feature import Normalizer
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-dataFrame = sqlContext.createDataFrame(data)
+dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 
 # Normalize each Vector using $L^1$ norm.
 normalizer = Normalizer(inputCol="features", outputCol="normFeatures", p=1.0)
@@ -1335,10 +1325,9 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.ml.feature.StandardScaler
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
+val dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 val scaler = new StandardScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures")
@@ -1355,16 +1344,12 @@ val scaledData = scalerModel.transform(dataFrame)
 
 <div data-lang="java">
 {% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StandardScaler;
 import org.apache.spark.ml.feature.StandardScalerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+DataFrame dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 StandardScaler scaler = new StandardScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures")
@@ -1381,11 +1366,10 @@ DataFrame scaledData = scalerModel.transform(dataFrame);
 
 <div data-lang="python">
 {% highlight python %}
-from pyspark.mllib.util import MLUtils
 from pyspark.ml.feature import StandardScaler
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-dataFrame = sqlContext.createDataFrame(data)
+dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 scaler = StandardScaler(inputCol="features", outputCol="scaledFeatures",
                         withStd=True, withMean=False)
 
@@ -1424,10 +1408,9 @@ More details can be found in the API docs for
 [MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
 {% highlight scala %}
 import org.apache.spark.ml.feature.MinMaxScaler
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
+val dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 val scaler = new MinMaxScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures")
@@ -1448,13 +1431,10 @@ More details can be found in the API docs for
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.MinMaxScaler;
 import org.apache.spark.ml.feature.MinMaxScalerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+DataFrame dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 MinMaxScaler scaler = new MinMaxScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures");

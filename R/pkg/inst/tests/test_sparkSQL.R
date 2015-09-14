@@ -1147,7 +1147,7 @@ test_that("describe() and summarize() on a DataFrame", {
   stats <- describe(df, "age")
   expect_equal(collect(stats)[1, "summary"], "count")
   expect_equal(collect(stats)[2, "age"], "24.5")
-  expect_equal(collect(stats)[3, "age"], "5.5")
+  expect_equal(collect(stats)[3, "age"], "7.7781745930520225")
   stats <- describe(df)
   expect_equal(collect(stats)[4, "name"], "Andy")
   expect_equal(collect(stats)[5, "age"], "30")

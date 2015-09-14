@@ -138,7 +138,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
  *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
- * @param child the QueryPlan
+ * @param child the SparkPlan
  */
 @DeveloperApi
 case class Sample(
