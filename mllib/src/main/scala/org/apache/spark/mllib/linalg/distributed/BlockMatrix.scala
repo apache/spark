@@ -60,6 +60,7 @@ private[mllib] class GridPartitioner(
    */
   override def getPartition(key: Any): Int = {
     key match {
+      case i: Int => i
       case (i: Int, j: Int) =>
         getPartitionId(i, j)
       case (i: Int, j: Int, _: Int) =>
@@ -352,6 +353,30 @@ class BlockMatrix @Since("1.3.0") (
     }
   }
 
+  private type BlockDestinations =  Map[(Int, Int), Set[Int]]
+
+  /**
+   * Simulate the multiplication with just indices in order to cut costs on communication, when
+   * we are actually shuffling the matrices.
+   */
+  private def simulateMultiply(
+      other: BlockMatrix,
+      partitioner: GridPartitioner): (BlockDestinations, BlockDestinations) = {
+    val leftMatrix = blockInfo.keys.collect() // blockInfo should already be cached
+    val rightMatrix = other.blocks.keys.collect()
+    val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
+      val rightCounterparts = rightMatrix.filter(_._1 == colIndex)
+      val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b._2)))
+      ((rowIndex, colIndex), partitions.toSet)
+    }.toMap
+    val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
+      val leftCounterparts = leftMatrix.filter(_._2 == rowIndex)
+      val partitions = leftCounterparts.map(b => partitioner.getPartition((b._1, colIndex)))
+      ((rowIndex, colIndex), partitions.toSet)
+    }.toMap
+    (leftDestinations, rightDestinations)
+  }
+
   /**
    * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
    * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
@@ -368,33 +393,30 @@ class BlockMatrix @Since("1.3.0") (
     if (colsPerBlock == other.rowsPerBlock) {
       val resultPartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
         math.max(blocks.partitions.length, other.blocks.partitions.length))
-      // Each block of A must be multiplied with the corresponding blocks in each column of B.
-      // TODO: Optimize to send block to a partition once, similar to ALS
+      val (leftDestinations, rightDestinations) = simulateMultiply(other, resultPartitioner)
+      // Each block of A must be multiplied with the corresponding blocks in the columns of B.
       val flatA = blocks.flatMap { case ((blockRowIndex, blockColIndex), block) =>
-        Iterator.tabulate(other.numColBlocks)(j => ((blockRowIndex, j, blockColIndex), block))
+        val destinations = leftDestinations.getOrElse((blockRowIndex, blockColIndex), Set.empty)
+        destinations.map(j => (j, (blockRowIndex, blockColIndex, block)))
       }
       // Each block of B must be multiplied with the corresponding blocks in each row of A.
       val flatB = other.blocks.flatMap { case ((blockRowIndex, blockColIndex), block) =>
-        Iterator.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
+        val destinations = rightDestinations.getOrElse((blockRowIndex, blockColIndex), Set.empty)
+        destinations.map(j => (j, (blockRowIndex, blockColIndex, block)))
       }
-      val newBlocks: RDD[MatrixBlock] = flatA.cogroup(flatB, resultPartitioner)
-        .flatMap { case ((blockRowIndex, blockColIndex, _), (a, b)) =>
-          if (a.size > 1 || b.size > 1) {
-            throw new SparkException("There are multiple MatrixBlocks with indices: " +
-              s"($blockRowIndex, $blockColIndex). Please remove them.")
-          }
-          if (a.nonEmpty && b.nonEmpty) {
-            val C = b.head match {
-              case dense: DenseMatrix => a.head.multiply(dense)
-              case sparse: SparseMatrix => a.head.multiply(sparse.toDense)
-              case _ => throw new SparkException(s"Unrecognized matrix type ${b.head.getClass}.")
+      val newBlocks = flatA.cogroup(flatB, resultPartitioner).flatMap { case (pId, (a, b)) =>
+        a.flatMap { case (leftRowIndex, leftColIndex, leftBlock) =>
+          b.filter(_._1 == leftColIndex).map { case (rightRowIndex, rightColIndex, rightBlock) =>
+            val C = rightBlock match {
+              case dense: DenseMatrix => leftBlock.multiply(dense)
+              case sparse: SparseMatrix => leftBlock.multiply(sparse.toDense)
+              case _ =>
+                throw new SparkException(s"Unrecognized matrix type ${rightBlock.getClass}.")
             }
-            Iterator(((blockRowIndex, blockColIndex), C.toBreeze))
-          } else {
-            Iterator()
+            ((leftRowIndex, rightColIndex), C.toBreeze)
           }
-      }.reduceByKey(resultPartitioner, (a, b) => a + b)
-        .mapValues(Matrices.fromBreeze)
+        }
+      }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)
       // TODO: Try to use aggregateByKey instead of reduceByKey to get rid of intermediate matrices
       new BlockMatrix(newBlocks, rowsPerBlock, other.colsPerBlock, numRows(), other.numCols())
     } else {
