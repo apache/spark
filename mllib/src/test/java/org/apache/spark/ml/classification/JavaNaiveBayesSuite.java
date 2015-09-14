@@ -23,6 +23,7 @@ import java.util.Arrays;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -58,18 +59,18 @@ public class JavaNaiveBayesSuite implements Serializable {
     for (Row r : predictionAndLabels.collect()) {
       double prediction = r.getAs(0);
       double label = r.getAs(1);
-      assert(prediction == label);
+      assertEquals(label, prediction, 1E-5);
     }
   }
 
   @Test
   public void naiveBayesDefaultParams() {
     NaiveBayes nb = new NaiveBayes();
-    assert(nb.getLabelCol() == "label");
-    assert(nb.getFeaturesCol() == "features");
-    assert(nb.getPredictionCol() == "prediction");
-    assert(nb.getSmoothing() == 1.0);
-    assert(nb.getModelType() == "multinomial");
+    assertEquals("label", nb.getLabelCol());
+    assertEquals("features", nb.getFeaturesCol());
+    assertEquals("prediction", nb.getPredictionCol());
+    assertEquals(1.0, nb.getSmoothing(), 1E-5);
+    assertEquals("multinomial", nb.getModelType());
   }
 
   @Test

@@ -39,12 +39,13 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
 
   protected def readParquetSchema(path: String, pathFilter: Path => Boolean): MessageType = {
     val fsPath = new Path(path)
-    val fs = fsPath.getFileSystem(configuration)
+    val fs = fsPath.getFileSystem(hadoopConfiguration)
     val parquetFiles = fs.listStatus(fsPath, new PathFilter {
       override def accept(path: Path): Boolean = pathFilter(path)
     }).toSeq.asJava
 
-    val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
+    val footers =
+      ParquetFileReader.readAllFootersInParallel(hadoopConfiguration, parquetFiles, true)
     footers.asScala.head.getParquetMetadata.getFileMetaData.getSchema
   }
 

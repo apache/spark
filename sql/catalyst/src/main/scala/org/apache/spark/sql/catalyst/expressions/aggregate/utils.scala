@@ -85,6 +85,24 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
 
+        case expressions.Stddev(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Stddev(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case expressions.StddevPop(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.StddevPop(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case expressions.StddevSamp(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.StddevSamp(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
         case expressions.Sum(child) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.Sum(child),
