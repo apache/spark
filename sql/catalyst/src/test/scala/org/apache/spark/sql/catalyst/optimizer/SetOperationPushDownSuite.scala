@@ -78,5 +78,22 @@ class SetOperationPushDownSuite extends PlanTest {
 
     comparePlans(unionOptimized, unionCorrectAnswer)
     comparePlans(intersectOptimized, intersectCorrectAnswer)
-    comparePlans(exceptOptimized, exceptCorrectAnswer)  }
+    comparePlans(exceptOptimized, exceptCorrectAnswer)
+  }
+
+  test("SPARK-10539: Empty project list should not be pushed down through intersect or except") {
+    val intersectQuery = testIntersect.select()
+    val exceptQuery = testExcept.select()
+
+    val intersectOptimized = Optimize.execute(intersectQuery.analyze)
+    val exceptOptimized = Optimize.execute(exceptQuery.analyze)
+
+    val intersectCorrectAnswer =
+      Intersect(testRelation, testRelation2).select().analyze
+    val exceptCorrectAnswer =
+      Except(testRelation, testRelation2).select().analyze
+
+    comparePlans(intersectOptimized, intersectCorrectAnswer)
+    comparePlans(exceptOptimized, exceptCorrectAnswer)
+  }
 }
