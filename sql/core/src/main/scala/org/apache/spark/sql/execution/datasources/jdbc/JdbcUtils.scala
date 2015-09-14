@@ -161,15 +161,18 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(
-                    df: DataFrame,
-                    url: String): String = {
+  def schemaString(df: DataFrame, url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field => {
       val name = field.name
-      val typ: String =
-        dialect.getJDBCType(field.dataType, field.metadata).map(_.databaseTypeDefinition).getOrElse(
+      /* If field metadata exists then call getJDBCType with field data type and metadata else just call with field data type
+       * To override field metadata in Scala
+       * import org.apache.spark.sql.types.MetadataBuilder
+       * val metadata = new MetadataBuilder().putLong("maxlength", 10).build()
+       * df.withColumn("colName", col("colName").as("colName", metadata)
+       */
+      val typ: String = dialect.getJDBCType(field.dataType, field.metadata).map(_.databaseTypeDefinition).getOrElse(
           field.dataType match {
             case IntegerType => "INTEGER"
             case LongType => "BIGINT"
@@ -201,6 +204,12 @@ object JdbcUtils extends Logging {
       properties: Properties = new Properties()) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
+      /* If field metadata exists then call getJDBCType with field data type and metadata else just call with field data type
+       * To override field metadata in Scala
+       * import org.apache.spark.sql.types.MetadataBuilder
+       * val metadata = new MetadataBuilder().putLong("maxlength", 10).build()
+       * df.withColumn("colName", col("colName").as("colName", metadata)
+       */
       dialect.getJDBCType(field.dataType, field.metadata).map(_.jdbcNullType).getOrElse(
         field.dataType match {
           case IntegerType => java.sql.Types.INTEGER

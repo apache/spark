@@ -77,6 +77,13 @@ abstract class JdbcDialect {
   /**
    * Retrieve the jdbc / sql type for a given datatype.
    * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
+   * @return The new JdbcType if there is an override for this DataType
+   */
+  def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Retrieve the jdbc / sql type for a given datatype.
+   * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
    * @param md The metadata
    * @return The new JdbcType if there is an override for this DataType
    */
@@ -127,7 +134,6 @@ object JdbcDialects {
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
   registerDialect(OracleDialect)
-  registerDialect(DB2Dialect)
   registerDialect(NetezzaDialect)
 
   /**
@@ -163,8 +169,8 @@ class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
     dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md)).headOption
   }
 
-  override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
-    dialects.flatMap(_.getJDBCType(dt, md)).headOption
+  override def getJDBCType(dt: DataType): Option[JdbcType] = {
+    dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 }
 
@@ -224,27 +230,6 @@ case object MySQLDialect extends JdbcDialect {
 
   override def quoteIdentifier(colName: String): String = {
     s"`$colName`"
-  }
-}
-
-/**
- * :: DeveloperApi ::
- * Default DB2 dialect, mapping string/boolean on write to valid DB2 types.
- * By default string, and boolean gets mapped to db2 invalid types TEXT, and BIT(1).
- */
-@DeveloperApi
-case object DB2Dialect extends JdbcDialect {
-
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:db2")
-
-  override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
-    if (dt == StringType && md.contains("maxlength")) {
-      Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.CHAR))
-    } else if (dt == StringType ) {
-      Some(JdbcType("CLOB", java.sql.Types.CLOB))
-    } else if (dt == BooleanType ) {
-      Some(JdbcType("CHAR(1)", java.sql.Types.CHAR))
-    } else None
   }
 }
 
