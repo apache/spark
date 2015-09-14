@@ -1696,6 +1696,8 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
         'password',
         'port',
         'extra',
+        'extra__jdbc__drv_path',
+        'extra__jdbc__drv_clsname',
     )
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
