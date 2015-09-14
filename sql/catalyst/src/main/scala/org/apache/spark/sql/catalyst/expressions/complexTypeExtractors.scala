@@ -227,6 +227,38 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 }
 
 /**
+ * Combines two Arrays into one Array.
+ */
+case class ArrayUnion(left: Expression, right: Expression) extends BinaryOperator {
+
+  override def inputType: AbstractDataType = ArrayType
+
+  override def symbol: String = "++"
+
+  private def inputArrType = left.dataType.asInstanceOf[ArrayType]
+  override def dataType: DataType = inputArrType
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arrayClass = classOf[GenericArrayData].getName
+    val elementType = inputArrType.elementType
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      s"""
+        final int n1 = $eval1.numElements();
+        final int n2 = $eval2.numElements();
+        final Object[] unionValues = new Object[n1 + n2];
+        for (int j = 0; j < n1; j++) {
+          unionValues[j] = ${ctx.getValue(eval1, elementType, "j")};
+        }
+        for (int j = 0; j < n2; j++) {
+          unionValues[n1 + j] = ${ctx.getValue(eval2, elementType, "j")};
+        }
+        ${ev.primitive} = new $arrayClass(unionValues);
+      """
+    })
+  }
+}
+
+/**
  * Returns the value of key `key` in Map `child`.
  *
  * We need to do type checking here as `key` expression maybe unresolved.

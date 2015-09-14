@@ -1001,3 +1001,9 @@ case class StddevFunction(
     }
   }
 }
+
+case class CollectList(child: Expression) extends UnaryExpression with AggregateExpression {
+  override def nullable: Boolean = false
+  override def dataType: DataType = new ArrayType(child.dataType, false)
+}
+

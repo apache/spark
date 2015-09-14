@@ -445,3 +445,35 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
 
   override val evaluateExpression = Cast(currentSum, resultType)
 }
+
+case class CollectList(child: Expression) extends AlgebraicAggregate {
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def nullable: Boolean = false
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  // Return data type.
+  override def dataType: DataType = new ArrayType(child.dataType, false)
+
+  private val currentArr = AttributeReference("currentArr", dataType)()
+
+  override val bufferAttributes = currentArr :: Nil
+
+  override val initialValues = Seq(
+    /* currentArr = */ CreateArray(Nil)
+  )
+
+  override val updateExpressions = Seq(
+    /* currentArr = */
+    If(IsNull(child), currentArr, ArrayUnion(currentArr, CreateArray(child :: Nil)))
+  )
+
+  override val mergeExpressions = Seq(
+    /* currentArr = */ ArrayUnion(currentArr.left, currentArr.right)
+  )
+
+  override val evaluateExpression = currentArr
+}
+

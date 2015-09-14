@@ -55,18 +55,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(queryCoalesce, Row("1") :: Nil)
   }
 
-  test("collect set") {
-    val df = Seq((1, "a"), (1, "b"), (2, "c")).toDF("key", "value")
+  test("collect list") {
+    val df = Seq((1, "a"), (1, "b"), (2, "c"), (2, "c")).toDF("key", "value")
     df.registerTempTable("src")
-    val query = sql("select key, collect_set(value) from src group by key")
+    val query = sql("select key, collect_list(value) from src group by key")
 
-    checkAnswer(query, Row(1, "a" :: "b" :: Nil) :: Row(2, "c" :: Nil) :: Nil)
+    checkAnswer(query, Row(1, "a" :: "b" :: Nil) :: Row(2, "c" :: "c" :: Nil) :: Nil)
   }
 
-  test("collect set with nulls") {
+  test("collect list with nulls") {
     val df = Seq((1, "a"), (1, null), (2, null)).toDF("key", "value")
     df.registerTempTable("src")
-    val query = sql("select key, collect_set(value) from src group by key")
+    val query = sql("select key, collect_list(value) from src group by key")
 
     checkAnswer(query, Row(1, "a" :: Nil) :: Row(2, Nil) :: Nil)
   }
@@ -275,12 +275,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.executedPlan
-      .collect { case _: aggregate.TungstenAggregate => true }
+      .collect {
+        case _: aggregate.TungstenAggregate => true
+        case _: aggregate.SortBasedAggregate => true
+      }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
         s"""
-           |Codegen is enabled, but query $sqlText does not have TungstenAggregate in the plan.
+           |Codegen is enabled, but query $sqlText does not have an Aggregate in the plan.
            |${df.queryExecution.simpleString}
          """.stripMargin)
     }
@@ -373,6 +376,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       testCodeGen(
         "SELECT  sum('a'), avg('a'), stddev('a'), count(null) FROM testData",
         Row(null, null, null, 0) :: Nil)
+      testCodeGen(
+        "SELECT value, collect_list(key), collect_set(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i :: i :: i :: Nil, i :: Nil)))
     } finally {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
