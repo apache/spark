@@ -17,39 +17,85 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.test.SharedSQLContext
+import java.util.Properties
 
-class SQLExecutionSuite extends SharedSQLContext {
-  import testImplicits._
+import scala.collection.parallel.CompositeThrowable
 
-  test("query execution IDs are not inherited across threads") {
-    sparkContext.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, "123")
-    sparkContext.setLocalProperty("do-inherit-me", "some-value")
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.sql.SQLContext
+
+class SQLExecutionSuite extends SparkFunSuite {
+
+  test("concurrent query execution (SPARK-10548)") {
+    // Try to reproduce the issue with the old SparkContext
+    val conf = new SparkConf()
+      .setMaster("local[*]")
+      .setAppName("test")
+    val badSparkContext = new BadSparkContext(conf)
+    try {
+      testConcurrentQueryExecution(badSparkContext)
+      fail("unable to reproduce SPARK-10548")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains(SQLExecution.EXECUTION_ID_KEY))
+    } finally {
+      badSparkContext.stop()
+    }
+
+    // Verify that the issue is fixed with the latest SparkContext
+    val goodSparkContext = new SparkContext(conf)
+    try {
+      testConcurrentQueryExecution(goodSparkContext)
+    } finally {
+      goodSparkContext.stop()
+    }
+  }
+
+  /**
+   * Trigger SPARK-10548 by mocking a parent and its child thread executing queries concurrently.
+   */
+  private def testConcurrentQueryExecution(sc: SparkContext): Unit = {
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    // Initialize local properties. This is necessary for the test to pass.
+    sc.getLocalProperties
+
+    // Set up a thread that runs executes a simple SQL query.
+    // Before starting the thread, mutate the execution ID in the parent.
+    // The child thread should not see the effect of this change.
     var throwable: Option[Throwable] = None
-    val thread = new Thread {
+    val child = new Thread {
       override def run(): Unit = {
         try {
-          assert(sparkContext.getLocalProperty("do-inherit-me") === "some-value")
-          assert(sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) === null)
+          sc.parallelize(1 to 100).map { i => (i, i) }.toDF("a", "b").collect()
         } catch {
           case t: Throwable =>
             throwable = Some(t)
         }
+
       }
     }
-    thread.start()
-    thread.join()
-    throwable.foreach { t => throw t }
+    sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, "anything")
+    child.start()
+    child.join()
+
+    // The throwable is thrown from the child thread so it doesn't have a helpful stack trace
+    throwable.foreach { t =>
+      t.setStackTrace(t.getStackTrace ++ Thread.currentThread.getStackTrace)
+      throw t
+    }
   }
 
-  // This is the end-to-end version of the previous test.
-  test("parallel query execution (SPARK-10548)") {
-    (1 to 5).foreach { i =>
-      // Scala's parallel collections spawns new threads as children of the existing threads.
-      // We need to run this multiple times to ensure new threads are spawned. Without the fix
-      // for SPARK-10548, this usually fails on the second try.
-      val df = sparkContext.parallelize(1 to 5).map { i => (i, i) }.toDF("a", "b")
-      (1 to 10).par.foreach { _ => df.count() }
-    }
+}
+
+/**
+ * A bad [[SparkContext]] that does not clone the inheritable thread local properties
+ * when passing them to children threads.
+ */
+private class BadSparkContext(conf: SparkConf) extends SparkContext(conf) {
+  protected[spark] override val localProperties = new InheritableThreadLocal[Properties] {
+    override protected def childValue(parent: Properties): Properties = new Properties(parent)
+    override protected def initialValue(): Properties = new Properties()
   }
 }

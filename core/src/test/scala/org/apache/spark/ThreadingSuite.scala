@@ -152,7 +152,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
                 ThreadingSuiteState.runningThreads.get() + "); failing test")
       fail("One or more threads didn't see runningThreads = 4")
     }
-    throwable.foreach { t => throw t }
+    throwable.foreach { t => throw improveStackTrace(t) }
   }
 
   test("set local properties in different thread") {
@@ -179,7 +179,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
 
     sem.acquire(5)
     assert(sc.getLocalProperty("test") === null)
-    throwable.foreach { t => throw t }
+    throwable.foreach { t => throw improveStackTrace(t) }
   }
 
   test("set and get local properties in parent-children thread") {
@@ -209,73 +209,39 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     sem.acquire(5)
     assert(sc.getLocalProperty("test") === "parent")
     assert(sc.getLocalProperty("Foo") === null)
-    throwable.foreach { t => throw t }
+    throwable.foreach { t => throw improveStackTrace(t) }
   }
 
-  test("inheritance exclusions (SPARK-10548)") {
+  test("mutation in parent local property does not affect child (SPARK-10563)") {
     sc = new SparkContext("local", "test")
-    sc.markLocalPropertyNonInherited("do-not-inherit-me")
-    sc.setLocalProperty("do-inherit-me", "parent")
-    sc.setLocalProperty("do-not-inherit-me", "parent")
+    val originalTestValue: String = "original-value"
+    var threadTestValue: String = null
+    sc.setLocalProperty("test", originalTestValue)
     var throwable: Option[Throwable] = None
-    val threads = (1 to 5).map { i =>
-      new Thread() {
-        override def run() {
-          // only the ones we intend to inherit will be passed to the children
-          try {
-            assert(sc.getLocalProperty("do-inherit-me") === "parent")
-            assert(sc.getLocalProperty("do-not-inherit-me") === null)
-          } catch {
-            case t: Throwable => throwable = Some(t)
-          }
-        }
-      }
-    }
-    threads.foreach(_.start())
-    threads.foreach(_.join())
-    throwable.foreach { t => throw t }
-  }
-
-  test("mutations to local properties should not affect submitted jobs (SPARK-6629)") {
-    val jobStarted = new Semaphore(0)
-    val jobEnded = new Semaphore(0)
-    @volatile var jobResult: JobResult = null
-
-    sc = new SparkContext("local", "test")
-    sc.setJobGroup("originalJobGroupId", "description")
-    sc.addSparkListener(new SparkListener {
-      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        jobStarted.release()
-      }
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        jobResult = jobEnd.jobResult
-        jobEnded.release()
-      }
-    })
-
-    // Create a new thread which will inherit the current thread's properties
-    val thread = new Thread() {
+    val thread = new Thread {
       override def run(): Unit = {
-        assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "originalJobGroupId")
-        // Sleeps for a total of 10 seconds, but allows cancellation to interrupt the task
         try {
-          sc.parallelize(1 to 100).foreach { x =>
-            Thread.sleep(100)
-          }
+          threadTestValue = sc.getLocalProperty("test")
         } catch {
-          case s: SparkException => // ignored so that we don't print noise in test logs
+          case t: Throwable =>
+            throwable = Some(t)
         }
       }
     }
+    sc.setLocalProperty("test", "this-should-not-be-inherited")
     thread.start()
-    // Wait for the job to start, then mutate the original properties, which should have been
-    // inherited by the running job but hopefully defensively copied or snapshotted:
-    jobStarted.tryAcquire(10, TimeUnit.SECONDS)
-    sc.setJobGroup("modifiedJobGroupId", "description")
-    // Canceling the original job group should cancel the running job. In other words, the
-    // modification of the properties object should not affect the properties of running jobs
-    sc.cancelJobGroup("originalJobGroupId")
-    jobEnded.tryAcquire(10, TimeUnit.SECONDS)
-    assert(jobResult.isInstanceOf[JobFailed])
+    thread.join()
+    throwable.foreach { t => throw improveStackTrace(t) }
+    assert(threadTestValue === originalTestValue)
   }
+
+  /**
+   * Improve the stack trace of an error thrown from within a thread.
+   * Otherwise it's difficult to tell which line in the test the error came from.
+   */
+  private def improveStackTrace(t: Throwable): Throwable = {
+    t.setStackTrace(t.getStackTrace ++ Thread.currentThread.getStackTrace)
+    t
+  }
+
 }

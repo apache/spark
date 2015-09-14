@@ -29,10 +29,11 @@ import java.util.UUID.randomUUID
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -347,28 +348,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
-  private val localProperties = new InheritableThreadLocal[Properties] {
+  protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
       // the those of the children threads, which has confusing semantics (SPARK-10564).
-      val p = new Properties
-      val filtered = parent.asScala.filter { case (k, _) =>
-        !nonInheritedLocalProperties.contains(k)
-      }
-      p.putAll(filtered.asJava)
-      p
+      SerializationUtils.clone(parent).asInstanceOf[Properties]
     }
     override protected def initialValue(): Properties = new Properties()
-  }
-
-  // Keys of local properties that should not be inherited by children threads
-  private val nonInheritedLocalProperties: HashSet[String] = new HashSet[String]
-
-  /**
-   * Mark a local property such that its values are never inherited across the thread hierarchy.
-   */
-  private[spark] def markLocalPropertyNonInherited(key: String): Unit = {
-    nonInheritedLocalProperties += key
   }
 
   /* ------------------------------------------------------------------------------------- *
