@@ -54,12 +54,13 @@ case class TakeOrderedAndProjectNode(
   }
 
   override def next(): Boolean = {
+    val p: (InternalRow => InternalRow) = projection match {
+      case Some(p) => p(_)
+      case None => identity(_)
+    }
     if (iterator.hasNext) {
       val _currentRow = iterator.next()
-      currentRow = projection match {
-        case Some(p) => p(_currentRow)
-        case None => _currentRow
-      }
+      currentRow = p(_currentRow)
       true
     } else {
       false

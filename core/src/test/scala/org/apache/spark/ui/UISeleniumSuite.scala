@@ -128,7 +128,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
       val storageJson2 = getJson(sc, "storage/rdd")
       storageJson2.children.length should be (1)
-      (storageJson2 \ "storageLevel").extract[String] should be (StorageLevels.DISK_ONLY.description)
+      (storageJson2 \ "storageLevel").extract[String] should be
+        (StorageLevels.DISK_ONLY.description)
       val rddJson2 = getJson(sc, "storage/rdd/0")
       (rddJson2  \ "storageLevel").extract[String] should be (StorageLevels.DISK_ONLY.description)
 
