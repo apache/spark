@@ -68,12 +68,12 @@ case class Generate(
     generator.resolved &&
       childrenResolved &&
       generator.elementTypes.length == generatorOutput.length &&
-      !generatorOutput.exists(!_.resolved)
+      generatorOutput.forall(_.resolved)
   }
 
   // we don't want the gOutput to be taken as part of the expressions
   // as that will cause exceptions like unresolved attributes etc.
-  override def expressions: Seq[Expression] = generator :: Nil
+  override lazy val expressions: Seq[Expression] = generator :: Nil
 
   def output: Seq[Attribute] = {
     val qualified = qualifier.map(q =>
