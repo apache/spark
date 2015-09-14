@@ -22,6 +22,7 @@ import scala.language.existentials
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -74,7 +75,9 @@ private[spark] class CoGroupPartition(
  * @param part partitioner used to partition the shuffle output
  */
 @DeveloperApi
-class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
+class CoGroupedRDD[K: ClassTag](
+    @transient var rdds: Seq[RDD[_ <: Product2[K, _]]],
+    part: Partitioner)
   extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {
 
   // For example, `(k, a) cogroup (k, b)` produces k -> Array(ArrayBuffer as, ArrayBuffer bs).

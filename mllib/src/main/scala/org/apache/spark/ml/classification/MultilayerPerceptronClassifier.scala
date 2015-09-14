@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
@@ -32,6 +34,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   with HasSeed with HasMaxIter with HasTol {
   /**
    * Layer sizes including input size and output size.
+   * Default: Array(1, 1)
    * @group param
    */
   final val layers: IntArrayParam = new IntArrayParam(this, "layers",
@@ -42,9 +45,6 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
     ParamValidators.arrayLengthGt(1)
   )
 
-  /** @group setParam */
-  def setLayers(value: Array[Int]): this.type = set(layers, value)
-
   /** @group getParam */
   final def getLayers: Array[Int] = $(layers)
 
@@ -53,6 +53,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    * Data is stacked within partitions. If block size is more than remaining data in
    * a partition then it is adjusted to the size of this data.
    * Recommended size is between 10 and 1000.
+   * Default: 128
    * @group expertParam
    */
   final val blockSize: IntParam = new IntParam(this, "blockSize",
@@ -61,32 +62,8 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
       "it is adjusted to the size of this data. Recommended size is between 10 and 1000",
     ParamValidators.gt(0))
 
-  /** @group setParam */
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
-
   /** @group getParam */
   final def getBlockSize: Int = $(blockSize)
-
-  /**
-   * Set the maximum number of iterations.
-   * Default is 100.
-   * @group setParam
-   */
-  def setMaxIter(value: Int): this.type = set(maxIter, value)
-
-  /**
-   * Set the convergence tolerance of iterations.
-   * Smaller value will lead to higher accuracy with the cost of more iterations.
-   * Default is 1E-4.
-   * @group setParam
-   */
-  def setTol(value: Double): this.type = set(tol, value)
-
-  /**
-   * Set the seed for weights initialization.
-   * @group setParam
-   */
-  def setSeed(value: Long): this.type = set(seed, value)
 
   setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 128)
 }
@@ -136,6 +113,33 @@ class MultilayerPerceptronClassifier(override val uid: String)
 
   def this() = this(Identifiable.randomUID("mlpc"))
 
+  /** @group setParam */
+  def setLayers(value: Array[Int]): this.type = set(layers, value)
+
+  /** @group setParam */
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
+  /**
+   * Set the maximum number of iterations.
+   * Default is 100.
+   * @group setParam
+   */
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /**
+   * Set the convergence tolerance of iterations.
+   * Smaller value will lead to higher accuracy with the cost of more iterations.
+   * Default is 1E-4.
+   * @group setParam
+   */
+  def setTol(value: Double): this.type = set(tol, value)
+
+  /**
+   * Set the seed for weights initialization.
+   * @group setParam
+   */
+  def setSeed(value: Long): this.type = set(seed, value)
+
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
   /**
@@ -172,12 +176,19 @@ class MultilayerPerceptronClassifier(override val uid: String)
 @Experimental
 class MultilayerPerceptronClassificationModel private[ml] (
     override val uid: String,
-    layers: Array[Int],
-    weights: Vector)
+    val layers: Array[Int],
+    val weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable {
 
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)
+
+  /**
+   * Returns layers in a Java List.
+   */
+  private[ml] def javaLayers: java.util.List[Int] = {
+    layers.toList.asJava
+  }
 
   /**
    * Predict label for the given features.

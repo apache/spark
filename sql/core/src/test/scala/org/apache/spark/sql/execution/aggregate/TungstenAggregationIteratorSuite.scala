@@ -21,15 +21,12 @@ import org.apache.spark._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.InterpretedMutableProjection
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 
-class TungstenAggregationIteratorSuite extends SparkFunSuite {
+class TungstenAggregationIteratorSuite extends SparkFunSuite with SharedSQLContext {
 
   test("memory acquired on construction") {
-    // set up environment
-    val ctx = TestSQLContext
-
     val taskMemoryManager = new TaskMemoryManager(SparkEnv.get.executorMemoryManager)
     val taskContext = new TaskContextImpl(0, 0, 0, 0, taskMemoryManager, null, Seq.empty)
     TaskContext.setTaskContext(taskContext)
@@ -40,7 +37,7 @@ class TungstenAggregationIteratorSuite extends SparkFunSuite {
       val newMutableProjection = (expr: Seq[Expression], schema: Seq[Attribute]) => {
         () => new InterpretedMutableProjection(expr, schema)
       }
-      val dummyAccum = SQLMetrics.createLongMetric(ctx.sparkContext, "dummy")
+      val dummyAccum = SQLMetrics.createLongMetric(sparkContext, "dummy")
       iter = new TungstenAggregationIterator(Seq.empty, Seq.empty, Seq.empty, 0,
         Seq.empty, newMutableProjection, Seq.empty, None, dummyAccum, dummyAccum)
       val numPages = iter.getHashMap.getNumDataPages

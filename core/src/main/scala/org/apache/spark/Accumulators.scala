@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] private[spark] (
-    @transient initialValue: R,
+    initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
     internal: Boolean)

@@ -20,7 +20,7 @@ package org.apache.spark.streaming.api.java
 import java.lang.{Long => JLong, Iterable => JIterable}
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -116,14 +116,14 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * generate the RDDs with Spark's default number of partitions.
    */
   def groupByKey(): JavaPairDStream[K, JIterable[V]] =
-    dstream.groupByKey().mapValues(asJavaIterable _)
+    dstream.groupByKey().mapValues(_.asJava)
 
   /**
    * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
    */
   def groupByKey(numPartitions: Int): JavaPairDStream[K, JIterable[V]] =
-    dstream.groupByKey(numPartitions).mapValues(asJavaIterable _)
+    dstream.groupByKey(numPartitions).mapValues(_.asJava)
 
   /**
    * Return a new DStream by applying `groupByKey` on each RDD of `this` DStream.
@@ -132,7 +132,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * is used to control the partitioning of each RDD.
    */
   def groupByKey(partitioner: Partitioner): JavaPairDStream[K, JIterable[V]] =
-    dstream.groupByKey(partitioner).mapValues(asJavaIterable _)
+    dstream.groupByKey(partitioner).mapValues(_.asJava)
 
   /**
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
@@ -197,7 +197,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                       batching interval
    */
   def groupByKeyAndWindow(windowDuration: Duration): JavaPairDStream[K, JIterable[V]] = {
-    dstream.groupByKeyAndWindow(windowDuration).mapValues(asJavaIterable _)
+    dstream.groupByKeyAndWindow(windowDuration).mapValues(_.asJava)
   }
 
   /**
@@ -212,7 +212,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration)
   : JavaPairDStream[K, JIterable[V]] = {
-    dstream.groupByKeyAndWindow(windowDuration, slideDuration).mapValues(asJavaIterable _)
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration).mapValues(_.asJava)
   }
 
   /**
@@ -228,8 +228,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration, numPartitions: Int)
     : JavaPairDStream[K, JIterable[V]] = {
-    dstream.groupByKeyAndWindow(windowDuration, slideDuration, numPartitions)
-      .mapValues(asJavaIterable _)
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration, numPartitions).mapValues(_.asJava)
   }
 
   /**
@@ -248,8 +247,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       slideDuration: Duration,
       partitioner: Partitioner
     ): JavaPairDStream[K, JIterable[V]] = {
-    dstream.groupByKeyAndWindow(windowDuration, slideDuration, partitioner)
-      .mapValues(asJavaIterable _)
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration, partitioner).mapValues(_.asJava)
   }
 
   /**
@@ -431,7 +429,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   private def convertUpdateStateFunction[S](in: JFunction2[JList[V], Optional[S], Optional[S]]):
   (Seq[V], Option[S]) => Option[S] = {
     val scalaFunc: (Seq[V], Option[S]) => Option[S] = (values, state) => {
-      val list: JList[V] = values
+      val list: JList[V] = values.asJava
       val scalaState: Optional[S] = JavaUtils.optionToOptional(state)
       val result: Optional[S] = in.apply(list, scalaState)
       result.isPresent match {
@@ -539,7 +537,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def cogroup[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (JIterable[V], JIterable[W])] = {
     implicit val cm: ClassTag[W] = fakeClassTag
-    dstream.cogroup(other.dstream).mapValues(t => (asJavaIterable(t._1), asJavaIterable((t._2))))
+    dstream.cogroup(other.dstream).mapValues(t => (t._1.asJava, t._2.asJava))
   }
 
   /**
@@ -551,8 +549,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       numPartitions: Int
     ): JavaPairDStream[K, (JIterable[V], JIterable[W])] = {
     implicit val cm: ClassTag[W] = fakeClassTag
-    dstream.cogroup(other.dstream, numPartitions)
-           .mapValues(t => (asJavaIterable(t._1), asJavaIterable((t._2))))
+    dstream.cogroup(other.dstream, numPartitions).mapValues(t => (t._1.asJava, t._2.asJava))
   }
 
   /**
@@ -564,8 +561,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       partitioner: Partitioner
     ): JavaPairDStream[K, (JIterable[V], JIterable[W])] = {
     implicit val cm: ClassTag[W] = fakeClassTag
-    dstream.cogroup(other.dstream, partitioner)
-           .mapValues(t => (asJavaIterable(t._1), asJavaIterable((t._2))))
+    dstream.cogroup(other.dstream, partitioner).mapValues(t => (t._1.asJava, t._2.asJava))
   }
 
   /**
