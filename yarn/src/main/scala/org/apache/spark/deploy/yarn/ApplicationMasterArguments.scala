@@ -107,6 +107,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |                       Multiple invocations are possible, each will be passed in order.
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
       |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+      |  --properties-file FILE Path to a custom Spark properties file.
       """.stripMargin)
     // scalastyle:on println
     System.exit(exitCode)
