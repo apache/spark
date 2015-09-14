@@ -285,9 +285,12 @@ private[spark] class TaskSchedulerImpl(
       activeExecutorIds += o.executorId
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
+      }
+      if (!executorsByHost.get(o.host).get.contains(o.executorId)) {
         executorAdded(o.executorId, o.host)
         newExecAvail = true
       }
+
       for (rack <- getRackForHost(o.host)) {
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
