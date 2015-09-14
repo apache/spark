@@ -688,7 +688,7 @@ class RDD(object):
                                              other._jrdd_deserializer)
         return RDD(self._jrdd.cartesian(other._jrdd), self.ctx, deserializer)
 
-    def groupBy(self, f, numPartitions=None):
+    def groupBy(self, f, numPartitions=None, partitionFunc=portable_hash):
         """
         Return an RDD of grouped items.
 
@@ -697,7 +697,7 @@ class RDD(object):
         >>> sorted([(x, sorted(y)) for (x, y) in result])
         [(0, [2, 8]), (1, [1, 1, 3, 5])]
         """
-        return self.map(lambda x: (f(x), x)).groupByKey(numPartitions)
+        return self.map(lambda x: (f(x), x)).groupByKey(numPartitions, partitionFunc)
 
     @ignore_unicode_prefix
     def pipe(self, command, env=None, checkCode=False):
@@ -1792,7 +1792,8 @@ class RDD(object):
 
         return shuffled.mapPartitions(_mergeCombiners, preservesPartitioning=True)
 
-    def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
+    def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None,
+                       partitionFunc=portable_hash):
         """
         Aggregate the values of each key, using given combine functions and a neutral
         "zero value". This function can return a different result type, U, than the type
@@ -1806,9 +1807,9 @@ class RDD(object):
             return copy.deepcopy(zeroValue)
 
         return self.combineByKey(
-            lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions)
+            lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions, partitionFunc)
 
-    def foldByKey(self, zeroValue, func, numPartitions=None):
+    def foldByKey(self, zeroValue, func, numPartitions=None, partitionFunc=portable_hash):
         """
         Merge the values for each key using an associative function "func"
         and a neutral "zeroValue" which may be added to the result an
@@ -1823,7 +1824,8 @@ class RDD(object):
         def createZero():
             return copy.deepcopy(zeroValue)
 
-        return self.combineByKey(lambda v: func(createZero(), v), func, func, numPartitions)
+        return self.combineByKey(lambda v: func(createZero(), v), func, func, numPartitions,
+                                 partitionFunc)
 
     def _can_spill(self):
         return self.ctx._conf.get("spark.shuffle.spill", "True").lower() == "true"
@@ -1832,7 +1834,7 @@ class RDD(object):
         return _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
 
     # TODO: support variant with custom partitioner
-    def groupByKey(self, numPartitions=None):
+    def groupByKey(self, numPartitions=None, partitionFunc=portable_hash):
         """
         Group the values for each key in the RDD into a single sequence.
         Hash-partitions the resulting RDD with numPartitions partitions.
@@ -1870,7 +1872,7 @@ class RDD(object):
             return merger.items()
 
         locally_combined = self.mapPartitions(combine, preservesPartitioning=True)
-        shuffled = locally_combined.partitionBy(numPartitions)
+        shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
         def groupByKey(it):
             merger = ExternalGroupBy(agg, memory, serializer)\
