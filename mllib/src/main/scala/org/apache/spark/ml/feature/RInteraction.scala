@@ -209,6 +209,7 @@ class Interaction(override val uid: String) extends Transformer
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
 
+    // TODO(ekl) make in same order as attrs
     def interact(vv: Any*): Vector = {
       var indices = ArrayBuilder.make[Int]
       var values = ArrayBuilder.make[Double]
@@ -255,8 +256,18 @@ class Interaction(override val uid: String) extends Transformer
   }
 
   private def genAttrs(schema: Seq[StructField]): AttributeGroup = {
-    var attrs = Seq[Attribute]()
-    schema.foreach { field =>
+    def gen(iterators: Seq[Seq[Attribute]]): Seq[Attribute] = {
+      if (iterators.length == 1) {
+        iterators.head
+      } else {
+        iterators.head.flatMap { head =>
+          gen(iterators.tail).map { tail =>
+            NumericAttribute.defaultAttr.withName(head.name.get + ":" + tail.name.get)
+          }
+        }
+      }
+    }
+    val iterators = schema.map { field =>
       val attrIterator = field.dataType match {
         case _: NumericType | BooleanType =>
           val attr = Attribute.fromStructField(field)
@@ -265,22 +276,15 @@ class Interaction(override val uid: String) extends Transformer
           val group = AttributeGroup.fromStructField(field)
           encodedAttrIterator(Some(group.name), group.attributes.get)
       }
-      attrs = attrIterator.flatMap { attr =>
-        if (attrs.isEmpty) {
-          Seq(attr)
-        } else {
-          attrs.map(prev => prev.withName(prev.name.getOrElse("UNKNOWN") + ":" + attr.name.get))
-        }
-      }
+      attrIterator
     }
-    println("Num attrs: " + attrs.length)
-    attrs.foreach(a => println("a: " + a.toMetadata))
-    new AttributeGroup($(outputCol), attrs.toArray)
+    new AttributeGroup($(outputCol), gen(iterators).toArray)
   }
 
   private def encodedAttrIterator(groupName: Option[String], attrs: Seq[Attribute]): Seq[Attribute] = {
     def format(i: Int, attrName: Option[String], value: Option[String]): String = {
-      Seq(groupName, Some(attrName.getOrElse(i.toString)), value).flatten.mkString("_")
+      val parts = Seq(groupName, Some(attrName.getOrElse(i.toString)), value)
+      parts.flatten.mkString("_")
     }
     attrs.zipWithIndex.flatMap {
       case (nominal: NominalAttribute, i) =>
