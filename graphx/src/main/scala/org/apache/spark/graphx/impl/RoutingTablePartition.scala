@@ -34,7 +34,7 @@ object RoutingTablePartition {
   /**
    * A message from an edge partition to a vertex specifying the position in which the edge
    * partition references the vertex (src, dst, or both). The edge partition is encoded in the lower
-   * 30 bytes of the Int, and the position is encoded in the upper 2 bytes of the Int.
+   * 30 bits of the Int, and the position is encoded in the upper 2 bits of the Int.
    */
   type RoutingTableMessage = (VertexId, Int)
 
