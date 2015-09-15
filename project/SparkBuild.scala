@@ -567,11 +567,20 @@ object TestSettings {
     javaOptions in Test ++= "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
+    // Exclude tags defined in a system property
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
+      sys.props.get("test.exclude.tags").map { tags =>
+        tags.split(",").flatMap { tag => Seq("-l", tag) }.toSeq
+      }.getOrElse(Nil): _*),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit,
+      sys.props.get("test.exclude.tags").map { tags =>
+        Seq("--exclude-categories=" + tags)
+      }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
+    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     // Make sure the test temp directory exists.
