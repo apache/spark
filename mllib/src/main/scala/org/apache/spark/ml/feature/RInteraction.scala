@@ -174,36 +174,56 @@ class Interaction(override val uid: String) extends Transformer
 }
 
 private object Interaction {
-  private[feature] def interact(vv: Any*): Vector = {
-    val indices = ArrayBuilder.make[Int]
-    val values = ArrayBuilder.make[Double]
-    var cur = 0
-    vv.foreach {
-      for (item in vector) {
-        for (item in vector) {
-        }
-      }
-      case v: Double =>
-        if (v != 0.0) {
+  def getIterator(v: Any) = v match {
+    case d: Double =>
+      Vectors.dense(d)
+    case vec: Vector =>
+      var indices = ArrayBuilder.make[Int]
+      var values = ArrayBuilder.make[Double]
+      var cur = 0
+      vec.foreachActive { case (i, v) =>
+      // TODO(ekl) precompute cardinality from the ml attrs
+        if (CARDINALITY(i) > 0) {
+          indices += cur + v.toInt
+          values += 1.0
+          cur += CARDINALITY(i)
+        } else {
           indices += cur
           values += v
+          cur += 1
         }
-        cur += 1
-      case vec: Vector =>
-        vec.foreachActive { case (i, v) =>
-          if (v != 0.0) {
-            indices += cur + i
-            values += v
-          }
+      }
+      Vectors.sparse(cur, indices.result(), values.result())
+    case null =>
+      throw new SparkException("Values to interact cannot be null.")
+    case o =>
+      throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
+  }
+
+  def interact(vv: Any*): Vector = {
+    var indices = ArrayBuilder.make[Int]
+    var values = ArrayBuilder.make[Double]
+    var size = 1
+    indices += 1
+    values += 1.0
+    vv.foreach { v =>
+      val prevIndices = indices.result()
+      val prevValues = values.result()
+      val prevSize = size
+      val currentVector = getIterator(v)
+      indices = ArrayBuilder.make[Int]
+      values = ArrayBuilder.make[Double]
+      size *= currentVector.size
+      currentVector.foreachActive { (i, a) =>
+        var j = 0
+        while (j < prevIndices.length) {
+          indices += prevIndices(j) + i * prevSize
+          values += prevValues(j) * a
+          j += 1
         }
-        cur += vec.size
-      case null =>
-        // TODO: output Double.NaN?
-        throw new SparkException("Values to assemble cannot be null.")
-      case o =>
-        throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
+      }
     }
-    Vectors.sparse(cur, indices.result(), values.result()).compressed
+    Vectors.sparse(size, indices.result(), values.result()).compressed
   }
 }
 
