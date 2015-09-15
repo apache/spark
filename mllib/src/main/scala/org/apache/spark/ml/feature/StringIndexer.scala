@@ -27,7 +27,7 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, NumericType, StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -229,8 +229,7 @@ class IndexToString private[ml] (
     val outputColName = $(outputCol)
     require(inputFields.forall(_.name != outputColName),
       s"Output column $outputColName already exists.")
-    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
-    val outputFields = inputFields :+ attr.toStructField()
+    val outputFields = inputFields :+ StructField($(outputCol), StringType)
     StructType(outputFields)
   }
 
