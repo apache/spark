@@ -65,8 +65,8 @@ For Python applications, simply pass a `.py` file in the place of `<application-
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
 
 There are a few options available that are specific to the
-[cluster manager](#cluster-overview.html#cluster-manager-types) that is being used.
-For example, with a [Spark Standalone](#spark-standalone) cluster with `cluster` deploy mode,
+[cluster manager](cluster-overview.html#cluster-manager-types) that is being used.
+For example, with a [Spark standalone cluster](spark-standalone.html) with `cluster` deploy mode,
 you can also specify `--supervise` to make sure that the driver is automatically restarted if it
 fails with non-zero exit code. To enumerate all such options available to `spark-submit`,
 run it with `--help`. Here are a few examples of common options:
@@ -79,7 +79,7 @@ run it with `--help`. Here are a few examples of common options:
   /path/to/examples.jar \
   100
 
-# Run on a Spark Standalone cluster in client deploy mode
+# Run on a Spark standalone cluster in client deploy mode
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
@@ -88,7 +88,7 @@ run it with `--help`. Here are a few examples of common options:
   /path/to/examples.jar \
   1000
 
-# Run on a Spark Standalone cluster in cluster deploy mode with supervise
+# Run on a Spark standalone cluster in cluster deploy mode with supervise
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
@@ -109,7 +109,7 @@ export HADOOP_CONF_DIR=XXX
   /path/to/examples.jar \
   1000
 
-# Run a Python application on a Spark Standalone cluster
+# Run a Python application on a Spark standalone cluster
 ./bin/spark-submit \
   --master spark://207.184.161.138:7077 \
   examples/src/main/python/pi.py \
