@@ -18,13 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.Decimal
 
 
-class StringFunctionsSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class StringFunctionsSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("string concat") {
     val df = Seq[(String, String, String)](("a", "b", null)).toDF("a", "b", "c")
@@ -126,6 +125,12 @@ class StringFunctionsSuite extends QueryTest {
       df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
       Row(bytes, "大千世界"))
     // scalastyle:on
+  }
+
+  test("string translate") {
+    val df = Seq(("translate", "")).toDF("a", "b")
+    checkAnswer(df.select(translate($"a", "rnlt", "123")), Row("1a2s3ae"))
+    checkAnswer(df.selectExpr("""translate(a, "rnlt", "")"""), Row("asae"))
   }
 
   test("string trim functions") {
@@ -263,9 +268,7 @@ class StringFunctionsSuite extends QueryTest {
       Row(3, 4))
 
     intercept[AnalysisException] {
-      checkAnswer(
-        df.selectExpr("length(c)"), // int type of the argument is unacceptable
-        Row("5.0000"))
+      df.selectExpr("length(c)") // int type of the argument is unacceptable
     }
   }
 
@@ -279,63 +282,46 @@ class StringFunctionsSuite extends QueryTest {
   }
 
   test("number format function") {
-    val tuple =
-      ("aa", 1.asInstanceOf[Byte], 2.asInstanceOf[Short],
-        3.13223f, 4, 5L, 6.48173d, Decimal(7.128381))
-    val df =
-      Seq(tuple)
-        .toDF(
-          "a", // string "aa"
-          "b", // byte    1
-          "c", // short   2
-          "d", // float   3.13223f
-          "e", // integer 4
-          "f", // long    5L
-          "g", // double  6.48173d
-          "h") // decimal 7.128381
+    val df = sqlContext.range(1)
 
     checkAnswer(
-      df.select(format_number($"f", 4)),
+      df.select(format_number(lit(5L), 4)),
       Row("5.0000"))
 
     checkAnswer(
-      df.selectExpr("format_number(b, e)"), // convert the 1st argument to integer
+      df.select(format_number(lit(1.toByte), 4)), // convert the 1st argument to integer
       Row("1.0000"))
 
     checkAnswer(
-      df.selectExpr("format_number(c, e)"), // convert the 1st argument to integer
+      df.select(format_number(lit(2.toShort), 4)), // convert the 1st argument to integer
       Row("2.0000"))
 
     checkAnswer(
-      df.selectExpr("format_number(d, e)"), // convert the 1st argument to double
+      df.select(format_number(lit(3.1322.toFloat), 4)), // convert the 1st argument to double
       Row("3.1322"))
 
     checkAnswer(
-      df.selectExpr("format_number(e, e)"), // not convert anything
+      df.select(format_number(lit(4), 4)), // not convert anything
       Row("4.0000"))
 
     checkAnswer(
-      df.selectExpr("format_number(f, e)"), // not convert anything
+      df.select(format_number(lit(5L), 4)), // not convert anything
       Row("5.0000"))
 
     checkAnswer(
-      df.selectExpr("format_number(g, e)"), // not convert anything
+      df.select(format_number(lit(6.48173), 4)), // not convert anything
       Row("6.4817"))
 
     checkAnswer(
-      df.selectExpr("format_number(h, e)"), // not convert anything
+      df.select(format_number(lit(BigDecimal(7.128381)), 4)), // not convert anything
       Row("7.1284"))
 
     intercept[AnalysisException] {
-      checkAnswer(
-        df.selectExpr("format_number(a, e)"), // string type of the 1st argument is unacceptable
-        Row("5.0000"))
+      df.select(format_number(lit("aa"), 4)) // string type of the 1st argument is unacceptable
     }
 
     intercept[AnalysisException] {
-      checkAnswer(
-        df.selectExpr("format_number(e, g)"), // decimal type of the 2nd argument is unacceptable
-        Row("5.0000"))
+      df.selectExpr("format_number(4, 6.48173)") // non-integral type 2nd argument is unacceptable
     }
 
     // for testing the mutable state of the expression in code gen.
@@ -343,9 +329,9 @@ class StringFunctionsSuite extends QueryTest {
     // it will still use the interpretProjection if projection follows by a LocalRelation,
     // hence we add a filter operator.
     // See the optimizer rule `ConvertToLocalRelation`
-    val df2 = Seq((5L, 4), (4L, 3), (3L, 2)).toDF("a", "b")
+    val df2 = Seq((5L, 4), (4L, 3), (4L, 3), (4L, 3), (3L, 2)).toDF("a", "b")
     checkAnswer(
       df2.filter("b>0").selectExpr("format_number(a, b)"),
-      Row("5.0000") :: Row("4.000") :: Row("3.00") :: Nil)
+      Row("5.0000") :: Row("4.000") :: Row("4.000") :: Row("4.000") :: Row("3.00") :: Nil)
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.types;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 public class ByteArray {
 
@@ -27,12 +27,6 @@ public class ByteArray {
    * hold all the bytes in this string.
    */
   public static void writeToMemory(byte[] src, Object target, long targetOffset) {
-    PlatformDependent.copyMemory(
-      src,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      target,
-      targetOffset,
-      src.length
-    );
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET, target, targetOffset, src.length);
   }
 }

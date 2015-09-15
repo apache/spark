@@ -127,14 +127,8 @@ private[deploy] class Master(
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
-  private val restServer =
-    if (restServerEnabled) {
-      val port = conf.getInt("spark.master.rest.port", 6066)
-      Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
-    } else {
-      None
-    }
-  private val restServerBoundPort = restServer.map(_.start())
+  private var restServer: Option[StandaloneRestServer] = None
+  private var restServerBoundPort: Option[Int] = None
 
   override def onStart(): Unit = {
     logInfo("Starting Spark master at " + masterUrl)
@@ -147,6 +141,12 @@ private[deploy] class Master(
         self.send(CheckForWorkerTimeOut)
       }
     }, 0, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+
+    if (restServerEnabled) {
+      val port = conf.getInt("spark.master.rest.port", 6066)
+      restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
+    }
+    restServerBoundPort = restServer.map(_.start())
 
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
@@ -581,20 +581,22 @@ private[deploy] class Master(
 
     /** Return whether the specified worker can launch an executor for this app. */
     def canLaunchExecutor(pos: Int): Boolean = {
+      val keepScheduling = coresToAssign >= minCoresPerExecutor
+      val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
+
       // If we allow multiple executors per worker, then we can always launch new executors.
-      // Otherwise, we may have already started assigning cores to the executor on this worker.
+      // Otherwise, if there is already an executor on this worker, just give it more cores.
       val launchingNewExecutor = !oneExecutorPerWorker || assignedExecutors(pos) == 0
-      val underLimit =
-        if (launchingNewExecutor) {
-          assignedExecutors.sum + app.executors.size < app.executorLimit
-        } else {
-          true
-        }
-      val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
-      usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor &&
-      usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor &&
-      coresToAssign >= minCoresPerExecutor &&
-      underLimit
+      if (launchingNewExecutor) {
+        val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
+        val enoughMemory = usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor
+        val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
+        keepScheduling && enoughCores && enoughMemory && underLimit
+      } else {
+        // We're adding cores to an existing executor, so no need
+        // to check memory and executor limits
+        keepScheduling && enoughCores
+      }
     }
 
     // Keep launching executors until no more workers can accommodate any

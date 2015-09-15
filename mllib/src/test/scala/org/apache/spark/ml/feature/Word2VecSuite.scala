@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -61,6 +62,9 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("result")
       .setSeed(42L)
       .fit(docDF)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
 
     model.transform(docDF).select("result", "expected").collect().foreach {
       case Row(vector1: Vector, vector2: Vector) =>

@@ -320,7 +320,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = left.nullable && right.nullable
 
-  private lazy val ordering = TypeUtils.getOrdering(dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -374,7 +374,7 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = left.nullable && right.nullable
 
-  private lazy val ordering = TypeUtils.getOrdering(dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)

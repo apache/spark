@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasCheckpointInterval
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
@@ -117,7 +118,7 @@ final class DecisionTreeClassificationModel private[ml] (
    * Construct a decision tree classification model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  def this(rootNode: Node, numClasses: Int) =
+  private[ml] def this(rootNode: Node, numClasses: Int) =
     this(Identifiable.randomUID("dtc"), rootNode, numClasses)
 
   override protected def predict(features: Vector): Double = {
@@ -141,10 +142,11 @@ final class DecisionTreeClassificationModel private[ml] (
 
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
     copyValues(new DecisionTreeClassificationModel(uid, rootNode, numClasses), extra)
+      .setParent(parent)
   }
 
   override def toString: String = {
-    s"DecisionTreeClassificationModel of depth $depth with $numNodes nodes"
+    s"DecisionTreeClassificationModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
 
   /** (private[ml]) Convert to a model in the old API */

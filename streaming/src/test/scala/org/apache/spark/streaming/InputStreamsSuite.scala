@@ -76,6 +76,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           fail("Timeout: cannot finish all batches in 30 seconds")
         }
 
+        // Ensure progress listener has been notified of all events
+        ssc.scheduler.listenerBus.waitUntilEmpty(500)
+
         // Verify all "InputInfo"s have been reported
         assert(ssc.progressListener.numTotalReceivedRecords === input.size)
         assert(ssc.progressListener.numTotalProcessedRecords === input.size)

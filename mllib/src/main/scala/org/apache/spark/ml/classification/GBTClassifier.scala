@@ -196,11 +196,11 @@ final class GBTClassificationModel(
   }
 
   override def copy(extra: ParamMap): GBTClassificationModel = {
-    copyValues(new GBTClassificationModel(uid, _trees, _treeWeights), extra)
+    copyValues(new GBTClassificationModel(uid, _trees, _treeWeights), extra).setParent(parent)
   }
 
   override def toString: String = {
-    s"GBTClassificationModel with $numTrees trees"
+    s"GBTClassificationModel (uid=$uid) with $numTrees trees"
   }
 
   /** (private[ml]) Convert to a model in the old API */

@@ -32,7 +32,6 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.hive.common.FileUtils
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -45,7 +44,7 @@ import org.apache.spark.util.SerializableJobConf
  * It is based on [[SparkHadoopWriter]].
  */
 private[hive] class SparkHiveWriterContainer(
-    @transient jobConf: JobConf,
+    jobConf: JobConf,
     fileSinkConf: FileSinkDesc)
   extends Logging
   with SparkHadoopMapRedUtil
@@ -163,7 +162,7 @@ private[spark] object SparkHiveDynamicPartitionWriterContainer {
 }
 
 private[spark] class SparkHiveDynamicPartitionWriterContainer(
-    @transient jobConf: JobConf,
+    jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
     dynamicPartColNames: Array[String])
   extends SparkHiveWriterContainer(jobConf, fileSinkConf) {
@@ -194,10 +193,10 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     // Better solution is to add a step similar to what Hive FileSinkOperator.jobCloseOp does:
     // calling something like Utilities.mvFileToFinalPath to cleanup the output directory and then
     // load it with loadDynamicPartitions/loadPartition/loadTable.
-    val oldMarker = jobConf.getBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, true)
-    jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, false)
+    val oldMarker = conf.value.getBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, true)
+    conf.value.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, false)
     super.commitJob()
-    jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
+    conf.value.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
   }
 
   override def getLocalFileWriter(row: InternalRow, schema: StructType)
@@ -211,18 +210,18 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       }
     }
 
-    val dynamicPartPath = dynamicPartColNames
-      .zip(row.toSeq.takeRight(dynamicPartColNames.length))
-      .map { case (col, rawVal) =>
-        val string = if (rawVal == null) null else convertToHiveRawString(col, rawVal)
-        val colString =
-          if (string == null || string.isEmpty) {
-            defaultPartName
-          } else {
-            FileUtils.escapePathName(string, defaultPartName)
-          }
-        s"/$col=$colString"
-      }.mkString
+    val nonDynamicPartLen = row.numFields - dynamicPartColNames.length
+    val dynamicPartPath = dynamicPartColNames.zipWithIndex.map { case (colName, i) =>
+      val rawVal = row.get(nonDynamicPartLen + i, schema(colName).dataType)
+      val string = if (rawVal == null) null else convertToHiveRawString(colName, rawVal)
+      val colString =
+        if (string == null || string.isEmpty) {
+          defaultPartName
+        } else {
+          FileUtils.escapePathName(string, defaultPartName)
+        }
+      s"/$colName=$colString"
+    }.mkString
 
     def newWriter(): FileSinkOperator.RecordWriter = {
       val newFileSinkDesc = new FileSinkDesc(

@@ -21,7 +21,7 @@ import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
@@ -58,7 +58,7 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  *                        this ClientWrapper.
  */
 private[hive] class ClientWrapper(
-    version: HiveVersion,
+    override val version: HiveVersion,
     config: Map[String, String],
     initClassLoader: ClassLoader)
   extends ClientInterface
@@ -68,45 +68,67 @@ private[hive] class ClientWrapper(
 
   // !! HACK ALERT !!
   //
-  // This method is a surgical fix for Hadoop version 2.0.0-mr1-cdh4.1.1, which is used by Spark EC2
-  // scripts.  We should remove this after upgrading Spark EC2 scripts to some more recent Hadoop
-  // version in the future.
-  //
   // Internally, Hive `ShimLoader` tries to load different versions of Hadoop shims by checking
-  // version information gathered from Hadoop jar files.  If the major version number is 1,
-  // `Hadoop20SShims` will be loaded.  Otherwise, if the major version number is 2, `Hadoop23Shims`
-  // will be chosen.
+  // major version number gathered from Hadoop jar files:
   //
-  // However, part of APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical
-  // reasons. So 2.0.0-mr1-cdh4.1.1 is actually more Hadoop-1-like and should be used together with
-  // `Hadoop20SShims`, but `Hadoop20SShims` is chose because the major version number here is 2.
+  // - For major version number 1, load `Hadoop20SShims`, where "20S" stands for Hadoop 0.20 with
+  //   security.
+  // - For major version number 2, load `Hadoop23Shims`, where "23" stands for Hadoop 0.23.
   //
-  // Here we check for this specific version and loads `Hadoop20SShims` via reflection.  Note that
-  // we can't check for string literal "2.0.0-mr1-cdh4.1.1" because the obtained version string
-  // comes from Maven artifact org.apache.hadoop:hadoop-common:2.0.0-cdh4.1.1, which doesn't have
-  // the "mr1" tag in its version string.
+  // However, APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical reasons. It
+  // turns out that Hadoop 2.0.x versions should also be used together with `Hadoop20SShims`, but
+  // `Hadoop23Shims` is chosen because the major version number here is 2.
+  //
+  // To fix this issue, we try to inspect Hadoop version via `org.apache.hadoop.utils.VersionInfo`
+  // and load `Hadoop20SShims` for Hadoop 1.x and 2.0.x versions.  If Hadoop version information is
+  // not available, we decide whether to override the shims or not by checking for existence of a
+  // probe method which doesn't exist in Hadoop 1.x or 2.0.x versions.
   private def overrideHadoopShims(): Unit = {
-    val VersionPattern = """2\.0\.0.*cdh4.*""".r
+    val hadoopVersion = VersionInfo.getVersion
+    val VersionPattern = """(\d+)\.(\d+).*""".r
 
-    VersionInfo.getVersion match {
-      case VersionPattern() =>
-        val shimClassName = "org.apache.hadoop.hive.shims.Hadoop20SShims"
-        logInfo(s"Loading Hadoop shims $shimClassName")
+    hadoopVersion match {
+      case null =>
+        logError("Failed to inspect Hadoop version")
 
-        try {
-          val shimsField = classOf[ShimLoader].getDeclaredField("hadoopShims")
-          // scalastyle:off classforname
-          val shimsClass = Class.forName(shimClassName)
-          // scalastyle:on classforname
-          val shims = classOf[HadoopShims].cast(shimsClass.newInstance())
-          shimsField.setAccessible(true)
-          shimsField.set(null, shims)
-        } catch { case cause: Throwable =>
-          logError(s"Failed to load $shimClassName")
-          // Falls back to normal Hive `ShimLoader` logic
+        // Using "Path.getPathWithoutSchemeAndAuthority" as the probe method.
+        val probeMethod = "getPathWithoutSchemeAndAuthority"
+        if (!classOf[Path].getDeclaredMethods.exists(_.getName == probeMethod)) {
+          logInfo(
+            s"Method ${classOf[Path].getCanonicalName}.$probeMethod not found, " +
+              s"we are probably using Hadoop 1.x or 2.0.x")
+          loadHadoop20SShims()
         }
 
-      case _ =>
+      case VersionPattern(majorVersion, minorVersion) =>
+        logInfo(s"Inspected Hadoop version: $hadoopVersion")
+
+        // Loads Hadoop20SShims for 1.x and 2.0.x versions
+        val (major, minor) = (majorVersion.toInt, minorVersion.toInt)
+        if (major < 2 || (major == 2 && minor == 0)) {
+          loadHadoop20SShims()
+        }
+    }
+
+    // Logs the actual loaded Hadoop shims class
+    val loadedShimsClassName = ShimLoader.getHadoopShims.getClass.getCanonicalName
+    logInfo(s"Loaded $loadedShimsClassName for Hadoop version $hadoopVersion")
+  }
+
+  private def loadHadoop20SShims(): Unit = {
+    val hadoop20SShimsClassName = "org.apache.hadoop.hive.shims.Hadoop20SShims"
+    logInfo(s"Loading Hadoop shims $hadoop20SShimsClassName")
+
+    try {
+      val shimsField = classOf[ShimLoader].getDeclaredField("hadoopShims")
+      // scalastyle:off classforname
+      val shimsClass = Class.forName(hadoop20SShimsClassName)
+      // scalastyle:on classforname
+      val shims = classOf[HadoopShims].cast(shimsClass.newInstance())
+      shimsField.setAccessible(true)
+      shimsField.set(null, shims)
+    } catch { case cause: Throwable =>
+      throw new RuntimeException(s"Failed to load $hadoop20SShimsClassName", cause)
     }
   }
 
@@ -283,10 +305,11 @@ private[hive] class ClientWrapper(
       HiveTable(
         name = h.getTableName,
         specifiedDatabase = Option(h.getDbName),
-        schema = h.getCols.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
-        partitionColumns = h.getPartCols.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
-        properties = h.getParameters.toMap,
-        serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.toMap,
+        schema = h.getCols.asScala.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
+        partitionColumns = h.getPartCols.asScala.map(f =>
+          HiveColumn(f.getName, f.getType, f.getComment)),
+        properties = h.getParameters.asScala.toMap,
+        serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap,
         tableType = h.getTableType match {
           case HTableType.MANAGED_TABLE => ManagedTable
           case HTableType.EXTERNAL_TABLE => ExternalTable
@@ -312,9 +335,9 @@ private[hive] class ClientWrapper(
   private def toQlTable(table: HiveTable): metadata.Table = {
     val qlTable = new metadata.Table(table.database, table.name)
 
-    qlTable.setFields(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+    qlTable.setFields(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
     qlTable.setPartCols(
-      table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+      table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
     table.properties.foreach { case (k, v) => qlTable.setProperty(k, v) }
     table.serdeProperties.foreach { case (k, v) => qlTable.setSerdeParam(k, v) }
 
@@ -344,13 +367,13 @@ private[hive] class ClientWrapper(
   private def toHivePartition(partition: metadata.Partition): HivePartition = {
     val apiPartition = partition.getTPartition
     HivePartition(
-      values = Option(apiPartition.getValues).map(_.toSeq).getOrElse(Seq.empty),
+      values = Option(apiPartition.getValues).map(_.asScala).getOrElse(Seq.empty),
       storage = HiveStorageDescriptor(
         location = apiPartition.getSd.getLocation,
         inputFormat = apiPartition.getSd.getInputFormat,
         outputFormat = apiPartition.getSd.getOutputFormat,
         serde = apiPartition.getSd.getSerdeInfo.getSerializationLib,
-        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.toMap))
+        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
   }
 
   override def getPartitionOption(
@@ -375,7 +398,7 @@ private[hive] class ClientWrapper(
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    client.getAllTables(dbName)
+    client.getAllTables(dbName).asScala
   }
 
   /**
@@ -492,17 +515,17 @@ private[hive] class ClientWrapper(
   }
 
   def reset(): Unit = withHiveState {
-    client.getAllTables("default").foreach { t =>
+    client.getAllTables("default").asScala.foreach { t =>
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
-        client.getIndexes("default", t, 255).foreach { index =>
+        client.getIndexes("default", t, 255).asScala.foreach { index =>
           shim.dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
           client.dropTable("default", t)
         }
       }
-      client.getAllDatabases.filterNot(_ == "default").foreach { db =>
+      client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }

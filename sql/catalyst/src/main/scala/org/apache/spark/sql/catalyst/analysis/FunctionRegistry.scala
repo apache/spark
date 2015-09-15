@@ -168,6 +168,9 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Max]("max"),
     expression[Min]("min"),
+    expression[Stddev]("stddev"),
+    expression[StddevPop]("stddev_pop"),
+    expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
 
     // string functions
@@ -203,6 +206,7 @@ object FunctionRegistry {
     expression[Substring]("substr"),
     expression[Substring]("substring"),
     expression[SubstringIndex]("substring_index"),
+    expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),

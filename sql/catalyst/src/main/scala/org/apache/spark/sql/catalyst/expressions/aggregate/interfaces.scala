@@ -93,7 +93,7 @@ private[sql] case class AggregateExpression2(
     AttributeSet(childReferences)
   }
 
-  override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
+  override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
 }
 
 abstract class AggregateFunction2

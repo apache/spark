@@ -31,6 +31,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
@@ -427,7 +428,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   test("transform with SerDe2") {
 
@@ -446,7 +447,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
         |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
         |FROM small_src
-      """.stripMargin.replaceAll("\n", " ")).collect().head
+      """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
 
     assert(expected(0) === res(0))
   }
@@ -458,7 +459,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
       |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   createQueryTest("transform with SerDe4",
     """
@@ -467,7 +468,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
       |('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
@@ -1104,18 +1105,19 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size == 0)
+    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
 
+    val defaults = collectResults(sql("SET"))
     assertResult(Set(testKey -> testVal)) {
       collectResults(sql(s"SET $testKey=$testVal"))
     }
 
-    assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
+    assert(hiveconf.get(testKey, "") === testVal)
+    assertResult(defaults ++ Set(testKey -> testVal))(collectResults(sql("SET")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+    assertResult(defaults ++ Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
     }
 

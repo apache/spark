@@ -49,7 +49,7 @@ import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -101,8 +101,8 @@ public class UnsafeExternalSorterSuite {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     sparkConf = new SparkConf();
-    tempDir = new File(Utils.createTempDir$default$1());
-    shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
+    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
+    shuffleMemoryManager = ShuffleMemoryManager.create(Long.MAX_VALUE, pageSizeBytes);
     spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
@@ -143,13 +143,18 @@ public class UnsafeExternalSorterSuite {
 
   @After
   public void tearDown() {
-    long leakedUnsafeMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
-    if (shuffleMemoryManager != null) {
-      long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
-      shuffleMemoryManager = null;
-      assertEquals(0L, leakedShuffleMemory);
+    try {
+      long leakedUnsafeMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
+      if (shuffleMemoryManager != null) {
+        long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
+        shuffleMemoryManager = null;
+        assertEquals(0L, leakedShuffleMemory);
+      }
+      assertEquals(0, leakedUnsafeMemory);
+    } finally {
+      Utils.deleteRecursively(tempDir);
+      tempDir = null;
     }
-    assertEquals(0, leakedUnsafeMemory);
   }
 
   private void assertSpillFilesWereCleanedUp() {
@@ -161,14 +166,14 @@ public class UnsafeExternalSorterSuite {
 
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
     final int[] arr = new int[]{ value };
-    sorter.insertRecord(arr, PlatformDependent.INT_ARRAY_OFFSET, 4, value);
+    sorter.insertRecord(arr, Platform.INT_ARRAY_OFFSET, 4, value);
   }
 
   private static void insertRecord(
       UnsafeExternalSorter sorter,
       int[] record,
       long prefix) throws IOException {
-    sorter.insertRecord(record, PlatformDependent.INT_ARRAY_OFFSET, record.length * 4, prefix);
+    sorter.insertRecord(record, Platform.INT_ARRAY_OFFSET, record.length * 4, prefix);
   }
 
   private UnsafeExternalSorter newSorter() throws IOException {
@@ -200,7 +205,7 @@ public class UnsafeExternalSorterSuite {
       iter.loadNext();
       assertEquals(i, iter.getKeyPrefix());
       assertEquals(4, iter.getRecordLength());
-      assertEquals(i, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     }
 
     sorter.cleanupResources();
@@ -232,9 +237,9 @@ public class UnsafeExternalSorterSuite {
 
   @Test
   public void spillingOccursInResponseToMemoryPressure() throws Exception {
-    shuffleMemoryManager = new ShuffleMemoryManager(pageSizeBytes * 2);
+    shuffleMemoryManager = ShuffleMemoryManager.create(pageSizeBytes * 2, pageSizeBytes);
     final UnsafeExternalSorter sorter = newSorter();
-    final int numRecords = 100000;
+    final int numRecords = (int) pageSizeBytes / 4;
     for (int i = 0; i <= numRecords; i++) {
       insertNumber(sorter, numRecords - i);
     }
@@ -248,7 +253,7 @@ public class UnsafeExternalSorterSuite {
       iter.loadNext();
       assertEquals(i, iter.getKeyPrefix());
       assertEquals(4, iter.getRecordLength());
-      assertEquals(i, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
       i++;
     }
     sorter.cleanupResources();
@@ -260,7 +265,7 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = newSorter();
     byte[] record = new byte[16];
     while (sorter.getNumberOfAllocatedPages() < 2) {
-      sorter.insertRecord(record, PlatformDependent.BYTE_ARRAY_OFFSET, record.length, 0);
+      sorter.insertRecord(record, Platform.BYTE_ARRAY_OFFSET, record.length, 0);
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -287,25 +292,25 @@ public class UnsafeExternalSorterSuite {
     iter.loadNext();
     assertEquals(123, iter.getKeyPrefix());
     assertEquals(smallRecord.length * 4, iter.getRecordLength());
-    assertEquals(123, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(123, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     // Small record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(123, iter.getKeyPrefix());
     assertEquals(smallRecord.length * 4, iter.getRecordLength());
-    assertEquals(123, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(123, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     // Large record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(456, iter.getKeyPrefix());
     assertEquals(largeRecord.length * 4, iter.getRecordLength());
-    assertEquals(456, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(456, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     // Large record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(456, iter.getKeyPrefix());
     assertEquals(largeRecord.length * 4, iter.getRecordLength());
-    assertEquals(456, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(456, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
 
     assertFalse(iter.hasNext());
     sorter.cleanupResources();
@@ -335,7 +340,8 @@ public class UnsafeExternalSorterSuite {
       for (int i = 0; i < numRecordsPerPage * 10; i++) {
         insertNumber(sorter, i);
         newPeakMemory = sorter.getPeakMemoryUsedBytes();
-        if (i % numRecordsPerPage == 0) {
+        // The first page is pre-allocated on instantiation
+        if (i % numRecordsPerPage == 0 && i > 0) {
           // We allocated a new page for this record, so peak memory should change
           assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
@@ -353,6 +359,22 @@ public class UnsafeExternalSorterSuite {
       }
       newPeakMemory = sorter.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
+    } finally {
+      sorter.cleanupResources();
+      assertSpillFilesWereCleanedUp();
+    }
+  }
+
+  @Test
+  public void testReservePageOnInstantiation() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    try {
+      assertEquals(1, sorter.getNumberOfAllocatedPages());
+      // Inserting a new record doesn't allocate more memory since we already have a page
+      long peakMemory = sorter.getPeakMemoryUsedBytes();
+      insertNumber(sorter, 100);
+      assertEquals(peakMemory, sorter.getPeakMemoryUsedBytes());
+      assertEquals(1, sorter.getNumberOfAllocatedPages());
     } finally {
       sorter.cleanupResources();
       assertSpillFilesWereCleanedUp();

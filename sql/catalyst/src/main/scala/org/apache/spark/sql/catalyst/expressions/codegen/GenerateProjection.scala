@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -24,6 +25,8 @@ import org.apache.spark.sql.types._
  * Java can not access Projection (in package object)
  */
 abstract class BaseProjection extends Projection {}
+
+abstract class CodeGenMutableRow extends MutableRow with BaseGenericInternalRow
 
 /**
  * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
@@ -45,7 +48,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val columns = expressions.zipWithIndex.map {
       case (e, i) =>
         s"private ${ctx.javaType(e.dataType)} c$i = ${ctx.defaultValue(e.dataType)};\n"
-    }.mkString("\n      ")
+    }.mkString("\n")
 
     val initColumns = expressions.zipWithIndex.map {
       case (e, i) =>
@@ -64,18 +67,18 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val getCases = (0 until expressions.size).map { i =>
       s"case $i: return c$i;"
-    }.mkString("\n        ")
+    }.mkString("\n")
 
     val updateCases = expressions.zipWithIndex.map { case (e, i) =>
       s"case $i: { c$i = (${ctx.boxedType(e.dataType)})value; return;}"
-    }.mkString("\n        ")
+    }.mkString("\n")
 
     val specificAccessorFunctions = ctx.primitiveTypes.map { jt =>
       val cases = expressions.zipWithIndex.flatMap {
         case (e, i) if ctx.javaType(e.dataType) == jt =>
           Some(s"case $i: return c$i;")
         case _ => None
-      }.mkString("\n        ")
+      }.mkString("\n")
       if (cases.length > 0) {
         val getter = "get" + ctx.primitiveTypeName(jt)
         s"""
@@ -100,7 +103,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         case (e, i) if ctx.javaType(e.dataType) == jt =>
           Some(s"case $i: { c$i = value; return; }")
         case _ => None
-      }.mkString("\n        ")
+      }.mkString("\n")
       if (cases.length > 0) {
         val setter = "set" + ctx.primitiveTypeName(jt)
         s"""
@@ -149,7 +152,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val copyColumns = expressions.zipWithIndex.map { case (e, i) =>
         s"""if (!nullBits[$i]) arr[$i] = c$i;"""
-    }.mkString("\n      ")
+    }.mkString("\n")
 
     val code = s"""
     public SpecificProjection generate($exprType[] expr) {
@@ -171,7 +174,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         return new SpecificRow((InternalRow) r);
       }
 
-      final class SpecificRow extends ${classOf[MutableRow].getName} {
+      final class SpecificRow extends ${classOf[CodeGenMutableRow].getName} {
 
         $columns
 
@@ -184,7 +187,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         public void setNullAt(int i) { nullBits[i] = true; }
         public boolean isNullAt(int i) { return nullBits[i]; }
 
-        protected Object genericGet(int i) {
+        @Override
+        public Object genericGet(int i) {
           if (isNullAt(i)) return null;
           switch (i) {
           $getCases

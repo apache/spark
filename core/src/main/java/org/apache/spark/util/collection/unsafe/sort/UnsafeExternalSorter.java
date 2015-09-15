@@ -35,7 +35,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
@@ -127,12 +127,15 @@ public final class UnsafeExternalSorter {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.fileBufferSizeBytes = 32 * 1024;
-    // this.pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "64m");
     this.pageSizeBytes = pageSizeBytes;
     this.writeMetrics = new ShuffleWriteMetrics();
 
     if (existingInMemorySorter == null) {
       initializeForWriting();
+      // Acquire a new page as soon as we construct the sorter to ensure that we have at
+      // least one page to work with. Otherwise, other operators in the same task may starve
+      // this sorter (SPARK-9709). We don't need to do this if we already have an existing sorter.
+      acquireNewPage();
     } else {
       this.isInMemSorterExternal = true;
       this.inMemSorter = existingInMemorySorter;
@@ -191,24 +194,29 @@ public final class UnsafeExternalSorter {
       spillWriters.size(),
       spillWriters.size() > 1 ? " times" : " time");
 
-    final UnsafeSorterSpillWriter spillWriter =
-      new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
-        inMemSorter.numRecords());
-    spillWriters.add(spillWriter);
-    final UnsafeSorterIterator sortedRecords = inMemSorter.getSortedIterator();
-    while (sortedRecords.hasNext()) {
-      sortedRecords.loadNext();
-      final Object baseObject = sortedRecords.getBaseObject();
-      final long baseOffset = sortedRecords.getBaseOffset();
-      final int recordLength = sortedRecords.getRecordLength();
-      spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
+    // We only write out contents of the inMemSorter if it is not empty.
+    if (inMemSorter.numRecords() > 0) {
+      final UnsafeSorterSpillWriter spillWriter =
+        new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
+          inMemSorter.numRecords());
+      spillWriters.add(spillWriter);
+      final UnsafeSorterIterator sortedRecords = inMemSorter.getSortedIterator();
+      while (sortedRecords.hasNext()) {
+        sortedRecords.loadNext();
+        final Object baseObject = sortedRecords.getBaseObject();
+        final long baseOffset = sortedRecords.getBaseOffset();
+        final int recordLength = sortedRecords.getRecordLength();
+        spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
+      }
+      spillWriter.close();
     }
-    spillWriter.close();
+
     final long spillSize = freeMemory();
     // Note that this is more-or-less going to be a multiple of the page size, so wasted space in
     // pages will currently be counted as memory spilled even though that space isn't actually
     // written to disk. This also counts the space needed to store the sorter's pointer array.
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
+
     initializeForWriting();
   }
 
@@ -338,22 +346,32 @@ public final class UnsafeExternalSorter {
         throw new IOException("Required space " + requiredSpace + " is greater than page size (" +
           pageSizeBytes + ")");
       } else {
-        final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-        if (memoryAcquired < pageSizeBytes) {
-          shuffleMemoryManager.release(memoryAcquired);
-          spill();
-          final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-          if (memoryAcquiredAfterSpilling != pageSizeBytes) {
-            shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
-            throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
-          }
-        }
-        currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
-        currentPagePosition = currentPage.getBaseOffset();
-        freeSpaceInCurrentPage = pageSizeBytes;
-        allocatedPages.add(currentPage);
+        acquireNewPage();
       }
     }
+  }
+
+  /**
+   * Acquire a new page from the {@link ShuffleMemoryManager}.
+   *
+   * If there is not enough space to allocate the new page, spill all existing ones
+   * and try again. If there is still not enough space, report error to the caller.
+   */
+  private void acquireNewPage() throws IOException {
+    final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+    if (memoryAcquired < pageSizeBytes) {
+      shuffleMemoryManager.release(memoryAcquired);
+      spill();
+      final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+      if (memoryAcquiredAfterSpilling != pageSizeBytes) {
+        shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
+        throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
+      }
+    }
+    currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
+    currentPagePosition = currentPage.getBaseOffset();
+    freeSpaceInCurrentPage = pageSizeBytes;
+    allocatedPages.add(currentPage);
   }
 
   /**
@@ -408,14 +426,10 @@ public final class UnsafeExternalSorter {
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
     dataPagePosition += 4;
-    PlatformDependent.copyMemory(
-      recordBaseObject,
-      recordBaseOffset,
-      dataPageBaseObject,
-      dataPagePosition,
-      lengthInBytes);
+    Platform.copyMemory(
+      recordBaseObject, recordBaseOffset, dataPageBaseObject, dataPagePosition, lengthInBytes);
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
   }
@@ -474,18 +488,16 @@ public final class UnsafeExternalSorter {
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, keyLen + valueLen + 4);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, keyLen + valueLen + 4);
     dataPagePosition += 4;
 
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, keyLen);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, keyLen);
     dataPagePosition += 4;
 
-    PlatformDependent.copyMemory(
-      keyBaseObj, keyOffset, dataPageBaseObject, dataPagePosition, keyLen);
+    Platform.copyMemory(keyBaseObj, keyOffset, dataPageBaseObject, dataPagePosition, keyLen);
     dataPagePosition += keyLen;
 
-    PlatformDependent.copyMemory(
-      valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
+    Platform.copyMemory(valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
 
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
@@ -505,12 +517,11 @@ public final class UnsafeExternalSorter {
       final UnsafeSorterSpillMerger spillMerger =
         new UnsafeSorterSpillMerger(recordComparator, prefixComparator, numIteratorsToMerge);
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
-        spillMerger.addSpill(spillWriter.getReader(blockManager));
+        spillMerger.addSpillIfNotEmpty(spillWriter.getReader(blockManager));
       }
       spillWriters.clear();
-      if (inMemoryIterator.hasNext()) {
-        spillMerger.addSpill(inMemoryIterator);
-      }
+      spillMerger.addSpillIfNotEmpty(inMemoryIterator);
+
       return spillMerger.getSortedIterator();
     }
   }

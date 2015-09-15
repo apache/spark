@@ -21,7 +21,7 @@ import java.io._
 import java.util.Properties
 import javax.annotation.Nullable
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -53,7 +53,7 @@ case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
-    ioschema: HiveScriptIOSchema)(@transient sc: HiveContext)
+    ioschema: HiveScriptIOSchema)(@transient private val sc: HiveContext)
   extends UnaryNode {
 
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
@@ -61,7 +61,7 @@ case class ScriptTransformation(
   protected override def doExecute(): RDD[InternalRow] = {
     def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val cmd = List("/bin/bash", "-c", script)
-      val builder = new ProcessBuilder(cmd)
+      val builder = new ProcessBuilder(cmd.asJava)
 
       val proc = builder.start()
       val inputStream = proc.getInputStream
@@ -88,6 +88,7 @@ case class ScriptTransformation(
       // external process. That process's output will be read by this current thread.
       val writerThread = new ScriptTransformationWriterThread(
         inputIterator,
+        input.map(_.dataType),
         outputProjection,
         inputSerde,
         inputSoi,
@@ -171,10 +172,10 @@ case class ScriptTransformation(
             val fieldList = outputSoi.getAllStructFieldRefs()
             var i = 0
             while (i < dataList.size()) {
-              if (dataList(i) == null) {
+              if (dataList.get(i) == null) {
                 mutableRow.setNullAt(i)
               } else {
-                mutableRow(i) = unwrap(dataList(i), fieldList(i).getFieldObjectInspector)
+                mutableRow(i) = unwrap(dataList.get(i), fieldList.get(i).getFieldObjectInspector)
               }
               i += 1
             }
@@ -201,6 +202,7 @@ case class ScriptTransformation(
 
 private class ScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
+    inputSchema: Seq[DataType],
     outputProjection: Projection,
     @Nullable inputSerde: AbstractSerDe,
     @Nullable inputSoi: ObjectInspector,
@@ -226,12 +228,25 @@ private class ScriptTransformationWriterThread(
     // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
     // let's use a variable to record whether the `finally` block was hit due to an exception
     var threwException: Boolean = true
+    val len = inputSchema.length
     try {
       iter.map(outputProjection).foreach { row =>
         if (inputSerde == null) {
-          val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
-          outputStream.write(data)
+          val data = if (len == 0) {
+            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
+          } else {
+            val sb = new StringBuilder
+            sb.append(row.get(0, inputSchema(0)))
+            var i = 1
+            while (i < len) {
+              sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+              sb.append(row.get(i, inputSchema(i)))
+              i += 1
+            }
+            sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
+            sb.toString()
+          }
+          outputStream.write(data.getBytes("utf-8"))
         } else {
           val writable = inputSerde.serialize(
             row.asInstanceOf[GenericInternalRow].values, inputSoi)
@@ -292,7 +307,7 @@ case class HiveScriptIOSchema (
       val serde = initSerDe(serdeClass, columns, columnTypes, inputSerdeProps)
       val fieldObjectInspectors = columnTypes.map(toInspector)
       val objectInspector = ObjectInspectorFactory
-        .getStandardStructObjectInspector(columns, fieldObjectInspectors)
+        .getStandardStructObjectInspector(columns.asJava, fieldObjectInspectors.asJava)
         .asInstanceOf[ObjectInspector]
       (serde, objectInspector)
     }
@@ -327,7 +342,7 @@ case class HiveScriptIOSchema (
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()
-    properties.putAll(propsMap)
+    properties.putAll(propsMap.asJava)
     serde.initialize(null, properties)
 
     serde

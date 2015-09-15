@@ -31,7 +31,7 @@ class Module(object):
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
                  sbt_test_goals=(), python_test_goals=(), blacklisted_python_implementations=(),
-                 should_run_r_tests=False):
+                 test_tags=(), should_run_r_tests=False):
         """
         Define a new module.
 
@@ -50,6 +50,8 @@ class Module(object):
         :param blacklisted_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
+        :param test_tags A set of tags that will be excluded when running unit tests if the module
+            is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
         """
         self.name = name
@@ -60,6 +62,7 @@ class Module(object):
         self.environ = environ
         self.python_test_goals = python_test_goals
         self.blacklisted_python_implementations = blacklisted_python_implementations
+        self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
 
         self.dependent_modules = set()
@@ -85,6 +88,9 @@ sql = Module(
         "catalyst/test",
         "sql/test",
         "hive/test",
+    ],
+    test_tags=[
+        "org.apache.spark.sql.hive.ExtendedHiveTest"
     ]
 )
 
@@ -134,7 +140,7 @@ streaming = Module(
 # files in streaming_kinesis_asl are changed, so that if Kinesis experiences an outage, we don't
 # fail other PRs.
 streaming_kinesis_asl = Module(
-    name="kinesis-asl",
+    name="streaming-kinesis-asl",
     dependencies=[],
     source_file_regexes=[
         "extras/kinesis-asl/",
@@ -147,7 +153,7 @@ streaming_kinesis_asl = Module(
         "ENABLE_KINESIS_TESTS": "1"
     },
     sbt_test_goals=[
-        "kinesis-asl/test",
+        "streaming-kinesis-asl/test",
     ]
 )
 
@@ -181,6 +187,7 @@ streaming_mqtt = Module(
     dependencies=[streaming],
     source_file_regexes=[
         "external/mqtt",
+        "external/mqtt-assembly",
     ],
     sbt_test_goals=[
         "streaming-mqtt/test",
@@ -306,6 +313,7 @@ pyspark_streaming = Module(
         streaming,
         streaming_kafka,
         streaming_flume_assembly,
+        streaming_mqtt,
         streaming_kinesis_asl
     ],
     source_file_regexes=[
@@ -395,6 +403,22 @@ ec2 = Module(
     ]
 )
 
+
+yarn = Module(
+    name="yarn",
+    dependencies=[],
+    source_file_regexes=[
+        "yarn/",
+        "network/yarn/",
+    ],
+    sbt_test_goals=[
+        "yarn/test",
+        "network-yarn/test",
+    ],
+    test_tags=[
+        "org.apache.spark.deploy.yarn.ExtendedYarnTest"
+    ]
+)
 
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
