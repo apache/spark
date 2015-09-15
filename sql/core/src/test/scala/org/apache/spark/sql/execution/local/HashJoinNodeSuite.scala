@@ -18,99 +18,91 @@
 package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.execution.joins
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.types.{IntegerType, StringType}
+
 
 class HashJoinNodeSuite extends LocalNodeTest {
+  private val names = Seq(
+    AttributeReference("id", IntegerType)(),
+    AttributeReference("name", StringType)())
+  private val orders = Seq(
+    AttributeReference("id", IntegerType)(),
+    AttributeReference("orders", IntegerType)())
 
-  import testImplicits._
+  /**
+   * Test inner hash join with varying degrees of matches.
+   */
+  private def testJoin(
+      testNamePrefix: String,
+      buildSide: BuildSide,
+      unsafeAndCodegen: Boolean): Unit = {
+    val leftData = (1 to 100).map { i => (i, "burger" + i) }.toArray
+    val conf = new SQLConf
+    conf.setConf(SQLConf.UNSAFE_ENABLED, unsafeAndCodegen)
+    conf.setConf(SQLConf.CODEGEN_ENABLED, unsafeAndCodegen)
 
-  def joinSuite(suiteName: String, confPairs: (String, String)*): Unit = {
-    test(s"$suiteName: inner join with one match per row") {
-      withSQLConf(confPairs: _*) {
-        checkAnswer2(
-          upperCaseData,
-          lowerCaseData,
-          wrapForUnsafe(
-            (node1, node2) => HashJoinNode(
-              conf,
-              Seq(upperCaseData.col("N").expr),
-              Seq(lowerCaseData.col("n").expr),
-              joins.BuildLeft,
-              node1,
-              node2)
-          ),
-          upperCaseData.join(lowerCaseData, $"n" === $"N").collect()
-        )
+    def runTest(
+        testName: String,
+        leftData: Array[(Int, String)],
+        rightData: Array[(Int, Int)]): Unit = {
+      test(testName) {
+        val rightDataMap = rightData.toMap
+        val leftNode = new DummyNode(names, leftData)
+        val rightNode = new DummyNode(orders, rightData)
+        val makeNode = (node1: LocalNode, node2: LocalNode) => {
+          new HashJoinNode(
+            conf, Seq(node1.output(0)), Seq(node2.output(0)), buildSide, node1, node2)
+        }
+        val makeUnsafeNode = if (unsafeAndCodegen) wrapForUnsafe(makeNode) else makeNode
+        val hashJoinNode = makeUnsafeNode(leftNode, rightNode)
+        val expectedOutput = leftData
+          .filter { case (k, _) => rightDataMap.contains(k) }
+          .map { case (k, v) => (k, v, k, rightDataMap(k)) }
+        val actualOutput = hashJoinNode.collect().map { row =>
+          // (id, name, id, order)
+          (row.getInt(0), row.getString(1), row.getInt(2), row.getInt(3))
+        }
+        assert(actualOutput === expectedOutput)
       }
     }
 
-    test(s"$suiteName: inner join with multiple matches") {
-      withSQLConf(confPairs: _*) {
-        val x = testData2.where($"a" === 1).as("x")
-        val y = testData2.where($"a" === 1).as("y")
-        checkAnswer2(
-          x,
-          y,
-          wrapForUnsafe(
-            (node1, node2) => HashJoinNode(
-              conf,
-              Seq(x.col("a").expr),
-              Seq(y.col("a").expr),
-              joins.BuildLeft,
-              node1,
-              node2)
-          ),
-          x.join(y).where($"x.a" === $"y.a").collect()
-        )
-      }
-    }
+    runTest(
+      s"$testNamePrefix: empty",
+      leftData,
+      Array.empty[(Int, Int)])
 
-    test(s"$suiteName: inner join, no matches") {
-      withSQLConf(confPairs: _*) {
-        val x = testData2.where($"a" === 1).as("x")
-        val y = testData2.where($"a" === 2).as("y")
-        checkAnswer2(
-          x,
-          y,
-          wrapForUnsafe(
-            (node1, node2) => HashJoinNode(
-              conf,
-              Seq(x.col("a").expr),
-              Seq(y.col("a").expr),
-              joins.BuildLeft,
-              node1,
-              node2)
-          ),
-          Nil
-        )
-      }
-    }
+    runTest(
+      s"$testNamePrefix: no matches",
+      leftData,
+      (10000 to 100100).map { i => (i, i) }.toArray)
 
-    test(s"$suiteName: big inner join, 4 matches per row") {
-      withSQLConf(confPairs: _*) {
-        val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
-        val bigDataX = bigData.as("x")
-        val bigDataY = bigData.as("y")
+    runTest(
+      s"$testNamePrefix: one match per row",
+      leftData,
+      (50 to 100).map { i => (i, i * 1000) }.toArray)
 
-        checkAnswer2(
-          bigDataX,
-          bigDataY,
-          wrapForUnsafe(
-            (node1, node2) =>
-              HashJoinNode(
-                conf,
-                Seq(bigDataX.col("key").expr),
-                Seq(bigDataY.col("key").expr),
-                joins.BuildLeft,
-                node1,
-                node2)
-          ),
-          bigDataX.join(bigDataY).where($"x.key" === $"y.key").collect())
+    runTest(
+      s"$testNamePrefix: multiple matches per row",
+      leftData,
+      (1 to 100)
+        .flatMap { i => Seq(i, i / 2, i / 3, i / 5, i / 8) }
+        .distinct
+        .map { i => (i, i) }
+        .toArray)
+  }
+
+  // Test all combinations of build sides and whether unsafe is enabled
+  Seq(false, true).foreach { unsafeAndCodegen =>
+    val simpleOrUnsafe = if (unsafeAndCodegen) "unsafe" else "simple"
+    Seq(BuildLeft, BuildRight).foreach { buildSide =>
+      val leftOrRight = buildSide match {
+        case BuildLeft => "left"
+        case BuildRight => "right"
       }
+      testJoin(s"$simpleOrUnsafe (build $leftOrRight)", buildSide, unsafeAndCodegen)
     }
   }
 
-  joinSuite(
-    "general", SQLConf.CODEGEN_ENABLED.key -> "false", SQLConf.UNSAFE_ENABLED.key -> "false")
-  joinSuite("tungsten", SQLConf.CODEGEN_ENABLED.key -> "true", SQLConf.UNSAFE_ENABLED.key -> "true")
 }
