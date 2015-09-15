@@ -1250,6 +1250,7 @@ class DAGSchedulerSuite
   }
 
   test("reduce tasks should be placed locally with map output") {
+    reduceLocalityEnvSet()
     // Create an shuffleMapRdd with 1 partition
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
@@ -1270,6 +1271,7 @@ class DAGSchedulerSuite
   }
 
   test("reduce task locality preferences should only include machines with largest map outputs") {
+    reduceLocalityEnvSet()
     val numMapTasks = 4
     // Create an shuffleMapRdd with more partitions
     val shuffleMapRdd = new MyRDD(sc, numMapTasks, Nil)
@@ -1589,6 +1591,24 @@ class DAGSchedulerSuite
     val info = new TaskInfo(0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
     info.finishTime = 1  // to prevent spurious errors in JobProgressListener
     info
+  }
+
+  // Reset the original environment and change the SparkConf to enable reduce
+  // locality
+  private def reduceLocalityEnvSet(): Unit = {
+    scheduler.stop()
+    val reduceLocalityConf = new SparkConf
+    reduceLocalityConf.set("spark.shuffle.reduceLocality.enabled", "true")
+    sc = new SparkContext("local", "DAGSchedulerSuite", reduceLocalityConf)
+    sc.addSparkListener(sparkListener)
+    scheduler = new DAGScheduler(
+        sc,
+        taskScheduler,
+        sc.listenerBus,
+        mapOutputTracker,
+        blockManagerMaster,
+        sc.env)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
 }
