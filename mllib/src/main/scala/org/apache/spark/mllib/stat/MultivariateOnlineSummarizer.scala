@@ -186,7 +186,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * Sample unbiased estimation of variance of each dimension.
+   * Unbiased estimate of sample variance of each dimension.
    *
    */
   @Since("1.1.0")

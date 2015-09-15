@@ -230,8 +230,8 @@ class LogisticRegression(override val uid: String)
   override def getThreshold: Double = super.getThreshold
 
   /**
-   * Whether to over-/undersamples each of training instance according to the given
-   * weight in `weightCol`. If empty, all instances are supposed to have weights as 1.0.
+   * Whether to over-/under-sample training instances according to the given weights in weightCol.
+   * If empty, all instances are treated equally (weight 1.0).
    * Default is empty, so all instances have weight one.
    * @group setParam
    */
@@ -595,6 +595,8 @@ private[classification] class MultiClassSummarizer extends Serializable {
 
 /**
  * Abstraction for multinomial Logistic Regression Training results.
+ * Currently, the training summary ignores the training weights except
+ * for the objective trace.
  */
 sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
