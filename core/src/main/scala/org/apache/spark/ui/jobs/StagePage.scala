@@ -368,7 +368,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val peakExecutionMemory = validTasks.map { case TaskUIData(info, _, _) =>
             info.accumulables
               .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-              .map { acc => acc.value.toLong }
+              .map { acc => acc.update.getOrElse("0").toLong }
               .getOrElse(0L)
               .toDouble
           }

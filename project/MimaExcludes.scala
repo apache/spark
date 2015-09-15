@@ -35,8 +35,18 @@ object MimaExcludes {
   def excludes(version: String) = version match {
     case v if v.startsWith("1.6") =>
       Seq(
-        MimaBuild.excludeSparkPackage("network")
-      ) ++ Seq(
+        MimaBuild.excludeSparkPackage("deploy"),
+        MimaBuild.excludeSparkPackage("network"),
+        // These are needed if checking against the sbt build, since they are part of
+        // the maven-generated artifacts in 1.3.
+        excludePackage("org.spark-project.jetty"),
+        MimaBuild.excludeSparkPackage("unused"),
+        // SQL execution is considered private.
+        excludePackage("org.apache.spark.sql.execution")
+      ) ++
+      MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
+      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++
+      Seq(
         // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
         // This class is marked as `private` but MiMa still seems to be confused by the change.
         ProblemFilters.exclude[MissingMethodProblem](
