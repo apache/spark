@@ -17,19 +17,12 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.types.IntegerType
 
-
-class LocalNodeSuite extends SparkFunSuite {
-  private val attributes = Seq(
-    AttributeReference("k", IntegerType)(),
-    AttributeReference("v", IntegerType)())
+class LocalNodeSuite extends LocalNodeTest {
   private val data = (1 to 100).map { i => (i, i) }.toArray
 
   test("basic open, next, fetch, close") {
-    val node = new DummyNode(attributes, data)
+    val node = new DummyNode(kvIntAttributes, data)
     assert(!node.isOpen)
     node.open()
     assert(node.isOpen)
@@ -49,7 +42,7 @@ class LocalNodeSuite extends SparkFunSuite {
   }
 
   test("asIterator") {
-    val node = new DummyNode(attributes, data)
+    val node = new DummyNode(kvIntAttributes, data)
     val iter = node.asIterator
     node.open()
     data.foreach { case (k, v) =>
@@ -68,7 +61,7 @@ class LocalNodeSuite extends SparkFunSuite {
   }
 
   test("collect") {
-    val node = new DummyNode(attributes, data)
+    val node = new DummyNode(kvIntAttributes, data)
     node.open()
     val collected = node.collect()
     assert(collected.size === data.size)

@@ -23,10 +23,16 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.types.IntegerType
 
 class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
 
   def conf: SQLConf = sqlContext.conf
+
+  protected val kvIntAttributes = Seq(
+    AttributeReference("k", IntegerType)(),
+    AttributeReference("v", IntegerType)())
 
   /**
    * Runs the LocalNode and makes sure the answer matches the expected result.

@@ -18,20 +18,13 @@
 package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.types.IntegerType
 
 
 class FilterNodeSuite extends LocalNodeTest {
-  private val attributes = Seq(
-    AttributeReference("k", IntegerType)(),
-    AttributeReference("v", IntegerType)())
 
-  test("basic") {
-    val n = 100
+  private def testFilter(inputData: Array[(Int, Int)] = Array.empty): Unit = {
     val cond = 'k % 2 === 0
-    val inputData = (1 to n).map { i => (i, i) }.toArray
-    val inputNode = new DummyNode(attributes, inputData)
+    val inputNode = new DummyNode(kvIntAttributes, inputData)
     val filterNode = new FilterNode(conf, cond, inputNode)
     val resolvedNode = resolveExpressions(filterNode)
     val expectedOutput = inputData.filter { case (k, _) => k % 2 == 0 }
@@ -42,16 +35,11 @@ class FilterNodeSuite extends LocalNodeTest {
   }
 
   test("empty") {
-    val cond = 'k % 2 === 0
-    val inputData = Array.empty[(Int, Int)]
-    val inputNode = new DummyNode(attributes, inputData)
-    val filterNode = new FilterNode(conf, cond, inputNode)
-    val resolvedNode = resolveExpressions(filterNode)
-    val expectedOutput = inputData
-    val actualOutput = resolvedNode.collect().map { case row =>
-      (row.getInt(0), row.getInt(1))
-    }
-    assert(actualOutput === expectedOutput)
+    testFilter()
+  }
+
+  test("basic") {
+    testFilter((1 to 100).map { i => (i, i) }.toArray)
   }
 
 }
