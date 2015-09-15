@@ -32,7 +32,6 @@ import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
  */
-@ExtendedYarnTest
 class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
   override def newYarnConfig(): YarnConfiguration = {
