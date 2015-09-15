@@ -18,16 +18,16 @@ Spark application's configuration (driver, executors, and the AM when running in
 
 There are two deploy modes that can be used to launch Spark applications on YARN. In `yarn-cluster` mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In `yarn-client` mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 
-Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn-client` or `yarn-cluster`. 
+Unlike [Spark standalone](spark-standalone.html) and [Mesos](running-on-mesos.html) modes, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn-client` or `yarn-cluster`.
+
 To launch a Spark application in `yarn-cluster` mode:
 
-   `$ ./bin/spark-submit --class path.to.your.Class --master yarn-cluster [options] <app jar> [app options]`
+    $ ./bin/spark-submit --class path.to.your.Class --master yarn-cluster [options] <app jar> [app options]
     
 For example:
 
     $ ./bin/spark-submit --class org.apache.spark.examples.SparkPi \
         --master yarn-cluster \
-        --num-executors 3 \
         --driver-memory 4g \
         --executor-memory 2g \
         --executor-cores 1 \
@@ -37,7 +37,7 @@ For example:
 
 The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Debugging your Application" section below for how to see driver and executor logs.
 
-To launch a Spark application in `yarn-client` mode, do the same, but replace `yarn-cluster` with `yarn-client`.  To run spark-shell:
+To launch a Spark application in `yarn-client` mode, do the same, but replace `yarn-cluster` with `yarn-client`. The following shows how you can run `spark-shell` in `yarn-client` mode:
 
     $ ./bin/spark-shell --master yarn-client
 
@@ -54,8 +54,8 @@ In `yarn-cluster` mode, the driver runs on a different machine than the client, 
 
 # Preparations
 
-Running Spark-on-YARN requires a binary distribution of Spark which is built with YARN support.
-Binary distributions can be downloaded from the Spark project website. 
+Running Spark on YARN requires a binary distribution of Spark which is built with YARN support.
+Binary distributions can be downloaded from the [downloads page](http://spark.apache.org/downloads.html) of the project website.
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
 # Configuration
