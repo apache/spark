@@ -443,4 +443,11 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
   }
+
+  test("Basic API with Unserializable Driver Properties") {
+    UnserializableDriverHelper.replaceDriverDuring {
+      assert(sqlContext.read.jdbc(
+        urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
+    }
+  }
 }

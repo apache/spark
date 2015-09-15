@@ -57,4 +57,3 @@ object DriverRegistry extends Logging {
     case driver => driver.getClass.getCanonicalName
   }
 }
-
