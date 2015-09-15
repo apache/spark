@@ -49,14 +49,8 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
     val time = System.currentTimeMillis()
     val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)
 
-    val grepExp = Option(request.getParameter("grepexp")).map(Pattern.compile(_, Pattern.MULTILINE))
-
-    val filteredContent = maybeThreadDump.map { threadDump =>
-      threadDump.filter(thread =>
-        grepExp.map { grep => grep.matcher(thread.stackTrace).find()}.getOrElse(true)
-      )
-    }.map { threadDump =>
-      val dumpRows = threadDump.sortWith {
+    val content = maybeThreadDump.map { threadDump =>
+     val dumpRows = threadDump.sortWith {
         case (threadTrace1, threadTrace2) => {
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
@@ -68,7 +62,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         }
       }.map { thread =>
         val threadId = thread.threadId
-        <tr class="accordion-heading"
+        <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
             onclick={s"toggleThreadStackTrace($threadId)"}
             onmouseover={s"onMouseOverAndOut($threadId)"}
             onmouseout={s"onMouseOverAndOut($threadId)"}>
@@ -95,9 +89,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         <div class="bs-example" data-example-id="simple-form-inline">
           <div class="form-group">
             <div class="input-group">
-              <input type="text" class="form-control" id="grepexp"></input>
-              <button type="submit" onclick="grep()" class="btn btn-default">Grep</button>
-              <button type="submit" onclick="viewAll()" class="btn btn-default">View All</button>
+              Search: <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
             </div>
           </div>
         </div>
@@ -116,6 +108,6 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       </table>
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
-    UIUtils.headerSparkPage(s"Thread dump for executor $executorId", filteredContent, parent)
+    UIUtils.headerSparkPage(s"Thread dump for executor $executorId", content, parent)
   }
 }

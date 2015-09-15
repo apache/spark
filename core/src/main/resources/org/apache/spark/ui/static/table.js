@@ -73,20 +73,21 @@ function onMouseOverAndOut(threadId) {
     $("#" + threadId + "_td_state").toggleClass("threaddump-td-mouseover");
 }
 
-function grep() {
-    var grepExp = $("#grepexp").val();
-    if (grepExp != "") {
-        var url = location.href
-        if (url.indexOf("&grepexp=") == -1) {
-            location.href = url + "&grepexp=" + grepExp;
-        } else {
-            location.href = url.replace(/&grepexp=.*/g, "&grepexp=" + grepExp);
-        }
+function onSearchStringChange() {
+    var searchString = $('#search').val()
+    if (searchString.length == 0) {
+        $('tr').each(function() {
+            $(this).removeClass('hidden')
+        })
     } else {
-        alert("input cannot be empty");
+        $('tr').each(function(){
+            if($(this).attr('id') && $(this).attr('id').match(/thread_[0-9]+_tr/) ) {
+                if ($(this).children().eq(3).text().toLowerCase().indexOf(searchString) >= 0) {
+                    $(this).removeClass('hidden')
+                } else {
+                    $(this).addClass('hidden')
+                }
+            }
+        });
     }
-}
-
-function viewAll() {
-    location.href = location.href.replace(/&grepexp=(.*)/g, "");
 }
