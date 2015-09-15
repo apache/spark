@@ -34,6 +34,20 @@ class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
     AttributeReference("k", IntegerType)(),
     AttributeReference("v", IntegerType)())
 
+  protected def wrapForUnsafe(
+      f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
+    if (conf.unsafeEnabled) {
+      (left: LocalNode, right: LocalNode) => {
+        val _left = ConvertToUnsafeNode(conf, left)
+        val _right = ConvertToUnsafeNode(conf, right)
+        val r = f(_left, _right)
+        ConvertToSafeNode(conf, r)
+      }
+    } else {
+      f
+    }
+  }
+
   /**
    * Runs the LocalNode and makes sure the answer matches the expected result.
    * @param input the input data to be used.
