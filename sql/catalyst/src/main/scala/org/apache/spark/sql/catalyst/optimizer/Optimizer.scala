@@ -228,10 +228,21 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case Project(projectList, Limit(exp, child)) =>
       Limit(exp, Project(projectList, child))
 
-    // Push down project if possible when the child is sort
-    case p @ Project(projectList, s @ Sort(_, _, grandChild))
-      if s.references.subsetOf(p.outputSet) =>
-      s.copy(child = Project(projectList, grandChild))
+    // Push down project if possible when the child is sort.
+    case p @ Project(projectList, s @ Sort(_, _, grandChild)) =>
+      if (s.references.subsetOf(p.outputSet)) {
+        s.copy(child = Project(projectList, grandChild))
+      } else {
+        val neededReferences = s.references ++ p.references
+        if (neededReferences == grandChild.outputSet) {
+          // No column we can prune, return the original plan.
+          p
+        } else {
+          // Do not use neededReferences.toSeq directly, should respect grandChild's output order.
+          val newProjectList = grandChild.output.filter(neededReferences.contains)
+          p.copy(child = s.copy(child = Project(newProjectList, grandChild)))
+        }
+      }
 
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child

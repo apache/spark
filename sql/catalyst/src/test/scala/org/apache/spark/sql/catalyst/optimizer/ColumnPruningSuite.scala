@@ -80,5 +80,16 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("Column pruning for Project on Sort") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double)
+
+    val query = input.orderBy('b.asc).select('a).analyze
+    val optimized = Optimize.execute(query)
+
+    val correctAnswer = input.select('a, 'b).orderBy('b.asc).select('a).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   // todo: add more tests for column pruning
 }
