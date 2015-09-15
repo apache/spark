@@ -45,7 +45,15 @@ object MimaExcludes {
         excludePackage("org.apache.spark.sql.execution")
       ) ++
       MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
-      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils")
+      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++ 
+      Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticCostFun.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticAggregator.add"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticAggregator.count")
+      )
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
