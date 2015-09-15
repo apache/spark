@@ -84,6 +84,12 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   }
 }
 
+/**
+ * :: Experimental ::
+ * Fit a parametric survival regression model named Accelerated failure time model
+ * ([[https://en.wikipedia.org/wiki/Accelerated_failure_time_model]])
+ * based on the Weibull distribution of the survival time.
+ */
 @Experimental
 class AFTSurvivalRegression(override val uid: String)
   extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with Logging {
@@ -129,13 +135,13 @@ class AFTSurvivalRegression(override val uid: String)
   setDefault(tol -> 1E-6)
 
   /**
-   * Extracts (feature, label, censored) from input dataset.
+   * Extracts (features, label, censored) from input dataset.
    */
   protected[ml] def extractCensoredLabeledPoints(
       dataset: DataFrame): RDD[(Vector, Double, Double)] = {
     dataset.select($(featuresCol), $(labelCol), $(censorCol))
-      .map { case Row(feature: Vector, label: Double, censored: Double) =>
-      (feature, label, censored)
+      .map { case Row(features: Vector, label: Double, censored: Double) =>
+      (features, label, censored)
     }
   }
 
@@ -239,10 +245,68 @@ class AFTSurvivalRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): AFTSurvivalRegressionModel = {
-    copyValues(new AFTSurvivalRegressionModel(uid, weights, intercept, scale), extra).setParent(parent)
+    copyValues(new AFTSurvivalRegressionModel(uid, weights, intercept, scale), extra)
+      .setParent(parent)
   }
 }
 
+/**
+ * AFTAggregator computes the gradient and loss for a AFT loss function,
+ * as used in AFT survival regression for samples in sparse or dense vector in a online fashion.
+ *
+ * The loss function and likelihood function under the AFT model based on:
+ * Lawless, J. F., Statistical Models and Methods for Lifetime Data,
+ * New York: John Wiley & Sons, Inc. 2003.
+ *
+ * Two AFTAggregator can be merged together to have a summary of loss and gradient of
+ * the corresponding joint dataset.
+ *
+ * For random lifetime T_{i} of subjects i = 1, ..., n, with possible right-censoring,
+ * the likelihood function under the AFT model is given as
+ * {{{
+ *   L(\beta,\sigma)=\prod_{i=1}^n[\frac{1}{\sigma}f_{0}
+ *   (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})]^{\delta_{i}}S_{0}
+ *   (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})^{1-\delta_{i}}
+ * }}}
+ * Using \epsilon_{i}=\frac{\log{t_{i}}-x^{'}\beta}{\sigma}, the log-likelihood function
+ * assumes the form
+ * {{{
+ *   \iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+
+ *   \delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
+ * }}}
+ * Where S_{0}(\epsilon_{i}) is the baseline survivor function
+ * and f_{0}(\epsilon_{i}) is corresponding density function.
+ * The most commonly used log-linear survival regression method is based on the Weibull
+ * distribution of the survival time. The Weibull distribution for lifetime corresponding
+ * to extreme value distribution for log of the lifetime,
+ * and the S_{0}(\epsilon) function is
+ * {{{
+ *   S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
+ * }}}
+ * the f_{0}(\epsilon_{i}) function is
+ * {{{
+ *   f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
+ * }}}
+ * The log-likelihood function for Weibull distribution is
+ * {{{
+ *   \iota(\beta,\sigma)=
+ *   -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
+ * }}}
+ * Due to minimizing the negative log-likelihood equivalent to maximum a posteriori probability,
+ * the loss function we use to optimize is -\iota(\beta,\sigma).
+ * The gradient functions for \beta and \log\sigma respectively are
+ * {{{
+ *   \frac{\partial (-\iota)}{\partial \beta}=
+ *   \sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma}
+ * }}}
+ * {{{
+ *   \frac{\partial (-\iota)}{\partial (\log\sigma)}=
+ *   \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
+ * }}}
+ * @param weights The the log of scale parameter,
+ *                the intercept and weights/coefficients corresponding to the features.
+ * @param fitIntercept Whether to fit an intercept term.
+ */
 private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
   extends Serializable {
 
@@ -260,6 +324,14 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
   def gradient: BDV[Double] = BDV.vertcat(BDV(Array(gradientLogSigmaSum / totalCnt.toDouble)),
     gradientBetaSum/totalCnt.toDouble)
 
+  /**
+   * Add a new training data to this AFTAggregator, and update the loss and gradient
+   * of the objective function.
+   *
+   * @param data The (features, label, censored) triple for one data point to be added
+   *             into this aggregator.
+   * @return This AFTAggregator object.
+   */
   def add(data: (Vector, Double, Double)): this.type = {
 
     val xi = if (fitIntercept) {
@@ -285,6 +357,14 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
     this
   }
 
+  /**
+   * Merge another AFTAggregator, and update the loss and gradient
+   * of the objective function.
+   * (Note that it's in place merging; as a result, `this` object will be modified.)
+   *
+   * @param other The other AFTAggregator to be merged.
+   * @return This AFTAggregator object.
+   */
   def merge(other: AFTAggregator): this.type = {
     if (totalCnt != 0) {
       totalCnt += other.totalCnt
@@ -297,6 +377,11 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
   }
 }
 
+/**
+ * AFTCostFun implements Breeze's DiffFunction[T] for AFT cost.
+ * It returns the loss and gradient at a particular point (weights).
+ * It's used in Breeze's convex optimization routines.
+ */
 private class AFTCostFun(data: RDD[(Vector, Double, Double)], fitIntercept: Boolean)
   extends DiffFunction[BDV[Double]] {
 

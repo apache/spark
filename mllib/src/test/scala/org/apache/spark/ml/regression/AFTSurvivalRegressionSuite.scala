@@ -80,13 +80,13 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
       xVariance: Array[Double],
       nPoints: Int,
       seed: Int,
-      weibullAlpha: Double,
-      weibullBeta: Double,
+      weibullShape: Double,
+      weibullScale: Double,
       exponentialMean: Double): Seq[AFTPoint] = {
 
     def censored(x: Double, y: Double): Double = { if (x <= y) 1.0 else 0.0 }
 
-    val weibull = new WeibullGenerator(weibullAlpha, weibullBeta)
+    val weibull = new WeibullGenerator(weibullShape, weibullScale)
     weibull.setSeed(seed)
 
     val exponential = new ExponentialGenerator(exponentialMean)
@@ -208,7 +208,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        > responsePred <- predict(sr.fit)
        > quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
      */
-    val features = Vectors.dense(2.233396950271428,-2.5321374085997683)
+    val features = Vectors.dense(2.233396950271428, -2.5321374085997683)
     val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
     val responsePredictR = 4.761219
     val quantilePredictR = Vectors.dense(0.5287044, 3.328586, 10.75171)
@@ -248,7 +248,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
 
        Weibull distribution
        Loglik(model)= -1292.4   Loglik(intercept only)= -1072.7
-	       Chisq= -439.57 on 1 degrees of freedom, p= 1
+         Chisq= -439.57 on 1 degrees of freedom, p= 1
        Number of Newton-Raphson Iterations: 6
        n= 1000
      */
@@ -265,7 +265,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        > responsePred <- predict(sr.fit)
        > quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
      */
-    val features = Vectors.dense(2.233396950271428,-2.5321374085997683)
+    val features = Vectors.dense(2.233396950271428, -2.5321374085997683)
     val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
     val responsePredictR = 44.5446531
     val quantilePredictR = Vectors.dense(1.45210294, 25.5060774, 158.428600)
