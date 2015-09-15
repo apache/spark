@@ -34,6 +34,7 @@ import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -243,16 +244,10 @@ class LogisticRegression(override val uid: String)
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
-    val instances: RDD[Instance] = if ($(weightCol).isEmpty) {
-      dataset.select($(labelCol), $(featuresCol)).map {
-        case Row(label: Double, features: Vector) =>
-          Instance(label, 1.0, features)
-      }
-    } else {
-      dataset.select($(labelCol), $(weightCol), $(featuresCol)).map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
+      case Row(label: Double, weight: Double, features: Vector) =>
+        Instance(label, weight, features)
     }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -529,7 +524,9 @@ class LogisticRegressionModel private[ml] (
  * corresponding joint dataset.
  */
 private[classification] class MultiClassSummarizer extends Serializable {
-  private val distinctMap = new mutable.HashMap[Int, Double]
+  // The first element of value in distinctMap is the actually number of instances,
+  // and the second element of value is sum of the weights.
+  private val distinctMap = new mutable.HashMap[Int, (Long, Double)]
   private var totalInvalidCnt: Long = 0L
 
   /**
@@ -548,8 +545,8 @@ private[classification] class MultiClassSummarizer extends Serializable {
       this
     }
     else {
-      val counts: Double = distinctMap.getOrElse(label.toInt, 0.0)
-      distinctMap.put(label.toInt, counts + weight)
+      val (counts: Long, weightSum: Double) = distinctMap.getOrElse(label.toInt, (0L, 0.0))
+      distinctMap.put(label.toInt, (counts + 1L, weightSum + weight))
       this
     }
   }
@@ -570,8 +567,8 @@ private[classification] class MultiClassSummarizer extends Serializable {
     }
     smallMap.distinctMap.foreach {
       case (key, value) =>
-        val counts: Double = largeMap.distinctMap.getOrElse(key, 0.0)
-        largeMap.distinctMap.put(key, counts + value)
+        val (counts: Long, weightSum: Double) = largeMap.distinctMap.getOrElse(key, (0L, 0.0))
+        largeMap.distinctMap.put(key, (counts + value._1, weightSum + value._2))
     }
     largeMap.totalInvalidCnt += smallMap.totalInvalidCnt
     largeMap
@@ -583,13 +580,13 @@ private[classification] class MultiClassSummarizer extends Serializable {
   /** @return The number of distinct labels in the input dataset. */
   def numClasses: Int = distinctMap.keySet.max + 1
 
-  /** @return The counts of each label in the input dataset. */
+  /** @return The weightSum of each label in the input dataset. */
   def histogram: Array[Double] = {
     val result = Array.ofDim[Double](numClasses)
     var i = 0
     val len = result.length
     while (i < len) {
-      result(i) = distinctMap.getOrElse(i, 0.0)
+      result(i) = distinctMap.getOrElse(i, (0L, 0.0))._2
       i += 1
     }
     result
