@@ -28,10 +28,7 @@ class TakeOrderedAndProjectNodeSuite extends LocalNodeTest {
   private def testTakeOrderedAndProject(desc: Boolean): Unit = {
     val limit = 10
     val ascOrDesc = if (desc) "desc" else "asc"
-    // TODO: re-enable me once TakeOrderedAndProjectNode can return things in sorted order.
-    // This test is ignored because the node currently just returns the items in the order
-    // maintained by the underlying min / max heap, but we expect sorted order.
-    ignore(ascOrDesc) {
+    test(ascOrDesc) {
       val inputData = Random.shuffle((1 to 100).toList).map { i => (i, i) }.toArray
       val inputNode = new DummyNode(kvIntAttributes, inputData)
       val firstColumn = inputNode.output(0)

@@ -50,7 +50,7 @@ case class TakeOrderedAndProjectNode(
     }
     // Close it eagerly since we don't need it.
     child.close()
-    iterator = queue.iterator
+    iterator = queue.toArray.sorted(ord).iterator
   }
 
   override def next(): Boolean = {
