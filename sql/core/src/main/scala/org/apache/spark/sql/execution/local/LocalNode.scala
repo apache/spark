@@ -46,6 +46,14 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
   def output: Seq[Attribute]
 
   /**
+   * Called before open(). Prepare can be used to reserve memory needed. It must NOT consume
+   * any input data.
+   *
+   * Implementations of this must also call the `prepare()` function of its children.
+   */
+  def prepare(): Unit = children.foreach(_.prepare())
+
+  /**
    * Initializes the iterator state. Must be called before calling `next()`.
    *
    * Implementations of this must also call the `open()` function of its children.
