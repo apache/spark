@@ -480,10 +480,11 @@ abstract class RDD[T: ClassTag](
       "Cannot support a sample size > Int.MaxValue - " +
       s"$numStDev * math.sqrt(Int.MaxValue)")
 
-    val initialCount = this.count()
-    if (num == 0 || initialCount == 0) {
+    
+    if (num == 0 || this.count() == 0) {
       new Array[T](0)
     } else {
+      val initialCount = this.count()
       val rand = new Random(seed)
       if (!withReplacement && num >= initialCount) {
         Utils.randomizeInPlace(this.collect(), rand)
