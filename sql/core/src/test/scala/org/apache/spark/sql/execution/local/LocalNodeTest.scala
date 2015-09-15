@@ -24,7 +24,7 @@ import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
 
@@ -33,6 +33,14 @@ class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
   protected val kvIntAttributes = Seq(
     AttributeReference("k", IntegerType)(),
     AttributeReference("v", IntegerType)())
+
+  protected val joinNameAttributes = Seq(
+    AttributeReference("id1", IntegerType)(),
+    AttributeReference("name", StringType)())
+
+  protected val joinNicknameAttributes = Seq(
+    AttributeReference("id2", IntegerType)(),
+    AttributeReference("nickname", StringType)())
 
   protected def wrapForUnsafe(
       f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {

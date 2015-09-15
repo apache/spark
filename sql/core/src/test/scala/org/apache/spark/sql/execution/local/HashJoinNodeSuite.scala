@@ -18,90 +18,79 @@
 package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.types.{IntegerType, StringType}
 
 
 class HashJoinNodeSuite extends LocalNodeTest {
-  private val names = Seq(
-    AttributeReference("id", IntegerType)(),
-    AttributeReference("name", StringType)())
-  private val orders = Seq(
-    AttributeReference("id", IntegerType)(),
-    AttributeReference("orders", IntegerType)())
+
+  // Test all combinations of the two dimensions: with/out unsafe and build sides
+  val maybeUnsafeAndCodegen = Seq(false, true)
+  val buildSides = Seq(BuildLeft, BuildRight)
+  maybeUnsafeAndCodegen.foreach { unsafeAndCodegen =>
+    buildSides.foreach { buildSide =>
+      testJoin(unsafeAndCodegen, buildSide)
+    }
+  }
 
   /**
    * Test inner hash join with varying degrees of matches.
    */
   private def testJoin(
-      testNamePrefix: String,
-      buildSide: BuildSide,
-      unsafeAndCodegen: Boolean): Unit = {
-    val leftData = (1 to 100).map { i => (i, "burger" + i) }.toArray
+      unsafeAndCodegen: Boolean,
+      buildSide: BuildSide): Unit = {
+    val simpleOrUnsafe = if (!unsafeAndCodegen) "simple" else "unsafe"
+    val testNamePrefix = s"$simpleOrUnsafe / $buildSide"
+    val someData = (1 to 100).map { i => (i, "burger" + i) }.toArray
     val conf = new SQLConf
     conf.setConf(SQLConf.UNSAFE_ENABLED, unsafeAndCodegen)
     conf.setConf(SQLConf.CODEGEN_ENABLED, unsafeAndCodegen)
 
-    def runTest(
-        testName: String,
-        leftData: Array[(Int, String)],
-        rightData: Array[(Int, Int)]): Unit = {
-      test(testName) {
-        val rightDataMap = rightData.toMap
-        val leftNode = new DummyNode(names, leftData)
-        val rightNode = new DummyNode(orders, rightData)
-        val makeNode = (node1: LocalNode, node2: LocalNode) => {
-          new HashJoinNode(
-            conf, Seq(node1.output(0)), Seq(node2.output(0)), buildSide, node1, node2)
-        }
-        val makeUnsafeNode = if (unsafeAndCodegen) wrapForUnsafe(makeNode) else makeNode
-        val hashJoinNode = makeUnsafeNode(leftNode, rightNode)
-        val expectedOutput = leftData
-          .filter { case (k, _) => rightDataMap.contains(k) }
-          .map { case (k, v) => (k, v, k, rightDataMap(k)) }
-        val actualOutput = hashJoinNode.collect().map { row =>
-          // (id, name, id, order)
-          (row.getInt(0), row.getString(1), row.getInt(2), row.getInt(3))
-        }
-        assert(actualOutput === expectedOutput)
+    // Actual test body
+    def runTest(leftInput: Array[(Int, String)], rightInput: Array[(Int, String)]): Unit = {
+      val rightInputMap = rightInput.toMap
+      val leftNode = new DummyNode(joinNameAttributes, leftInput)
+      val rightNode = new DummyNode(joinNicknameAttributes, rightInput)
+      val makeNode = (node1: LocalNode, node2: LocalNode) => {
+        resolveExpressions(new HashJoinNode(
+          conf, Seq('id1), Seq('id2), buildSide, node1, node2))
       }
+      val makeUnsafeNode = if (unsafeAndCodegen) wrapForUnsafe(makeNode) else makeNode
+      val hashJoinNode = makeUnsafeNode(leftNode, rightNode)
+      val expectedOutput = leftInput
+        .filter { case (k, _) => rightInputMap.contains(k) }
+        .map { case (k, v) => (k, v, k, rightInputMap(k)) }
+      val actualOutput = hashJoinNode.collect().map { row =>
+        // (id, name, id, nickname)
+        (row.getInt(0), row.getString(1), row.getInt(2), row.getString(3))
+      }
+      assert(actualOutput === expectedOutput)
     }
 
-    runTest(
-      s"$testNamePrefix: empty",
-      leftData,
-      Array.empty[(Int, Int)])
+    test(s"$testNamePrefix: empty") {
+      runTest(Array.empty, Array.empty)
+      runTest(someData, Array.empty)
+      runTest(Array.empty, someData)
+    }
 
-    runTest(
-      s"$testNamePrefix: no matches",
-      leftData,
-      (10000 to 100100).map { i => (i, i) }.toArray)
+    test(s"$testNamePrefix: no matches") {
+      val someIrrelevantData = (10000 to 100100).map { i => (i, "piper" + i) }.toArray
+      runTest(someData, Array.empty)
+      runTest(Array.empty, someData)
+      runTest(someData, someIrrelevantData)
+      runTest(someIrrelevantData, someData)
+    }
 
-    runTest(
-      s"$testNamePrefix: one match per row",
-      leftData,
-      (50 to 100).map { i => (i, i * 1000) }.toArray)
+    test(s"$testNamePrefix: partial matches") {
+      val someOtherData = (50 to 150).map { i => (i, "finnegan" + i) }.toArray
+      runTest(someData, someOtherData)
+      runTest(someOtherData, someData)
+    }
 
-    runTest(
-      s"$testNamePrefix: multiple matches per row",
-      leftData,
-      (1 to 100)
-        .flatMap { i => Seq(i, i / 2, i / 3, i / 5, i / 8) }
-        .distinct
-        .map { i => (i, i) }
-        .toArray)
-  }
-
-  // Test all combinations of build sides and whether unsafe is enabled
-  Seq(false, true).foreach { unsafeAndCodegen =>
-    val simpleOrUnsafe = if (unsafeAndCodegen) "unsafe" else "simple"
-    Seq(BuildLeft, BuildRight).foreach { buildSide =>
-      val leftOrRight = buildSide match {
-        case BuildLeft => "left"
-        case BuildRight => "right"
-      }
-      testJoin(s"$simpleOrUnsafe (build $leftOrRight)", buildSide, unsafeAndCodegen)
+    test(s"$testNamePrefix: full matches") {
+      val someSuperRelevantData = someData.map { case (k, v) => (k, "cooper" + v) }.toArray
+      runTest(someData, someSuperRelevantData)
+      runTest(someSuperRelevantData, someData)
     }
   }
 
