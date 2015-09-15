@@ -478,19 +478,37 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     }
 
     checkPushedFilter("select * from foobar where NAME = 'fred'", "NAME = 'fred'")
+
     checkPushedFilter("select * from inttypes where A > '15'", "A > 15")
     checkPushedFilter("select * from inttypes where C <= 20", "C <= 20")
-    checkPushedFilter("select * from decimals where A > 1000", "A > 1000.00")
+    checkPushedFilter("select * from inttypes where C <= '20.0'", "C <= 20")
+    checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue}'",
+      s"A > ${Int.MaxValue}")
+    checkPushedFilter(s"select * from inttypes where C <= '${Int.MinValue}'",
+      s"C <= ${Int.MinValue}")
+    checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue.toLong + 1L}'", "")
+    checkPushedFilter(s"select * from inttypes where A <= '${Int.MinValue.toLong - 1L}'", "")
+    checkPushedFilter(s"select * from inttypes where A > ${Int.MaxValue.toLong + 1L}", "")
+    checkPushedFilter(s"select * from inttypes where A <= ${Int.MinValue.toLong - 1L}", "")
+    checkPushedFilter("select * from inttypes where C <= '20.1'", "")
+    checkPushedFilter("select * from inttypes where C <= 20.1", "")
+
+    checkPushedFilter("select * from decimals where A > 1000.010000", "A > 1000.01")
+    checkPushedFilter("select * from decimals where A > 1000.1", "A > 1000.10")
     checkPushedFilter("select * from decimals where A > 1000 AND A < 2000",
       "A > 1000.00 AND A < 2000.00")
     checkPushedFilter("select * from decimals where A = 2000 AND B > 20", "A = 2000.00 AND B > 20")
+    checkPushedFilter(s"select * from decimals where A > ${Int.MaxValue.toLong + 1L}", "")
+    checkPushedFilter("select * from decimals where A > 1000.010001", "")
+
     checkPushedFilter("select * from timetypes where B > '1998-09-10'", "B > 1998-09-10")
     checkPushedFilter("select * from timetypes where B > 'abcd'", "")
-    checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue.toLong + 1L}'", "")
-    checkPushedFilter(s"select * from inttypes where A > '${Int.MaxValue.toLong}'",
-      s"A > ${Int.MaxValue.toLong}")
-    checkPushedFilter(s"select * from inttypes where C <= '${Int.MinValue.toLong - 1L}'", "")
-    checkPushedFilter(s"select * from inttypes where C <= '${Int.MinValue.toLong}'",
-      s"C <= ${Int.MinValue.toLong}")
+
+    checkPushedFilter("select * from flttypes where A <= 1", "A <= 1.0")
+    checkPushedFilter("select * from flttypes where A <= '1.01'", "A <= 1.01")
+    checkPushedFilter(s"select * from flttypes where A <= '${Double.MaxValue}'",
+      s"A <= ${Double.MaxValue}")
+    checkPushedFilter(s"select * from flttypes where A <= '${Double.MinValue}'",
+      s"A <= ${Double.MinValue}")
   }
 }
