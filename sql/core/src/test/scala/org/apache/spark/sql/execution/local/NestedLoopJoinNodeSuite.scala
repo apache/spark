@@ -26,9 +26,9 @@ import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 class NestedLoopJoinNodeSuite extends LocalNodeTest {
 
   // Test all combinations of the three dimensions: with/out unsafe, build sides, and join types
-  val maybeUnsafeAndCodegen = Seq(false, true)
-  val buildSides = Seq(BuildLeft, BuildRight)
-  val joinTypes = Seq(LeftOuter, RightOuter, FullOuter)
+  private val maybeUnsafeAndCodegen = Seq(false, true)
+  private val buildSides = Seq(BuildLeft, BuildRight)
+  private val joinTypes = Seq(LeftOuter, RightOuter, FullOuter)
   maybeUnsafeAndCodegen.foreach { unsafeAndCodegen =>
     buildSides.foreach { buildSide =>
       joinTypes.foreach { joinType =>

@@ -25,8 +25,8 @@ import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 class HashJoinNodeSuite extends LocalNodeTest {
 
   // Test all combinations of the two dimensions: with/out unsafe and build sides
-  val maybeUnsafeAndCodegen = Seq(false, true)
-  val buildSides = Seq(BuildLeft, BuildRight)
+  private val maybeUnsafeAndCodegen = Seq(false, true)
+  private val buildSides = Seq(BuildLeft, BuildRight)
   maybeUnsafeAndCodegen.foreach { unsafeAndCodegen =>
     buildSides.foreach { buildSide =>
       testJoin(unsafeAndCodegen, buildSide)
