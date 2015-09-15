@@ -75,8 +75,7 @@ case class HashJoinNode(
 
   override def open(): Unit = {
     buildNode.open()
-    hashed = HashedRelation.apply(
-      new LocalNodeIterator(buildNode), SQLMetrics.nullLongMetric, buildSideKeyGenerator)
+    hashed = HashedRelation(buildNode, buildSideKeyGenerator)
     streamedNode.open()
     joinRow = new JoinedRow
     resultProjection = {
