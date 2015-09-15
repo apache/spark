@@ -962,7 +962,7 @@ class DAGScheduler(
     outputCommitCoordinator.taskCompleted(
       stageId,
       task.partitionId,
-      event.taskInfo.attempt, // this is a task attempt number
+      event.taskInfo.attemptNumber, // this is a task attempt number
       event.reason)
 
     // The success case is dealt with separately below, since we need to compute accumulator
