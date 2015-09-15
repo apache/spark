@@ -480,27 +480,32 @@ abstract class RDD[T: ClassTag](
       "Cannot support a sample size > Int.MaxValue - " +
       s"$numStDev * math.sqrt(Int.MaxValue)")
 
-    if (num == 0 || this.count() == 0) {
+    if (num == 0) {
       new Array[T](0)
     } else {
       val initialCount = this.count()
-      val rand = new Random(seed)
-      if (!withReplacement && num >= initialCount) {
-        Utils.randomizeInPlace(this.collect(), rand)
+      if(initialCount ==0)
+      {
+        new Array[T](0)
       } else {
-        val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
-          withReplacement)
-        var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+        val rand = new Random(seed)
+        if (!withReplacement && num >= initialCount) {
+          Utils.randomizeInPlace(this.collect(), rand)
+        } else {
+          val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
+            withReplacement)
+          var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
-        // If the first sample didn't turn out large enough, keep trying to take samples;
-        // this shouldn't happen often because we use a big multiplier for the initial size
-        var numIters = 0
-        while (samples.length < num) {
-          logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
-          samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
-          numIters += 1
+          // If the first sample didn't turn out large enough, keep trying to take samples;
+          // this shouldn't happen often because we use a big multiplier for the initial size
+          var numIters = 0
+          while (samples.length < num) {
+            logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
+            samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+            numIters += 1
+          }
+          Utils.randomizeInPlace(samples, rand).take(num)
         }
-        Utils.randomizeInPlace(samples, rand).take(num)
       }
     }
   }
