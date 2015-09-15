@@ -42,7 +42,7 @@ object MimaExcludes {
         excludePackage("org.spark-project.jetty"),
         MimaBuild.excludeSparkPackage("unused"),
         // SQL execution is considered private.
-        excludePackage("org.apache.spark.sql.execution"),
+        excludePackage("org.apache.spark.sql.execution")
       ) ++
       MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils")
     case v if v.startsWith("1.5") =>
