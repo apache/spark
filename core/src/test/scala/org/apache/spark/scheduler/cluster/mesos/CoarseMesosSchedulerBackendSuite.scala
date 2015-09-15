@@ -58,7 +58,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
   private def createSchedulerBackend(
       taskScheduler: TaskSchedulerImpl,
-      driver: SchedulerDriver): CoarseMesosSchedulerBackend = {
+      driver: SchedulerDriver, sc: SparkContext): CoarseMesosSchedulerBackend = {
     val securityManager = mock[SecurityManager]
     val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
       override protected def createSchedulerDriver(
@@ -84,11 +84,10 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
       .setMaster("local[*]")
       .setAppName("test-mesos-dynamic-alloc")
       .setSparkHome("/path")
-
-    sc = new SparkContext(sparkConf)
-  }
+ }
 
   test("mesos supports killing and limiting executors") {
+    sc = new SparkContext(sparkConf)
     val driver = mock[SchedulerDriver]
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
     val taskScheduler = mock[TaskSchedulerImpl]
@@ -97,7 +96,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     sparkConf.set("spark.driver.host", "driverHost")
     sparkConf.set("spark.driver.port", "1234")
 
-    val backend = createSchedulerBackend(taskScheduler, driver)
+    val backend = createSchedulerBackend(taskScheduler, driver, sc)
     val minMem = backend.calculateTotalMemory(sc)
     val minCpu = 4
 
@@ -140,12 +139,13 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("mesos supports killing and relaunching tasks with executors") {
+    sc = new SparkContext(sparkConf)
     val driver = mock[SchedulerDriver]
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.sc).thenReturn(sc)
 
-    val backend = createSchedulerBackend(taskScheduler, driver)
+    val backend = createSchedulerBackend(taskScheduler, driver, sc)
     val minMem = backend.calculateTotalMemory(sc) + 1024
     val minCpu = 4
 
@@ -184,4 +184,52 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
     verify(driver, times(1)).reviveOffers()
   }
+
+  test("testing various isOfferValidForScheduling cases") {
+    val sparkConf = (new SparkConf)
+      .setMaster("local[*]")
+      .setAppName("test-mesos-dynamic-alloc")
+      .setSparkHome("/path")
+      .set("spark.cores.max", "10")
+
+    val sc = new SparkContext(sparkConf)
+
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+
+
+    val schedulerBackend = createSchedulerBackend(taskScheduler, driver, sc)
+
+    // Return true when there is a valid offer
+    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave1", 10000, 5, sc))
+
+    schedulerBackend.slaveIdsWithExecutors += "Slave2"
+    schedulerBackend.failuresBySlaveId("Slave3") = 2
+    schedulerBackend.totalCoresAcquired = 5
+
+    // Return false When offer do not meet constraints
+    assert(schedulerBackend.isOfferValidForScheduling(false, "Slave1", 10000, 5, sc) === false)
+
+    // Return false When memory in offer is less than required memory
+    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave1", 1, 5, sc) === false)
+
+    // Return false When cpu in offer is less than required cpu
+    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave1", 10000, 0, sc) === false)
+
+    // Return false When offer is from slave already running an executor
+    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave2", 10000, 5, sc) === false)
+
+    // Return false When task is failed more than MAX_SLAVE_FAILURES times on the given slave
+    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave3", 10000, 5, sc) === false)
+
+    schedulerBackend.totalCoresAcquired = 10
+
+    // Return false When max core is already acquired
+    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave1", 10000, 5, sc) === false)
+
+  }
+
+
 }
