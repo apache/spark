@@ -480,7 +480,6 @@ abstract class RDD[T: ClassTag](
       "Cannot support a sample size > Int.MaxValue - " +
       s"$numStDev * math.sqrt(Int.MaxValue)")
 
-    
     if (num == 0 || this.count() == 0) {
       new Array[T](0)
     } else {
