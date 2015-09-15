@@ -507,7 +507,7 @@ must also be $> 1.0$. Providing `Vector(-1)` results in default behavior
 $> 1.0$. Providing `-1` results in defaulting to a value of $0.1 + 1$.
 * `maxIterations`: The maximum number of EM iterations.
 
-*Hint*: It is important to do enough iterations.  In early iterations, EM often has useless topics,
+*Note*: It is important to do enough iterations.  In early iterations, EM often has useless topics,
 but those topics improve dramatically after more iterations.  Using at least 20 and possibly
 50-100 iterations is often reasonable, depending on your dataset.
 

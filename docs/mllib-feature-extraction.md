@@ -382,9 +382,15 @@ data2 = labels.zip(normalizer2.transform(features))
 
 ## ChiSqSelector
 
-[Feature selection](http://en.wikipedia.org/wiki/Feature_selection) tries to identify relevant features for use in model construction. It reduces the size of the feature space, which can improve both speed and statistical learning behavior.
+[Feature selection](http://en.wikipedia.org/wiki/Feature_selection) tries to identify relevant
+features for use in model construction. It reduces the size of the feature space, which can improve
+both speed and statistical learning behavior.
 
-[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) implements Chi-Squared feature selection. It operates on labeled data with categorical features. `ChiSqSelector` orders features based on a Chi-Squared test of independence from the class, and then filters (selects) the top features which the class label depends on the most. This is akin to yielding the features with the most predictive power.
+[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) implements
+Chi-Squared feature selection. It operates on labeled data with categorical features.
+`ChiSqSelector` orders features based on a Chi-Squared test of independence from the class,
+and then filters (selects) the top features which the class label depends on the most.
+This is akin to yielding the features with the most predictive power.
 
 The number of features to select can be tuned using a held-out validation set.
 
@@ -492,7 +498,11 @@ sc.stop();
 
 ## ElementwiseProduct
 
-ElementwiseProduct multiplies each input vector by a provided "weight" vector, using element-wise multiplication. In other words, it scales each column of the dataset by a scalar multiplier.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and transforming vector, `scalingVec`, to yield a result vector.
+`ElementwiseProduct` multiplies each input vector by a provided "weight" vector, using element-wise
+multiplication. In other words, it scales each column of the dataset by a scalar multiplier. This
+represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29)
+between the input vector, `v` and transforming vector, `scalingVec`, to yield a result vector.
+Qu8T948*1#
 Denoting the `scalingVec` as "`w`," this transformation may be written as:
 
 `\[ \begin{pmatrix}
