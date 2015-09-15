@@ -78,6 +78,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   sparkContext.addSparkListener(listener)
   sparkContext.ui.foreach(new SQLTab(this, _))
 
+  // Execution IDs go through SparkContext's local properties, which are not safe to use with
+  // fork join pools by default. In particular, even after a child thread is spawned, if the
+  // parent sets a property the value may be reflected in the child. This leads to undefined
+  // consequences such as SPARK-10548, so we should just clone the properties instead to be safe.
+  sparkContext.conf.set("spark.localProperties.clone", "true")
+
   /**
    * Set Spark SQL configuration properties.
    *
