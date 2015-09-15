@@ -36,13 +36,15 @@ object MimaExcludes {
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
+        MimaBuild.excludeSparkPackage("network"),
         // These are needed if checking against the sbt build, since they are part of
         // the maven-generated artifacts in 1.3.
         excludePackage("org.spark-project.jetty"),
         MimaBuild.excludeSparkPackage("unused"),
-        ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.execution.datasources.DefaultSource")
-      )
+        // SQL execution is considered private.
+        excludePackage("org.apache.spark.sql.execution"),
+      ) ++
+      MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils")
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
