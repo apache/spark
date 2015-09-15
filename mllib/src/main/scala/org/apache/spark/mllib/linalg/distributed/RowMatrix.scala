@@ -122,7 +122,7 @@ class RowMatrix @Since("1.0.0") (
     // Compute the upper triangular part of the gram matrix.
     val GU = rows.treeAggregate(new BDV[Double](new Array[Double](nt)))(
       seqOp = (U, v) => {
-        BLAS.dspr(1.0, v, U.data)
+        BLAS.spr(1.0, v, U.data)
         U
       }, combOp = (U1, U2) => U1 += U2)
 
@@ -671,6 +671,7 @@ class RowMatrix @Since("1.0.0") (
 @Since("1.0.0")
 @Experimental
 object RowMatrix {
+
   /**
    * Fills a full square matrix from its upper triangular part.
    */

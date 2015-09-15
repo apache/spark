@@ -176,41 +176,6 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's DSPR.
-   *
-   * @param U the upper triangular part of the matrix packed in an array (column major)
-   */
-  def dspr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
-    val n = v.size
-    v match {
-      case DenseVector(values) =>
-        NativeBLAS.dspr("U", n, alpha, values, 1, U)
-      case SparseVector(size, indices, values) =>
-        val nnz = indices.length
-        var colStartIdx = 0
-        var prevCol = 0
-        var col = 0
-        var j = 0
-        var i = 0
-        var av = 0.0
-        while (j < nnz) {
-          col = indices(j)
-          // Skip empty columns.
-          colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
-          col = indices(j)
-          av = alpha * values(j)
-          i = 0
-          while (i <= j) {
-            U(colStartIdx + indices(i)) += av * values(i)
-            i += 1
-          }
-          j += 1
-          prevCol = col
-        }
-    }
-  }
-
-  /**
    * y = x
    */
   def copy(x: Vector, y: Vector): Unit = {
@@ -269,6 +234,50 @@ private[spark] object BLAS extends Serializable with Logging {
       _nativeBLAS = NativeBLAS
     }
     _nativeBLAS
+  }
+
+  /**
+   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   *
+   * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
+   */
+  def spr(alpha: Double, v: Vector, U: DenseVector): Unit = {
+    spr(alpha, v, U.values)
+  }
+
+  /**
+   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   *
+   * @param U the upper triangular part of the matrix packed in an array (column major)
+   */
+  def spr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
+    val n = v.size
+    v match {
+      case DenseVector(values) =>
+        NativeBLAS.dspr("U", n, alpha, values, 1, U)
+      case SparseVector(size, indices, values) =>
+        val nnz = indices.length
+        var colStartIdx = 0
+        var prevCol = 0
+        var col = 0
+        var j = 0
+        var i = 0
+        var av = 0.0
+        while (j < nnz) {
+          col = indices(j)
+          // Skip empty columns.
+          colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
+          col = indices(j)
+          av = alpha * values(j)
+          i = 0
+          while (i <= j) {
+            U(colStartIdx + indices(i)) += av * values(i)
+            i += 1
+          }
+          j += 1
+          prevCol = col
+        }
+    }
   }
 
   /**
