@@ -81,11 +81,7 @@ object MimaExcludes {
           "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticCostFun.this"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticAggregator.add"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticAggregator.count"),
-          // SQL execution is considered private.
+        // SQL execution is considered private.
         excludePackage("org.apache.spark.sql.execution"),
         // The old JSON RDD is removed in favor of streaming Jackson
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
