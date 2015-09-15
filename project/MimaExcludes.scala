@@ -42,16 +42,18 @@ object MimaExcludes {
         excludePackage("org.spark-project.jetty"),
         MimaBuild.excludeSparkPackage("unused"),
         // SQL execution is considered private.
-        excludePackage("org.apache.spark.sql.execution"),
+        excludePackage("org.apache.spark.sql.execution")
+      ) ++
+      MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
+      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++ 
+      Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticCostFun.this"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticAggregator.count")
-      ) ++
-      MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
-      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils")
+      )
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
@@ -79,7 +81,11 @@ object MimaExcludes {
           "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticCostFun.this"),
-        // SQL execution is considered private.
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticAggregator.add"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticAggregator.count"),
+          // SQL execution is considered private.
         excludePackage("org.apache.spark.sql.execution"),
         // The old JSON RDD is removed in favor of streaming Jackson
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
