@@ -26,7 +26,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.scheduler._
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.{ThreadUtils, Clock, SystemClock, Utils}
+import org.apache.spark.util.{MonotonicClock, ThreadUtils, Clock}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -142,7 +142,7 @@ private[spark] class ExecutorAllocationManager(
   private val intervalMillis: Long = 100
 
   // Clock used to schedule when executors should be added and removed
-  private var clock: Clock = new SystemClock()
+  private var clock: Clock = new MonotonicClock()
 
   // Listener for Spark events that impact the allocation policy
   private val listener = new ExecutorAllocationListener

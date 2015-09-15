@@ -21,12 +21,22 @@ package org.apache.spark.util
  * An interface to represent clocks, so that they can be mocked out in unit tests.
  */
 private[spark] trait Clock {
+
+  /**
+   * @return the time in milliseconds
+   */
   def getTimeMillis(): Long
+
+  /**
+   * @param targetTime block until the current time is at least this value
+   * @return current system time when wait has completed
+   */
   def waitTillTime(targetTime: Long): Long
 }
 
 /**
- * A clock backed by the actual time from the OS as reported by the `System` API.
+ * A clock backed by the actual time from the OS as reported by
+ * `System.currentTimeMillis()`
  */
 private[spark] class SystemClock extends Clock {
 
@@ -44,7 +54,7 @@ private[spark] class SystemClock extends Clock {
    */
   def waitTillTime(targetTime: Long): Long = {
     var currentTime = 0L
-    currentTime = System.currentTimeMillis()
+    currentTime = getTimeMillis()
 
     var waitTime = targetTime - currentTime
     if (waitTime <= 0) {
@@ -63,5 +73,20 @@ private[spark] class SystemClock extends Clock {
       Thread.sleep(sleepTime)
     }
     -1
+  }
+}
+
+/**
+ * A clock whose time monotonically increases, irrespective of
+ * changes in the system clock (VM host clock shift, operations or NTP
+ * initiated time shift)
+ */
+private[spark] class MonotonicClock extends SystemClock {
+  /**
+   * @return the same time  in milliseconds
+   *         as is reported by `System.nanoTime()`
+   */
+  override def getTimeMillis(): Long = {
+    (System.nanoTime() / (1000 * 1000))
   }
 }
