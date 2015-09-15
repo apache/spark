@@ -126,6 +126,31 @@ class BLASSuite extends SparkFunSuite {
     }
   }
 
+  test("spr") {
+    // test dense vector
+    val alpha = 0.1
+    val x = new DenseVector(Array(1.0, 2, 2.1, 4))
+    val U = new DenseVector(Array(1.0, 2, 2, 3, 3, 3, 4, 4, 4, 4))
+    val expected = new DenseVector(Array(1.1, 2.2, 2.4, 3.21, 3.42, 3.441, 4.4, 4.8, 4.84, 5.6))
+
+    spr(alpha, x, U)
+    assert(U ~== expected absTol 1e-9)
+
+    val matrix33 = new DenseVector(Array(1.0, 2, 3, 4, 5))
+    withClue("Size of vector must match the rank of matrix") {
+      intercept[Exception] {
+        spr(alpha, x, matrix33)
+      }
+    }
+
+    // test sparse vector
+    val sv = new SparseVector(4, Array(0, 3), Array(1.0, 2))
+    val U2 = new DenseVector(Array(1.0, 2, 2, 3, 3, 3, 4, 4, 4, 4))
+    spr(0.1, sv, U2)
+    val expectedSparse = new DenseVector(Array(1.1, 2.0, 2.0, 3.0, 3.0, 3.0, 4.2, 4.0, 4.0, 4.4))
+    assert(U2 ~== expectedSparse absTol 1e-15)
+  }
+
   test("syr") {
     val dA = new DenseMatrix(4, 4,
       Array(0.0, 1.2, 2.2, 3.1, 1.2, 3.2, 5.3, 4.6, 2.2, 5.3, 1.8, 3.0, 3.1, 4.6, 3.0, 0.8))
