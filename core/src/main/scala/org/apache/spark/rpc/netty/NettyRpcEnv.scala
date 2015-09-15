@@ -336,6 +336,13 @@ private[netty] class NettyRpcEndpointRef(@transient conf: SparkConf)
   override def toString: String = s"NettyRpcEndpointRef(${_address})"
 
   def toURI: URI = new URI(s"spark://${_address}")
+
+  final override def equals(that: Any): Boolean = that match {
+    case other: NettyRpcEndpointRef => _address == other._address
+    case _ => false
+  }
+
+  final override def hashCode(): Int = if (_address == null) 0 else _address.hashCode()
 }
 
 /**

@@ -135,7 +135,6 @@ private[netty] class Inbox(
               }
             }
             case OnStop =>
-              dispatcher.unregisterRpcEndpoint(endpointRef.name)
               endpoint.onStop()
               assert(isEmpty, "OnStop should be the last message")
               return true

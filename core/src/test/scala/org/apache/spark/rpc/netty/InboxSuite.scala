@@ -45,7 +45,6 @@ class InboxSuite extends SparkFunSuite {
     assert(inbox.process(dispatcher) === true)
     endpoint.verifyStarted()
     endpoint.verifyStopped()
-    verify(dispatcher).unregisterRpcEndpoint("hello")
   }
 
   test("post: with reply") {
@@ -97,7 +96,6 @@ class InboxSuite extends SparkFunSuite {
     assert(1000 === endpoint.numReceiveMessages + numDroppedMessages.get)
     endpoint.verifyStarted()
     endpoint.verifyStopped()
-    verify(dispatcher).unregisterRpcEndpoint("hello")
   }
 
   test("post: Associated") {
