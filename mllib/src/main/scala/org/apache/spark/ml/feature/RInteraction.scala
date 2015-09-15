@@ -19,14 +19,15 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder}
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -147,83 +148,104 @@ class Interaction(override val uid: String) extends Transformer
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val isCategorical: Array[Boolean] = $(inputCols).map { col =>
-      dataset.schema(col).dataType match {
-        case DoubleType =>
-          UnaryIterator()
+    checkParams()
+
+    val numValues: Array[Array[Int]] = $(inputCols).map { col =>
+      val field = dataset.schema(col)
+      field.dataType match {
+        case _: NumericType | BooleanType => Array[Int]()
         case _: VectorUDT =>
-          OneHotIterator()
+          val group = AttributeGroup.fromStructField(field)
+          assert(group.attributes.isDefined, "TODO")
+          val cardinalities = group.attributes.get.map {
+            case nominal: NominalAttribute => nominal.getNumValues.get
+            case _ => 0
+          }
+          cardinalities.toArray
       }
     }
-    inputCols.foreach {
+    assert(numValues.length == $(inputCols).length)
+
+    def getIterator(fieldIndex: Int, v: Any) = v match {
+      case d: Double =>
+        Vectors.dense(d)
+      case vec: Vector =>
+        var indices = ArrayBuilder.make[Int]
+        var values = ArrayBuilder.make[Double]
+        var cur = 0
+        vec.foreachActive { case (i, v) =>
+          val numColumns = numValues(fieldIndex)(i)
+          if (numColumns > 0) {
+            // One-hot encode the field. TODO(ekl) support drop-last?
+            indices += cur + v.toInt
+            values += 1.0
+            cur += numColumns
+          } else {
+            // Copy the field verbatim.
+            indices += cur
+            values += v
+            cur += 1
+          }
+        }
+        Vectors.sparse(cur, indices.result(), values.result())
+      case null =>
+        throw new SparkException("Values to interact cannot be null.")
+      case o =>
+        throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
-    dataset
+
+    def interact(vv: Any*): Vector = {
+      var indices = ArrayBuilder.make[Int]
+      var values = ArrayBuilder.make[Double]
+      var size = 1
+      indices += 0
+      values += 1.0
+      var fieldIndex = 0
+      while (fieldIndex < vv.length) {
+        val prevIndices = indices.result()
+        val prevValues = values.result()
+        val prevSize = size
+        val currentVector = getIterator(fieldIndex, vv(fieldIndex))
+        indices = ArrayBuilder.make[Int]
+        values = ArrayBuilder.make[Double]
+        size *= currentVector.size
+        currentVector.foreachActive { (i, a) =>
+          var j = 0
+          while (j < prevIndices.length) {
+            indices += prevIndices(j) + i * prevSize
+            values += prevValues(j) * a
+            j += 1
+          }
+        }
+        fieldIndex += 1
+      }
+      Vectors.sparse(size, indices.result(), values.result()).compressed
+    }
+
+    val interactFunc = udf { r: Row =>
+      interact(r.toSeq: _*)
+    }
+
+    val args = $(inputCols).map { c =>
+      dataset.schema(c).dataType match {
+        case DoubleType => dataset(c)
+        case _: VectorUDT => dataset(c)
+        case _: NumericType | BooleanType => dataset(c).cast(DoubleType)
+      }
+    }
+
     dataset.select(
       col("*"),
-      encode(array(inputCols).cast(DoubleType)).as(outputColName, metadata))
+      interactFunc(struct(args: _*)).as($(outputCol)))
   }
 
-  override def copy(extra: ParamMap): RInteraction = defaultCopy(extra)
+  override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
 
   private def checkParams(): Unit = {
     require(get(inputCols).isDefined, "Input cols must be defined first.")
     require(get(outputCol).isDefined, "Output col must be defined first.")
     require($(inputCols).length > 0, "Input cols must have non-zero length.")
     require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
-  }
-}
-
-private object Interaction {
-  def getIterator(v: Any) = v match {
-    case d: Double =>
-      Vectors.dense(d)
-    case vec: Vector =>
-      var indices = ArrayBuilder.make[Int]
-      var values = ArrayBuilder.make[Double]
-      var cur = 0
-      vec.foreachActive { case (i, v) =>
-      // TODO(ekl) precompute cardinality from the ml attrs
-        if (CARDINALITY(i) > 0) {
-          indices += cur + v.toInt
-          values += 1.0
-          cur += CARDINALITY(i)
-        } else {
-          indices += cur
-          values += v
-          cur += 1
-        }
-      }
-      Vectors.sparse(cur, indices.result(), values.result())
-    case null =>
-      throw new SparkException("Values to interact cannot be null.")
-    case o =>
-      throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
-  }
-
-  def interact(vv: Any*): Vector = {
-    var indices = ArrayBuilder.make[Int]
-    var values = ArrayBuilder.make[Double]
-    var size = 1
-    indices += 1
-    values += 1.0
-    vv.foreach { v =>
-      val prevIndices = indices.result()
-      val prevValues = values.result()
-      val prevSize = size
-      val currentVector = getIterator(v)
-      indices = ArrayBuilder.make[Int]
-      values = ArrayBuilder.make[Double]
-      size *= currentVector.size
-      currentVector.foreachActive { (i, a) =>
-        var j = 0
-        while (j < prevIndices.length) {
-          indices += prevIndices(j) + i * prevSize
-          values += prevValues(j) * a
-          j += 1
-        }
-      }
-    }
-    Vectors.sparse(size, indices.result(), values.result()).compressed
   }
 }
 
