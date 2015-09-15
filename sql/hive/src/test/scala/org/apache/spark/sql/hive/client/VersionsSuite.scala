@@ -23,7 +23,6 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Literal, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.ExtendedHiveTest
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.Utils
 
@@ -33,7 +32,6 @@ import org.apache.spark.util.Utils
  * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionality
  * is not fully tested.
  */
-@ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
   // Do not use a temp path here to speed up subsequent executions of the unit test during
