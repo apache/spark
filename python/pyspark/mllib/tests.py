@@ -197,11 +197,12 @@ class VectorTests(MLlibTestCase):
     def test_hash(self):
         v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
         v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        v3 = DenseVector([1.0, 1.0, 0.0, 5.5])
+        v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
         v4 = SparseVector(4, [(1, 1.0), (3, 2.5)])
-        self.assertTrue(hash(v1) == hash(v2))
-        self.assertFalse(hash(v1) == hash(v3))
-        self.assertFalse(hash(v2) == hash(v3))
+        self.assertEquals(hash(v1), hash(v2))
+        self.assertEquals(hash(v1), hash(v3))
+        self.assertEquals(hash(v2), hash(v3))
+        self.assertFalse(hash(v1) == hash(v4))
         self.assertFalse(hash(v2) == hash(v4))
 
     def test_eq(self):
@@ -211,8 +212,8 @@ class VectorTests(MLlibTestCase):
         v4 = SparseVector(6, [(1, 1.0), (3, 5.5)])
         v5 = DenseVector([0.0, 1.0, 0.0, 2.5])
         v6 = SparseVector(4, [(1, 1.0), (3, 2.5)])
-        self.assertTrue(v1 == v2)
-        self.assertTrue(v1 == v3)
+        self.assertEquals(v1, v2)
+        self.assertEquals(v1, v3)
         self.assertFalse(v2 == v4)
         self.assertFalse(v1 == v5)
         self.assertFalse(v1 == v6)

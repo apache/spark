@@ -124,12 +124,10 @@ def _format_float_list(l):
 
 
 def _double_to_long_bits(value):
-    if value != value:
-        # value is NaN, standardize to canonical non-signaling NaN
-        return 0x7ff8000000000000
-    else:
-        # pack double into 64 bits, then unpack as long int
-        return struct.unpack('Q', struct.pack('d', value))[0]
+    if np.isnan(value):
+        value = float('nan')
+    # pack double into 64 bits, then unpack as long int
+    return struct.unpack('Q', struct.pack('d', value))[0]
 
 
 class VectorUDT(UserDefinedType):
