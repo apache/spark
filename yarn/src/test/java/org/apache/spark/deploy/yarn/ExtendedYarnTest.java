@@ -15,23 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.nio
+package org.apache.spark.deploy.yarn;
 
-import java.net.InetSocketAddress
+import java.lang.annotation.*;
+import org.scalatest.TagAnnotation;
 
-import org.apache.spark.util.Utils
-
-private[nio] case class ConnectionManagerId(host: String, port: Int) {
-  // DEBUG code
-  Utils.checkHost(host)
-  assert (port > 0)
-
-  def toSocketAddress(): InetSocketAddress = new InetSocketAddress(host, port)
-}
-
-
-private[nio] object ConnectionManagerId {
-  def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
-    new ConnectionManagerId(socketAddress.getHostName, socketAddress.getPort)
-  }
-}
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface ExtendedYarnTest { }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{TestSQLContext, SharedSQLContext}
 
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -32,8 +32,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("programmatic ways of basic setting and getting") {
+    // Set a conf first.
+    sqlContext.setConf(testKey, testVal)
+    // Clear the conf.
     sqlContext.conf.clear()
-    assert(sqlContext.getAllConfs.size === 0)
+    // After clear, only overrideConfs used by unit test should be in the SQLConf.
+    assert(sqlContext.getAllConfs === TestSQLContext.overrideConfs)
 
     sqlContext.setConf(testKey, testVal)
     assert(sqlContext.getConf(testKey) === testVal)
@@ -42,7 +46,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
     // Tests SQLConf as accessed from a SQLContext is mutable after
     // the latter is initialized, unlike SparkConf inside a SparkContext.
-    assert(sqlContext.getConf(testKey) == testVal)
+    assert(sqlContext.getConf(testKey) === testVal)
     assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
     assert(sqlContext.getAllConfs.contains(testKey))
 
@@ -73,8 +77,13 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
   test("deprecated property") {
     sqlContext.conf.clear()
-    sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
-    assert(sqlContext.conf.numShufflePartitions === 10)
+    val original = sqlContext.conf.numShufflePartitions
+    try{
+      sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
+      assert(sqlContext.conf.numShufflePartitions === 10)
+    } finally {
+      sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
+    }
   }
 
   test("invalid conf value") {

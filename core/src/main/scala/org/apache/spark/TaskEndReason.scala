@@ -48,6 +48,8 @@ case object Success extends TaskEndReason
 sealed trait TaskFailedReason extends TaskEndReason {
   /** Error message displayed in the web UI. */
   def toErrorString: String
+
+  def shouldEventuallyFailJob: Boolean = true
 }
 
 /**
@@ -194,6 +196,12 @@ case object TaskKilled extends TaskFailedReason {
 case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extends TaskFailedReason {
   override def toErrorString: String = s"TaskCommitDenied (Driver denied task commit)" +
     s" for job: $jobID, partition: $partitionID, attempt: $attemptID"
+  /**
+   * If a task failed because its attempt to commit was denied, do not count this failure
+   * towards failing the stage. This is intended to prevent spurious stage failures in cases
+   * where many speculative tasks are launched and denied to commit.
+   */
+  override def shouldEventuallyFailJob: Boolean = false
 }
 
 /**
@@ -202,8 +210,14 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
  * the task crashed the JVM.
  */
 @DeveloperApi
-case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
-  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost)"
+case class ExecutorLostFailure(execId: String, isNormalExit: Boolean = false)
+  extends TaskFailedReason {
+  override def toErrorString: String = {
+    val exitBehavior = if (isNormalExit) "normally" else "abnormally"
+    s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})"
+  }
+
+  override def shouldEventuallyFailJob: Boolean = !isNormalExit
 }
 
 /**

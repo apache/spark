@@ -15,22 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.nio
+package org.apache.spark.sql.hive;
 
-private[nio] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
-  override def toString: String = {
-    connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId
-  }
-}
+import java.lang.annotation.*;
+import org.scalatest.TagAnnotation;
 
-private[nio] object ConnectionId {
-
-  def createConnectionIdFromString(connectionIdString: String): ConnectionId = {
-    val res = connectionIdString.split("_").map(_.trim())
-    if (res.size != 3) {
-      throw new Exception("Error converting ConnectionId string: " + connectionIdString +
-        " to a ConnectionId Object")
-    }
-    new ConnectionId(new ConnectionManagerId(res(0), res(1).toInt), res(2).toInt)
-  }
-}
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface ExtendedHiveTest { }

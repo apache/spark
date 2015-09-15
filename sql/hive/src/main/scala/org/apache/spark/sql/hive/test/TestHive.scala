@@ -116,18 +116,28 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
+  // Make sure we set those test specific confs correctly when we create
+  // the SQLConf as well as when we call clear.
   override protected[sql] def createSession(): SQLSession = {
     new this.SQLSession()
   }
 
   protected[hive] class SQLSession extends super.SQLSession {
-    /** Fewer partitions to speed up testing. */
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
-      override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, 5)
       // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
       // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
       override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+
+      clear()
+
+      override def clear(): Unit = {
+        super.clear()
+
+        TestHiveContext.overrideConfs.map {
+          case (key, value) => setConfString(key, value)
+        }
+      }
     }
   }
 
@@ -454,4 +464,16 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
     }
   }
+}
+
+private[hive] object TestHiveContext {
+
+  /**
+   * A map used to store all confs that need to be overridden in sql/hive unit tests.
+   */
+  val overrideConfs: Map[String, String] =
+    Map(
+      // Fewer shuffle partitions to speed up testing.
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+    )
 }

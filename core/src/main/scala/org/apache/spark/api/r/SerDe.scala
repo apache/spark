@@ -21,6 +21,7 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.sql.{Timestamp, Date, Time}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.WrappedArray
 
 /**
  * Utility functions to serialize, deserialize objects to / from R
@@ -213,89 +214,97 @@ private[spark] object SerDe {
     }
   }
 
-  def writeObject(dos: DataOutputStream, value: Object): Unit = {
-    if (value == null) {
+  def writeObject(dos: DataOutputStream, obj: Object): Unit = {
+    if (obj == null) {
       writeType(dos, "void")
     } else {
-      value.getClass.getName match {
-        case "java.lang.Character" =>
+      // Convert ArrayType collected from DataFrame to Java array
+      // Collected data of ArrayType from a DataFrame is observed to be of
+      // type "scala.collection.mutable.WrappedArray"
+      val value =
+        if (obj.isInstanceOf[WrappedArray[_]]) {
+          obj.asInstanceOf[WrappedArray[_]].toArray
+        } else {
+          obj
+        }
+
+      value match {
+        case v: java.lang.Character =>
           writeType(dos, "character")
-          writeString(dos, value.asInstanceOf[Character].toString)
-        case "java.lang.String" =>
+          writeString(dos, v.toString)
+        case v: java.lang.String =>
           writeType(dos, "character")
-          writeString(dos, value.asInstanceOf[String])
-        case "java.lang.Long" =>
+          writeString(dos, v)
+        case v: java.lang.Long =>
           writeType(dos, "double")
-          writeDouble(dos, value.asInstanceOf[Long].toDouble)
-        case "java.lang.Float" =>
+          writeDouble(dos, v.toDouble)
+        case v: java.lang.Float =>
           writeType(dos, "double")
-          writeDouble(dos, value.asInstanceOf[Float].toDouble)
-        case "java.math.BigDecimal" =>
+          writeDouble(dos, v.toDouble)
+        case v: java.math.BigDecimal =>
           writeType(dos, "double")
-          val javaDecimal = value.asInstanceOf[java.math.BigDecimal]
-          writeDouble(dos, scala.math.BigDecimal(javaDecimal).toDouble)
-        case "java.lang.Double" =>
+          writeDouble(dos, scala.math.BigDecimal(v).toDouble)
+        case v: java.lang.Double =>
           writeType(dos, "double")
-          writeDouble(dos, value.asInstanceOf[Double])
-        case "java.lang.Byte" =>
+          writeDouble(dos, v)
+        case v: java.lang.Byte =>
           writeType(dos, "integer")
-          writeInt(dos, value.asInstanceOf[Byte].toInt)
-        case "java.lang.Short" =>
+          writeInt(dos, v.toInt)
+        case v: java.lang.Short =>
           writeType(dos, "integer")
-          writeInt(dos, value.asInstanceOf[Short].toInt)
-        case "java.lang.Integer" =>
+          writeInt(dos, v.toInt)
+        case v: java.lang.Integer =>
           writeType(dos, "integer")
-          writeInt(dos, value.asInstanceOf[Int])
-        case "java.lang.Boolean" =>
+          writeInt(dos, v)
+        case v: java.lang.Boolean =>
           writeType(dos, "logical")
-          writeBoolean(dos, value.asInstanceOf[Boolean])
-        case "java.sql.Date" =>
+          writeBoolean(dos, v)
+        case v: java.sql.Date =>
           writeType(dos, "date")
-          writeDate(dos, value.asInstanceOf[Date])
-        case "java.sql.Time" =>
+          writeDate(dos, v)
+        case v: java.sql.Time =>
           writeType(dos, "time")
-          writeTime(dos, value.asInstanceOf[Time])
-        case "java.sql.Timestamp" =>
+          writeTime(dos, v)
+        case v: java.sql.Timestamp =>
           writeType(dos, "time")
-          writeTime(dos, value.asInstanceOf[Timestamp])
+          writeTime(dos, v)
 
         // Handle arrays
 
         // Array of primitive types
 
         // Special handling for byte array
-        case "[B" =>
+        case v: Array[Byte] =>
           writeType(dos, "raw")
-          writeBytes(dos, value.asInstanceOf[Array[Byte]])
+          writeBytes(dos, v)
 
-        case "[C" =>
+        case v: Array[Char] =>
           writeType(dos, "array")
-          writeStringArr(dos, value.asInstanceOf[Array[Char]].map(_.toString))
-        case "[S" =>
+          writeStringArr(dos, v.map(_.toString))
+        case v: Array[Short] =>
           writeType(dos, "array")
-          writeIntArr(dos, value.asInstanceOf[Array[Short]].map(_.toInt))
-        case "[I" =>
+          writeIntArr(dos, v.map(_.toInt))
+        case v: Array[Int] =>
           writeType(dos, "array")
-          writeIntArr(dos, value.asInstanceOf[Array[Int]])
-        case "[J" =>
+          writeIntArr(dos, v)
+        case v: Array[Long] =>
           writeType(dos, "array")
-          writeDoubleArr(dos, value.asInstanceOf[Array[Long]].map(_.toDouble))
-        case "[F" =>
+          writeDoubleArr(dos, v.map(_.toDouble))
+        case v: Array[Float] =>
           writeType(dos, "array")
-          writeDoubleArr(dos, value.asInstanceOf[Array[Float]].map(_.toDouble))
-        case "[D" =>
+          writeDoubleArr(dos, v.map(_.toDouble))
+        case v: Array[Double] =>
           writeType(dos, "array")
-          writeDoubleArr(dos, value.asInstanceOf[Array[Double]])
-        case "[Z" =>
+          writeDoubleArr(dos, v)
+        case v: Array[Boolean] =>
           writeType(dos, "array")
-          writeBooleanArr(dos, value.asInstanceOf[Array[Boolean]])
+          writeBooleanArr(dos, v)
 
         // Array of objects, null objects use "void" type
-        case c if c.startsWith("[") =>
+        case v: Array[Object] =>
           writeType(dos, "list")
-          val array = value.asInstanceOf[Array[Object]]
-          writeInt(dos, array.length)
-          array.foreach(elem => writeObject(dos, elem))
+          writeInt(dos, v.length)
+          v.foreach(elem => writeObject(dos, elem))
 
         case _ =>
           writeType(dos, "jobj")

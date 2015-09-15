@@ -15,27 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.nio
+package org.apache.spark.sql.execution.local
 
-import java.nio.ByteBuffer
+class SampleNodeSuite extends LocalNodeTest {
 
-import scala.collection.mutable.ArrayBuffer
+  import testImplicits._
 
-private[nio]
-class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
-
-  val size: Int = if (buffer == null) 0 else buffer.remaining
-
-  lazy val buffers: ArrayBuffer[ByteBuffer] = {
-    val ab = new ArrayBuffer[ByteBuffer]()
-    ab += header.buffer
-    if (buffer != null) {
-      ab += buffer
+  private def testSample(withReplacement: Boolean): Unit = {
+    test(s"withReplacement: $withReplacement") {
+      val seed = 0L
+      val input = sqlContext.sparkContext.
+        parallelize((1 to 10).map(i => (i, i.toString)), 1). // Should be only 1 partition
+        toDF("key", "value")
+      checkAnswer(
+        input,
+        node => SampleNode(conf, 0.0, 0.3, withReplacement, seed, node),
+        input.sample(withReplacement, 0.3, seed).collect()
+      )
     }
-    ab
   }
 
-  override def toString: String = {
-    "" + this.getClass.getSimpleName + " (id = " + header.id + ", size = " + size + ")"
-  }
+  testSample(withReplacement = true)
+  testSample(withReplacement = false)
 }
