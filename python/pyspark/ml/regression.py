@@ -124,6 +124,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
+
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
@@ -136,11 +137,12 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> model.boundaries
     DenseVector([0.0, 1.0])
     """
+
     # a placeholder to make it appear in the generated doc
     isotonic = \
         Param(Params._dummy(), "isotonic",
               "whether the output sequence should be isotonic/increasing (true) or" +
-              "antitonic/decreasing (false)")
+              "antitonic/decreasing (false). (default true)")
     featureIndex = \
         Param(Params._dummy(), "featureIndex",
               "The index of the feature if featuresCol is a vector column, no effect otherwise. " +
@@ -148,10 +150,10 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 weightCol=None, istonic=False, featureIndex=0):
+                 weightCol=None, isotonic=True, featureIndex=0):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 weightCol=None, istonic=False, featureIndex=0):
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 weightCol=None, isotonic=True, featureIndex=0):
         """
         super(IsotonicRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -159,21 +161,21 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         self.isotonic = \
             Param(self, "isotonic",
                   "whether the output sequence should be isotonic/increasing (true) or" +
-                  "antitonic/decreasing (false)")
+                  "antitonic/decreasing (false). (default true)")
         self.featureIndex = \
             Param(self, "featureIndex",
                   "The index of the feature if featuresCol is a vector column, no effect " +
                   "otherwise. (default 0)")
-        self._setDefault(isotonic=False, featureIndex=0)
+        self._setDefault(isotonic=True, featureIndex=0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  weightCol=None, istonic=False, featureIndex=0):
+                  weightCol=None, isotonic=True, featureIndex=0):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 weightCol=None, istonic=false, featureIndex=0):
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 weightCol=None, isotonic=True, featureIndex=0):
         Set the params for IsotonicRegression
         """
         kwargs = self.setParams._input_kwargs
@@ -182,31 +184,31 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def _create_model(self, java_model):
         return IsotonicRegressionModel(java_model)
 
-    def setIsotonicParam(self, value):
+    def setIsotonic(self, value):
         """
-        Sets the value of :py:attr:`isotonicParam`.
+        Sets the value of :py:attr:`isotonic`.
         """
-        self._paramMap[self.isotonicParam] = value
+        self._paramMap[self.isotonic] = value
         return self
 
-    def getIsotonicParam(self):
+    def getIsotonic(self):
         """
-        Gets the value of isotonicParam or its default value.
+        Gets the value of isotonic param or its default value.
         """
-        return self.getOrDefault(self.isotonicParam)
+        return self.getOrDefault(self.isotonic)
 
-    def setFeautreIndexParam(self, value):
+    def setFeautreIndex(self, value):
         """
-        Sets the value of :py:attr:`featureIndexParam`.
+        Sets the value of :py:attr:`featureIndex`.
         """
-        self._paramMap[self.featureIndexParam] = value
+        self._paramMap[self.featureIndex] = value
         return self
 
-    def getFeatureIndexParam(self):
+    def getFeatureIndex(self):
         """
-        Gets the value of elasticNetParam or its default value.
+        Gets the value of featureIndex param or its default value.
         """
-        return self.getOrDefault(self.featureIndexParam)
+        return self.getOrDefault(self.featureIndex)
 
 
 class IsotonicRegressionModel(JavaModel):
@@ -220,6 +222,14 @@ class IsotonicRegressionModel(JavaModel):
         Model boundaries.
         """
         return self._call_java("boundaries")
+
+    @property
+    def predictions(self):
+        """
+        Predictions associated with the boundaries at the same index, monotone because of isotonic
+        regression.
+        """
+        return self._call_java("predictions")
 
 
 class TreeRegressorParams(object):
