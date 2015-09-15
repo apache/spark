@@ -835,6 +835,32 @@ class DataFrame(object):
         from pyspark.sql.group import GroupedData
         return GroupedData(jgd, self.sql_ctx)
 
+    @ignore_unicode_prefix
+    @since(1.3)
+    def groupby(self, *cols):
+        """Groups the :class:`DataFrame` using the specified columns,
+        so we can run aggregation on them. See :class:`GroupedData`
+        for all the available aggregate functions.
+
+        :func:`groupBy` is an alias for :func:`groupby`.
+
+        :param cols: list of columns to group by.
+            Each element should be a column name (string) or an expression (:class:`Column`).
+
+        >>> df.groupby().avg().collect()
+        [Row(avg(age)=3.5)]
+        >>> df.groupby('name').agg({'age': 'mean'}).collect()
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
+        >>> df.groupby(df.name).avg().collect()
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
+        >>> df.groupby(['name', df.age]).count().collect()
+        [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
+        """
+        jgd = self._jdf.groupby(self._jcols(*cols))
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jgd, self.sql_ctx)
+
+
     @since(1.4)
     def rollup(self, *cols):
         """
@@ -1309,8 +1335,6 @@ class DataFrame(object):
     # Pandas compatibility
     ##########################################################################################
 
-    groupby = groupBy
-   # drop_duplicates = dropDuplicates
 
 
 # Having SchemaRDD for backward compatibility (for docs)
