@@ -830,12 +830,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(100000000000000, df1.first().f2)
 
         self.assertEqual(_infer_type(1), LongType())
-        self.assertEqual(_infer_type(1<<10), LongType())
-        self.assertEqual(_infer_type(1<<20), LongType())
-        self.assertEqual(_infer_type(1<<31 - 1), LongType())
-        self.assertEqual(_infer_type(1<<31), LongType())
-        self.assertEqual(_infer_type(1<<61), LongType())
-        self.assertEqual(_infer_type(1<<71), LongType())
+        self.assertEqual(_infer_type(2**10), LongType())
+        self.assertEqual(_infer_type(2**20), LongType())
+        self.assertEqual(_infer_type(2**31 - 1), LongType())
+        self.assertEqual(_infer_type(2**31), LongType())
+        self.assertEqual(_infer_type(2**61), LongType())
+        self.assertEqual(_infer_type(2**71), LongType())
 
     def test_filter_with_datetime(self):
         time = datetime.datetime(2015, 4, 17, 23, 1, 2, 3000)
