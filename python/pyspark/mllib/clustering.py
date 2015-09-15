@@ -97,7 +97,7 @@ class KMeansModel(Saveable, Loader):
     >>> model.clusterCenters
     [array([-1000., -1000.]), array([ 5.,  5.]), array([ 1000.,  1000.])]
 
-    .. versionadded:: 0.9.1
+    .. versionadded:: 0.9.0
     """
 
     def __init__(self, centers):
@@ -115,7 +115,7 @@ class KMeansModel(Saveable, Loader):
         """Total number of clusters."""
         return len(self.centers)
 
-    @since('0.9.1')
+    @since('0.9.0')
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
         best = 0
@@ -162,11 +162,11 @@ class KMeansModel(Saveable, Loader):
 
 class KMeans(object):
     """
-    .. versionadded:: 0.9.1
+    .. versionadded:: 0.9.0
     """
 
     @classmethod
-    @since('0.9.1')
+    @since('0.9.0')
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
               seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
         """Train a k-means clustering model."""
