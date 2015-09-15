@@ -19,15 +19,15 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{Project, InsertIntoTable}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.sources.HadoopFsRelation
+
+import scala.collection.JavaConverters._
 
 
 /**
@@ -269,12 +269,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
-    val props = new Properties()
-    extraOptions.foreach { case (key, value) =>
-      props.put(key, value)
-    }
-    // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
+    val props = JDBCRelation.getEffectiveProperties(connectionProperties, this.extraOptions)
     val conn = JdbcUtils.createConnection(url, props)
 
     try {
@@ -303,7 +298,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       conn.close()
     }
 
-    JdbcUtils.saveTable(df, url, table, props)
+    val propsForSave = JDBCRelation.getEffectiveProperties(connectionProperties, this.extraOptions)
+    JdbcUtils.saveTable(df, url, table, propsForSave)
   }
 
   /**

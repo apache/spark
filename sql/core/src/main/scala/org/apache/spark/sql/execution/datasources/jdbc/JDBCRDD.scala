@@ -187,7 +187,7 @@ private[sql] object JDBCRDD extends Logging {
         case e: ClassNotFoundException =>
           logWarning(s"Couldn't find class $driver", e)
       }
-      DriverManager.getConnection(url, properties)
+      DriverManager.getConnection(url, JDBCRelation.getEffectiveProperties(properties))
     }
   }
 
