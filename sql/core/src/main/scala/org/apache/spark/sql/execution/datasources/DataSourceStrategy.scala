@@ -350,10 +350,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     def isCastable(a: Attribute, l: Literal): Boolean = {
       (l.dataType, a.dataType) match {
         case (from: DecimalType, to: NumericType) =>
-          Cast(Cast(l, to), from).eval().asInstanceOf[Decimal]
-            .compare(l.value.asInstanceOf[Decimal]) == 0
+          // As downcasting decimal to decimal, it may return null.
+          val maybeCastedValue = Option(Cast(Cast(l, to), from).eval())
+          maybeCastedValue.exists(
+            _.asInstanceOf[Decimal].compare(l.value.asInstanceOf[Decimal]) == 0)
         case (from: NumericType, to: NumericType) =>
-          Cast(l, a.dataType).eval() == l.value
+          Cast(l, to).eval() == l.value
         case _ => true
       }
     }
