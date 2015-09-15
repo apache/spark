@@ -310,9 +310,9 @@ class LinearRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    val newModel = copyValues(new LinearRegressionModel(uid, weights, intercept))
+    val newModel = copyValues(new LinearRegressionModel(uid, weights, intercept), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
-    newModel
+    newModel.setParent(parent)
   }
 }
 

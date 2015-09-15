@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.TaskContext
+import org.apache.spark.rdd.{MapPartitionsWithPreparationRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 case class TungstenAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
@@ -35,11 +37,15 @@ case class TungstenAggregate(
     child: SparkPlan)
   extends UnaryNode {
 
+  override private[sql] lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   override def outputsUnsafeRows: Boolean = true
 
   override def canProcessUnsafeRows: Boolean = true
 
-  override def canProcessSafeRows: Boolean = false
+  override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -61,42 +67,72 @@ case class TungstenAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    child.execute().mapPartitions { iter =>
-      val hasInput = iter.hasNext
-      if (!hasInput && groupingExpressions.nonEmpty) {
-        // This is a grouped aggregate and the input iterator is empty,
-        // so return an empty iterator.
-        Iterator.empty.asInstanceOf[Iterator[UnsafeRow]]
-      } else {
-        val aggregationIterator =
-          new TungstenAggregationIterator(
-            groupingExpressions,
-            nonCompleteAggregateExpressions,
-            completeAggregateExpressions,
-            initialInputBufferOffset,
-            resultExpressions,
-            newMutableProjection,
-            child.output,
-            iter.asInstanceOf[Iterator[UnsafeRow]],
-            testFallbackStartsAt)
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
 
-        if (!hasInput && groupingExpressions.isEmpty) {
+    /**
+     * Set up the underlying unsafe data structures used before computing the parent partition.
+     * This makes sure our iterator is not starved by other operators in the same task.
+     */
+    def preparePartition(): TungstenAggregationIterator = {
+      new TungstenAggregationIterator(
+        groupingExpressions,
+        nonCompleteAggregateExpressions,
+        completeAggregateExpressions,
+        initialInputBufferOffset,
+        resultExpressions,
+        newMutableProjection,
+        child.output,
+        testFallbackStartsAt,
+        numInputRows,
+        numOutputRows)
+    }
+
+    /** Compute a partition using the iterator already set up previously. */
+    def executePartition(
+        context: TaskContext,
+        partitionIndex: Int,
+        aggregationIterator: TungstenAggregationIterator,
+        parentIterator: Iterator[InternalRow]): Iterator[UnsafeRow] = {
+      val hasInput = parentIterator.hasNext
+      if (!hasInput) {
+        // We're not using the underlying map, so we just can free it here
+        aggregationIterator.free()
+        if (groupingExpressions.isEmpty) {
+          numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
-          aggregationIterator
+          // This is a grouped aggregate and the input iterator is empty,
+          // so return an empty iterator.
+          Iterator.empty
         }
+      } else {
+        aggregationIterator.start(parentIterator)
+        aggregationIterator
       }
     }
+
+    // Note: we need to set up the iterator in each partition before computing the
+    // parent partition, so we cannot simply use `mapPartitions` here (SPARK-9747).
+    val resultRdd = {
+      new MapPartitionsWithPreparationRDD[UnsafeRow, InternalRow, TungstenAggregationIterator](
+        child.execute(), preparePartition, executePartition, preservesPartitioning = true)
+    }
+    resultRdd.asInstanceOf[RDD[InternalRow]]
   }
 
   override def simpleString: String = {
     val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
 
     testFallbackStartsAt match {
-      case None => s"TungstenAggregate ${groupingExpressions} ${allAggregateExpressions}"
+      case None =>
+        val keyString = groupingExpressions.mkString("[", ",", "]")
+        val functionString = allAggregateExpressions.mkString("[", ",", "]")
+        val outputString = output.mkString("[", ",", "]")
+        s"TungstenAggregate(key=$keyString, functions=$functionString, output=$outputString)"
       case Some(fallbackStartsAt) =>
-        s"TungstenAggregateWithControlledFallback ${groupingExpressions} " +
-          s"${allAggregateExpressions} fallbackStartsAt=$fallbackStartsAt"
+        s"TungstenAggregateWithControlledFallback $groupingExpressions " +
+          s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }
 }

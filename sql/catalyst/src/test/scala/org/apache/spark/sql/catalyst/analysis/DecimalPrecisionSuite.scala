@@ -136,10 +136,10 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkType(Multiply(i, u), DecimalType(38, 18))
     checkType(Multiply(u, u), DecimalType(38, 36))
 
-    checkType(Divide(u, d1), DecimalType(38, 21))
-    checkType(Divide(u, d2), DecimalType(38, 24))
-    checkType(Divide(u, i), DecimalType(38, 29))
-    checkType(Divide(u, u), DecimalType(38, 38))
+    checkType(Divide(u, d1), DecimalType(38, 18))
+    checkType(Divide(u, d2), DecimalType(38, 19))
+    checkType(Divide(u, i), DecimalType(38, 23))
+    checkType(Divide(u, u), DecimalType(38, 18))
 
     checkType(Remainder(d1, u), DecimalType(19, 18))
     checkType(Remainder(d2, u), DecimalType(21, 18))

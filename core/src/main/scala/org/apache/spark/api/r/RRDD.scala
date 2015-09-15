@@ -19,9 +19,10 @@ package org.apache.spark.api.r
 
 import java.io._
 import java.net.{InetAddress, ServerSocket}
+import java.util.Arrays
 import java.util.{Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -365,11 +366,11 @@ private[r] object RRDD {
       sparkConf.setIfMissing("spark.master", "local")
     }
 
-    for ((name, value) <- sparkEnvirMap) {
-      sparkConf.set(name.asInstanceOf[String], value.asInstanceOf[String])
+    for ((name, value) <- sparkEnvirMap.asScala) {
+      sparkConf.set(name.toString, value.toString)
     }
-    for ((name, value) <- sparkExecutorEnvMap) {
-      sparkConf.setExecutorEnv(name.asInstanceOf[String], value.asInstanceOf[String])
+    for ((name, value) <- sparkExecutorEnvMap.asScala) {
+      sparkConf.setExecutorEnv(name.toString, value.toString)
     }
 
     val jsc = new JavaSparkContext(sparkConf)
@@ -395,7 +396,7 @@ private[r] object RRDD {
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir + "/SparkR/worker/" + script
-    val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))
+    val pb = new ProcessBuilder(Arrays.asList(rCommand, rOptions, rExecScript))
     // Unset the R_TESTS environment variable for workers.
     // This is set by R CMD check as startup.Rs
     // (http://svn.r-project.org/R/trunk/src/library/tools/R/testing.R)

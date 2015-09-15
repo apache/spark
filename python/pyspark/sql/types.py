@@ -168,10 +168,12 @@ class DateType(AtomicType):
         return True
 
     def toInternal(self, d):
-        return d and d.toordinal() - self.EPOCH_ORDINAL
+        if d is not None:
+            return d.toordinal() - self.EPOCH_ORDINAL
 
     def fromInternal(self, v):
-        return v and datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
+        if v is not None:
+            return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
 class TimestampType(AtomicType):
@@ -467,9 +469,11 @@ class StructType(DataType):
         """
         Construct a StructType by adding new elements to it to define the schema. The method accepts
         either:
+
             a) A single parameter which is a StructField object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
-             metadata(optional). The data_type parameter may be either a String or a DataType object
+               metadata(optional). The data_type parameter may be either a String or a
+               DataType object.
 
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         >>> struct2 = StructType([StructField("f1", StringType(), True),\
@@ -535,6 +539,9 @@ class StructType(DataType):
                 return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
             elif isinstance(obj, (tuple, list)):
                 return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -542,6 +549,9 @@ class StructType(DataType):
                 return tuple(obj.get(n) for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                return tuple(d.get(n) for n in self.names)
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
 
@@ -1166,6 +1176,8 @@ class Row(tuple):
     >>> row = Row(name="Alice", age=11)
     >>> row
     Row(age=11, name='Alice')
+    >>> row['name'], row['age']
+    ('Alice', 11)
     >>> row.name, row.age
     ('Alice', 11)
 
@@ -1197,18 +1209,54 @@ class Row(tuple):
         else:
             raise ValueError("No args or kwargs")
 
-    def asDict(self):
+    def asDict(self, recursive=False):
         """
         Return as an dict
+
+        :param recursive: turns the nested Row as dict (default: False).
+
+        >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
+        True
+        >>> row = Row(key=1, value=Row(name='a', age=2))
+        >>> row.asDict() == {'key': 1, 'value': Row(age=2, name='a')}
+        True
+        >>> row.asDict(True) == {'key': 1, 'value': {'name': 'a', 'age': 2}}
+        True
         """
         if not hasattr(self, "__fields__"):
             raise TypeError("Cannot convert a Row class into dict")
-        return dict(zip(self.__fields__, self))
+
+        if recursive:
+            def conv(obj):
+                if isinstance(obj, Row):
+                    return obj.asDict(True)
+                elif isinstance(obj, list):
+                    return [conv(o) for o in obj]
+                elif isinstance(obj, dict):
+                    return dict((k, conv(v)) for k, v in obj.items())
+                else:
+                    return obj
+            return dict(zip(self.__fields__, (conv(o) for o in self)))
+        else:
+            return dict(zip(self.__fields__, self))
 
     # let object acts like class
     def __call__(self, *args):
         """create new Row object"""
         return _create_row(self, args)
+
+    def __getitem__(self, item):
+        if isinstance(item, (int, slice)):
+            return super(Row, self).__getitem__(item)
+        try:
+            # it will be slow when it has many fields,
+            # but this will not be used in normal cases
+            idx = self.__fields__.index(item)
+            return super(Row, self).__getitem__(idx)
+        except IndexError:
+            raise KeyError(item)
+        except ValueError:
+            raise ValueError(item)
 
     def __getattr__(self, item):
         if item.startswith("__"):
@@ -1222,6 +1270,11 @@ class Row(tuple):
             raise AttributeError(item)
         except ValueError:
             raise AttributeError(item)
+
+    def __setattr__(self, key, value):
+        if key != '__fields__':
+            raise Exception("Row is read-only")
+        self.__dict__[key] = value
 
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""
@@ -1254,8 +1307,11 @@ class DatetimeConverter(object):
 
     def convert(self, obj, gateway_client):
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
-        return Timestamp(int(time.mktime(obj.timetuple())) * 1000 + obj.microsecond // 1000)
-
+        seconds = (calendar.timegm(obj.utctimetuple()) if obj.tzinfo
+                   else time.mktime(obj.timetuple()))
+        t = Timestamp(int(seconds) * 1000)
+        t.setNanos(obj.microsecond * 1000)
+        return t
 
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())

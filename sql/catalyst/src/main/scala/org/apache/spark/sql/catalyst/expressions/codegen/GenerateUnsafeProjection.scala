@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
 
 /**
  * Generates a [[Projection]] that returns an [[UnsafeRow]].
@@ -41,8 +40,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   private val ArrayWriter = classOf[UnsafeRowWriters.ArrayWriter].getName
   private val MapWriter = classOf[UnsafeRowWriters.MapWriter].getName
 
-  private val PlatformDependent = classOf[PlatformDependent].getName
-
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
     case NullType => true
@@ -56,19 +53,19 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   def genAdditionalSize(dt: DataType, ev: GeneratedExpressionCode): String = dt match {
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
-      s" + $DecimalWriter.getSize(${ev.primitive})"
+      s"$DecimalWriter.getSize(${ev.primitive})"
     case StringType =>
-      s" + (${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive}))"
+      s"${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive})"
     case BinaryType =>
-      s" + (${ev.isNull} ? 0 : $BinaryWriter.getSize(${ev.primitive}))"
+      s"${ev.isNull} ? 0 : $BinaryWriter.getSize(${ev.primitive})"
     case CalendarIntervalType =>
-      s" + (${ev.isNull} ? 0 : 16)"
+      s"${ev.isNull} ? 0 : 16"
     case _: StructType =>
-      s" + (${ev.isNull} ? 0 : $StructWriter.getSize(${ev.primitive}))"
+      s"${ev.isNull} ? 0 : $StructWriter.getSize(${ev.primitive})"
     case _: ArrayType =>
-      s" + (${ev.isNull} ? 0 : $ArrayWriter.getSize(${ev.primitive}))"
+      s"${ev.isNull} ? 0 : $ArrayWriter.getSize(${ev.primitive})"
     case _: MapType =>
-      s" + (${ev.isNull} ? 0 : $MapWriter.getSize(${ev.primitive}))"
+      s"${ev.isNull} ? 0 : $MapWriter.getSize(${ev.primitive})"
     case _ => ""
   }
 
@@ -125,64 +122,68 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
    */
   private def createCodeForStruct(
       ctx: CodeGenContext,
+      row: String,
       inputs: Seq[GeneratedExpressionCode],
       inputTypes: Seq[DataType]): GeneratedExpressionCode = {
 
-    val output = ctx.freshName("convertedStruct")
-    ctx.addMutableState("UnsafeRow", output, s"$output = new UnsafeRow();")
-    val buffer = ctx.freshName("buffer")
-    ctx.addMutableState("byte[]", buffer, s"$buffer = new byte[64];")
-    val numBytes = ctx.freshName("numBytes")
-    val cursor = ctx.freshName("cursor")
-
-    val convertedFields = inputTypes.zip(inputs).map { case (dt, input) =>
-      createConvertCode(ctx, input, dt)
-    }
-
     val fixedSize = 8 * inputTypes.length + UnsafeRow.calculateBitSetWidthInBytes(inputTypes.length)
-    val additionalSize = inputTypes.zip(convertedFields).map { case (dt, ev) =>
-      genAdditionalSize(dt, ev)
-    }.mkString("")
 
-    val fieldWriters = inputTypes.zip(convertedFields).zipWithIndex.map { case ((dt, ev), i) =>
-      val update = genFieldWriter(ctx, dt, ev, output, i, cursor)
-      if (dt.isInstanceOf[DecimalType]) {
-        // Can't call setNullAt() for DecimalType
+    val output = ctx.freshName("convertedStruct")
+    ctx.addMutableState("UnsafeRow", output, s"this.$output = new UnsafeRow();")
+    val buffer = ctx.freshName("buffer")
+    ctx.addMutableState("byte[]", buffer, s"this.$buffer = new byte[$fixedSize];")
+    val cursor = ctx.freshName("cursor")
+    ctx.addMutableState("int", cursor, s"this.$cursor = 0;")
+    val tmpBuffer = ctx.freshName("tmpBuffer")
+
+    val convertedFields = inputTypes.zip(inputs).zipWithIndex.map { case ((dt, input), i) =>
+      val ev = createConvertCode(ctx, input, dt)
+      val growBuffer = if (!UnsafeRow.isFixedLength(dt)) {
+        val numBytes = ctx.freshName("numBytes")
         s"""
+          int $numBytes = $cursor + (${genAdditionalSize(dt, ev)});
+          if ($buffer.length < $numBytes) {
+            // This will not happen frequently, because the buffer is re-used.
+            byte[] $tmpBuffer = new byte[$numBytes * 2];
+            Platform.copyMemory($buffer, Platform.BYTE_ARRAY_OFFSET,
+              $tmpBuffer, Platform.BYTE_ARRAY_OFFSET, $buffer.length);
+            $buffer = $tmpBuffer;
+          }
+          $output.pointTo($buffer, Platform.BYTE_ARRAY_OFFSET, ${inputTypes.length}, $numBytes);
+         """
+      } else {
+        ""
+      }
+      val update = dt match {
+        case dt: DecimalType if dt.precision > Decimal.MAX_LONG_DIGITS =>
+          // Can't call setNullAt() for DecimalType
+          s"""
           if (${ev.isNull}) {
-           $cursor += $DecimalWriter.write($output, $i, $cursor, null);
+            $cursor += $DecimalWriter.write($output, $i, $cursor, null);
           } else {
-           $update;
+            ${genFieldWriter(ctx, dt, ev, output, i, cursor)};
           }
         """
-      } else {
-        s"""
+        case _ =>
+          s"""
           if (${ev.isNull}) {
             $output.setNullAt($i);
           } else {
-            $update;
+            ${genFieldWriter(ctx, dt, ev, output, i, cursor)};
           }
         """
       }
-    }.mkString("\n")
+      s"""
+        ${ev.code}
+        $growBuffer
+        $update
+      """
+    }
 
     val code = s"""
-      ${convertedFields.map(_.code).mkString("\n")}
-
-      final int $numBytes = $fixedSize $additionalSize;
-      if ($numBytes > $buffer.length) {
-        $buffer = new byte[$numBytes];
-      }
-
-      $output.pointTo(
-        $buffer,
-        $PlatformDependent.BYTE_ARRAY_OFFSET,
-        ${inputTypes.length},
-        $numBytes);
-
-      int $cursor = $fixedSize;
-
-      $fieldWriters
+      $cursor = $fixedSize;
+      $output.pointTo($buffer, Platform.BYTE_ARRAY_OFFSET, ${inputTypes.length}, $cursor);
+      ${ctx.splitExpressions(row, convertedFields)}
       """
     GeneratedExpressionCode(code, "false", output)
   }
@@ -205,77 +206,40 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     ctx.addMutableState("UnsafeArrayData", output, s"$output = new UnsafeArrayData();")
     val buffer = ctx.freshName("buffer")
     ctx.addMutableState("byte[]", buffer, s"$buffer = new byte[64];")
+    val tmpBuffer = ctx.freshName("tmpBuffer")
     val outputIsNull = ctx.freshName("isNull")
-    val tmp = ctx.freshName("tmp")
     val numElements = ctx.freshName("numElements")
     val fixedSize = ctx.freshName("fixedSize")
     val numBytes = ctx.freshName("numBytes")
-    val elements = ctx.freshName("elements")
     val cursor = ctx.freshName("cursor")
     val index = ctx.freshName("index")
+    val elementName = ctx.freshName("elementName")
 
-    val element = GeneratedExpressionCode(
-      code = "",
-      isNull = s"$tmp.isNullAt($index)",
-      primitive = s"${ctx.getValue(tmp, elementType, index)}"
-    )
-    val convertedElement: GeneratedExpressionCode = createConvertCode(ctx, element, elementType)
-
-    // go through the input array to calculate how many bytes we need.
-    val calculateNumBytes = elementType match {
-      case _ if (ctx.isPrimitiveType(elementType)) =>
-        // Should we do word align?
-        val elementSize = elementType.defaultSize
-        s"""
-          $numBytes += $elementSize * $numElements;
-        """
-      case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
-        s"""
-          $numBytes += 8 * $numElements;
-        """
-      case _ =>
-        val writer = getWriter(elementType)
-        val elementSize = s"$writer.getSize($elements[$index])"
-        val unsafeType = elementType match {
-          case _: StructType => "UnsafeRow"
-          case _: ArrayType => "UnsafeArrayData"
-          case _: MapType => "UnsafeMapData"
-          case _ => ctx.javaType(elementType)
-        }
-        val copy = elementType match {
-          // We reuse the buffer during conversion, need copy it before process next element.
-          case _: StructType | _: ArrayType | _: MapType => ".copy()"
-          case _ => ""
-        }
-
-        s"""
-          final $unsafeType[] $elements = new $unsafeType[$numElements];
-          for (int $index = 0; $index < $numElements; $index++) {
-            ${convertedElement.code}
-            if (!${convertedElement.isNull}) {
-              $elements[$index] = ${convertedElement.primitive}$copy;
-              $numBytes += $elementSize;
-            }
-          }
-        """
+    val element = {
+      val code = s"${ctx.javaType(elementType)} $elementName = " +
+        s"${ctx.getValue(input.primitive, elementType, index)};"
+      val isNull = s"${input.primitive}.isNullAt($index)"
+      GeneratedExpressionCode(code, isNull, elementName)
     }
 
+    val convertedElement = createConvertCode(ctx, element, elementType)
+
     val writeElement = elementType match {
-      case _ if (ctx.isPrimitiveType(elementType)) =>
+      case _ if ctx.isPrimitiveType(elementType) =>
         // Should we do word align?
         val elementSize = elementType.defaultSize
         s"""
-          $PlatformDependent.UNSAFE.put${ctx.primitiveTypeName(elementType)}(
+          Platform.put${ctx.primitiveTypeName(elementType)}(
             $buffer,
-            $PlatformDependent.BYTE_ARRAY_OFFSET + $cursor,
+            Platform.BYTE_ARRAY_OFFSET + $cursor,
             ${convertedElement.primitive});
           $cursor += $elementSize;
         """
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
         s"""
-          $PlatformDependent.UNSAFE.putLong(
+          Platform.putLong(
             $buffer,
-            $PlatformDependent.BYTE_ARRAY_OFFSET + $cursor,
+            Platform.BYTE_ARRAY_OFFSET + $cursor,
             ${convertedElement.primitive}.toUnscaledLong());
           $cursor += 8;
         """
@@ -284,57 +248,60 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         s"""
           $cursor += $writer.write(
             $buffer,
-            $PlatformDependent.BYTE_ARRAY_OFFSET + $cursor,
-            $elements[$index]);
+            Platform.BYTE_ARRAY_OFFSET + $cursor,
+            ${convertedElement.primitive});
         """
     }
 
-    val checkNull = elementType match {
-      case _ if ctx.isPrimitiveType(elementType) => s"${convertedElement.isNull}"
-      case t: DecimalType => s"$elements[$index] == null" +
-        s" || !$elements[$index].changePrecision(${t.precision}, ${t.scale})"
-      case _ => s"$elements[$index] == null"
+    val checkNull = convertedElement.isNull + (elementType match {
+      case t: DecimalType =>
+        s" || !${convertedElement.primitive}.changePrecision(${t.precision}, ${t.scale})"
+      case _ => ""
+    })
+
+    val elementSize = elementType match {
+      // Should we do word align for primitive types?
+      case _ if ctx.isPrimitiveType(elementType) => elementType.defaultSize.toString
+      case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS => "8"
+      case _ =>
+        val writer = getWriter(elementType)
+        s"$writer.getSize(${convertedElement.primitive})"
     }
 
     val code = s"""
       ${input.code}
       final boolean $outputIsNull = ${input.isNull};
       if (!$outputIsNull) {
-        final ArrayData $tmp = ${input.primitive};
-        if ($tmp instanceof UnsafeArrayData) {
-          $output = (UnsafeArrayData) $tmp;
+        if (${input.primitive} instanceof UnsafeArrayData) {
+          $output = (UnsafeArrayData) ${input.primitive};
         } else {
-          final int $numElements = $tmp.numElements();
+          final int $numElements = ${input.primitive}.numElements();
           final int $fixedSize = 4 * $numElements;
           int $numBytes = $fixedSize;
 
-          $calculateNumBytes
-
-          if ($numBytes > $buffer.length) {
-            $buffer = new byte[$numBytes];
-          }
-
           int $cursor = $fixedSize;
           for (int $index = 0; $index < $numElements; $index++) {
+            ${convertedElement.code}
             if ($checkNull) {
               // If element is null, write the negative value address into offset region.
-              $PlatformDependent.UNSAFE.putInt(
-                $buffer,
-                $PlatformDependent.BYTE_ARRAY_OFFSET + 4 * $index,
-                -$cursor);
+              Platform.putInt($buffer, Platform.BYTE_ARRAY_OFFSET + 4 * $index, -$cursor);
             } else {
-              $PlatformDependent.UNSAFE.putInt(
-                $buffer,
-                $PlatformDependent.BYTE_ARRAY_OFFSET + 4 * $index,
-                $cursor);
-
+              $numBytes += $elementSize;
+              if ($buffer.length < $numBytes) {
+                // This will not happen frequently, because the buffer is re-used.
+                byte[] $tmpBuffer = new byte[$numBytes * 2];
+                Platform.copyMemory($buffer, Platform.BYTE_ARRAY_OFFSET,
+                  $tmpBuffer, Platform.BYTE_ARRAY_OFFSET, $buffer.length);
+                $buffer = $tmpBuffer;
+              }
+              Platform.putInt($buffer, Platform.BYTE_ARRAY_OFFSET + 4 * $index, $cursor);
               $writeElement
             }
           }
 
           $output.pointTo(
             $buffer,
-            $PlatformDependent.BYTE_ARRAY_OFFSET,
+            Platform.BYTE_ARRAY_OFFSET,
             $numElements,
             $numBytes);
         }
@@ -350,29 +317,31 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       valueType: DataType): GeneratedExpressionCode = {
     val output = ctx.freshName("convertedMap")
     val outputIsNull = ctx.freshName("isNull")
-    val tmp = ctx.freshName("tmp")
+    val keyArrayName = ctx.freshName("keyArrayName")
+    val valueArrayName = ctx.freshName("valueArrayName")
 
-    val keyArray = GeneratedExpressionCode(
-      code = "",
-      isNull = "false",
-      primitive = s"$tmp.keyArray()"
-    )
-    val valueArray = GeneratedExpressionCode(
-      code = "",
-      isNull = "false",
-      primitive = s"$tmp.valueArray()"
-    )
-    val convertedKeys: GeneratedExpressionCode = createCodeForArray(ctx, keyArray, keyType)
-    val convertedValues: GeneratedExpressionCode = createCodeForArray(ctx, valueArray, valueType)
+    val keyArray = {
+      val code = s"ArrayData $keyArrayName = ${input.primitive}.keyArray();"
+      val isNull = "false"
+      GeneratedExpressionCode(code, isNull, keyArrayName)
+    }
+
+    val valueArray = {
+      val code = s"ArrayData $valueArrayName = ${input.primitive}.valueArray();"
+      val isNull = "false"
+      GeneratedExpressionCode(code, isNull, valueArrayName)
+    }
+
+    val convertedKeys = createCodeForArray(ctx, keyArray, keyType)
+    val convertedValues = createCodeForArray(ctx, valueArray, valueType)
 
     val code = s"""
       ${input.code}
       final boolean $outputIsNull = ${input.isNull};
       UnsafeMapData $output = null;
       if (!$outputIsNull) {
-        final MapData $tmp = ${input.primitive};
-        if ($tmp instanceof UnsafeMapData) {
-          $output = (UnsafeMapData) $tmp;
+        if (${input.primitive} instanceof UnsafeMapData) {
+          $output = (UnsafeMapData) ${input.primitive};
         } else {
           ${convertedKeys.code}
           ${convertedValues.code}
@@ -393,22 +362,22 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case t: StructType =>
       val output = ctx.freshName("convertedStruct")
       val outputIsNull = ctx.freshName("isNull")
-      val tmp = ctx.freshName("tmp")
       val fieldTypes = t.fields.map(_.dataType)
       val fieldEvals = fieldTypes.zipWithIndex.map { case (dt, i) =>
-        val getFieldCode = ctx.getValue(tmp, dt, i.toString)
-        val fieldIsNull = s"$tmp.isNullAt($i)"
-        GeneratedExpressionCode("", fieldIsNull, getFieldCode)
+        val fieldName = ctx.freshName("fieldName")
+        val code = s"${ctx.javaType(dt)} $fieldName = " +
+          s"${ctx.getValue(input.primitive, dt, i.toString)};"
+        val isNull = s"${input.primitive}.isNullAt($i)"
+        GeneratedExpressionCode(code, isNull, fieldName)
       }
-      val converter = createCodeForStruct(ctx, fieldEvals, fieldTypes)
+      val converter = createCodeForStruct(ctx, input.primitive, fieldEvals, fieldTypes)
       val code = s"""
         ${input.code}
          UnsafeRow $output = null;
          final boolean $outputIsNull = ${input.isNull};
          if (!$outputIsNull) {
-           final InternalRow $tmp = ${input.primitive};
-           if ($tmp instanceof UnsafeRow) {
-             $output = (UnsafeRow) $tmp;
+           if (${input.primitive} instanceof UnsafeRow) {
+             $output = (UnsafeRow) ${input.primitive};
            } else {
              ${converter.code}
              $output = ${converter.primitive};
@@ -427,7 +396,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   def createCode(ctx: CodeGenContext, expressions: Seq[Expression]): GeneratedExpressionCode = {
     val exprEvals = expressions.map(e => e.gen(ctx))
     val exprTypes = expressions.map(_.dataType)
-    createCodeForStruct(ctx, exprEvals, exprTypes)
+    createCodeForStruct(ctx, "i", exprEvals, exprTypes)
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =

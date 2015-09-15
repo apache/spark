@@ -116,6 +116,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
+        PartitioningUtils.validatePartitionColumnDataTypes(r.schema, part.keySet.toArray)
+
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src: BaseRelation) => src
@@ -138,12 +140,12 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-      case CreateTableUsingAsSelect(tableName, _, _, _, SaveMode.Overwrite, _, query) =>
+      case CreateTableUsingAsSelect(tableIdent, _, _, partitionColumns, mode, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (catalog.tableExists(Seq(tableName))) {
+        if (mode == SaveMode.Overwrite && catalog.tableExists(tableIdent.toSeq)) {
           // Need to remove SubQuery operator.
-          EliminateSubQueries(catalog.lookupRelation(Seq(tableName))) match {
+          EliminateSubQueries(catalog.lookupRelation(tableIdent.toSeq)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation) =>
@@ -153,7 +155,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
               }
               if (srcRelations.contains(dest)) {
                 failAnalysis(
-                  s"Cannot overwrite table $tableName that is also being read from.")
+                  s"Cannot overwrite table $tableIdent that is also being read from.")
               } else {
                 // OK
               }
@@ -163,6 +165,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         } else {
           // OK
         }
+
+        PartitioningUtils.validatePartitionColumnDataTypes(query.schema, partitionColumns)
 
       case _ => // OK
     }

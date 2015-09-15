@@ -19,7 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
@@ -164,7 +164,7 @@ public final class UnsafeInMemorySorter {
       final long recordPointer = sortBuffer[position];
       baseObject = memoryManager.getPage(recordPointer);
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
-      recordLength = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset - 4);
+      recordLength = Platform.getInt(baseObject, baseOffset - 4);
       keyPrefix = sortBuffer[position + 1];
       position += 2;
     }

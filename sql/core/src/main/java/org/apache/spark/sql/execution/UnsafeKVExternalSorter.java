@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.KVIterator;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -160,6 +160,13 @@ public final class UnsafeKVExternalSorter {
   }
 
   /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    return sorter.getPeakMemoryUsedBytes();
+  }
+
+  /**
    * Marks the current page as no-more-space-available, and as a result, either allocate a
    * new page or spill when we see the next record.
    */
@@ -218,7 +225,7 @@ public final class UnsafeKVExternalSorter {
           int recordLen = underlying.getRecordLength();
 
           // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
-          int keyLen = PlatformDependent.UNSAFE.getInt(baseObj, recordOffset);
+          int keyLen = Platform.getInt(baseObj, recordOffset);
           int valueLen = recordLen - keyLen - 4;
           key.pointTo(baseObj, recordOffset + 4, numKeyFields, keyLen);
           value.pointTo(baseObj, recordOffset + 4 + keyLen, numValueFields, valueLen);

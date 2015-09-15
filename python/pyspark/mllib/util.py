@@ -300,6 +300,7 @@ class LinearDataGenerator(object):
         :param: seed      Random Seed
         :param: eps       Used to scale the noise. If eps is set high,
                           the amount of gaussian noise added is more.
+
         Returns a list of LabeledPoints of length nPoints
         """
         weights = [float(weight) for weight in weights]

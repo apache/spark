@@ -141,7 +141,7 @@ class Pipeline(Estimator):
     @keyword_only
     def __init__(self, stages=None):
         """
-        __init__(self, stages=[])
+        __init__(self, stages=None)
         """
         if stages is None:
             stages = []
@@ -170,7 +170,7 @@ class Pipeline(Estimator):
     @keyword_only
     def setParams(self, stages=None):
         """
-        setParams(self, stages=[])
+        setParams(self, stages=None)
         Sets params for Pipeline.
         """
         if stages is None:

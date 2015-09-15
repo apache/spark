@@ -17,18 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql._
-import org.scalatest.BeforeAndAfterAll
-import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
+import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-
-  override val sqlContext = TestHive
-  import sqlContext.implicits._
+abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
 
   var originalUseAggregate2: Boolean = _
 
@@ -68,7 +65,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     data2.write.saveAsTable("agg2")
 
     val emptyDF = sqlContext.createDataFrame(
-      sqlContext.sparkContext.emptyRDD[Row],
+      sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
     emptyDF.registerTempTable("emptyTable")
 
@@ -479,6 +476,21 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(0, null, 1, 1, null, 0) :: Nil)
   }
 
+  test("test Last implemented based on AggregateExpression1") {
+    // TODO: Remove this test once we remove AggregateExpression1.
+    import org.apache.spark.sql.functions._
+    val df = Seq((1, 1), (2, 2), (3, 3)).toDF("i", "j").repartition(1)
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+
+      checkAnswer(
+        df.groupBy("i").agg(last("j")),
+        df
+      )
+    }
+  }
+
   test("error handling") {
     withSQLConf("spark.sql.useAggregate2" -> "false") {
       val errorMessage = intercept[AnalysisException] {
@@ -494,41 +506,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
           """.stripMargin).collect()
       }.getMessage
       assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-    }
-
-    // TODO: once we support Hive UDAF in the new interface,
-    // we can remove the following two tests.
-    withSQLConf("spark.sql.useAggregate2" -> "true") {
-      val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
-          """
-            |SELECT
-            |  key,
-            |  mydoublesum(value + 1.5 * key),
-            |  stddev_samp(value)
-            |FROM agg1
-            |GROUP BY key
-          """.stripMargin).collect()
-      }.getMessage
-      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-      // This will fall back to the old aggregate
-      val newAggregateOperators = sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  sum(value + 1.5 * key),
-          |  stddev_samp(value)
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin).queryExecution.executedPlan.collect {
-        case agg: aggregate.SortBasedAggregate => agg
-        case agg: aggregate.TungstenAggregate => agg
-      }
-      val message =
-        "We should fallback to the old aggregation code path if " +
-          "there is any aggregate function that cannot be converted to the new interface."
-      assert(newAggregateOperators.isEmpty, message)
     }
   }
 }
@@ -581,7 +558,7 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
     sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
   }
 
-  override protected def checkAnswer(actual: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+  override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     (0 to 2).foreach { fallbackStartsAt =>
       sqlContext.setConf(
         "spark.sql.TungstenAggregate.testFallbackStartsAt",
@@ -589,6 +566,7 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
 
       // Create a new df to make sure its physical operator picks up
       // spark.sql.TungstenAggregate.testFallbackStartsAt.
+      // todo: remove it?
       val newActual = DataFrame(sqlContext, actual.logicalPlan)
 
       QueryTest.checkAnswer(newActual, expectedAnswer) match {
@@ -610,12 +588,12 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
   }
 
   // Override it to make sure we call the actually overridden checkAnswer.
-  override protected def checkAnswer(df: DataFrame, expectedAnswer: Row): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
   // Override it to make sure we call the actually overridden checkAnswer.
-  override protected def checkAnswer(df: DataFrame, expectedAnswer: DataFrame): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
     checkAnswer(df, expectedAnswer.collect())
   }
 }

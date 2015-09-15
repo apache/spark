@@ -144,21 +144,28 @@ private[spark] object DecisionTreeMetadata extends Logging {
       val maxCategoriesForUnorderedFeature =
         ((math.log(maxPossibleBins / 2 + 1) / math.log(2.0)) + 1).floor.toInt
       strategy.categoricalFeaturesInfo.foreach { case (featureIndex, numCategories) =>
-        // Decide if some categorical features should be treated as unordered features,
-        //  which require 2 * ((1 << numCategories - 1) - 1) bins.
-        // We do this check with log values to prevent overflows in case numCategories is large.
-        // The next check is equivalent to: 2 * ((1 << numCategories - 1) - 1) <= maxBins
-        if (numCategories <= maxCategoriesForUnorderedFeature) {
-          unorderedFeatures.add(featureIndex)
-          numBins(featureIndex) = numUnorderedBins(numCategories)
-        } else {
-          numBins(featureIndex) = numCategories
+        // Hack: If a categorical feature has only 1 category, we treat it as continuous.
+        // TODO(SPARK-9957): Handle this properly by filtering out those features.
+        if (numCategories > 1) {
+          // Decide if some categorical features should be treated as unordered features,
+          //  which require 2 * ((1 << numCategories - 1) - 1) bins.
+          // We do this check with log values to prevent overflows in case numCategories is large.
+          // The next check is equivalent to: 2 * ((1 << numCategories - 1) - 1) <= maxBins
+          if (numCategories <= maxCategoriesForUnorderedFeature) {
+            unorderedFeatures.add(featureIndex)
+            numBins(featureIndex) = numUnorderedBins(numCategories)
+          } else {
+            numBins(featureIndex) = numCategories
+          }
         }
       }
     } else {
       // Binary classification or regression
       strategy.categoricalFeaturesInfo.foreach { case (featureIndex, numCategories) =>
-        numBins(featureIndex) = numCategories
+        // If a categorical feature has only 1 category, we treat it as continuous: SPARK-9957
+        if (numCategories > 1) {
+          numBins(featureIndex) = numCategories
+        }
       }
     }
 
