@@ -73,7 +73,7 @@ test_that("infer types and check types", {
   e <- new.env()
   assign("a", 1L, envir = e)
   expect_equal(infer_type(e), "map<string,integer>")
-  
+
   expect_error(checkType("map<integer,integer>"), "Key type in a map must be string or character")
 })
 
