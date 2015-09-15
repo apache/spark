@@ -17,22 +17,18 @@
 
 package org.apache.spark.ml.regression
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.OneHotEncoder
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{Row, DataFrame}
 
-import scala.util.Random
-
-case class AFTExamplePoint(stage: Double, time: Double, age: Int, year: Int, censored: Double)
-
-case class AFTPoint(features: Vector, censored: Double, label: Double)
+private case class AFTPoint(features: Vector, censored: Double, label: Double)
 
 class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -43,32 +39,37 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     super.beforeAll()
     datasetUnivariate = sqlContext.createDataFrame(
       sc.parallelize(generateAFTInput(
-        1, Array(5.5), Array(0.8), 1000, 42, 1.0, 2.0)))
+        1, Array(5.5), Array(0.8), 1000, 42, 1.0, 2.0, 2.0)))
     datasetMultivariate = sqlContext.createDataFrame(
       sc.parallelize(generateAFTInput(
-        2, Array(0.9, -1.3), Array(0.7, 1.2), 1000, 42, 1.5, 2.5)))
+        2, Array(0.9, -1.3), Array(0.7, 1.2), 1000, 42, 1.5, 2.5, 2.0)))
   }
 
   test("params") {
     ParamsSuite.checkParams(new AFTSurvivalRegression)
-    val model = new AFTSurvivalRegressionModel("aftReg", Vectors.dense(0.0), 0.0, 0.0)
+    val model = new AFTSurvivalRegressionModel("aftSurvReg", Vectors.dense(0.0), 0.0, 0.0)
     ParamsSuite.checkParams(model)
   }
 
-  test("aft regression: default params") {
+  test("aft survival regression: default params") {
     val aftr = new AFTSurvivalRegression
     assert(aftr.getLabelCol === "label")
     assert(aftr.getFeaturesCol === "features")
     assert(aftr.getPredictionCol === "prediction")
+    assert(aftr.getCensorCol === "censored")
     assert(aftr.getFitIntercept)
+    assert(aftr.getMaxIter === 100)
+    assert(aftr.getTol === 1E-6)
     val model = aftr.fit(datasetUnivariate)
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
 
+    model.transform(datasetUnivariate)
+      .select("label", "prediction")
+      .collect()
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
-    assert(model.getQuantileCol == "quantile")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
   }
@@ -79,22 +80,20 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
       xVariance: Array[Double],
       nPoints: Int,
       seed: Int,
-      alpha: Double,
-      beta: Double): Seq[AFTPoint] = {
+      weibullAlpha: Double,
+      weibullBeta: Double,
+      exponentialMean: Double): Seq[AFTPoint] = {
 
-    def censored(x: Double, y: Double): Double = {
-      if (x <= y) 1.0 else 0.0
-    }
+    def censored(x: Double, y: Double): Double = { if (x <= y) 1.0 else 0.0 }
 
-    val weibull = new WeibullGenerator(alpha, beta)
+    val weibull = new WeibullGenerator(weibullAlpha, weibullBeta)
     weibull.setSeed(seed)
 
-    val exponential = new ExponentialGenerator(2.0)
+    val exponential = new ExponentialGenerator(exponentialMean)
     exponential.setSeed(seed)
 
     val rnd = new Random(seed)
-    val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](numFeatures)(rnd.nextDouble()))
+    val x = Array.fill[Array[Double]](nPoints)(Array.fill[Double](numFeatures)(rnd.nextDouble()))
 
     x.foreach { v =>
       var i = 0
@@ -104,16 +103,12 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
         i += 1
       }
     }
-    val y = (1 to nPoints).map { i =>
-      (weibull.nextValue(), exponential.nextValue())
-    }
+    val y = (1 to nPoints).map { i => (weibull.nextValue(), exponential.nextValue()) }
 
-    y.zip(x).map { p =>
-      AFTPoint(Vectors.dense(p._2), censored(p._1._1, p._1._2), p._1._1)
-    }
+    y.zip(x).map { p => AFTPoint(Vectors.dense(p._2), censored(p._1._1, p._1._2), p._1._1) }
   }
 
-  test("aft regression with univariate") {
+  test("aft survival regression with univariate") {
     val trainer = new AFTSurvivalRegression
     val model = trainer.fit(datasetUnivariate)
 
@@ -150,12 +145,28 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(model.weights ~= weightsR relTol 1E-3)
     assert(model.scale ~= scaleR relTol 1E-3)
 
-    val features = Vectors.dense(4.675290165370009)
+    /*
+       Using the following R code to predict.
+       > responsePred <- predict(sr.fit)
+       > quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
+     */
+    val features = Vectors.dense(6.559282795753792)
     val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
-    val expected = model.predict(features, quantile)
+    val responsePredictR = 4.494763
+    val quantilePredictR = Vectors.dense(0.1879174, 2.680120, 14.57794)
+
+    assert(model.predict(features) ~== responsePredictR relTol 1E-3)
+    model.setQuantile(quantile)
+    assert(model.quantilePredict(features) ~== quantilePredictR relTol 1E-3)
+
+    model.transform(datasetUnivariate).select("features", "prediction").collect().foreach {
+      case Row(features: DenseVector, prediction1: Double) =>
+        val prediction2 = math.exp(model.weights.toBreeze.dot(features.toBreeze) + model.intercept)
+        assert(prediction1 ~== prediction2 relTol 1E-5)
+    }
   }
 
-  test("aft regression with multivariate") {
+  test("aft survival regression with multivariate") {
     val trainer = new AFTSurvivalRegression
     val model = trainer.fit(datasetMultivariate)
 
@@ -192,88 +203,24 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(model.weights ~= weightsR relTol 1E-3)
     assert(model.scale ~= scaleR relTol 1E-3)
 
-    val features = Vectors.dense(1.109175828579902, -0.5315711415960551)
+    /*
+       Using the following R code to predict.
+       > responsePred <- predict(sr.fit)
+       > quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
+     */
+    val features = Vectors.dense(2.233396950271428,-2.5321374085997683)
     val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
-    val expected = model.predict(features, quantile)
-  }
+    val responsePredictR = 4.761219
+    val quantilePredictR = Vectors.dense(0.5287044, 3.328586, 10.75171)
 
-  /*
-     This test case is only used to verify the AFTRegression on classical dataset.
-     It is not a regular unit test because it depends on external data which need to be downloaded
-     to your local disk firstly. I will move this test case to examples when this PR merged.
-   */
-  /*
-  test("aft regression") {
-    /*
-       Larynx cancer data that are available in Klein and Moeschberger (2003)
-       "Survival Analysis: Techniques for Censored and Truncated Data", Springer.
+    assert(model.predict(features) ~== responsePredictR relTol 1E-3)
+    model.setQuantile(quantile)
+    assert(model.quantilePredict(features) ~== quantilePredictR relTol 1E-3)
 
-       The data can also be found here:
-       http://www.mcw.edu/FileLibrary/Groups/Biostatistics/Publicfiles/DataFromSection
-       /DataFromSectionTXT/Data_from_section_1.8.txt
-     */
-    val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-    import sqlContext.implicits._
-    val cancer = sc.textFile("your-path-to-the-larynx-dataset")
-      .map(_.split(" "))
-      .map(p => AFTExamplePoint(
-      p(0).toDouble, p(1).toDouble, p(2).toInt, p(3).toInt, p(4).toDouble)).toDF()
-
-    val dataset1 = cancer.select("stage", "age", "time", "censored")
-      .withColumnRenamed("time", "label")
-
-    val encoder = new OneHotEncoder()
-      .setInputCol("stage")
-      .setOutputCol("factorStage")
-      .setDropLast(false)
-
-    val dataset2 = encoder.transform(dataset1)
-
-    val featuresUDF = udf {
-      (factorStage: Vector, age: Double) => {
-        Vectors.dense(factorStage.toArray.slice(2, factorStage.size) ++ Array(age))
-      }
+    model.transform(datasetMultivariate).select("features", "prediction").collect().foreach {
+      case Row(features: DenseVector, prediction1: Double) =>
+        val prediction2 = math.exp(model.weights.toBreeze.dot(features.toBreeze) + model.intercept)
+        assert(prediction1 ~== prediction2 relTol 1E-5)
     }
-
-    val dataset3 = dataset2.withColumn("features", featuresUDF(col("factorStage"), col("age")))
-
-    val model = new AFTRegression().fit(dataset3)
-
-    /*
-       Using the following R code to load the data and train the model using survival package.
-       You can follow the document:
-       https://www.openintro.org/download.php?file=survival_analysis_in_R
-
-       > library("survival")
-       > data(larynx)
-       > attach(larynx)
-       > srFit <- survreg(Surv(time, delta) ~ as.factor(stage) + age, dist="weibull")
-       > summary(srFit)
-
-                           Value Std. Error      z        p
-       (Intercept)        3.5288     0.9041  3.903 9.50e-05
-       as.factor(stage)2 -0.1477     0.4076 -0.362 7.17e-01
-       as.factor(stage)3 -0.5866     0.3199 -1.833 6.68e-02
-       as.factor(stage)4 -1.5441     0.3633 -4.251 2.13e-05
-       age               -0.0175     0.0128 -1.367 1.72e-01
-       Log(scale)        -0.1223     0.1225 -0.999 3.18e-01
-
-       Scale= 0.885
-
-       Weibull distribution
-       Loglik(model)= -141.4    Loglik(intercept only)= -151.1
-           Chisq= 19.37 on 4 degrees of freedom, p= 0.00066
-       Number of Newton-Raphson Iterations: 5
-       n= 90
-     */
-
-    val weightsR = Vectors.dense(Array(-0.1477, -0.5866, -1.5441, -0.0175))
-    val interceptR = 3.5288
-    val scaleR = 0.885
-
-    assert(model.intercept ~== interceptR relTol 1E-2)
-    assert(model.weights ~= weightsR relTol 1E-2)
-    assert(model.scale ~= scaleR relTol 1E-2)
   }
-  */
 }

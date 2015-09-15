@@ -28,7 +28,7 @@ import org.apache.spark.ml.{Model, Estimator}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
-import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.functions._
@@ -52,14 +52,14 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   final def getCensorCol: String = $(censorCol)
 
   /**
-   * Param for quantile column name.
+   * Param for quantile vector.
    * @group param
    */
-  final val quantileCol: Param[String] = new Param[String](this,
+  final val quantile: Param[Vector] = new Param[Vector](this,
     "quantileCol", "quantile column name")
 
   /** @group getParam */
-  final def getQuantileCol: String = $(quantileCol)
+  final def getQuantile: Vector = $(quantile)
 
   /**
    * Validates and transforms the input schema with the provided param map.
@@ -74,8 +74,6 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
-    } else {
-      SchemaUtils.checkColumnType(schema, $(quantileCol), new VectorUDT)
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
@@ -152,7 +150,8 @@ class AFTSurvivalRegression(override val uid: String)
        the second element: Double, intercept of the beta parameter
        the third to the end elements: Doubles, weights vector of the beta parameter
      */
-    val initialWeights = new DenseVector(Array.fill(numFeatures + 2)(1.0))
+    val initialWeights = Vectors.zeros(numFeatures + 2)
+//      new DenseVector(Array.fill(numFeatures + 2)(1.0))
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       initialWeights.toBreeze.toDenseVector)
@@ -206,25 +205,35 @@ class AFTSurvivalRegressionModel private[ml] (
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
-  def setQuantileCol(value: String): this.type = set(quantileCol, value)
-  setDefault(quantileCol -> "quantile")
+  def setQuantile(value: Vector): this.type = set(quantile, value)
 
   /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  def predict(features: Vector, quantile: Vector): Vector = {
+  /** Checks whether the input has quantile vector. */
+  protected[ml] def hasQuantile: Boolean = {
+    isDefined(quantile) && $(quantile).size != 0
+  }
+
+  def quantilePredict(features: Vector): Vector = {
+    require(hasQuantile, "AFTSurvivalRegressionModel quantilePredict must set quantile vector")
     // scale parameter of the Weibull distribution
     val lambda = math.exp(weights.toBreeze.dot(features.toBreeze) + intercept)
     // shape parameter of the Weibull distribution
     val k = 1 / scale
-    val array = quantile.toArray.map { q => lambda * math.exp(math.log(-math.log(1-q)) / k) }
+    val array = $(quantile).toArray.map { q => lambda * math.exp(math.log(-math.log(1-q)) / k) }
     Vectors.dense(array)
+  }
+
+  def predict(features: Vector): Double = {
+    val lambda = math.exp(weights.toBreeze.dot(features.toBreeze) + intercept)
+    lambda
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
-    val predictUDF = udf { (features: Vector, quantile: Vector) => predict(features, quantile) }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol)), col($(quantileCol))))
+    val predictUDF = udf { features: Vector => predict(features) }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   override def transformSchema(schema: StructType): StructType = {
