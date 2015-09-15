@@ -57,7 +57,7 @@ mockLinesComplexType <-
 complexTypeJsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
-test_that("infer types", {
+test_that("infer types and check types", {
   expect_equal(infer_type(1L), "integer")
   expect_equal(infer_type(1.0), "double")
   expect_equal(infer_type("abc"), "string")
@@ -73,6 +73,8 @@ test_that("infer types", {
   e <- new.env()
   assign("a", 1L, envir = e)
   expect_equal(infer_type(e), "map<string,integer>")
+  
+  expect_error(checkType("map<integer,integer>"), "Key type in a map must be string or character")
 })
 
 test_that("structType and structField", {

@@ -150,7 +150,9 @@ checkType <- function(type) {
               matchedStrings <- regmatches(type, m)
               if (length(matchedStrings[[1]]) >= 3) {
                 keyType <- matchedStrings[[1]][2]
-                stopifnot (keyType == "string" || keyType == "character")
+                if (keyType != "string" && keyType != "character") {
+                  stop("Key type in a map must be string or character")
+                }
                 valueType <- matchedStrings[[1]][3]
                 checkType(valueType)
                 return()
