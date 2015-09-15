@@ -17,25 +17,41 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.types.IntegerType
 
-class FilterNodeSuite extends LocalNodeTest with SharedSQLContext {
+
+class FilterNodeSuite extends LocalNodeTest {
+  private val attributes = Seq(
+    AttributeReference("k", IntegerType)(),
+    AttributeReference("v", IntegerType)())
 
   test("basic") {
-    val condition = (testData.col("key") % 2) === 0
-    checkAnswer(
-      testData,
-      node => FilterNode(conf, condition.expr, node),
-      testData.filter(condition).collect()
-    )
+    val n = 100
+    val cond = 'k % 2 === 0
+    val inputData = (1 to n).map { i => (i, i) }.toArray
+    val inputNode = new DummyNode(attributes, inputData)
+    val filterNode = new FilterNode(conf, cond, inputNode)
+    val resolvedNode = resolveExpressions(filterNode)
+    val expectedOutput = inputData.filter { case (k, _) => k % 2 == 0 }
+    val actualOutput = resolvedNode.collect().map { case row =>
+      (row.getInt(0), row.getInt(1))
+    }
+    assert(actualOutput === expectedOutput)
   }
 
   test("empty") {
-    val condition = (emptyTestData.col("key") % 2) === 0
-    checkAnswer(
-      emptyTestData,
-      node => FilterNode(conf, condition.expr, node),
-      emptyTestData.filter(condition).collect()
-    )
+    val cond = 'k % 2 === 0
+    val inputData = Array.empty[(Int, Int)]
+    val inputNode = new DummyNode(attributes, inputData)
+    val filterNode = new FilterNode(conf, cond, inputNode)
+    val resolvedNode = resolveExpressions(filterNode)
+    val expectedOutput = inputData
+    val actualOutput = resolvedNode.collect().map { case row =>
+      (row.getInt(0), row.getInt(1))
+    }
+    assert(actualOutput === expectedOutput)
   }
+
 }

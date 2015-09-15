@@ -24,7 +24,7 @@ import org.apache.spark.sql.{SQLConf, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -33,17 +33,13 @@ import org.apache.spark.sql.types.StructType
  * Before consuming the iterator, open function must be called.
  * After consuming the iterator, close function must be called.
  */
-abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging {
+abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Logging {
 
   protected val codegenEnabled: Boolean = conf.codegenEnabled
 
   protected val unsafeEnabled: Boolean = conf.unsafeEnabled
 
-  lazy val schema: StructType = StructType.fromAttributes(output)
-
   private[this] lazy val isTesting: Boolean = sys.props.contains("spark.testing")
-
-  def output: Seq[Attribute]
 
   /**
    * Initializes the iterator state. Must be called before calling `next()`.

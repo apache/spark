@@ -22,6 +22,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 
 class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
 
@@ -99,6 +100,21 @@ class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
       df.queryExecution.toRdd.map(_.copy()).collect())
   }
 
+  /**
+   * Recursively resolve all expressions in a [[LocalNode]] using the node's attributes.
+   */
+  protected def resolveExpressions(outputNode: LocalNode): LocalNode = {
+    outputNode transform {
+      case node: LocalNode =>
+        val inputMap = node.output.map { a => (a.name, a) }.toMap
+        node transformExpressions {
+          case UnresolvedAttribute(Seq(u)) =>
+            inputMap.getOrElse(u,
+              sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
+        }
+    }
+  }
+
 }
 
 /**
@@ -116,10 +132,10 @@ object LocalNodeTest {
    *                    to being compared.
    */
   def checkAnswer(
-    input: Seq[SeqScanNode],
-    nodeFunction: Seq[LocalNode] => LocalNode,
-    expectedAnswer: Seq[Row],
-    sortAnswers: Boolean): Option[String] = {
+      input: Seq[SeqScanNode],
+      nodeFunction: Seq[LocalNode] => LocalNode,
+      expectedAnswer: Seq[Row],
+      sortAnswers: Boolean): Option[String] = {
 
     val outputNode = nodeFunction(input)
 
