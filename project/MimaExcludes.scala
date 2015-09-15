@@ -44,7 +44,8 @@ object MimaExcludes {
         // SQL execution is considered private.
         excludePackage("org.apache.spark.sql.execution")
       ) ++
-      MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils")
+      MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
+      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils")
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
