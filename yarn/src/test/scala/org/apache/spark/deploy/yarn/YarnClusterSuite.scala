@@ -32,6 +32,7 @@ import org.apache.spark.launcher.TestClasspathBuilder
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
   SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.tags.ExtendedYarnTest
 import org.apache.spark.util.Utils
 
 /**

@@ -23,8 +23,8 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Literal, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.ExtendedHiveTest
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 
 /**

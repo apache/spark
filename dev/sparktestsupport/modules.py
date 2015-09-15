@@ -90,7 +90,7 @@ sql = Module(
         "hive/test",
     ],
     test_tags=[
-        "org.apache.spark.sql.hive.ExtendedHiveTest"
+        "org.apache.spark.tags.ExtendedHiveTest"
     ]
 )
 
@@ -416,7 +416,7 @@ yarn = Module(
         "network-yarn/test",
     ],
     test_tags=[
-        "org.apache.spark.deploy.yarn.ExtendedYarnTest"
+        "org.apache.spark.tags.ExtendedYarnTest"
     ]
 )
 

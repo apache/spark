@@ -28,6 +28,7 @@ import org.scalatest.Matchers
 import org.apache.spark._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
+import org.apache.spark.tags.ExtendedYarnTest
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
