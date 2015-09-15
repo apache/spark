@@ -152,6 +152,14 @@ class DAGSchedulerSuite
     override def jobFailed(exception: Exception) = { failure = exception }
   }
 
+  /** A simple helper class for creating custom JobListeners */
+  class SimpleListener extends JobListener {
+    val results = new HashMap[Int, Any]
+    var failure: Exception = null
+    override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+    override def jobFailed(exception: Exception): Unit = { failure = exception }
+  }
+
   before {
     sc = new SparkContext("local", "DAGSchedulerSuite")
     sparkListener.submittedStageInfos.clear()
@@ -229,7 +237,7 @@ class DAGSchedulerSuite
     }
   }
 
-  /** Sends the rdd to the scheduler for scheduling and returns the job id. */
+  /** Submits a job to the scheduler and returns the job id. */
   private def submit(
       rdd: RDD[_],
       partitions: Array[Int],
@@ -237,6 +245,15 @@ class DAGSchedulerSuite
       listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener))
+    jobId
+  }
+
+  /** Submits a map stage to the scheduler and returns the job id. */
+  private def submitMapStage(
+      shuffleDep: ShuffleDependency[_, _, _],
+      listener: JobListener = jobListener): Int = {
+    val jobId = scheduler.nextJobId.getAndIncrement()
+    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener))
     jobId
   }
 
@@ -1311,6 +1328,230 @@ class DAGSchedulerSuite
 
     // should include the FunSuite setup:
     assert(stackTraceString.contains("org.scalatest.FunSuite"))
+  }
+
+  test("simple map stage submission") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+
+    // Submit a map stage by itself
+    submitMapStage(shuffleDep)
+    assert(results.size === 0)  // No results yet
+    completeShuffleMapStageSuccessfully(0, 0, 1)
+    assert(results.size === 1)
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Submit a reduce job that depends on this map stage; it should directly do the reduce
+    submit(reduceRdd, Array(0))
+    completeNextResultStageWithSuccess(2, 0)
+    assert(results === Map(0 -> 42))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Check that if we submit the map stage again, no tasks run
+    submitMapStage(shuffleDep)
+    assert(results.size === 1)
+    assertDataStructuresEmpty()
+  }
+
+  test("map stage submission with reduce stage also depending on the data") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+
+    // Submit the map stage by itself
+    submitMapStage(shuffleDep)
+
+    // Submit a reduce job that depends on this map stage
+    submit(reduceRdd, Array(0))
+
+    // Complete tasks for the map stage
+    completeShuffleMapStageSuccessfully(0, 0, 1)
+    assert(results.size === 1)
+    results.clear()
+
+    // Complete tasks for the reduce stage
+    completeNextResultStageWithSuccess(1, 0)
+    assert(results === Map(0 -> 42))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Check that if we submit the map stage again, no tasks run
+    submitMapStage(shuffleDep)
+    assert(results.size === 1)
+    assertDataStructuresEmpty()
+  }
+
+  test("map stage submission with fetch failure") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+
+    // Submit a map stage by itself
+    submitMapStage(shuffleDep)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.size))))
+    assert(results.size === 1)
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Submit a reduce job that depends on this map stage, but where one reduce will fail a fetch
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(1), Seq(
+      (Success, 42),
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null)))
+    // Ask the scheduler to try it again; TaskSet 2 will rerun the map task that we couldn't fetch
+    // from, then TaskSet 3 will run the reduce stage
+    scheduler.resubmitFailedStages()
+    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", reduceRdd.partitions.size))))
+    complete(taskSets(3), Seq((Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Run another reduce job without a failure; this should just work
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(4), Seq(
+      (Success, 44),
+      (Success, 45)))
+    assert(results === Map(0 -> 44, 1 -> 45))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Resubmit the map stage; this should also just work
+    submitMapStage(shuffleDep)
+    assert(results.size === 1)
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  /**
+   * In this test, we have three RDDs with shuffle dependencies, and we submit map stage jobs
+   * that are waiting on each one, as well as a reduce job on the last one. We test that all of
+   * these jobs complete even if there are some fetch failures in both shuffles.
+   */
+  test("map stage submission with multiple shared stages and failures") {
+    val rdd1 = new MyRDD(sc, 2, Nil)
+    val dep1 = new ShuffleDependency(rdd1, new HashPartitioner(2))
+    val rdd2 = new MyRDD(sc, 2, List(dep1))
+    val dep2 = new ShuffleDependency(rdd2, new HashPartitioner(2))
+    val rdd3 = new MyRDD(sc, 2, List(dep2))
+
+    val listener1 = new SimpleListener
+    val listener2 = new SimpleListener
+    val listener3 = new SimpleListener
+
+    submitMapStage(dep1, listener1)
+    submitMapStage(dep2, listener2)
+    submit(rdd3, Array(0, 1), listener = listener3)
+
+    // Complete the first stage
+    assert(taskSets(0).stageId === 0)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", rdd1.partitions.size)),
+      (Success, makeMapStatus("hostB", rdd1.partitions.size))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    assert(listener1.results.size === 1)
+
+    // When attempting the second stage, show a fetch failure
+    assert(taskSets(1).stageId === 1)
+    complete(taskSets(1), Seq(
+      (Success, makeMapStatus("hostA", rdd2.partitions.size)),
+      (FetchFailed(makeBlockManagerId("hostA"), dep1.shuffleId, 0, 0, "ignored"), null)))
+    scheduler.resubmitFailedStages()
+    assert(listener2.results.size === 0)    // Second stage listener should not have a result yet
+
+    // Stage 0 should now be running as task set 2; make its task succeed
+    assert(taskSets(2).stageId === 0)
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostC", rdd2.partitions.size))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
+    assert(listener2.results.size === 0)    // Second stage listener should still not have a result
+
+    // Stage 1 should now be running as task set 3; make its first task succeed
+    assert(taskSets(3).stageId === 1)
+    complete(taskSets(3), Seq(
+      (Success, makeMapStatus("hostB", rdd2.partitions.size)),
+      (Success, makeMapStatus("hostD", rdd2.partitions.size))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(dep2.shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostB"), makeBlockManagerId("hostD")))
+    assert(listener2.results.size === 1)
+
+    // Finally, the reduce job should be running as task set 4; make it see a fetch failure,
+    // then make it run again and succeed
+    assert(taskSets(4).stageId === 2)
+    complete(taskSets(4), Seq(
+      (Success, 52),
+      (FetchFailed(makeBlockManagerId("hostD"), dep2.shuffleId, 0, 0, "ignored"), null)))
+    scheduler.resubmitFailedStages()
+
+    // TaskSet 5 will rerun stage 1's lost task, then TaskSet 6 will rerun stage 2
+    assert(taskSets(5).stageId === 1)
+    complete(taskSets(5), Seq(
+      (Success, makeMapStatus("hostE", rdd2.partitions.size))))
+    complete(taskSets(6), Seq(
+      (Success, 53)))
+    assert(listener3.results === Map(0 -> 52, 1 -> 53))
+    assertDataStructuresEmpty()
+  }
+
+  /**
+   * In this test, we run a map stage where one of the executors fails but we still receive a
+   * "zombie" complete message from that executor. We want to make sure the stage is not reported
+   * as done until all tasks have completed.
+   */
+  test("map stage submission with executor failure late map task completions") {
+    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+
+    submitMapStage(shuffleDep)
+
+    val oldTaskSet = taskSets(0)
+    runEvent(CompletionEvent(oldTaskSet.tasks(0), Success, makeMapStatus("hostA", 2),
+      null, createFakeTaskInfo(), null))
+    assert(results.size === 0)    // Map stage job should not be complete yet
+
+    // Pretend host A was lost
+    val oldEpoch = mapOutputTracker.getEpoch
+    runEvent(ExecutorLost("exec-hostA"))
+    val newEpoch = mapOutputTracker.getEpoch
+    assert(newEpoch > oldEpoch)
+
+    // Suppose we also get a completed event from task 1 on the same host; this should be ignored
+    runEvent(CompletionEvent(oldTaskSet.tasks(1), Success, makeMapStatus("hostA", 2),
+      null, createFakeTaskInfo(), null))
+    assert(results.size === 0)    // Map stage job should not be complete yet
+
+    // A completion from another task should work because it's a non-failed host
+    runEvent(CompletionEvent(oldTaskSet.tasks(2), Success, makeMapStatus("hostB", 2),
+      null, createFakeTaskInfo(), null))
+    assert(results.size === 0)    // Map stage job should not be complete yet
+
+    // Now complete tasks in the second task set
+    val newTaskSet = taskSets(1)
+    assert(newTaskSet.tasks.size === 2)     // Both tasks 0 and 1 were on on hostA
+    runEvent(CompletionEvent(newTaskSet.tasks(0), Success, makeMapStatus("hostB", 2),
+      null, createFakeTaskInfo(), null))
+    assert(results.size === 0)    // Map stage job should not be complete yet
+    runEvent(CompletionEvent(newTaskSet.tasks(1), Success, makeMapStatus("hostB", 2),
+      null, createFakeTaskInfo(), null))
+    assert(results.size === 1)    // Map stage job should now finally be complete
+    assertDataStructuresEmpty()
+
+    // Also test that a reduce stage using this shuffled data can immediately run
+    val reduceRDD = new MyRDD(sc, 2, List(shuffleDep))
+    results.clear()
+    submit(reduceRDD, Array(0, 1))
+    complete(taskSets(2), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    results.clear()
+    assertDataStructuresEmpty()
   }
 
   /**
