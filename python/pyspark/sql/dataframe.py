@@ -26,13 +26,13 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
+from pyspark import since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql import since
 from pyspark.sql.types import _parse_datatype_json_string
-from pyspark.sql.column import Column, _to_seq, _to_java_column
+from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
 
@@ -494,7 +494,7 @@ class DataFrame(object):
             if w < 0.0:
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        rdd_array = self._jdf.randomSplit(_to_seq(self.sql_ctx._sc, weights), long(seed))
+        rdd_array = self._jdf.randomSplit(_to_list(self.sql_ctx._sc, weights), long(seed))
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
     @property
@@ -653,25 +653,25 @@ class DataFrame(object):
         guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         >>> df.describe().show()
-        +-------+---+
-        |summary|age|
-        +-------+---+
-        |  count|  2|
-        |   mean|3.5|
-        | stddev|1.5|
-        |    min|  2|
-        |    max|  5|
-        +-------+---+
+        +-------+------------------+
+        |summary|               age|
+        +-------+------------------+
+        |  count|                 2|
+        |   mean|               3.5|
+        | stddev|2.1213203435596424|
+        |    min|                 2|
+        |    max|                 5|
+        +-------+------------------+
         >>> df.describe(['age', 'name']).show()
-        +-------+---+-----+
-        |summary|age| name|
-        +-------+---+-----+
-        |  count|  2|    2|
-        |   mean|3.5| null|
-        | stddev|1.5| null|
-        |    min|  2|Alice|
-        |    max|  5|  Bob|
-        +-------+---+-----+
+        +-------+------------------+-----+
+        |summary|               age| name|
+        +-------+------------------+-----+
+        |  count|                 2|    2|
+        |   mean|               3.5| null|
+        | stddev|2.1213203435596424| null|
+        |    min|                 2|Alice|
+        |    max|                 5|  Bob|
+        +-------+------------------+-----+
         """
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]

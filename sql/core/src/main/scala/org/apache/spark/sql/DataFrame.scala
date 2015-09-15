@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -114,7 +114,7 @@ private[sql] object DataFrame {
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution) extends Serializable {
+    @DeveloperApi @transient val queryExecution: QueryExecution) extends Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
@@ -684,7 +684,7 @@ class DataFrame private[sql](
       // make it a NamedExpression.
       case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
       case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analzyer will generate the
+      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
       // correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
@@ -1288,15 +1288,11 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def describe(cols: String*): DataFrame = {
 
-    // TODO: Add stddev as an expression, and remove it from here.
-    def stddevExpr(expr: Expression): Expression =
-      Sqrt(Subtract(Average(Multiply(expr, expr)), Multiply(Average(expr), Average(expr))))
-
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
       "count" -> Count,
       "mean" -> Average,
-      "stddev" -> stddevExpr,
+      "stddev" -> Stddev,
       "min" -> Min,
       "max" -> Max)
 

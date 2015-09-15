@@ -144,7 +144,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 LabeledPoint pos = new LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0));
 
 // Create a labeled point with a negative label and a sparse feature vector.
-LabeledPoint neg = new LabeledPoint(1.0, Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0}));
+LabeledPoint neg = new LabeledPoint(0.0, Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0}));
 {% endhighlight %}
 </div>
 
@@ -337,7 +337,10 @@ limited by the integer range but it should be much smaller in practice.
 <div data-lang="scala" markdown="1">
 
 A [`RowMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be
-created from an `RDD[Vector]` instance.  Then we can compute its column summary statistics.
+created from an `RDD[Vector]` instance.  Then we can compute its column summary statistics and decompositions.
+[QR decomposition](https://en.wikipedia.org/wiki/QR_decomposition) is of the form A = QR where Q is an orthogonal matrix and R is an upper triangular matrix.
+For [singular value decomposition (SVD)](https://en.wikipedia.org/wiki/Singular_value_decomposition) and [principal component analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis), please refer to [Dimensionality reduction](mllib-dimensionality-reduction.html).
+
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vector
@@ -350,6 +353,9 @@ val mat: RowMatrix = new RowMatrix(rows)
 // Get its size.
 val m = mat.numRows()
 val n = mat.numCols()
+
+// QR decomposition 
+val qrResult = mat.tallSkinnyQR(true)
 {% endhighlight %}
 </div>
 
@@ -370,6 +376,9 @@ RowMatrix mat = new RowMatrix(rows.rdd());
 // Get its size.
 long m = mat.numRows();
 long n = mat.numCols();
+
+// QR decomposition 
+QRDecomposition<RowMatrix, Matrix> result = mat.tallSkinnyQR(true);
 {% endhighlight %}
 </div>
 

@@ -38,8 +38,8 @@ import org.apache.spark.graphx.impl.EdgeRDDImpl
  * `impl.ReplicatedVertexView`.
  */
 abstract class EdgeRDD[ED](
-    @transient sc: SparkContext,
-    @transient deps: Seq[Dependency[_]]) extends RDD[Edge[ED]](sc, deps) {
+    sc: SparkContext,
+    deps: Seq[Dependency[_]]) extends RDD[Edge[ED]](sc, deps) {
 
   // scalastyle:off structural.type
   private[graphx] def partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])] forSome { type VD }

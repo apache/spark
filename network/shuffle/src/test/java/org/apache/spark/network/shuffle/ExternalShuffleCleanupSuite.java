@@ -42,7 +42,7 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext = createSomeData();
 
     ExternalShuffleBlockResolver resolver =
-      new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
+      new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
     resolver.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
     resolver.applicationRemoved("app", false /* cleanup */);
 
@@ -65,7 +65,8 @@ public class ExternalShuffleCleanupSuite {
       @Override public void execute(Runnable runnable) { cleanupCalled.set(true); }
     };
 
-    ExternalShuffleBlockResolver manager = new ExternalShuffleBlockResolver(conf, noThreadExecutor);
+    ExternalShuffleBlockResolver manager =
+      new ExternalShuffleBlockResolver(conf, null, noThreadExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
     manager.applicationRemoved("app", true);
@@ -83,7 +84,7 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext1 = createSomeData();
 
     ExternalShuffleBlockResolver resolver =
-      new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
+      new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
 
     resolver.registerExecutor("app", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
     resolver.registerExecutor("app", "exec1", dataContext1.createExecutorInfo("shuffleMgr"));
@@ -99,7 +100,7 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext1 = createSomeData();
 
     ExternalShuffleBlockResolver resolver =
-      new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
+      new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
 
     resolver.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
     resolver.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo("shuffleMgr"));

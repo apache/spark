@@ -25,4 +25,22 @@ class JavaSerializerSuite extends SparkFunSuite {
     val instance = serializer.newInstance()
     instance.deserialize[JavaSerializer](instance.serialize(serializer))
   }
+
+  test("Deserialize object containing a primitive Class as attribute") {
+    val serializer = new JavaSerializer(new SparkConf())
+    val instance = serializer.newInstance()
+    instance.deserialize[JavaSerializer](instance.serialize(new ContainsPrimitiveClass()))
+  }
+}
+
+private class ContainsPrimitiveClass extends Serializable {
+  val intClass = classOf[Int]
+  val longClass = classOf[Long]
+  val shortClass = classOf[Short]
+  val charClass = classOf[Char]
+  val doubleClass = classOf[Double]
+  val floatClass = classOf[Float]
+  val booleanClass = classOf[Boolean]
+  val byteClass = classOf[Byte]
+  val voidClass = classOf[Void]
 }

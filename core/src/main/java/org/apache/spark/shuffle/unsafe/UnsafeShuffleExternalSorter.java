@@ -122,6 +122,10 @@ final class UnsafeShuffleExternalSorter {
     this.maxRecordSizeBytes = pageSizeBytes - 4;
     this.writeMetrics = writeMetrics;
     initializeForWriting();
+
+    // preserve first page to ensure that we have at least one page to work with. Otherwise,
+    // other operators in the same task may starve this sorter (SPARK-9709).
+    acquireNewPageIfNecessary(pageSizeBytes);
   }
 
   /**
