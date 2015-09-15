@@ -150,10 +150,18 @@ class Interaction(override val uid: String) extends Transformer
   override def transform(dataset: DataFrame): DataFrame = {
     checkParams()
 
+    val attrs = genAttrs($(inputCols).map(col => dataset.schema(col)))
+
     val numValues: Array[Array[Int]] = $(inputCols).map { col =>
       val field = dataset.schema(col)
       field.dataType match {
-        case _: NumericType | BooleanType => Array[Int]()
+        case _: NumericType | BooleanType =>
+          Attribute.fromStructField(field) match {
+            case nominal: NominalAttribute =>
+              Array(nominal.getNumValues.get)
+            case _ =>
+              Array(0)
+          }
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(field)
           assert(group.attributes.isDefined, "TODO")
@@ -165,21 +173,28 @@ class Interaction(override val uid: String) extends Transformer
       }
     }
     assert(numValues.length == $(inputCols).length)
+    println("num input cols: " + $(inputCols).mkString(", "))
+    println("numValues: " + numValues.map(_.mkString(":")).mkString(", "))
 
     def getIterator(fieldIndex: Int, v: Any) = v match {
       case d: Double =>
-        Vectors.dense(d)
+        val numOutputCols = numValues(fieldIndex)(0)
+        if (numOutputCols > 0) {
+          Vectors.sparse(numOutputCols, Array(d.toInt), Array(1.0))
+        } else {
+          Vectors.dense(d)
+        }
       case vec: Vector =>
         var indices = ArrayBuilder.make[Int]
         var values = ArrayBuilder.make[Double]
         var cur = 0
         vec.foreachActive { case (i, v) =>
-          val numColumns = numValues(fieldIndex)(i)
-          if (numColumns > 0) {
+          val numOutputCols = numValues(fieldIndex)(i)
+          if (numOutputCols > 0) {
             // One-hot encode the field. TODO(ekl) support drop-last?
             indices += cur + v.toInt
             values += 1.0
-            cur += numColumns
+            cur += numOutputCols
           } else {
             // Copy the field verbatim.
             indices += cur
@@ -236,7 +251,49 @@ class Interaction(override val uid: String) extends Transformer
 
     dataset.select(
       col("*"),
-      interactFunc(struct(args: _*)).as($(outputCol)))
+      interactFunc(struct(args: _*)).as($(outputCol), attrs.toMetadata()))
+  }
+
+  private def genAttrs(schema: Seq[StructField]): AttributeGroup = {
+    var attrs = Seq[Attribute]()
+    schema.foreach { field =>
+      val attrIterator = field.dataType match {
+        case _: NumericType | BooleanType =>
+          val attr = Attribute.fromStructField(field)
+          encodedAttrIterator(None, Seq(attr))
+        case _: VectorUDT =>
+          val group = AttributeGroup.fromStructField(field)
+          encodedAttrIterator(Some(group.name), group.attributes.get)
+      }
+      attrs = attrIterator.flatMap { attr =>
+        if (attrs.isEmpty) {
+          Seq(attr)
+        } else {
+          attrs.map(prev => prev.withName(prev.name.getOrElse("UNKNOWN") + ":" + attr.name.get))
+        }
+      }
+    }
+    println("Num attrs: " + attrs.length)
+    attrs.foreach(a => println("a: " + a.toMetadata))
+    new AttributeGroup($(outputCol), attrs.toArray)
+  }
+
+  private def encodedAttrIterator(groupName: Option[String], attrs: Seq[Attribute]): Seq[Attribute] = {
+    def format(i: Int, attrName: Option[String], value: Option[String]): String = {
+      Seq(groupName, Some(attrName.getOrElse(i.toString)), value).flatten.mkString("_")
+    }
+    attrs.zipWithIndex.flatMap {
+      case (nominal: NominalAttribute, i) =>
+        if (nominal.values.isDefined) {
+          nominal.values.get.map(
+            v => BinaryAttribute.defaultAttr.withName(format(i, nominal.name, Some(v))))
+        } else {
+          Array.tabulate(nominal.getNumValues.get)(
+            j => BinaryAttribute.defaultAttr.withName(format(i, nominal.name, Some(j.toString))))
+        }
+      case (a: Attribute, i) =>
+        Seq(NumericAttribute.defaultAttr.withName(format(i, a.name, None)))
+    }
   }
 
   override def copy(extra: ParamMap): Interaction = defaultCopy(extra)

@@ -33,34 +33,38 @@ class RInteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data = sqlContext.createDataFrame(
       Seq(
         (1, "foo", true, 4, Vectors.dense(0.0, 0.0, 1.0), Vectors.dense(5.0, 3.0)),
-        (2, "bar", true, 4, Vectors.dense(1.0, 4.0, 2.0), Vectors.dense(4.0, 3.0)),
-        (3, "bar", true, 5, Vectors.dense(2.0, 5.0, 3.0), Vectors.dense(5.0, 3.0)),
-        (4, "baz", true, 5, Vectors.dense(3.0, 8.0, 4.0), Vectors.dense(5.0, 2.0)),
-        (4, "baz", false, 5, Vectors.dense(4.0, 9.0, 8.0), Vectors.dense(7.0, 1.0)),
-        (4, "baz", false, 5, Vectors.dense(5.0, 2.0, 9.0), Vectors.dense(2.0, 0.0)))
+        (1, "bar", true, 4, Vectors.dense(1.0, 4.0, 2.0), Vectors.dense(4.0, 3.0)),
+        (1, "bar", true, 5, Vectors.dense(2.0, 5.0, 3.0), Vectors.dense(5.0, 3.0)),
+        (1, "baz", true, 5, Vectors.dense(3.0, 8.0, 4.0), Vectors.dense(5.0, 2.0)),
+        (1, "baz", false, 5, Vectors.dense(4.0, 9.0, 8.0), Vectors.dense(7.0, 1.0)),
+        (2, "baz", false, 5, Vectors.dense(5.0, 2.0, 9.0), Vectors.dense(2.0, 0.0)))
       ).toDF("id", "a", "bin", "b", "test", "test2")
     val attrs = new AttributeGroup(
       "test",
       Array[Attribute](
         NominalAttribute.defaultAttr.withValues(Array("a", "b", "c", "d", "e", "f")),
         NumericAttribute.defaultAttr.withName("magnitude"),
-        NominalAttribute.defaultAttr.withValues(
+        NominalAttribute.defaultAttr.withName("colors").withValues(
           Array("green", "blue", "red", "violet", "yellow",
             "orange", "black", "white", "azure", "gray"))))
+
+    val idAttr = NominalAttribute.defaultAttr.withValues(Array("red", "blue"))
     val attrs2 = new AttributeGroup(
       "test2",
       Array[Attribute](
-        NumericAttribute.defaultAttr.withName("species"),
+        NumericAttribute.defaultAttr,
         NominalAttribute.defaultAttr.withValues(Array("one", "two", "three", "four"))))
     val df = data.select(
-      col("id"), col("b"), col("bin"), col("test").as("test", attrs.toMetadata()),
-      col("test2").as("test2", attrs.toMetadata()))
+      col("id").as("id", idAttr.toMetadata()), col("b"), col("bin"),
+      col("test").as("test", attrs.toMetadata()),
+      col("test2").as("test2", attrs2.toMetadata()))
     df.collect.foreach(println)
     println(df.schema)
     df.schema.foreach { field =>
       println(field.metadata)
     }
     val trans = new Interaction().setInputCols(Array("id", "test2", "test")).setOutputCol("feature")
+//    val trans = new Interaction().setInputCols(Array("id", "test")).setOutputCol("feature")
     val res = trans.transform(df)
     res.collect.foreach(println)
     println(res.schema)
