@@ -73,7 +73,41 @@ case class Generate(
 
   // we don't want the gOutput to be taken as part of the expressions
   // as that will cause exceptions like unresolved attributes etc.
-  override lazy val expressions: Seq[Expression] = generator :: Nil
+  override def expressions: Seq[Expression] = generator :: Nil
+
+  /**
+   * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
+   * @param rule the rule to be applied to every expression in this operator.
+   *
+   * Note: This is used by ResolveReferences, we need to override it to not resolve
+   * `generatorOutput`.
+   */
+  override def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
+    var changed = false
+
+    @inline def transformExpressionUp(e: Expression): Expression = {
+      val newE = e.transformUp(rule)
+      if (newE.fastEquals(e)) {
+        e
+      } else {
+        changed = true
+        newE
+      }
+    }
+
+    def recursiveTransform(arg: Any): AnyRef = arg match {
+      case e: Expression if expressions.contains(e) => transformExpressionUp(e)
+      case Some(e: Expression) if expressions.contains(e) => Some(transformExpressionUp(e))
+      case m: Map[_, _] => m
+      case d: DataType => d // Avoid unpacking Structs
+      case seq: Traversable[_] => seq.map(recursiveTransform)
+      case other: AnyRef => other
+    }
+
+    val newArgs = productIterator.map(recursiveTransform).toArray
+
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
+  }
 
   def output: Seq[Attribute] = {
     val qualified = qualifier.map(q =>

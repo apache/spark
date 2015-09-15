@@ -114,8 +114,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }
 
     def recursiveTransform(arg: Any): AnyRef = arg match {
-      case e: Expression if expressions.contains(e) => transformExpressionUp(e)
-      case Some(e: Expression) if expressions.contains(e) => Some(transformExpressionUp(e))
+      case e: Expression => transformExpressionUp(e)
+      case Some(e: Expression) => Some(transformExpressionUp(e))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map(recursiveTransform)
@@ -136,7 +136,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   /** Returns all of the expressions present in this query plan operator. */
-  lazy val expressions: Seq[Expression] = {
+  def expressions: Seq[Expression] = {
     productIterator.flatMap {
       case e: Expression => e :: Nil
       case Some(e: Expression) => e :: Nil
