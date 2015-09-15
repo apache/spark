@@ -432,6 +432,144 @@ class HasStepSize(Params):
         return self.getOrDefault(self.stepSize)
 
 
+class HasHandleInvalid(Params):
+    """
+    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.")
+
+    def __init__(self):
+        super(HasHandleInvalid, self).__init__()
+        #: param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
+        self.handleInvalid = Param(self, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.")
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        self._paramMap[self.handleInvalid] = value
+        return self
+
+    def getHandleInvalid(self):
+        """
+        Gets the value of handleInvalid or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
+
+
+class HasElasticNetParam(Params):
+    """
+    Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+
+    def __init__(self):
+        super(HasElasticNetParam, self).__init__()
+        #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
+        self.elasticNetParam = Param(self, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+        self._setDefault(elasticNetParam=0.0)
+
+    def setElasticNetParam(self, value):
+        """
+        Sets the value of :py:attr:`elasticNetParam`.
+        """
+        self._paramMap[self.elasticNetParam] = value
+        return self
+
+    def getElasticNetParam(self):
+        """
+        Gets the value of elasticNetParam or its default value.
+        """
+        return self.getOrDefault(self.elasticNetParam)
+
+
+class HasFitIntercept(Params):
+    """
+    Mixin for param fitIntercept: whether to fit an intercept term..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.")
+
+    def __init__(self):
+        super(HasFitIntercept, self).__init__()
+        #: param for whether to fit an intercept term.
+        self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
+        self._setDefault(fitIntercept=True)
+
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        self._paramMap[self.fitIntercept] = value
+        return self
+
+    def getFitIntercept(self):
+        """
+        Gets the value of fitIntercept or its default value.
+        """
+        return self.getOrDefault(self.fitIntercept)
+
+
+class HasStandardization(Params):
+    """
+    Mixin for param standardization: whether to standardize the training features before fitting the model..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    standardization = Param(Params._dummy(), "standardization", "whether to standardize the training features before fitting the model.")
+
+    def __init__(self):
+        super(HasStandardization, self).__init__()
+        #: param for whether to standardize the training features before fitting the model.
+        self.standardization = Param(self, "standardization", "whether to standardize the training features before fitting the model.")
+        self._setDefault(standardization=True)
+
+    def setStandardization(self, value):
+        """
+        Sets the value of :py:attr:`standardization`.
+        """
+        self._paramMap[self.standardization] = value
+        return self
+
+    def getStandardization(self):
+        """
+        Gets the value of standardization or its default value.
+        """
+        return self.getOrDefault(self.standardization)
+
+
+class HasThresholds(Params):
+    """
+    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.")
+
+    def __init__(self):
+        super(HasThresholds, self).__init__()
+        #: param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
+        self.thresholds = Param(self, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.")
+
+    def setThresholds(self, value):
+        """
+        Sets the value of :py:attr:`thresholds`.
+        """
+        self._paramMap[self.thresholds] = value
+        return self
+
+    def getThresholds(self):
+        """
+        Gets the value of thresholds or its default value.
+        """
+        return self.getOrDefault(self.thresholds)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.
@@ -444,7 +582,7 @@ class DecisionTreeParams(Params):
     minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
     maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
     cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
-
+    
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
@@ -460,7 +598,7 @@ class DecisionTreeParams(Params):
         self.maxMemoryInMB = Param(self, "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
         #: param for If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.
         self.cacheNodeIds = Param(self, "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
-
+        
     def setMaxDepth(self, value):
         """
         Sets the value of :py:attr:`maxDepth`.

@@ -151,7 +151,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
-    testTaskEndReason(ExecutorLostFailure("100"))
+    testTaskEndReason(ExecutorLostFailure("100", true))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -295,10 +295,10 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("ExecutorLostFailure backward compatibility") {
     // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
-    val executorLostFailure = ExecutorLostFailure("100")
+    val executorLostFailure = ExecutorLostFailure("100", true)
     val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
       .removeField({ _._1 == "Executor ID" })
-    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown")
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", true)
     assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
@@ -577,8 +577,10 @@ class JsonProtocolSuite extends SparkFunSuite {
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
-      case (ExecutorLostFailure(execId1), ExecutorLostFailure(execId2)) =>
+      case (ExecutorLostFailure(execId1, isNormalExit1),
+          ExecutorLostFailure(execId2, isNormalExit2)) =>
         assert(execId1 === execId2)
+        assert(isNormalExit1 === isNormalExit2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }

@@ -671,7 +671,6 @@ class RowMatrix @Since("1.0.0") (
 @Since("1.0.0")
 @Experimental
 object RowMatrix {
-
   /**
    * Fills a full square matrix from its upper triangular part.
    */

@@ -100,7 +100,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  test("test all data types") {
+  ignore("test all data types") {
     withTempPath { file =>
       // Create the schema.
       val struct =
@@ -372,6 +372,19 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
     withTable("t") {
       checkQueries(sqlContext.table("t"))
+    }
+  }
+
+  test("saveAsTable()/load() - partitioned table - boolean type") {
+    sqlContext.range(2)
+      .select('id, ('id % 2 === 0).as("b"))
+      .write.partitionBy("b").saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(
+        sqlContext.table("t").sort('id),
+        Row(0, true) :: Row(1, false) :: Nil
+      )
     }
   }
 

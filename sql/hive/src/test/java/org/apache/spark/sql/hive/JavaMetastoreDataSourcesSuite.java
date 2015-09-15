@@ -53,7 +53,7 @@ public class JavaMetastoreDataSourcesSuite {
   FileSystem fs;
   DataFrame df;
 
-  private void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(DataFrame actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -77,7 +77,7 @@ public class JavaMetastoreDataSourcesSuite {
       fs.delete(hiveManagedPath, true);
     }
 
-    List<String> jsonObjects = new ArrayList<String>(10);
+    List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
@@ -97,7 +97,7 @@ public class JavaMetastoreDataSourcesSuite {
 
   @Test
   public void saveExternalTableAndQueryIt() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
     df.write()
       .format("org.apache.spark.sql.json")
@@ -120,7 +120,7 @@ public class JavaMetastoreDataSourcesSuite {
 
   @Test
   public void saveExternalTableWithSchemaAndQueryIt() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
     df.write()
       .format("org.apache.spark.sql.json")
@@ -132,7 +132,7 @@ public class JavaMetastoreDataSourcesSuite {
       sqlContext.sql("SELECT * FROM javaSavedTable"),
       df.collectAsList());
 
-    List<StructField> fields = new ArrayList<StructField>();
+    List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
     DataFrame loadedDF =
@@ -148,7 +148,7 @@ public class JavaMetastoreDataSourcesSuite {
 
   @Test
   public void saveTableAndQueryIt() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     df.write()
       .format("org.apache.spark.sql.json")
       .mode(SaveMode.Append)
