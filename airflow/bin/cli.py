@@ -201,7 +201,11 @@ def test(args):
     dag = dagbag.dags[args.dag_id]
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
-    ti.run(force=True, ignore_dependencies=True, test_mode=True)
+
+    if args.dry_run:
+        ti.dry_run()
+    else:
+        ti.run(force=True, ignore_dependencies=True, test_mode=True)
 
 
 def clear(args):
@@ -467,6 +471,8 @@ def get_parser():
     parser_test.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
+    parser_test.add_argument(
+        "-dr", "--dry_run", help="Perform a dry run", action="store_true")
     parser_test.set_defaults(func=test)
 
     ht = "Get the status of a task instance."

@@ -958,6 +958,15 @@ class TaskInstance(Base):
 
         session.commit()
 
+    def dry_run(self):
+        task = self.task
+        task_copy = copy.copy(task)
+        self.task = task_copy
+
+        self.render_templates()
+        task_copy.dry_run()
+
+
     def handle_failure(self, error, test_mode, context):
         logging.exception(error)
         task = self.task

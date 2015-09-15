@@ -3,6 +3,7 @@ from builtins import zip
 from past.builtins import basestring
 import csv
 import logging
+import re
 import subprocess
 from tempfile import NamedTemporaryFile
 
@@ -40,7 +41,7 @@ class HiveCliHook(BaseHook):
         self.use_beeline = conn.extra_dejson.get('use_beeline', False)
         self.conn = conn
 
-    def run_cli(self, hql, schema=None):
+    def run_cli(self, hql, schema=None, test=False):
         """
         Run an hql statement using the hive cli
 
@@ -78,7 +79,8 @@ class HiveCliHook(BaseHook):
                 if self.hive_cli_params:
                     hive_params_list = self.hive_cli_params.split()
                     hive_cmd.extend(hive_params_list)
-                logging.info(" ".join(hive_cmd))
+                if not test:
+                    logging.info(" ".join(hive_cmd))
                 sp = subprocess.Popen(
                     hive_cmd,
                     stdout=subprocess.PIPE,
@@ -89,13 +91,58 @@ class HiveCliHook(BaseHook):
                 stdout = ''
                 for line in iter(sp.stdout.readline, ''):
                     stdout += line
-                    logging.info(line.strip())
+                    if not test:
+                        logging.info(line.strip())
                 sp.wait()
 
                 if sp.returncode:
-                    raise AirflowException(all_err)
+                    if not test:
+                        raise AirflowException(all_err)
+                    else:
+                        return (False, stdout)
 
-                return stdout
+                if not test:
+                    return stdout
+                else:
+                    return (True, stdout)
+
+    def test_hql(self, hql):
+        """
+        Test an hql statement using the hive cli and EXPLAIN
+
+        """
+        create, insert, other = [], [], []
+        for query in hql.split(';'):  # naive
+            query = query.lower()
+            if 'create table' in query:
+                create.append(query)
+            elif 'set' in query or 'add jar' in query or 'temporary' in query:
+                other.append(query)
+            elif 'select' in query:
+                insert.append(query)
+        other = ';'.join(other)
+        for query_set in [create, insert]:
+            for query in query_set:
+                query_preview = ' '.join(query.split())[:50]
+                logging.info("Testing HQL [{0} (...)]".format(query_preview))
+                if query_set == insert:
+                    query = other + '; explain ' + query
+                else:
+                    query = 'explain ' + query
+                success, output = self.run_cli(query, test=True)
+            if success:
+                logging.info("SUCCESS")
+            else:
+                failure_message = output.split('\n')[-2]
+                logging.info(failure_message)
+                line_number = re.search('(\d+):(\d+)', failure_message).group(1)
+                if line_number.isdigit():
+                    l = int(line_number)
+                    begin = max(l-2, 0)
+                    end = min(l+3, len(query.split('\n')))
+                    context = '\n'.join(query.split('\n')[begin:end])
+                    logging.info("Context :\n {0}".format(context))
+
 
     def load_file(
             self,
