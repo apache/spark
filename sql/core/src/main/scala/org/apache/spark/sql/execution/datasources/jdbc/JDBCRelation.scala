@@ -75,6 +75,18 @@ private[sql] object JDBCRelation {
     }
     ans.toArray
   }
+
+  def getEffectiveProperties(
+      connectionProperties: Properties,
+      extraOptions: scala.collection.Map[String, String] = Map()): Properties = {
+    val props = new Properties()
+    extraOptions.foreach { case (key, value) =>
+      props.put(key, value)
+    }
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    props
+  }
 }
 
 private[sql] case class JDBCRelation(
@@ -88,7 +100,11 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
+  override val schema: StructType = JDBCRDD.resolveTable(
+    url,
+    table,
+    JDBCRelation.getEffectiveProperties(properties)
+  )
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val driver: String = DriverRegistry.getDriverClassName(url)
@@ -98,7 +114,7 @@ private[sql] case class JDBCRelation(
       schema,
       driver,
       url,
-      properties,
+      JDBCRelation.getEffectiveProperties(properties),
       table,
       requiredColumns,
       filters,
@@ -108,6 +124,6 @@ private[sql] case class JDBCRelation(
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     data.write
       .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
-      .jdbc(url, table, properties)
+      .jdbc(url, table, JDBCRelation.getEffectiveProperties(properties))
   }
 }
