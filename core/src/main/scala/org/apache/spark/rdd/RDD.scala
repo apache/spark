@@ -481,7 +481,7 @@ abstract class RDD[T: ClassTag](
       s"$numStDev * math.sqrt(Int.MaxValue)")
 
     val initialCount = this.count()
-    if (num == 0 || initialCount == 0 ) {
+    if (num == 0 || initialCount == 0) {
       new Array[T](0)
     } else {
       val rand = new Random(seed)
