@@ -162,7 +162,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     >>> mcm.predict([0.0, 0.0, 0.3])
     2
 
-    .. versionadded:: 0.9.1
+    .. versionadded:: 0.9.0
     """
     def __init__(self, weights, intercept, numFeatures, numClasses):
         super(LogisticRegressionModel, self).__init__(weights, intercept)
@@ -194,7 +194,7 @@ class LogisticRegressionModel(LinearClassificationModel):
         """
         return self._numClasses
 
-    @since('0.9.1')
+    @since('0.9.0')
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points
@@ -262,10 +262,10 @@ class LogisticRegressionModel(LinearClassificationModel):
 
 class LogisticRegressionWithSGD(object):
     """
-    .. versionadded:: 0.9.1
+    .. versionadded:: 0.9.0
     """
     @classmethod
-    @since('0.9.1')
+    @since('0.9.0')
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.01, regType="l2", intercept=False,
               validateData=True, convergenceTol=0.001):
@@ -430,13 +430,13 @@ class SVMModel(LinearClassificationModel):
     ... except:
     ...    pass
 
-    .. versionadded:: 0.9.1
+    .. versionadded:: 0.9.0
     """
     def __init__(self, weights, intercept):
         super(SVMModel, self).__init__(weights, intercept)
         self._threshold = 0.0
 
-    @since('0.9.1')
+    @since('0.9.0')
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points
@@ -479,11 +479,11 @@ class SVMModel(LinearClassificationModel):
 
 class SVMWithSGD(object):
     """
-    .. versionadded:: 0.9.1
+    .. versionadded:: 0.9.0
     """
 
     @classmethod
-    @since('0.9.1')
+    @since('0.9.0')
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, regType="l2",
               intercept=False, validateData=True, convergenceTol=0.001):
@@ -576,14 +576,14 @@ class NaiveBayesModel(Saveable, Loader):
     ... except OSError:
     ...     pass
 
-    .. versionadded:: 0.9.1
+    .. versionadded:: 0.9.0
     """
     def __init__(self, labels, pi, theta):
         self.labels = labels
         self.pi = pi
         self.theta = theta
 
-    @since('0.9.1')
+    @since('0.9.0')
     def predict(self, x):
         """
         Return the most likely class for a data vector
@@ -622,11 +622,11 @@ class NaiveBayesModel(Saveable, Loader):
 
 class NaiveBayes(object):
     """
-    .. versionadded:: 0.9.1
+    .. versionadded:: 0.9.0
     """
 
     @classmethod
-    @since('0.9.1')
+    @since('0.9.0')
     def train(cls, data, lambda_=1.0):
         """
         Train a Naive Bayes model given an RDD of (label, features)
