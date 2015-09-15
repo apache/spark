@@ -28,7 +28,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, DataFrame}
 
-private case class AFTPoint(features: Vector, censored: Double, label: Double)
+private[ml] case class AFTPoint(features: Vector, censored: Double, label: Double)
 
 class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -212,6 +212,63 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
     val responsePredictR = 4.761219
     val quantilePredictR = Vectors.dense(0.5287044, 3.328586, 10.75171)
+
+    assert(model.predict(features) ~== responsePredictR relTol 1E-3)
+    model.setQuantile(quantile)
+    assert(model.quantilePredict(features) ~== quantilePredictR relTol 1E-3)
+
+    model.transform(datasetMultivariate).select("features", "prediction").collect().foreach {
+      case Row(features: DenseVector, prediction1: Double) =>
+        val prediction2 = math.exp(model.weights.toBreeze.dot(features.toBreeze) + model.intercept)
+        assert(prediction1 ~== prediction2 relTol 1E-5)
+    }
+  }
+
+  test("aft survival regression w/o intercept") {
+    val trainer = new AFTSurvivalRegression().setFitIntercept(false)
+    val model = trainer.fit(datasetMultivariate)
+
+    /*
+       Using the following R code to load the data and train the model using survival package.
+
+       > library("survival")
+       > data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
+       > features <- as.matrix(data.frame(as.numeric(data$V1), as.numeric(data$V2)))
+       > censored <- as.numeric(data$V3)
+       > label <- as.numeric(data$V4)
+       > sr.fit <- survreg(Surv(label, censored)~features-1, dist='weibull')
+       > summary(sr.fit)
+
+                                    Value Std. Error     z        p
+       featuresas.numeric.data.V1.  0.896     0.0685  13.1 3.93e-39
+       featuresas.numeric.data.V2. -0.709     0.0522 -13.6 5.78e-42
+       Log(scale)                   0.420     0.0401  10.5 1.23e-25
+
+       Scale= 1.52
+
+       Weibull distribution
+       Loglik(model)= -1292.4   Loglik(intercept only)= -1072.7
+	       Chisq= -439.57 on 1 degrees of freedom, p= 1
+       Number of Newton-Raphson Iterations: 6
+       n= 1000
+     */
+    val weightsR = Vectors.dense(0.896, -0.709)
+    val interceptR = 0.0
+    val scaleR = 1.52
+
+    assert(model.intercept === interceptR)
+    assert(model.weights ~= weightsR relTol 1E-3)
+    assert(model.scale ~= scaleR relTol 1E-3)
+
+    /*
+       Using the following R code to predict.
+       > responsePred <- predict(sr.fit)
+       > quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
+     */
+    val features = Vectors.dense(2.233396950271428,-2.5321374085997683)
+    val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
+    val responsePredictR = 44.5446531
+    val quantilePredictR = Vectors.dense(1.45210294, 25.5060774, 158.428600)
 
     assert(model.predict(features) ~== responsePredictR relTol 1E-3)
     model.setQuantile(quantile)

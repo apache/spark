@@ -61,6 +61,11 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   /** @group getParam */
   final def getQuantile: Vector = $(quantile)
 
+  /** Checks whether the input has quantile vector. */
+  protected[ml] def hasQuantile: Boolean = {
+    isDefined(quantile) && $(quantile).size != 0
+  }
+
   /**
    * Validates and transforms the input schema with the provided param map.
    * @param schema input schema
@@ -151,7 +156,6 @@ class AFTSurvivalRegression(override val uid: String)
        the third to the end elements: Doubles, weights vector of the beta parameter
      */
     val initialWeights = Vectors.zeros(numFeatures + 2)
-//      new DenseVector(Array.fill(numFeatures + 2)(1.0))
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       initialWeights.toBreeze.toDenseVector)
@@ -161,7 +165,6 @@ class AFTSurvivalRegression(override val uid: String)
       var state: optimizer.State = null
       while (states.hasNext) {
         state = states.next()
-        // println(state.fVals.mkString(","))
         arrayBuilder += state.adjustedValue
       }
       if (state == null) {
@@ -205,15 +208,10 @@ class AFTSurvivalRegressionModel private[ml] (
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
-  def setQuantile(value: Vector): this.type = set(quantile, value)
-
-  /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  /** Checks whether the input has quantile vector. */
-  protected[ml] def hasQuantile: Boolean = {
-    isDefined(quantile) && $(quantile).size != 0
-  }
+  /** @group setParam */
+  def setQuantile(value: Vector): this.type = set(quantile, value)
 
   def quantilePredict(features: Vector): Vector = {
     require(hasQuantile, "AFTSurvivalRegressionModel quantilePredict must set quantile vector")
