@@ -303,6 +303,17 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
+  def isOfferValidForScheduling(meetsConstraints: Boolean,
+                                slaveId: String, mem: Double,
+                                cpus: Int, sc: SparkContext): Boolean = {
+    taskIdToSlaveId.size < executorLimit &&
+      totalCoresAcquired < maxCores &&
+      meetsConstraints &&
+      mem >= calculateTotalMemory(sc) &&
+      cpus >= 1 &&
+      failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
+      !slaveIdsWithExecutors.contains(slaveId)
+  }
 
   def isOfferValidForScheduling(meetsConstraints: Boolean,
                                 slaveId: String, mem: Double,
