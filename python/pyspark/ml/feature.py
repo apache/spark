@@ -210,12 +210,12 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         " appear in; if this is a double in [0,1), then this specifies the fraction of documents." +
         " Default 1.0")
     vocabSize = Param(
-        Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1<<18.")
+        Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1 << 18.")
 
     @keyword_only
-    def __init__(self, minTF=1.0, minDF=1.0, vocabSize=1<<18, inputCol=None, outputCol=None):
+    def __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None):
         """
-        __init__(self, minTF=1.0, minDF=1.0, vocabSize=1<<18, inputCol=None, outputCol=None)
+        __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None)
         """
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
@@ -235,15 +235,15 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
             " appear in; if this is a double in [0,1), then this specifies the fraction of " +
             "documents. Default 1.0")
         self.vocabSize = Param(
-            self, "vocabSize", "max size of the vocabulary. Default 1<<18.")
-        self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1<<18)
+            self, "vocabSize", "max size of the vocabulary. Default 1 << 18.")
+        self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1 << 18)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, minTF=1.0, minDF=1.0, vocabSize=1<<18, inputCol=None, outputCol=None):
+    def setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None):
         """
-        setParams(self, minTF=1.0, minDF=1.0, vocabSize=1<<18, inputCol=None, outputCol=None)
+        setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None)
         Set the params for the CountVectorizer
         """
         kwargs = self.setParams._input_kwargs
