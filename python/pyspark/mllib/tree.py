@@ -32,7 +32,7 @@ __all__ = ['DecisionTreeModel', 'DecisionTree', 'RandomForestModel',
 class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
     """TreeEnsembleModel
 
-    .. addedversion:: 1.3.0
+    .. versionadded:: 1.3.0
     """
     @since("1.3.0")
     def predict(self, x):
@@ -81,7 +81,7 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     A decision tree model for classification or regression.
 
-    .. addedversion:: 1.1.0
+    .. versionadded:: 1.1.0
     """
     @since("1.1.0")
     def predict(self, x):
@@ -134,7 +134,7 @@ class DecisionTree(object):
     Learning algorithm for a decision tree model for classification or
     regression.
 
-    .. addedversion:: 1.1.0
+    .. versionadded:: 1.1.0
     """
 
     @classmethod
@@ -262,7 +262,7 @@ class RandomForestModel(TreeEnsembleModel, JavaLoader):
 
     Represents a random forest model.
 
-    .. addedversion:: 1.2.0
+    .. versionadded:: 1.2.0
     """
 
     @classmethod
@@ -277,7 +277,7 @@ class RandomForest(object):
     Learning algorithm for a random forest model for classification or
     regression.
 
-    .. addedversion:: 1.2.0
+    .. versionadded:: 1.2.0
     """
 
     supportedFeatureSubsetStrategies = ("auto", "all", "sqrt", "log2", "onethird")
@@ -447,7 +447,7 @@ class GradientBoostedTreesModel(TreeEnsembleModel, JavaLoader):
 
     Represents a gradient-boosted tree model.
 
-    .. addedversion:: 1.3.0
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -462,7 +462,7 @@ class GradientBoostedTrees(object):
     Learning algorithm for a gradient boosted trees model for
     classification or regression.
 
-    .. addedversion:: 1.3.0
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
