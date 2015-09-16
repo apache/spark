@@ -99,6 +99,7 @@ fi
 DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 USER_HOST="$ASF_USERNAME@people.apache.org"
 
+git clean -d -f -x
 rm .gitignore
 rm -rf .git
 cd ..
