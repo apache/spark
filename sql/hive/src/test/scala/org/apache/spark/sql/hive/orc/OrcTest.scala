@@ -42,7 +42,7 @@ private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  protected def withPPD(f: ()=>Unit) {
+  protected def withPPD(f: () => Unit) {
     sqlContext.setConf("spark.sql.orc.filterPushdown", "true")
     f()
     sqlContext.setConf("spark.sql.orc.filterPushdown", "false")
