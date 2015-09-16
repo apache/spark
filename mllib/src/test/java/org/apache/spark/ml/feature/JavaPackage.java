@@ -49,6 +49,9 @@ import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineStage;
 import org.apache.spark.ml.PipelineModel;
 
+/**
+ * This is a test of the corresponding sample code in feature/package-info.java
+ */
 class JavaPackage {
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
