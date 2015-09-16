@@ -54,9 +54,9 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     details = ""
   )
 
-  private def createTaskInfo(taskId: Int, attempt: Int): TaskInfo = new TaskInfo(
+  private def createTaskInfo(taskId: Int, attemptNumber: Int): TaskInfo = new TaskInfo(
     taskId = taskId,
-    attempt = attempt,
+    attemptNumber = attemptNumber,
     // The following fields are not used in tests
     index = 0,
     launchTime = 0,

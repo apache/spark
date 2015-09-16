@@ -104,8 +104,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   }
 
   def commit() {
-    SparkHadoopMapRedUtil.commitTask(
-      getOutputCommitter(), getTaskContext(), jobID, splitID, attemptID)
+    SparkHadoopMapRedUtil.commitTask(getOutputCommitter(), getTaskContext(), jobID, splitID)
   }
 
   def commitJob() {

@@ -499,7 +499,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   private def assertEquals(info1: TaskInfo, info2: TaskInfo) {
     assert(info1.taskId === info2.taskId)
     assert(info1.index === info2.index)
-    assert(info1.attempt === info2.attempt)
+    assert(info1.attemptNumber === info2.attemptNumber)
     assert(info1.launchTime === info2.launchTime)
     assert(info1.executorId === info2.executorId)
     assert(info1.host === info2.host)
