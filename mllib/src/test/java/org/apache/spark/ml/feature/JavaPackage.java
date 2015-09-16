@@ -31,11 +31,10 @@ import java.io.File;
 
 // Imports we have in the example
 import java.util.Arrays;
-import java.util.List;
 
 import org.apache.spark.api.java.JavaRDD;
 // Import factory methods provided by DataTypes.
-import org.apache.spark.sql.types.DataTypes;
+import static org.apache.spark.sql.types.DataTypes.*;
 // Import StructType and StructField
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructField;
@@ -70,11 +69,11 @@ class JavaPackage {
   @Test
   public void javaPackageSampleCodeTest() {
     // a DataFrame with three columns: id (integer), text (string), and rating (double).
-    List<StructField> fields = Arrays.asList(
-        DataTypes.createStructField("id", DataTypes.IntegerType, false),
-        DataTypes.createStructField("text", DataTypes.StringType, false),
-        DataTypes.createStructField("rating", DataTypes.DoubleType, false));
-    StructType schema = DataTypes.createStructType(fields);
+    StructType schema = createStructType(
+      Arrays.asList(
+        createStructField("id", IntegerType, false),
+        createStructField("text", StringType, false),
+        createStructField("rating", DoubleType, false)));
     JavaRDD<Row> rowRDD = jsc.parallelize(
         Arrays.asList(
             RowFactory.create(0, "Hi I heard about Spark", 3.0),
