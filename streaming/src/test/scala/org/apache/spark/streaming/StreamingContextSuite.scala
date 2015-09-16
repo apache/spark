@@ -194,7 +194,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       jobGroupFound = sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
       jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
       jobInterruptFound = sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)
-      println("Found")
       allFound = true
     }
     ssc.start()

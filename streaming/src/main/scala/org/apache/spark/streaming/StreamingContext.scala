@@ -585,17 +585,17 @@ class StreamingContext private[streaming] (
    * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
+    import StreamingContext._
     state match {
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
-        StreamingContext.ACTIVATION_LOCK.synchronized {
-          StreamingContext.assertNoOtherContextIsActive()
+        ACTIVATION_LOCK.synchronized {
+          assertNoOtherContextIsActive()
           try {
             validate()
             ThreadUtils.runInNewThread("streaming-start") {
               sparkContext.setCallSite(startSite.get)
-              sparkContext.setJobGroup(
-                StreamingContext.STREAMING_JOB_GROUP_ID, StreamingContext.STREAMING_JOB_DESCRIPTION, false)
+              sparkContext.setJobGroup(STREAMING_JOB_GROUP_ID, STREAMING_JOB_DESCRIPTION, false)
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
@@ -606,10 +606,10 @@ class StreamingContext private[streaming] (
               state = StreamingContextState.STOPPED
               throw e
           }
-          StreamingContext.setActiveContext(this)
+          setActiveContext(this)
         }
         shutdownHookRef = ShutdownHookManager.addShutdownHook(
-          StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
+          SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
         // Registering Streaming Metrics at the start of the StreamingContext
         assert(env.metricsSystem != null)
         env.metricsSystem.registerSource(streamingSource)
