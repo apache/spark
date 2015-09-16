@@ -1344,7 +1344,7 @@ class BaseOperator(object):
         self.email_on_retry = email_on_retry
         self.email_on_failure = email_on_failure
         self.start_date = start_date
-        if not isinstance(start_date, datetime):
+        if start_date is not None and not isinstance(start_date, datetime):
             logging.warning(
                 "start_date for {} isn't datetime.datetime".format(self))
         self.end_date = end_date
