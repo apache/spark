@@ -17,49 +17,45 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.functions._
 
 class AggregateNodeSuite extends LocalNodeTest {
 
-  import testImplicits._
+  private def aggregateSuite(hasGroupBy: Boolean): Unit = {
+    val suiteName = if (hasGroupBy) "with-groupBy" else "without-groupBy"
+    test(suiteName) {
+      val inputData = {
+        for (key <- (0 until 4);
+             value <- (0 until 10))
+          yield (key, key + value)
+      }
+      val inputNode = new DummyNode(kvIntAttributes, inputData)
+      val keyColumn = inputNode.output(0)
+      val valueColumn = inputNode.output(1)
+      val groupBy = if (hasGroupBy) Seq(keyColumn) else Nil
+      val aggregateNode = AggregateNode(conf, groupBy, Seq(
+        Alias(Max(valueColumn), "max")(),
+        Alias(Min(valueColumn), "min")(),
+        Alias(Sum(valueColumn), "sum")()
+      ), inputNode)
 
-  test("basic") {
-    val input = {
-      for (key <- (0 until 4);
-           value <- (0 until 10))
-        yield (key.toString, key + value)
-    }.toDF("key", "value")
-
-    checkAnswer(
-      input,
-      node =>
-        AggregateNode(conf, Seq(input.col("key").expr), Seq(
-          Alias(input.col("key").expr, "max")(),
-          Alias(Max(input.col("value").expr), "max")(),
-          Alias(Min(input.col("value").expr), "min")(),
-          Alias(Sum(input.col("value").expr), "sum")()
-        ), node),
-      input.groupBy('key).agg(
-        max('value),
-        min('value),
-        sum('value)).collect()
-    )
-
-    checkAnswer(
-      input,
-      node =>
-        AggregateNode(conf, Nil, Seq(
-          Alias(Max(input.col("value").expr), "max")(),
-          Alias(Min(input.col("value").expr), "min")(),
-          Alias(Sum(input.col("value").expr), "sum")()
-        ), node),
-      input.agg(
-        max('value),
-        min('value),
-        sum('value)).collect()
-    )
+      val expectedOutput = if (hasGroupBy) {
+        inputData
+          .groupBy(_._1)
+          .map { case (k, v) => (k, v.map(_._2)) }
+          .map { case (k, vs) => (vs.max, vs.min, vs.sum) }
+          .toSeq
+      } else {
+        val results = (inputData.map(_._2).max, inputData.map(_._2).min, inputData.map(_._2).sum)
+        Seq(results)
+      }
+      val actualOutput = aggregateNode.collect().map { row =>
+        (row.getInt(0), row.getInt(1), row.getInt(2))
+      }
+      assert(actualOutput.sorted === expectedOutput.sorted)
+    }
   }
 
+  aggregateSuite(hasGroupBy = true)
+  aggregateSuite(hasGroupBy = false)
 }
