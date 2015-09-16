@@ -32,7 +32,21 @@ See the [algorithm guides](#algorithm-guides) section below for guides on sub-pa
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-# Main concepts
+# Algorithm guides
+
+We provide several algorithm guides specific to the Pipelines API.
+Several of these algorithms, such as certain feature transformers, are not in the `spark.mllib` API.
+Also, some algorithms have additional capabilities in the `spark.ml` API; e.g., random forests
+provide class probabilities, and linear models provide model summaries.
+
+* [Feature extraction, transformation, and selection](ml-features.html)
+* [Decision Trees for classification and regression](ml-decision-tree.html)
+* [Ensembles](ml-ensembles.html)
+* [Linear methods with elastic net regularization](ml-linear-methods.html)
+* [Multilayer perceptron classifier](ml-ann.html)
+
+
+# Main concepts in Pipelines
 
 Spark ML standardizes APIs for machine learning algorithms to make it easier to combine multiple
 algorithms into a single pipeline, or workflow.
@@ -166,6 +180,11 @@ compile-time type checking.
 `Pipeline`s and `PipelineModel`s instead do runtime checking before actually running the `Pipeline`.
 This type checking is done using the `DataFrame` *schema*, a description of the data types of columns in the `DataFrame`.
 
+*Unique Pipeline stages*: A `Pipeline`'s stages should be unique instances.  E.g., the same instance
+`myHashingTF` should not be inserted into the `Pipeline` twice since `Pipeline` stages must have
+unique IDs.  However, different instances `myHashingTF1` and `myHashingTF2` (both of type `HashingTF`)
+can be put into the same `Pipeline` since different instances will be created with different IDs.
+
 ## Parameters
 
 Spark ML `Estimator`s and `Transformer`s use a uniform API for specifying parameters.
@@ -183,16 +202,6 @@ There are two main ways to pass parameters to an algorithm:
 Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
-
-# Algorithm guides
-
-There are now several algorithms in the Pipelines API which are not in the `spark.mllib` API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
-
-* [Feature extraction, transformation, and selection](ml-features.html)
-* [Decision Trees for classification and regression](ml-decision-tree.html)
-* [Ensembles](ml-ensembles.html)
-* [Linear methods with elastic net regularization](ml-linear-methods.html)
-* [Multilayer perceptron classifier](ml-ann.html)
 
 # Code examples
 
