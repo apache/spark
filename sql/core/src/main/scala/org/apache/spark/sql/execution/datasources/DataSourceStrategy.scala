@@ -357,7 +357,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         case (from: NumericType, to: NumericType) =>
           Cast(l, to).eval() == l.value
         case (from: NumericType, to: StringType) => false
-        case _ => true
+        case (from: DataType, to: DataType) => Option(Cast(l, to).eval()).isDefined
       }
     }
 
