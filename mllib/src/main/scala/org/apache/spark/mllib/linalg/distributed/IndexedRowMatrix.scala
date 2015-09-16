@@ -72,6 +72,19 @@ class IndexedRowMatrix @Since("1.0.0") (
     nRows
   }
 
+
+  /**
+   * Compute all cosine similarities between columns of this matrix using the brute-force
+   * approach of computing normalized dot products.
+   *
+   * @return An n x n sparse upper-triangular matrix of cosine similarities between
+   *         columns of this matrix.
+   */
+  @Since("1.6.0")
+  def columnSimilarities(): CoordinateMatrix = {
+    toRowMatrix().columnSimilarities()
+  }
+
   /**
    * Drops row indices and converts this matrix to a
    * [[org.apache.spark.mllib.linalg.distributed.RowMatrix]].
