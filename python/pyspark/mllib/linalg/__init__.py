@@ -399,6 +399,10 @@ class DenseVector(Vector):
     def toArray(self):
         return self.array
 
+    @property
+    def values(self):
+        return self.array
+
     def __getitem__(self, item):
         return self.array[item]
 
