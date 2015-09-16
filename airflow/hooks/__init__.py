@@ -6,7 +6,6 @@ from airflow.utils import import_module_attrs as _import_module_attrs
 from airflow.hooks.base_hook import BaseHook as _BaseHook
 
 _hooks = {
-    'ftp_hook': ['FTPHook'],
     'hive_hooks': [
         'HiveCliHook',
         'HiveMetastoreHook',
