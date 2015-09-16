@@ -37,7 +37,7 @@ class Rating(namedtuple("Rating", ["user", "product", "rating"])):
     >>> (r[0], r[1], r[2])
     (1, 2, 5.0)
 
-    .. addedversion:: 1.2.0
+    .. versionadded:: 1.2.0
     """
 
     def __reduce__(self):
@@ -114,7 +114,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ... except OSError:
     ...     pass
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
     @since("0.9.0")
     def predict(self, user, product):
@@ -184,7 +184,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 class ALS(object):
     """Alternating Least Squares matrix factorization
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
 
     @classmethod
