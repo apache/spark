@@ -86,7 +86,11 @@ library, you should be able to use any database backend supported as a
 SqlAlchemy backend. We recommend using **MySQL** or **Postgres**.
 
 .. note:: If you decide to use **Postgres**, we recommend using the ``psycopg2``
-   driver and specifying it in your SqlAlchemy connection string
+   driver and specifying it in your SqlAlchemy connection string.
+   Also note that since SqlAlchemy does not expose a way to target a
+   specific schema in the Postgres connection URI, you may
+   want to set a default schema for your role with a
+   command similar to ``ALTER ROLE username SET search_path = airflow, foobar;``
 
 Once you've setup your database to host Airflow, you'll need to alter the
 SqlAlchemy connection string located in your configuration file
