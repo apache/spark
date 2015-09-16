@@ -44,7 +44,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{CallSite, ShutdownHookManager, Utils}
+import org.apache.spark.util.{ThreadUtils, CallSite, ShutdownHookManager}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -588,12 +588,16 @@ class StreamingContext private[streaming] (
     state match {
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
-        sparkContext.setCallSite(startSite.get)
         StreamingContext.ACTIVATION_LOCK.synchronized {
           StreamingContext.assertNoOtherContextIsActive()
           try {
             validate()
-            scheduler.start()
+            ThreadUtils.runInNewThread("streaming-start") {
+              sparkContext.setCallSite(startSite.get)
+              sparkContext.setJobGroup(
+                StreamingContext.STREAMING_JOB_GROUP_ID, StreamingContext.STREAMING_JOB_DESCRIPTION, false)
+              scheduler.start()
+            }
             state = StreamingContextState.ACTIVE
           } catch {
             case NonFatal(e) =>
@@ -617,6 +621,7 @@ class StreamingContext private[streaming] (
         throw new IllegalStateException("StreamingContext has already been stopped")
     }
   }
+
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
@@ -719,6 +724,8 @@ class StreamingContext private[streaming] (
 
 object StreamingContext extends Logging {
 
+  private[streaming] val STREAMING_JOB_GROUP_ID = "streaming"
+  private[streaming] val STREAMING_JOB_DESCRIPTION = "streaming"
   /**
    * Lock that guards activation of a StreamingContext as well as access to the singleton active
    * StreamingContext in getActiveOrCreate().
