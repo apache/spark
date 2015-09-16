@@ -113,12 +113,12 @@ class HiveCliHook(BaseHook):
         """
         create, insert, other = [], [], []
         for query in hql.split(';'):  # naive
-            query = query.lower()
-            if 'create table' in query:
+            query = query.lower().strip()
+            if query.startswith('create table'):
                 create.append(query)
-            elif 'set' in query or 'add jar' in query or 'temporary' in query:
+            elif query.startswith(('set', 'add jar', 'temporary')):
                 other.append(query)
-            elif 'select' in query:
+            elif query.startswith('insert'):
                 insert.append(query)
         other = ';'.join(other)
         for query_set in [create, insert]:
