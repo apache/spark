@@ -1317,7 +1317,7 @@ class BaseOperator(object):
             retry_delay=timedelta(seconds=300),
             start_date=None,
             end_date=None,
-            schedule_interval=timedelta(days=1),  # not hooked as of now
+            schedule_interval=None,  # not hooked as of now
             depends_on_past=False,
             wait_for_downstream=False,
             dag=None,
@@ -1353,6 +1353,12 @@ class BaseOperator(object):
         self.wait_for_downstream = wait_for_downstream
         if wait_for_downstream:
             self.depends_on_past = True
+
+        if schedule_interval:
+            logging.warning(
+                "schedule_interval is used for {}, though it has "
+                "been deprecated as a task parameter, you need to "
+                "specify it as a DAG parameter instead".format(self))
         self._schedule_interval = schedule_interval
         self.retries = retries
         self.queue = queue
