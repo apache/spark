@@ -54,7 +54,7 @@ setup(
         'gunicorn>=19.3.0, <20.0',
         'jinja2>=2.7.3, <3.0',
         'markdown>=2.5.2, <3.0',
-        'pandas>=0.15.2, <0.16',
+        'pandas>=0.15.2, <1.0.0',
         'pygments>=2.0.1, <3.0',
         'python-dateutil>=2.3, <3',
         'requests>=2.5.1, <3',
