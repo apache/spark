@@ -22,15 +22,17 @@ import org.apache.spark.sql.SQLContext;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaSparkContext;
 
+// Test specific imports
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.apache.spark.util.Utils;
+import java.io.File;
 
 // Imports we have in the example
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
-import java.io.File;
 
 import org.apache.spark.api.java.JavaRDD;
 // Import factory methods provided by DataTypes.
@@ -41,7 +43,6 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.Row;
-import org.apache.spark.util.Utils;
 
 import org.apache.spark.ml.feature.*;
 import org.apache.spark.ml.Pipeline;
