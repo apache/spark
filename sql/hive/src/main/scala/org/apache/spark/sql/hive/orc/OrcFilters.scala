@@ -33,13 +33,13 @@ import org.apache.spark.sql.sources._
 private[orc] object OrcFilters extends Logging {
   def createFilter(expr: Array[Filter]): Option[SearchArgument] = {
     expr.reduceOption(And).flatMap { conjunction =>
-      val builder = SearchArgumentFactory.newBuilder()
-      buildSearchArgument(conjunction, builder).map(_.build())
+      val builder = SearchArgumentFactory.newBuilder().startAnd()
+      buildSearchArgument(conjunction, builder).map(_.end().build())
     }
   }
 
   private def buildSearchArgument(expression: Filter, builder: Builder): Option[Builder] = {
-    def newBuilder = SearchArgumentFactory.newBuilder()
+    def newBuilder = SearchArgumentFactory.newBuilder().startAnd()
 
     def isSearchableLiteral(value: Any): Boolean = value match {
       // These are types recognized by the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
@@ -72,8 +72,8 @@ private[orc] object OrcFilters extends Logging {
 
     expression match {
       case And(left, right) =>
-        val tryLeft = buildSearchArgument(left, newBuilder)
-        val tryRight = buildSearchArgument(right, newBuilder)
+        val tryLeft = buildSearchArgument(left, newBuilder).map(_.end)
+        val tryRight = buildSearchArgument(right, newBuilder).map(_.end)
 
         val conjunction = for {
           _ <- tryLeft
@@ -90,15 +90,15 @@ private[orc] object OrcFilters extends Logging {
 
       case Or(left, right) =>
         for {
-          _ <- buildSearchArgument(left, newBuilder)
-          _ <- buildSearchArgument(right, newBuilder)
+          _ <- buildSearchArgument(left, newBuilder).map(_.end)
+          _ <- buildSearchArgument(right, newBuilder).map(_.end)
           lhs <- buildSearchArgument(left, builder.startOr())
           rhs <- buildSearchArgument(right, lhs)
         } yield rhs.end()
 
       case Not(child) =>
         for {
-          _ <- buildSearchArgument(child, newBuilder)
+          _ <- buildSearchArgument(child, newBuilder).map(_.end())
           negate <- buildSearchArgument(child, builder.startNot())
         } yield negate.end()
 

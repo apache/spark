@@ -101,7 +101,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("Simple selection form ORC table") {
+  def simpleSelection(): Unit = {
     val data = (1 to 10).map { i =>
       Person(s"name_$i", i, (0 to 1).map { m => Contact(s"contact_$m", s"phone_$m") })
     }
@@ -144,6 +144,16 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           df.flatMap(_.getAs[Seq[_]]("contacts")).count()
         }
       }
+    }
+  }
+
+  test("Simple selection form ORC table") {
+    simpleSelection()
+  }
+
+  test("Simple selection form ORC table with PPD") {
+    withPPD {
+      simpleSelection
     }
   }
 
