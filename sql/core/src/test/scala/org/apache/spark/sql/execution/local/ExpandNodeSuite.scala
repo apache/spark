@@ -17,35 +17,33 @@
 
 package org.apache.spark.sql.execution.local
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
+
+
 class ExpandNodeSuite extends LocalNodeTest {
 
-  import testImplicits._
-
-  test("expand") {
-    val input = Seq((1, 1), (2, 2), (3, 3), (4, 4), (5, 5)).toDF("key", "value")
-    checkAnswer(
-      input,
-      node =>
-        ExpandNode(conf, Seq(
-          Seq(
-            input.col("key") + input.col("value"), input.col("key") - input.col("value")
-          ).map(_.expr),
-          Seq(
-            input.col("key") * input.col("value"), input.col("key") / input.col("value")
-          ).map(_.expr)
-        ), node.output, node),
-      Seq(
-        (2, 0),
-        (1, 1),
-        (4, 0),
-        (4, 1),
-        (6, 0),
-        (9, 1),
-        (8, 0),
-        (16, 1),
-        (10, 0),
-        (25, 1)
-      ).toDF().collect()
-    )
+  private def testExpand(inputData: Array[(Int, Int)] = Array.empty): Unit = {
+    val inputNode = new DummyNode(kvIntAttributes, inputData)
+    val projections = Seq(Seq('k + 'v, 'k - 'v), Seq('k * 'v, 'k / 'v))
+    val expandNode = new ExpandNode(conf, projections, inputNode.output, inputNode)
+    val resolvedNode = resolveExpressions(expandNode)
+    val expectedOutput = {
+      val firstHalf = inputData.map { case (k, v) => (k + v, k - v) }
+      val secondHalf = inputData.map { case (k, v) => (k * v, k / v) }
+      firstHalf ++ secondHalf
+    }
+    val actualOutput = resolvedNode.collect().map { case row =>
+      (row.getInt(0), row.getInt(1))
+    }
+    assert(actualOutput.toSet === expectedOutput.toSet)
   }
+
+  test("empty") {
+    testExpand()
+  }
+
+  test("basic") {
+    testExpand((1 to 100).map { i => (i, i * 1000) }.toArray)
+  }
+
 }
