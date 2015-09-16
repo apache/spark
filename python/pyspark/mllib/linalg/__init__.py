@@ -266,7 +266,6 @@ class DenseVector(Vector):
         if ar.dtype != np.float64:
             ar = ar.astype(np.float64)
         self.array = ar
-        self.values = ar
 
     @staticmethod
     def parse(s):
@@ -390,6 +389,10 @@ class DenseVector(Vector):
         return np.dot(diff, diff)
 
     def toArray(self):
+        return self.array
+
+    @property
+    def values(self):
         return self.array
 
     def __getitem__(self, item):
