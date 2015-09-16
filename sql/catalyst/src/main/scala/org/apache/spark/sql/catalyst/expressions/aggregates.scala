@@ -692,6 +692,54 @@ case class LastFunction(expr: Expression, base: AggregateExpression1) extends Ag
   }
 }
 
+// Compute the sample standard deviation of a column
+case class Stddev(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"STDDEV($child)"
+  override def isSample: Boolean = true
+  override def isStddev: Boolean = true
+}
+
+// Compute the population standard deviation of a column
+case class StddevPop(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"STDDEV_POP($child)"
+  override def isSample: Boolean = false
+  override def isStddev: Boolean = true
+}
+
+// Compute the sample standard deviation of a column
+case class StddevSamp(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"STDDEV_SAMP($child)"
+  override def isSample: Boolean = true
+  override def isStddev: Boolean = true
+}
+
+// Compute the sample variance of a column
+case class Variance(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"VARIANCE($child)"
+  override def isSample: Boolean = true
+  override def isStddev: Boolean = false
+}
+
+// Compute the population variance of a column
+case class VariancePop(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"VAR_POP($child)"
+  override def isSample: Boolean = false
+  override def isStddev: Boolean = false
+}
+
+// Compute the sample variance of a column
+case class VarianceSamp(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"VAR_SAMP($child)"
+  override def isSample: Boolean = true
+  override def isStddev: Boolean = false
+}
+
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 abstract class StddevAgg1(child: Expression) extends UnaryExpression with PartialAggregate1 {
@@ -700,37 +748,22 @@ abstract class StddevAgg1(child: Expression) extends UnaryExpression with Partia
 
   def isSample: Boolean
 
+  def isStddev: Boolean
+
   override def asPartial: SplitEvaluation = {
     val partialStd = Alias(ComputePartialStd(child), "PartialStddev")()
-    SplitEvaluation(MergePartialStd(partialStd.toAttribute, isSample), partialStd :: Nil)
+    SplitEvaluation(MergePartialStd(partialStd.toAttribute, isSample, isStddev), partialStd :: Nil)
   }
 
-  override def newInstance(): StddevFunction = new StddevFunction(child, this, isSample)
+  override def newInstance(): StddevFunction = new StddevFunction(child, this, isSample, isStddev)
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function stddev")
-
-}
-
-// Compute the sample standard deviation of a column
-case class Stddev(child: Expression) extends StddevAgg1(child) {
-
-  override def toString: String = s"STDDEV($child)"
-  override def isSample: Boolean = true
-}
-
-// Compute the population standard deviation of a column
-case class StddevPop(child: Expression) extends StddevAgg1(child) {
-
-  override def toString: String = s"STDDEV_POP($child)"
-  override def isSample: Boolean = false
-}
-
-// Compute the sample standard deviation of a column
-case class StddevSamp(child: Expression) extends StddevAgg1(child) {
-
-  override def toString: String = s"STDDEV_SAMP($child)"
-  override def isSample: Boolean = true
+    if (isStddev) {
+      TypeUtils.checkForNumericExpr(child.dataType, "function stddev")
+    }
+    else {
+      TypeUtils.checkForNumericExpr(child.dataType, "function variance")
+    }
 }
 
 case class ComputePartialStd(child: Expression) extends UnaryExpression with AggregateExpression1 {
@@ -795,25 +828,27 @@ case class ComputePartialStdFunction (
 
 case class MergePartialStd(
     child: Expression,
-    isSample: Boolean
+    isSample: Boolean,
+    isStddev: Boolean
 ) extends UnaryExpression with AggregateExpression1 {
-  def this() = this(null, false) // required for serialization
+  def this() = this(null, false, false) // required for serialization
 
   override def children: Seq[Expression] = child:: Nil
   override def nullable: Boolean = false
   override def dataType: DataType = DoubleType
   override def toString: String = s"MergePartialStd($child)"
   override def newInstance(): MergePartialStdFunction = {
-    new MergePartialStdFunction(child, this, isSample)
+    new MergePartialStdFunction(child, this, isSample, isStddev)
   }
 }
 
 case class MergePartialStdFunction(
     expr: Expression,
     base: AggregateExpression1,
-    isSample: Boolean
+    isSample: Boolean,
+    isStddev: Boolean
 ) extends AggregateFunction1 {
-  def this() = this (null, null, false) // Required for serialization
+  def this() = this (null, null, false, false) // Required for serialization
 
   private val computeType = DoubleType
   private val zero = Cast(Literal(0), computeType)
@@ -877,7 +912,13 @@ case class MergePartialStdFunction(
           Divide(combineMk, Cast(Literal(count), computeType))
         }
       }
-      Sqrt(varCol).eval(null)
+
+      if (isStddev) { // return stddev
+        Sqrt(varCol).eval(null)
+      }
+      else { // return variance
+        varCol.eval(null)
+      }
     }
   }
 }
@@ -885,10 +926,11 @@ case class MergePartialStdFunction(
 case class StddevFunction(
     expr: Expression,
     base: AggregateExpression1,
-    isSample: Boolean
+    isSample: Boolean,
+    isStddev: Boolean
 ) extends AggregateFunction1 {
 
-  def this() = this(null, null, false) // Required for serialization
+  def this() = this(null, null, false, false) // Required for serialization
 
   private val computeType = DoubleType
   private var curCount: Long = 0L
@@ -932,7 +974,13 @@ case class StddevFunction(
           Divide(curMk, Cast(Literal(curCount), computeType))
         }
       }
-      Sqrt(varCol).eval(null)
+
+      if (isStddev) { // return stddev
+        Sqrt(varCol).eval(null)
+      }
+      else { // return variance
+        varCol.eval(null)
+      }
     }
   }
 }

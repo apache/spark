@@ -172,6 +172,9 @@ object FunctionRegistry {
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
+    expression[Variance]("variance"),
+    expression[VariancePop]("var_pop"),
+    expression[VarianceSamp]("var_samp"),
 
     // string functions
     expression[Ascii]("ascii"),

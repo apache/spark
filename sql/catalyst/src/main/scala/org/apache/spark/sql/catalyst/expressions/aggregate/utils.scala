@@ -114,6 +114,24 @@ object Utils {
             aggregateFunction = aggregate.Sum(child),
             mode = aggregate.Complete,
             isDistinct = true)
+
+        case expressions.Variance(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Variance(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case expressions.VariancePop(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.VariancePop(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case expressions.VarianceSamp(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.VarianceSamp(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
       }
       // Check if there is any expressions.AggregateExpression1 left.
       // If so, we cannot convert this plan.

@@ -221,4 +221,35 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       emptyTableData.agg(sumDistinct('a)),
       Row(null))
   }
+
+  test("variance") {
+    checkAnswer(
+      testData2.agg(variance('a)),
+      Row(4/5.0))
+
+    checkAnswer(
+      testData2.agg(var_pop('a)),
+      Row(4/6.0))
+
+    checkAnswer(
+      testData2.agg(var_samp('a)),
+      Row(4/5.0))
+  }
+
+  test("zero variance") {
+    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+    assert(emptyTableData.count() == 0)
+
+    checkAnswer(
+      emptyTableData.agg(variance('a)),
+      Row(null))
+
+    checkAnswer(
+      emptyTableData.agg(var_pop('a)),
+      Row(null))
+
+    checkAnswer(
+      emptyTableData.agg(var_samp('a)),
+      Row(null))
+  }
 }

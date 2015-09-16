@@ -248,11 +248,35 @@ case class Min(child: Expression) extends AlgebraicAggregate {
 
   override val evaluateExpression = min
 }
+// Compute the sample variance of a column
+case class Variance(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = true
+  override def isStddev: Boolean = false
+  override def prettyName: String = "variance"
+}
+
+// Compute the population variance of a column
+case class VariancePop(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = false
+  override def isStddev: Boolean = false
+  override def prettyName: String = "var_pop"
+}
+
+// Compute the sample variance of a column
+case class VarianceSamp(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = true
+  override def isStddev: Boolean = false
+  override def prettyName: String = "var_samp"
+}
 
 // Compute the sample standard deviation of a column
 case class Stddev(child: Expression) extends StddevAgg(child) {
 
   override def isSample: Boolean = true
+  override def isStddev: Boolean = true
   override def prettyName: String = "stddev"
 }
 
@@ -260,6 +284,7 @@ case class Stddev(child: Expression) extends StddevAgg(child) {
 case class StddevPop(child: Expression) extends StddevAgg(child) {
 
   override def isSample: Boolean = false
+  override def isStddev: Boolean = true
   override def prettyName: String = "stddev_pop"
 }
 
@@ -267,6 +292,7 @@ case class StddevPop(child: Expression) extends StddevAgg(child) {
 case class StddevSamp(child: Expression) extends StddevAgg(child) {
 
   override def isSample: Boolean = true
+  override def isStddev: Boolean = true
   override def prettyName: String = "stddev_samp"
 }
 
@@ -279,6 +305,8 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
   override def nullable: Boolean = true
 
   def isSample: Boolean
+
+  def isStddev: Boolean
 
   // Return data type.
   override def dataType: DataType = resultType
@@ -386,9 +414,16 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
       }
     }
 
-    If(EqualTo(currentCount, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
-      If(EqualTo(currentCount, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-        Cast(Sqrt(varCol), resultType)))
+    if (isStddev) { // return stddev
+      If(EqualTo(currentCount, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+        If(EqualTo(currentCount, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+          Cast(Sqrt(varCol), resultType)))
+    }
+    else { // return variance
+      If(EqualTo(currentCount, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+        If(EqualTo(currentCount, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+          Cast(varCol, resultType)))
+    }
   }
 }
 

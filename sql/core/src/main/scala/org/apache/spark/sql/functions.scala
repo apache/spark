@@ -353,6 +353,33 @@ object functions {
    */
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
+  /**
+   * Aggregate function: returns the unbiased sample variance of the
+   * expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def variance(e: Column): Column = Variance(e.expr)
+
+  /**
+   * Aggregate function: returns the population variance of the
+   * expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def var_pop(e: Column): Column = VariancePop(e.expr)
+
+  /**
+   * Aggregate function: returns the unbiased sample variance of
+   * expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def var_samp(e: Column): Column = VarianceSamp(e.expr)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////

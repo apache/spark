@@ -335,6 +335,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       testCodeGen(
         "SELECT stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2",
         Row(math.sqrt(1.5 / 5), math.sqrt(1.5 / 6), math.sqrt(1.5 / 5)) :: Nil)
+      // VARIANCE
+      testCodeGen(
+        "SELECT a, variance(b), var_pop(b) FROM testData2 GROUP BY a",
+        (1 to 3).map(i => Row(i, 0.5, 0.25)))
+      testCodeGen(
+        "SELECT variance(b), var_pop(b), var_samp(b) FROM testData2",
+        Row(0.3, 0.25, 0.3) :: Nil)
       // Some combinations.
       testCodeGen(
         """
@@ -355,8 +362,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(100, 1, 50.5, 300, 100) :: Nil)
       // Aggregate with Code generation handling all null values
       testCodeGen(
-        "SELECT  sum('a'), avg('a'), stddev('a'), count(null) FROM testData",
-        Row(null, null, null, 0) :: Nil)
+        "SELECT  sum('a'), avg('a'), stddev('a'), variance('a'), count(null) FROM testData",
+        Row(null, null, null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
@@ -754,6 +761,35 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
       (1 to 3).map(i => Row(i, math.sqrt(1/2.0), math.sqrt(1/4.0), math.sqrt(1/2.0))))
+  }
+
+
+  test("variance") {
+    checkAnswer(
+      sql("SELECT VARIANCE(a) FROM testData2"),
+      Row(0.8)
+    )
+  }
+
+  test("var_pop") {
+    checkAnswer(
+      sql("SELECT VAR_POP(a) FROM testData2"),
+      Row(4/6.0)
+    )
+  }
+
+  test("var_samp") {
+    checkAnswer(
+      sql("SELECT VAR_SAMP(a) FROM testData2"),
+      Row(4/5.0)
+    )
+  }
+
+  test("var agg") {
+    checkAnswer(
+      sql("SELECT a, variance(b), var_pop(b), var_samp(b) FROM testData2 GROUP BY a"),
+      (1 to 3).map(i => Row(i, 0.5, 0.25, 0.5))
+    )
   }
 
   test("inner join where, one match per row") {
