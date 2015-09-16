@@ -126,7 +126,7 @@ object JdbcDialects {
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
   registerDialect(DB2Dialect)
-  registerDialect(SqlServerDialect)
+  registerDialect(MsSqlServerDialect)
 
 
   /**
@@ -245,18 +245,16 @@ case object DB2Dialect extends JdbcDialect {
 
 /**
  * :: DeveloperApi ::
- * Default SQL Server dialect, mapping the datetimeoffset types to a String on read.
+ * Default Microsoft SQL Server dialect, mapping the datetimeoffset types to a String on read.
  */
 @DeveloperApi
-case object SqlServerDialect extends JdbcDialect {
-
+case object MsSqlServerDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
-
   override def getCatalystType(
-    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-        if (typeName.contains("datetimeoffset")) {
-          // String is used by SQL Server for datetimeoffset types in legacy clients
-          Some(StringType)
-        } else None
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (typeName.contains("datetimeoffset")) {
+      // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
+      Some(StringType)
+    } else None
   }
 }
