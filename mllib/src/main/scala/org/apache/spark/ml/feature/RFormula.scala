@@ -129,7 +129,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 
   override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
-  override def toString: String = s"RFormula(${get(formula)})"
+  override def toString: String = s"RFormula(${get(formula)}) (uid=$uid)"
 }
 
 /**
@@ -171,7 +171,7 @@ class RFormulaModel private[feature](
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
     new RFormulaModel(uid, resolvedFormula, pipelineModel))
 
-  override def toString: String = s"RFormulaModel(${resolvedFormula})"
+  override def toString: String = s"RFormulaModel(${resolvedFormula}) (uid=$uid)"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
     val labelName = resolvedFormula.label
