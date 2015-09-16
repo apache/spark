@@ -46,7 +46,6 @@
  *   import org.apache.spark.api.java.JavaRDD;
  *   import static org.apache.spark.sql.types.DataTypes.*;
  *   import org.apache.spark.sql.types.StructType;
- *   import org.apache.spark.sql.types.StructField;
  *   import org.apache.spark.sql.DataFrame;
  *   import org.apache.spark.sql.RowFactory;
  *   import org.apache.spark.sql.Row;
