@@ -209,15 +209,14 @@ class Interaction(override val uid: String) extends Transformer
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
 
-    // TODO(ekl) make in same order as attrs
     def interact(vv: Any*): Vector = {
       var indices = ArrayBuilder.make[Int]
       var values = ArrayBuilder.make[Double]
       var size = 1
       indices += 0
       values += 1.0
-      var fieldIndex = 0
-      while (fieldIndex < vv.length) {
+      var fieldIndex = vv.length - 1
+      while (fieldIndex >= 0) {
         val prevIndices = indices.result()
         val prevValues = values.result()
         val prevSize = size
@@ -233,7 +232,7 @@ class Interaction(override val uid: String) extends Transformer
             j += 1
           }
         }
-        fieldIndex += 1
+        fieldIndex -= 1
       }
       Vectors.sparse(size, indices.result(), values.result()).compressed
     }
@@ -256,18 +255,8 @@ class Interaction(override val uid: String) extends Transformer
   }
 
   private def genAttrs(schema: Seq[StructField]): AttributeGroup = {
-    def gen(iterators: Seq[Seq[Attribute]]): Seq[Attribute] = {
-      if (iterators.length == 1) {
-        iterators.head
-      } else {
-        iterators.head.flatMap { head =>
-          gen(iterators.tail).map { tail =>
-            NumericAttribute.defaultAttr.withName(head.name.get + ":" + tail.name.get)
-          }
-        }
-      }
-    }
-    val iterators = schema.map { field =>
+    var attrs: Seq[Attribute] = Nil
+    schema.reverse.map { field =>
       val attrIterator = field.dataType match {
         case _: NumericType | BooleanType =>
           val attr = Attribute.fromStructField(field)
@@ -276,9 +265,17 @@ class Interaction(override val uid: String) extends Transformer
           val group = AttributeGroup.fromStructField(field)
           encodedAttrIterator(Some(group.name), group.attributes.get)
       }
-      attrIterator
+      if (attrs.isEmpty) {
+        attrs = attrIterator
+      } else {
+        attrs = attrIterator.flatMap { head =>
+          attrs.map { tail =>
+            NumericAttribute.defaultAttr.withName(head.name.get + ":" + tail.name.get)
+          }
+        }
+      }
     }
-    new AttributeGroup($(outputCol), gen(iterators).toArray)
+    new AttributeGroup($(outputCol), attrs.toArray)
   }
 
   private def encodedAttrIterator(groupName: Option[String], attrs: Seq[Attribute]): Seq[Attribute] = {

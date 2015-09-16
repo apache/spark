@@ -32,12 +32,12 @@ class RInteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("new interaction") {
     val data = sqlContext.createDataFrame(
       Seq(
-        (1, "foo", true, 4, Vectors.dense(0.0, 0.0, 1.0), Vectors.dense(5.0, 3.0)),
-        (1, "bar", true, 4, Vectors.dense(1.0, 4.0, 2.0), Vectors.dense(4.0, 3.0)),
-        (1, "bar", true, 5, Vectors.dense(2.0, 5.0, 3.0), Vectors.dense(5.0, 3.0)),
-        (1, "baz", true, 5, Vectors.dense(3.0, 8.0, 4.0), Vectors.dense(5.0, 2.0)),
-        (1, "baz", false, 5, Vectors.dense(4.0, 9.0, 8.0), Vectors.dense(7.0, 1.0)),
-        (2, "baz", false, 5, Vectors.dense(5.0, 2.0, 9.0), Vectors.dense(2.0, 0.0)))
+        (0, "foo", true, 4, Vectors.dense(0.0, 0.0, 1.0), Vectors.dense(5.0, 3.0)),
+        (0, "bar", true, 4, Vectors.dense(1.0, 4.0, 2.0), Vectors.dense(4.0, 3.0)),
+        (0, "bar", true, 5, Vectors.dense(2.0, 5.0, 3.0), Vectors.dense(5.0, 3.0)),
+        (0, "baz", true, 5, Vectors.dense(3.0, 8.0, 4.0), Vectors.dense(5.0, 2.0)),
+        (0, "baz", false, 5, Vectors.dense(4.0, 9.0, 8.0), Vectors.dense(7.0, 1.0)),
+        (1, "baz", false, 5, Vectors.dense(5.0, 2.0, 9.0), Vectors.dense(2.0, 0.0)))
       ).toDF("id", "a", "bin", "b", "test", "test2")
     val attrs = new AttributeGroup(
       "test",
@@ -63,8 +63,8 @@ class RInteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
     df.schema.foreach { field =>
       println(field.metadata)
     }
-    val trans = new Interaction().setInputCols(Array("id", "test2", "test")).setOutputCol("feature")
-//    val trans = new Interaction().setInputCols(Array("id", "test")).setOutputCol("feature")
+//    val trans = new Interaction().setInputCols(Array("id", "test2", "test")).setOutputCol("feature")
+    val trans = new Interaction().setInputCols(Array("id", "test2")).setOutputCol("feature")
     val res = trans.transform(df)
     res.collect.foreach(println)
     println(res.schema)
