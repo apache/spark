@@ -193,7 +193,7 @@ class Interaction(override val uid: String) extends Transformer
  *                      value if the field is numeric. Fields with zero cardinality will not be
  *                      one-hot encoded (output verbatim).
  */
-// TODO(ekl) support drop-last option like OneHotEncoder does
+// TODO(ekl) support drop-last option like OneHotEncoder does?
 private[ml] class EncodingIterator(cardinalities: Array[Int]) {
   /** The size of the output vector. */
   val size = cardinalities.map(i => if (i > 0) i else 1).sum
