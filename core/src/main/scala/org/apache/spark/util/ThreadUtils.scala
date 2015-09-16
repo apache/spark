@@ -95,7 +95,7 @@ private[spark] object ThreadUtils {
    *
    * SomeException: exception-message
    *   at CallerClass.body-method (sourcefile.scala)
-	 *   at ... run in separate thread using org.apache.spark.util.ThreadUtils ... ()
+   *   at ... run in separate thread using org.apache.spark.util.ThreadUtils ... ()
    *   at CallerClass.caller-method (sourcefile.scala)
    *   ...
    */
@@ -138,7 +138,6 @@ private[spark] object ThreadUtils {
 
         // Update the stack trace and rethrow the exception in the caller thread
         realException.setStackTrace(finalStackTrace)
-        println(realException)
         throw realException
       case None =>
         result
