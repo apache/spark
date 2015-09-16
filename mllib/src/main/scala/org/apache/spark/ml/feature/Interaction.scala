@@ -39,8 +39,8 @@ import org.apache.spark.sql.types._
  * produced.
  *
  * For example, given the inputs Double(2), Vector(3, 4), the result would be Vector(6, 8) if
- * all columns were numeric. If the first was nominal with three different values, the result
- * would then be Vector(0, 0, 3, 0, 0, 4).
+ * all columns were numeric. If the first input was nominal with four different values, the result
+ * would then be Vector(0, 0, 0, 0, 3, 4, 0, 0).
  *
  * See https://stat.ethz.ch/R-manual/R-devel/library/base/html/formula.html for more
  * information about interactions in R formulae.

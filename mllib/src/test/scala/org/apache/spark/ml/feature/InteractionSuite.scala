@@ -26,7 +26,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.functions.col
 
-class RInteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new Interaction())
   }
@@ -53,6 +53,8 @@ class RInteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[AssertionError] { encode(Array(1), 2.2) }
     intercept[AssertionError] { encode(Array(3), Vectors.dense(2.2)) }
     intercept[AssertionError] { encode(Array(1), Vectors.dense(1.0, 2.0, 3.0)) }
+    intercept[AssertionError] { encode(Array(3), Vectors.dense(-1)) }
+    intercept[AssertionError] { encode(Array(3), Vectors.dense(3)) }
   }
 
   test("numeric interaction") {
