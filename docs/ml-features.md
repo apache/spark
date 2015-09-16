@@ -123,12 +123,21 @@ for features_label in rescaledData.select("features", "label").take(3):
 
 ## Word2Vec
 
-`Word2Vec` is an `Estimator` which takes sequences of words that represents documents and trains a `Word2VecModel`. The model is a `Map(String, Vector)` essentially, which maps each word to an unique fix-sized vector. The `Word2VecModel` transforms each documents into a vector using the average of all words in the document, which aims to other computations of documents such as similarity calculation consequencely. Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more details on Word2Vec.
+`Word2Vec` is an `Estimator` which takes sequences of words representing documents and trains a
+`Word2VecModel`. The model maps each word to a unique fixed-size vector. The `Word2VecModel`
+transforms each document into a vector using the average of all words in the document; this vector
+can then be used for as features for prediction, document similarity calculations, etc.
+Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more
+details.
 
-Word2Vec is implemented in [Word2Vec](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec). In the following code segment, we start with a set of documents, each of them is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
+In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [Word2Vec Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.Word2Vec
 
@@ -152,6 +161,10 @@ result.select("result").take(3).foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Word2Vec Java docs](api/java/org/apache/spark/ml/feature/Word2Vec.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -192,6 +205,10 @@ for (Row r: result.select("result").take(3)) {
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Word2Vec Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Word2Vec)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import Word2Vec
 
@@ -621,12 +638,15 @@ for ngrams_label in ngramDataFrame.select("ngrams", "label").take(3):
 
 ## Binarizer
 
-Binarization is the process of thresholding numerical features to binary features. As some probabilistic estimators make assumption that the input data is distributed according to [Bernoulli distribution](http://en.wikipedia.org/wiki/Bernoulli_distribution), a binarizer is useful for pre-processing the input data with continuous numerical features.
+Binarization is the process of thresholding numerical features to binary (0/1) features.
 
-A simple [Binarizer](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) class provides this functionality. Besides the common parameters of `inputCol` and `outputCol`, `Binarizer` has the parameter `threshold` used for binarizing continuous numerical features. The features greater than the threshold, will be binarized to 1.0. The features equal to or less than the threshold, will be binarized to 0.0. The example below shows how to binarize numerical features.
+`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold` for binarization. Feature values greater than the threshold are binarized to 1.0; values equal to or less than the threshold are binarized to 0.0.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [Binarizer API doc](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) for more details.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.Binarizer
 import org.apache.spark.sql.DataFrame
@@ -650,6 +670,9 @@ binarizedFeatures.collect().foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Binarizer API doc](api/java/org/apache/spark/ml/feature/Binarizer.html) for more details.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -687,6 +710,9 @@ for (Row r : binarizedFeatures.collect()) {
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Binarizer API doc](api/python/pyspark.ml.html#pyspark.ml.feature.Binarizer) for more details.
+
 {% highlight python %}
 from pyspark.ml.feature import Binarizer
 
