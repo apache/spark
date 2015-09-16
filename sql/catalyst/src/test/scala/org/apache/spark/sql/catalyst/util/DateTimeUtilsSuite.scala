@@ -136,6 +136,38 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("2015-031-8")).isEmpty)
   }
 
+  test("string to time") {
+    // Tests with UTC.
+    var c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00GMT-00:00") === c.getTime())
+
+    c.set(2000, 11, 30, 10, 0, 0)
+    assert(stringToTime("2000-12-30T10:00:00Z") === c.getTime())
+
+    // Tests with set time zone.
+    c.setTimeZone(TimeZone.getTimeZone("GMT-04:00"))
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00-04:00") === c.getTime())
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00GMT-04:00") === c.getTime())
+
+    // Tests with local time zone.
+    c.setTimeZone(TimeZone.getDefault())
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(2000, 11, 30, 0, 0, 0)
+    assert(stringToTime("2000-12-30") === new Date(c.getTimeInMillis()))
+
+    c.set(2000, 11, 30, 10, 0, 0)
+    assert(stringToTime("2000-12-30 10:00:00") === new Timestamp(c.getTimeInMillis()))
+  }
+
   test("string to timestamp") {
     var c = Calendar.getInstance()
     c.set(1969, 11, 31, 16, 0, 0)
