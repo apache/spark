@@ -41,7 +41,7 @@ class HiveCliHook(BaseHook):
         self.use_beeline = conn.extra_dejson.get('use_beeline', False)
         self.conn = conn
 
-    def run_cli(self, hql, schema=None, test=False):
+    def run_cli(self, hql, schema=None, verbose=True):
         """
         Run an hql statement using the hive cli
 
@@ -79,32 +79,26 @@ class HiveCliHook(BaseHook):
                 if self.hive_cli_params:
                     hive_params_list = self.hive_cli_params.split()
                     hive_cmd.extend(hive_params_list)
-                if not test:
+                if verbose:
                     logging.info(" ".join(hive_cmd))
                 sp = subprocess.Popen(
                     hive_cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     cwd=tmp_dir)
-                all_err = ''
                 self.sp = sp
                 stdout = ''
                 for line in iter(sp.stdout.readline, ''):
                     stdout += line
-                    if not test:
+                    if verbose:
                         logging.info(line.strip())
                 sp.wait()
 
                 if sp.returncode:
-                    if not test:
-                        raise AirflowException(all_err)
-                    else:
-                        return (False, stdout)
+                    raise AirflowException(stdout)
 
-                if not test:
-                    return stdout
-                else:
-                    return (True, stdout)
+                return stdout
+
 
     def test_hql(self, hql):
         """
@@ -116,7 +110,7 @@ class HiveCliHook(BaseHook):
             query = query.lower().strip()
             if query.startswith('create table'):
                 create.append(query)
-            elif query.startswith(('set', 'add jar', 'temporary')):
+            elif query.startswith(('set ', 'add jar ', 'temporary ')):
                 other.append(query)
             elif query.startswith('insert'):
                 insert.append(query)
@@ -129,19 +123,20 @@ class HiveCliHook(BaseHook):
                     query = other + '; explain ' + query
                 else:
                     query = 'explain ' + query
-                success, output = self.run_cli(query, test=True)
-            if success:
-                logging.info("SUCCESS")
-            else:
-                failure_message = output.split('\n')[-2]
-                logging.info(failure_message)
-                line_number = re.search('(\d+):(\d+)', failure_message).group(1)
-                if line_number.isdigit():
-                    l = int(line_number)
-                    begin = max(l-2, 0)
-                    end = min(l+3, len(query.split('\n')))
-                    context = '\n'.join(query.split('\n')[begin:end])
-                    logging.info("Context :\n {0}".format(context))
+                try:
+                    self.run_cli(query, verbose=False)
+                except AirflowException as e:
+                    failure_message = e.args[0].split('\n')[-2]
+                    logging.info(failure_message)
+                    line_number = re.search('(\d+):(\d+)', failure_message).group(1)
+                    if line_number.isdigit():
+                        l = int(line_number)
+                        begin = max(l-2, 0)
+                        end = min(l+3, len(query.split('\n')))
+                        context = '\n'.join(query.split('\n')[begin:end])
+                        logging.info("Context :\n {0}".format(context))
+                else:
+                    logging.info("SUCCESS")               
 
 
     def load_file(
