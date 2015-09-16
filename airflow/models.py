@@ -1637,6 +1637,15 @@ class BaseOperator(object):
                 ignore_dependencies=ignore_dependencies,
                 force=force,)
 
+    def dry_run(self):
+        logging.info('Dry run')
+        for attr in self.template_fields:
+            content = getattr(self, attr)
+            if content and isinstance(content, basestring):
+                logging.info('Rendering template for {0}'.format(attr))
+                logging.info(content)
+
+
     def get_direct_relatives(self, upstream=False):
         """
         Get the direct relatives to the current task, upstream or
