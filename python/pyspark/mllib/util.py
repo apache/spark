@@ -33,7 +33,7 @@ class MLUtils(object):
     """
     Helper methods to load, save and pre-process data used in MLlib.
 
-    .. addedversion:: 1.0.0
+    .. versionadded:: 1.0.0
     """
 
     @staticmethod
@@ -205,7 +205,7 @@ class Saveable(object):
     """
     Mixin for models and transformers which may be saved as files.
 
-    .. addedversion:: 1.3.0
+    .. versionadded:: 1.3.0
     """
 
     def save(self, sc, path):
@@ -232,7 +232,7 @@ class JavaSaveable(Saveable):
     Mixin for models that provide save() through their Scala
     implementation.
 
-    .. addedversion:: 1.3.0
+    .. versionadded:: 1.3.0
     """
 
     @since("1.3.0")
@@ -249,7 +249,7 @@ class Loader(object):
     """
     Mixin for classes which can load saved models from files.
 
-    .. addedversion:: 1.3.0
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -272,7 +272,7 @@ class JavaLoader(Loader):
     Mixin for classes which can load saved models using its Scala
     implementation.
 
-    .. addedversion:: 1.3.0
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -307,7 +307,7 @@ class JavaLoader(Loader):
 class LinearDataGenerator(object):
     """Utils for generating linear data.
 
-    .. addedversion:: 1.5.0
+    .. versionadded:: 1.5.0
     """
 
     @staticmethod
