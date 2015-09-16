@@ -31,7 +31,6 @@ import java.io.File;
 
 // Imports we have in the example
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.spark.api.java.JavaRDD;
@@ -71,10 +70,10 @@ class JavaPackage {
   @Test
   public void javaPackageSampleCodeTest() {
     // a DataFrame with three columns: id (integer), text (string), and rating (double).
-    List<StructField> fields = new ArrayList<StructField>();
-    fields.add(DataTypes.createStructField("id", DataTypes.IntegerType, false));
-    fields.add(DataTypes.createStructField("text", DataTypes.StringType, false));
-    fields.add(DataTypes.createStructField("rating", DataTypes.DoubleType, false));
+    List<StructField> fields = Arrays.asList(
+        DataTypes.createStructField("id", DataTypes.IntegerType, false),
+        DataTypes.createStructField("text", DataTypes.StringType, false),
+        DataTypes.createStructField("rating", DataTypes.DoubleType, false));
     StructType schema = DataTypes.createStructType(fields);
     JavaRDD<Row> rowRDD = jsc.parallelize(
         Arrays.asList(
