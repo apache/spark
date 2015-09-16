@@ -43,7 +43,7 @@ As the Airflow community grows, we'd like to keep track of who is using
 the platform. Please send a PR with your company name and @githubhandle 
 if you may.
 
-Currently **officialy** using Airflow:
+Currently **officially** using Airflow:
 
 * Airbnb [@mistercrunch]
 * Agari [@r39132](https://github.com/r39132)
@@ -54,6 +54,7 @@ Currently **officialy** using Airflow:
 * Xoom [[@gepser](https://github.com/gepser) & [@omarvides](https://github.com/omarvides)]
 * Yahoo!
 * [Jampp](https://github.com/jampp)
+* Chartboost [[@cgelman](https://github.com/cgelman) & [@dclubb](https://github.com/dclubb)]
 
 ## Links 
 
