@@ -207,7 +207,9 @@ private[ml] class EncodingIterator(cardinalities: Array[Int]) {
       assert(cardinalities.length == 1)
       val numOutputCols = cardinalities(0)
       if (numOutputCols > 0) {
-        assert(d >= 0.0 && d == d.toInt, s"Values from column must be indices, but got $d.")
+        assert(
+          d >= 0.0 && d == d.toInt && d < numOutputCols,
+          s"Values from column must be indices, but got $d.")
         f(d.toInt, 1.0)
       } else {
         f(0, d)
@@ -222,7 +224,9 @@ private[ml] class EncodingIterator(cardinalities: Array[Int]) {
         val numOutputCols = cardinalities(i)
         if (numOutputCols > 0) {
           val x = dense.values(i)
-          assert(x >= 0.0 && x == x.toInt, s"Values from column must be indices, but got $x.")
+          assert(
+            x >= 0.0 && x == x.toInt && x < numOutputCols,
+            s"Values from column must be indices, but got $x.")
           f(cur + x.toInt, 1.0)
           cur += numOutputCols
         } else {
