@@ -41,9 +41,10 @@
  *
  * <pre>
  * <code>
- *   import org.apache.spark.sql.RowFactory;
  *   import org.apache.spark.ml.feature.*;
  *   import org.apache.spark.ml.Pipeline;
+ *   import org.apache.spark.ml.PipelineModel;
+ *   import org.apache.spark.sql.RowFactory;
  *
  *   // a DataFrame with three columns: id (integer), text (string), and rating (double).
  *   DataFrame df = sqlContext.createDataFrame(Arrays.asList(
@@ -73,7 +74,7 @@
  *   // assemble and fit the feature transformation pipeline
  *   Pipeline pipeline = new Pipeline()
  *     .setStages(new PipelineStage[] {tok, sw, tf, idf, assembler});
- *   val model = pipeline.fit(df);
+ *   PipelineModel model = pipeline.fit(df);
  *
  *   // save transformed features with raw data
  *   model.transform(df)
