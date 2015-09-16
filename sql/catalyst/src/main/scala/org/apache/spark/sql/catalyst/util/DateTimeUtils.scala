@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{TimeZone, Calendar}
-import javax.xml.bind.DatatypeConverter;
+import javax.xml.bind.DatatypeConverter
 
 import org.apache.spark.unsafe.types.UTF8String
 
