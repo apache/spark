@@ -72,7 +72,11 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
 
   // Called before `prepareForRead()` when initializing Parquet record reader.
   override def init(context: InitContext): ReadContext = {
-    val conf = context.getConfiguration
+    val conf = {
+      // scalastyle:off jobcontext
+      context.getConfiguration
+      // scalastyle:on jobcontext
+    }
 
     // If the target file was written by Spark SQL, we should be able to find a serialized Catalyst
     // schema of this file from its metadata.

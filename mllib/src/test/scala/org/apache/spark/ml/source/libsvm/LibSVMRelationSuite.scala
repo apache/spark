@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.source
+package org.apache.spark.ml.source.libsvm
 
 import java.io.File
 
@@ -23,11 +23,12 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{SparseVector, Vectors, DenseVector}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils
 
 class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
+  var tempDir: File = _
   var path: String = _
 
   override def beforeAll(): Unit = {
@@ -38,10 +39,15 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
         |0
         |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    val tempDir = Utils.createTempDir()
-    val file = new File(tempDir.getPath, "part-00000")
+    tempDir = Utils.createTempDir()
+    val file = new File(tempDir, "part-00000")
     Files.write(lines, file, Charsets.US_ASCII)
     path = tempDir.toURI.toString
+  }
+
+  override def afterAll(): Unit = {
+    Utils.deleteRecursively(tempDir)
+    super.afterAll()
   }
 
   test("select as sparse vector") {
