@@ -87,10 +87,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.getPredictionCol === "prediction")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
-    val datasetFeatureSize = dataset.rdd.first() match {
-      case Row(label: Double, features: Vector) => features.size
-    }
-    assert(model.numFeatures == datasetFeatureSize)
+    val numFeatures = dataset.select("features").first().getAs[Vector](0).size
+    assert(model.numFeatures === numFeatures)
   }
 
   test("linear regression with intercept without regularization") {

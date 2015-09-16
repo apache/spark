@@ -98,6 +98,6 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
     val oldTreeAsNew = DecisionTreeRegressionModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
-    assert(newTree.numFeatures == numFeatures)
+    assert(newTree.numFeatures === numFeatures)
   }
 }

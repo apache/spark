@@ -209,7 +209,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   */
 }
 
-private object RandomForestClassifierSuite {
+private object RandomForestClassifierSuite extends SparkFunSuite {
 
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
@@ -234,7 +234,7 @@ private object RandomForestClassifierSuite {
     TreeTests.checkEqual(oldModelAsNew, newModel)
     assert(newModel.hasParent)
     assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
-    assert(newModel.numClasses == numClasses)
-    assert(newModel.numFeatures == numFeatures)
+    assert(newModel.numClasses === numClasses)
+    assert(newModel.numFeatures === numFeatures)
   }
 }

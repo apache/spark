@@ -145,8 +145,8 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   /** @group setParam */
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
 
-  /** Returns the number of features the model was trained on. Default: -1 */
-  @Since("1.5.1")
+  /** Returns the number of features the model was trained on. If unknown, returns -1 */
+  @Since("1.6.0")
   def numFeatures: Int = -1
 
   /**

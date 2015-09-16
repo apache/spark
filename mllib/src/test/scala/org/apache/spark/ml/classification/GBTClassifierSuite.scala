@@ -145,7 +145,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   */
 }
 
-private object GBTClassifierSuite {
+private object GBTClassifierSuite extends SparkFunSuite {
 
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
@@ -167,9 +167,7 @@ private object GBTClassifierSuite {
     val oldModelAsNew = GBTClassificationModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures, numFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
-    // numFeatures can't be inferred since GTBClassifier uses fromOld method to construct trees.
-    // TODO: when GBT implementation has been ported to ML, update this check
-    assert(newModel.numFeatures == numFeatures)
-    assert(oldModelAsNew.numFeatures == numFeatures)
+    assert(newModel.numFeatures === numFeatures)
+    assert(oldModelAsNew.numFeatures === numFeatures)
   }
 }

@@ -148,6 +148,6 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
     val oldModelAsNew = RandomForestRegressionModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[RandomForestRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
-    assert(newModel.numFeatures == numFeatures)
+    assert(newModel.numFeatures === numFeatures)
   }
 }

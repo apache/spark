@@ -155,7 +155,7 @@ object GBTRegressor {
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
 @Experimental
-final class GBTRegressionModel(
+final class GBTRegressionModel private[ml](
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
@@ -166,6 +166,14 @@ final class GBTRegressionModel(
   require(numTrees > 0, "GBTRegressionModel requires at least 1 tree.")
   require(_trees.length == _treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
     s" non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
+
+  /**
+   * Construct a GBTRegressionModel
+   * @param _trees  Decision trees in the ensemble.
+   * @param _treeWeights  Weights for the decision trees in the ensemble.
+   */
+  def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
+    this(uid, _trees, _treeWeights, -1)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 

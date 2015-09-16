@@ -319,6 +319,6 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
-    assert(newTree.numFeatures == numFeatures)
+    assert(newTree.numFeatures === numFeatures)
   }
 }

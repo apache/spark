@@ -177,6 +177,14 @@ final class GBTClassificationModel(
   require(_trees.length == _treeWeights.length, "GBTClassificationModel given trees, treeWeights" +
     s" of non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
+  /**
+   * Construct a GBTClassificationModel
+   * @param _trees  Decision trees in the ensemble.
+   * @param _treeWeights  Weights for the decision trees in the ensemble.
+   */
+  def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
+    this(uid, _trees, _treeWeights, -1)
+
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   override def treeWeights: Array[Double] = _treeWeights

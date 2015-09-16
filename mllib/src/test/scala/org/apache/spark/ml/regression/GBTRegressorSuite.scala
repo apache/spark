@@ -156,7 +156,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
   */
 }
 
-private object GBTRegressorSuite {
+private object GBTRegressorSuite extends SparkFunSuite {
 
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
@@ -177,7 +177,7 @@ private object GBTRegressorSuite {
     val oldModelAsNew = GBTRegressionModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[GBTRegressor], categoricalFeatures, numFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
-    assert(newModel.numFeatures == numFeatures)
-    assert(oldModelAsNew.numFeatures == numFeatures)
+    assert(newModel.numFeatures === numFeatures)
+    assert(oldModelAsNew.numFeatures === numFeatures)
   }
 }
