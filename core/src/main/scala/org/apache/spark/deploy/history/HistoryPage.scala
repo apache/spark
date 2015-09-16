@@ -51,7 +51,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val hasMultipleAttempts = appsToShow.exists(_.attempts.size > 1)
     val appTable =
       if (hasMultipleAttempts) {
-        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow, appsToShow)
+        // Sorting is disable here as table sort on rowspan has issues.
+        // ref. SPARK-10172
+        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow,
+          appsToShow, sortable = false)
       } else {
         UIUtils.listingTable(appHeader, appRow, appsToShow)
       }
@@ -156,7 +159,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   private def attemptRow(
       renderAttemptIdColumn: Boolean,
       info: ApplicationHistoryInfo,
-      attempt: ApplicationAttemptInfo): Seq[Node] = {
+      attempt: ApplicationAttemptInfo,
+      isFirst: Boolean): Seq[Node] = {
     val uiAddress = HistoryServer.getAttemptURI(info.id, attempt.attemptId)
     val startTime = UIUtils.formatDate(attempt.startTime)
     val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
@@ -168,8 +172,21 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       }
     val lastUpdated = UIUtils.formatDate(attempt.lastUpdated)
     <tr>
-      <td><a href={uiAddress}>{info.id}</a></td>
-      <td>{info.name}</td>
+      {
+        if (isFirst) {
+          if (info.attempts.size > 1 || renderAttemptIdColumn) {
+            <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
+              <a href={uiAddress}>{info.id}</a></td>
+            <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
+              {info.name}</td>
+          } else {
+            <td><a href={uiAddress}>{info.id}</a></td>
+            <td>{info.name}</td>
+          }
+        } else {
+          Nil
+        }
+      }
       {
         if (renderAttemptIdColumn) {
           if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
@@ -192,11 +209,12 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   }
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(false, info, info.attempts.head)
+    attemptRow(false, info, info.attempts.head, true)
   }
 
   private def appWithAttemptRow(info: ApplicationHistoryInfo): Seq[Node] = {
-      info.attempts.flatMap(attemptRow(true, info, _))
+    attemptRow(true, info, info.attempts.head, true) ++
+      info.attempts.drop(1).flatMap(attemptRow(true, info, _, false))
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
