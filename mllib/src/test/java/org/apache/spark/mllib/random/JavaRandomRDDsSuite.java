@@ -231,4 +231,29 @@ public class JavaRandomRDDsSuite {
     }
   }
 
+  @Test
+  public void testArbitrary() {
+    long size = 10;
+    long seed = 1L;
+    int numPartitions = 0;
+    // This is just a test generator, it always returns a string of 42
+    class StringGenerator implements RandomDataGenerator<String> {
+      @Override public String nextValue() {
+        return "42";
+      }
+      @Override public StringGenerator copy(){
+        return this;
+      }
+      @Override public void setSeed(long seed){
+      }
+    }
+    RandomDataGenerator<String> gen = new StringGenerator();
+    JavaRDD<String> rdd1 = randomJavaRDD(sc, gen, size);
+    JavaRDD<String> rdd2 = randomJavaRDD(sc, gen, size, numPartitions);
+    JavaRDD<String> rdd3 = randomJavaRDD(sc, gen, size, numPartitions, seed);
+    for (JavaRDD<String> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(size, rdd.count());
+      Assert.assertEquals(2, rdd.first().length());
+    }
+  }
 }

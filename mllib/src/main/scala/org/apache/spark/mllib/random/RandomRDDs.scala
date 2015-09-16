@@ -399,7 +399,7 @@ object RandomRDDs {
    * :: DeveloperApi ::
    * Generates an RDD comprised of `i.i.d.` samples produced by the input RandomDataGenerator.
    *
-   * @param sc SparkContext used to create the RDD.
+   * @param jsc JavaSparkContext used to create the RDD.
    * @param generator RandomDataGenerator used to populate the RDD.
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
@@ -407,17 +407,39 @@ object RandomRDDs {
    * @return RDD[Double] comprised of `i.i.d.` samples produced by generator.
    */
   @DeveloperApi
-  @Since("1.5.1")
+  @Since("1.6.0")
   def randomJavaRDD[T](
-      sc: SparkContext,
+      jsc: JavaSparkContext,
       generator: RandomDataGenerator[T],
       size: Long,
-      numPartitions: Int = 0,
-      seed: Long = Utils.random.nextLong()): JavaRDD[T] = {
+      numPartitions: Int,
+      seed: Long): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
-    JavaRDD.fromRDD(randomRDD(sc, generator, size, numPartitions, seed))
+    JavaRDD.fromRDD(randomRDD(jsc.sc, generator, size, numPartitions, seed))
   }
 
+  /**
+   * [[RandomRDDs#randomJavaRDD]] with the default seed.
+   */
+  @Since("1.6.0")
+  def randomJavaRDD[T](
+    jsc: JavaSparkContext,
+    generator: RandomDataGenerator[T],
+    size: Long,
+    numPartitions: Int): JavaRDD[T] = {
+    randomJavaRDD(jsc, generator, size, numPartitions, Utils.random.nextLong())
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaRDD]] with the default seed & numPartitions
+   */
+  @Since("1.6.0")
+  def randomJavaRDD[T](
+    jsc: JavaSparkContext,
+    generator: RandomDataGenerator[T],
+    size: Long): JavaRDD[T] = {
+    randomJavaRDD(jsc, generator, size, 0);
+  }
 
   // TODO Generate RDD[Vector] from multivariate distributions.
 
