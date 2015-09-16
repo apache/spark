@@ -1075,6 +1075,23 @@ class SQLTests(ReusedPySparkTestCase):
 
         self.assertRaises(TypeError, foo)
 
+    # add test for SPARK-10577 (test broadcast join hint)
+    def test_functions_broadcast(self):
+        from pyspark.sql.functions import broadcast
+
+        df1 = self.sqlCtx.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
+        df2 = self.sqlCtx.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
+
+        # equijoin - should be converted into broadcast join
+        self.assertEqual(1, df1.join(broadcast(df2), "key")._jdf.queryExecution().executedPlan().toString().count("BroadcastHashJoin"))
+
+        # no join key -- should not be a broadcast join
+        self.assertEqual(0, df1.join(broadcast(df2))._jdf.queryExecution().executedPlan().toString().count("BroadcastHashJoin"))
+
+        # planner should not crash without a join
+        broadcast(df1)._jdf.queryExecution().executedPlan()
+
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
