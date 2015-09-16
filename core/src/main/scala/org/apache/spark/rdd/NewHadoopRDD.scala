@@ -92,9 +92,9 @@ class NewHadoopRDD[K, V](
       // one job modifies a configuration while another reads it (SPARK-2546, SPARK-10611).  This
       // problem occurs somewhat rarely because most jobs treat the configuration as though it's
       // immutable.  One solution, implemented here, is to clone the Configuration object.
-      // Unfortunately, this clone can be very expensive.  To avoid unexpected performance regressions
-      // for workloads and Hadoop versions that do not suffer from these thread-safety issues, this
-      // cloning is disabled by default.
+      // Unfortunately, this clone can be very expensive.  To avoid unexpected performance
+      // regressions for workloads and Hadoop versions that do not suffer from these thread-safety
+      // issues, this cloning is disabled by default.
       NewHadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
         logDebug("Cloning Hadoop Configuration")
         new Configuration(conf)
