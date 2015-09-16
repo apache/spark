@@ -68,6 +68,8 @@ Operator API
         SubDagOperator,
         TimeSensor
 
+.. _macros:
+
 Macros
 ---------
 Here's a list of variables and macros that can be used in templates

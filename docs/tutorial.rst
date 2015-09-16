@@ -229,6 +229,9 @@ different languages, and general flexibility in structuring pipelines. It is
 also possible to define your ``template_searchpath`` as pointing to any folder
 locations in the DAG constructor call.
 
+For more information on the variables and macros that can be referenced
+in templates, make sure to read through the :ref:`macros` section
+
 Setting up Dependencies
 -----------------------
 We have two simple tasks that do not depend on each other. Here's a few ways
