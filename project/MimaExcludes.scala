@@ -45,7 +45,7 @@ object MimaExcludes {
         excludePackage("org.apache.spark.sql.execution")
       ) ++
       MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
-      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++ 
+      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++
       Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticCostFun.this"),
@@ -53,6 +53,23 @@ object MimaExcludes {
           "org.apache.spark.ml.classification.LogisticAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticAggregator.count")
+      ) ++ Seq(
+        // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
+        // This class is marked as `private` but MiMa still seems to be confused by the change.
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.task"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$2"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.taskAttempt"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$3"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
       )
     case v if v.startsWith("1.5") =>
       Seq(
@@ -213,6 +230,23 @@ object MimaExcludes {
         // SPARK-9704 Made ProbabilisticClassifier, Identifiable, VectorUDT public APIs
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "org.apache.spark.mllib.linalg.VectorUDT.serialize")
+      ) ++ Seq(
+        // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
+        // This class is marked as `private` but MiMa still seems to be confused by the change.
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.task"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$2"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.taskAttempt"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$3"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
       )
 
     case v if v.startsWith("1.4") =>
