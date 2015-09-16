@@ -107,16 +107,21 @@ class HiveCliHook(BaseHook):
         """
         create, insert, other = [], [], []
         for query in hql.split(';'):  # naive
+            query_original = query
             query = query.lower().strip()
+
             if query.startswith('create table'):
-                create.append(query)
-            elif query.startswith(('set ', 'add jar ', 'temporary ')):
-                other.append(query)
+                create.append(query_original)
+            elif query.startswith(('set ',
+                                   'add jar ',
+                                   'create temporary function')):
+                other.append(query_original)
             elif query.startswith('insert'):
-                insert.append(query)
+                insert.append(query_original)
         other = ';'.join(other)
         for query_set in [create, insert]:
             for query in query_set:
+
                 query_preview = ' '.join(query.split())[:50]
                 logging.info("Testing HQL [{0} (...)]".format(query_preview))
                 if query_set == insert:
@@ -126,11 +131,11 @@ class HiveCliHook(BaseHook):
                 try:
                     self.run_cli(query, verbose=False)
                 except AirflowException as e:
-                    failure_message = e.args[0].split('\n')[-2]
-                    logging.info(failure_message)
-                    line_number = re.search('(\d+):(\d+)', failure_message).group(1)
-                    if line_number.isdigit():
-                        l = int(line_number)
+                    message = e.args[0].split('\n')[-2]
+                    logging.info(message)
+                    error_loc = re.search('(\d+):(\d+)', message)
+                    if error_loc and error_loc.group(1).isdigit():
+                        l = int(error_loc.group(1))
                         begin = max(l-2, 0)
                         end = min(l+3, len(query.split('\n')))
                         context = '\n'.join(query.split('\n')[begin:end])
