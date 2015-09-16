@@ -88,7 +88,7 @@ private[ml] class WeightedLeastSquares(
     if (fitIntercept) {
       // shift centers
       // A^T A - aBar aBar^T
-      RowMatrix.dspr(-1.0, aBar, aaValues)
+      BLAS.spr(-1.0, aBar, aaValues)
       // A^T b - bBar aBar
       BLAS.axpy(-bBar, aBar, abBar)
     }
@@ -203,7 +203,7 @@ private[ml] object WeightedLeastSquares {
       bbSum += w * b * b
       BLAS.axpy(w, a, aSum)
       BLAS.axpy(w * b, a, abSum)
-      RowMatrix.dspr(w, a, aaSum.values)
+      BLAS.spr(w, a, aaSum)
       this
     }
 

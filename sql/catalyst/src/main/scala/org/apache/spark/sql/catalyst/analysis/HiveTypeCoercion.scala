@@ -297,6 +297,9 @@ object HiveTypeCoercion {
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case SumDistinct(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
+      case Stddev(e @ StringType()) => Stddev(Cast(e, DoubleType))
+      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
+      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
     }
   }
 

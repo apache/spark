@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.10</artifactId>
-  <version>1.5.0-SNAPSHOT</version>
+  <version>1.6.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -87,7 +87,7 @@
 
   <modules>
     <module>core</module>
-    <module>bagel</module>
+    <module>bagel</module> <!-- Deprecated -->
     <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>

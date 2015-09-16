@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.source;
+package org.apache.spark.ml.source.libsvm;
 
 import java.io.File;
 import java.io.IOException;
@@ -42,34 +42,34 @@ import org.apache.spark.util.Utils;
  */
 public class JavaLibSVMRelationSuite {
   private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
-  private transient DataFrame dataset;
+  private transient SQLContext sqlContext;
 
-  private File tmpDir;
-  private File path;
+  private File tempDir;
+  private String path;
 
   @Before
   public void setUp() throws IOException {
     jsc = new JavaSparkContext("local", "JavaLibSVMRelationSuite");
-    jsql = new SQLContext(jsc);
+    sqlContext = new SQLContext(jsc);
 
-    tmpDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
-    path = new File(tmpDir.getPath(), "part-00000");
-
+    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
+    File file = new File(tempDir, "part-00000");
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
-    Files.write(s, path, Charsets.US_ASCII);
+    Files.write(s, file, Charsets.US_ASCII);
+    path = tempDir.toURI().toString();
   }
 
   @After
   public void tearDown() {
     jsc.stop();
     jsc = null;
-    Utils.deleteRecursively(tmpDir);
+    Utils.deleteRecursively(tempDir);
   }
 
   @Test
   public void verifyLibSVMDF() {
-    dataset = jsql.read().format("libsvm").option("vectorType", "dense").load(path.getPath());
+    DataFrame dataset = sqlContext.read().format("libsvm").option("vectorType", "dense")
+      .load(path);
     Assert.assertEquals("label", dataset.columns()[0]);
     Assert.assertEquals("features", dataset.columns()[1]);
     Row r = dataset.first();

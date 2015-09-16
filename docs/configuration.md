@@ -447,9 +447,12 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.manager</code></td>
   <td>sort</td>
   <td>
-    Implementation to use for shuffling data. There are two implementations available:
-    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
-    the default option starting in 1.2.
+    Implementation to use for shuffling data. There are three implementations available:
+    <code>sort</code>, <code>hash</code> and the new (1.5+) <code>tungsten-sort</code>.
+    Sort-based shuffle is more memory-efficient and is the default option starting in 1.2.
+    Tungsten-sort is similar to the sort based shuffle, with a direct binary cache-friendly
+    implementation with a fall back to regular sort based shuffle if its requirements are not
+    met.
   </td>
 </tr>
 <tr>
@@ -1109,10 +1112,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0.8 for YARN mode; 0.0 otherwise</td>
+  <td>0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone mode)
+    (resources are executors in yarn mode, CPU cores in standalone mode and Mesos coarsed-grained
+     mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config

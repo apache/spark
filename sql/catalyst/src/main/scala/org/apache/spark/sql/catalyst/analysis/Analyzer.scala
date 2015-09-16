@@ -561,7 +561,7 @@ class Analyzer(
         }
 
       case sort @ Sort(sortOrder, global, aggregate: Aggregate)
-        if aggregate.resolved && !sort.resolved =>
+        if aggregate.resolved =>
 
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
@@ -598,9 +598,15 @@ class Analyzer(
               }
           }
 
-          Project(aggregate.output,
-            Sort(evaluatedOrderings, global,
-              aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+          // Since we don't rely on sort.resolved as the stop condition for this rule,
+          // we need to check this and prevent applying this rule multiple times
+          if (sortOrder == evaluatedOrderings) {
+            sort
+          } else {
+            Project(aggregate.output,
+              Sort(evaluatedOrderings, global,
+                aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+          }
         } catch {
           // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
           // just return the original plan.
