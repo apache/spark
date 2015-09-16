@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Since("1.5.0")
 @Experimental
-class DCT(override val uid: String)
+class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, DCT] {
 
   @Since("1.5.0")

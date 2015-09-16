@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  */
 @Since("1.4.0")
 @Experimental
-class OneHotEncoder(override val uid: String) extends Transformer
+class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Transformer
   with HasInputCol with HasOutputCol {
 
   @Since("1.4.0")

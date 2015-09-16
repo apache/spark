@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Since("1.4.0")
 @Experimental
-class Normalizer(override val uid: String) extends UnaryTransformer[Vector, Vector, Normalizer] {
+class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends UnaryTransformer[Vector, Vector, Normalizer] {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("normalizer"))

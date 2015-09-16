@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Since("1.4.0")
 @Experimental
-class ElementwiseProduct(override val uid: String)
+class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
 
   @Since("1.4.0")

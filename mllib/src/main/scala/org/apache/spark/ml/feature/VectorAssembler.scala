@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
  */
 @Since("1.4.0")
 @Experimental
-class VectorAssembler(override val uid: String)
+class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCols with HasOutputCol {
 
   @Since("1.4.0")

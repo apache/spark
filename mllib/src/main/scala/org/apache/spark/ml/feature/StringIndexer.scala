@@ -64,7 +64,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  */
 @Since("1.4.0")
 @Experimental
-class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
+class StringIndexer @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Estimator[StringIndexerModel]
   with StringIndexerBase {
 
   @Since("1.4.0")

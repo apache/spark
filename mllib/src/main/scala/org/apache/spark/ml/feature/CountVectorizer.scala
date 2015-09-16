@@ -105,7 +105,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
  */
 @Since("1.5.0")
 @Experimental
-class CountVectorizer(override val uid: String)
+class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[CountVectorizerModel] with CountVectorizerParams {
 
   @Since("1.5.0")
@@ -188,7 +188,8 @@ class CountVectorizer(override val uid: String)
  */
 @Since("1.5.0")
 @Experimental
-class CountVectorizerModel(override val uid: String, val vocabulary: Array[String])
+class CountVectorizerModel @Since("1.5.0") (@Since("1.5.0") override val uid:
+String, @Since("1.5.0") val vocabulary: Array[String])
   extends Model[CountVectorizerModel] with CountVectorizerParams {
 
   @Since("1.5.0")

@@ -86,7 +86,7 @@ private[spark] object StopWords {
  */
 @Since("1.5.0")
 @Experimental
-class StopWordsRemover(override val uid: String)
+class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol {
 
   @Since("1.5.0")

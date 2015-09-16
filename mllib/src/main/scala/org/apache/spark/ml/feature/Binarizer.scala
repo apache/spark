@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  */
 @Since("1.4.0")
 @Experimental
-final class Binarizer(override val uid: String)
+final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol {
 
   @Since("1.4.0")

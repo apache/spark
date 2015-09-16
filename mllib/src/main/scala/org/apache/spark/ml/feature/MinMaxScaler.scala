@@ -85,7 +85,7 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
  */
 @Since("1.5.0")
 @Experimental
-class MinMaxScaler(override val uid: String)
+class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[MinMaxScalerModel] with MinMaxScalerParams {
 
   @Since("1.5.0")

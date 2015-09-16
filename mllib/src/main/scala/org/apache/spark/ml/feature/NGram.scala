@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  */
 @Since("1.5.0")
 @Experimental
-class NGram(override val uid: String)
+class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends UnaryTransformer[Seq[String], Seq[String], NGram] {
 
   @Since("1.5.0")

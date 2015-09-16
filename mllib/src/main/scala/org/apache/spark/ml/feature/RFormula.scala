@@ -48,7 +48,7 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
  */
 @Since("1.5.0")
 @Experimental
-class RFormula(override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
+class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("rFormula"))

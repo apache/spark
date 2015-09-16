@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Since("1.5.0")
 @Experimental
-final class VectorSlicer(override val uid: String)
+final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol {
 
   @Since("1.5.0")

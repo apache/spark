@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  */
 @Since("1.4.0")
 @Experimental
-final class Bucketizer(override val uid: String)
+final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Model[Bucketizer] with HasInputCol with HasOutputCol {
 
   @Since("1.4.0")

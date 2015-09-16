@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  */
 @Since("1.2.0")
 @Experimental
-class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
+class Tokenizer @Since("1.2.0") (@Since("1.4.0") override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("tok"))
@@ -62,7 +62,7 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
  */
 @Since("1.4.0")
 @Experimental
-class RegexTokenizer(override val uid: String)
+class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
   @Since("1.4.0")

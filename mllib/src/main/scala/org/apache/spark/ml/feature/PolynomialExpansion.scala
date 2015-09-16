@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Since("1.4.0")
 @Experimental
-class PolynomialExpansion(override val uid: String)
+class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, PolynomialExpansion] {
 
   @Since("1.4.0")

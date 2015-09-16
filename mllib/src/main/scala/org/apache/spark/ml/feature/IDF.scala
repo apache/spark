@@ -61,7 +61,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
  */
 @Since("1.4.0")
 @Experimental
-final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase {
+final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Estimator[IDFModel] with IDFBase {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("idf"))

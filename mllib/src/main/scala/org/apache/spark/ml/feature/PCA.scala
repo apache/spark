@@ -50,7 +50,7 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
  */
 @Since("1.5.0")
 @Experimental
-class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams {
+class PCA @Since("1.5.0") (@Since("1.5.0") override val uid: String) extends Estimator[PCAModel] with PCAParams {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("pca"))
