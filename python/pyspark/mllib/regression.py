@@ -44,7 +44,7 @@ class LabeledPoint(object):
 
     Note: 'label' and 'features' are accessible as class attributes.
 
-    .. addedversion:: 1.0.0
+    .. versionadded:: 1.0.0
     """
 
     def __init__(self, label, features):
@@ -69,7 +69,7 @@ class LinearModel(object):
     :param weights: Weights computed for every feature.
     :param intercept: Intercept computed for this model.
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
 
     def __init__(self, weights, intercept):
@@ -103,7 +103,7 @@ class LinearRegressionModelBase(LinearModel):
     >>> abs(lrmb.predict(SparseVector(2, {0: -1.03, 1: 7.777})) - 14.624) < 1e-6
     True
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
 
     @since("0.9.0")
@@ -175,7 +175,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
     @since("1.4.0")
     def save(self, sc, path):
@@ -225,7 +225,7 @@ class LinearRegressionWithSGD(object):
     its corresponding right hand side label y.
     See also the documentation for the precise formulation.
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
 
     @classmethod
@@ -343,7 +343,7 @@ class LassoModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
     @since("1.4.0")
     def save(self, sc, path):
@@ -373,7 +373,7 @@ class LassoWithSGD(object):
     its corresponding right hand side label y.
     See also the documentation for the precise formulation.
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
 
     @classmethod
@@ -481,7 +481,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
     @since("1.4.0")
     def save(self, sc, path):
@@ -511,7 +511,7 @@ class RidgeRegressionWithSGD(object):
     its corresponding right hand side label y.
     See also the documentation for the precise formulation.
 
-    .. addedversion:: 0.9.0
+    .. versionadded:: 0.9.0
     """
 
     @classmethod
@@ -595,7 +595,7 @@ class IsotonicRegressionModel(Saveable, Loader):
     ... except OSError:
     ...     pass
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self, boundaries, predictions, isotonic):
@@ -667,7 +667,7 @@ class IsotonicRegression(object):
 
     @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     @classmethod
@@ -690,7 +690,7 @@ class StreamingLinearAlgorithm(object):
 
     Prevents reimplementation of methods predictOn and predictOnValues.
 
-    .. addedversion:: 1.5.0
+    .. versionadded:: 1.5.0
     """
     def __init__(self, model):
         self._model = model
@@ -746,7 +746,7 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
                               iteration.
     :param convergenceTol: A condition which decides iteration termination.
 
-    .. addedversion:: 1.5.0
+    .. versionadded:: 1.5.0
     """
     def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, convergenceTol=0.001):
         self.stepSize = stepSize
