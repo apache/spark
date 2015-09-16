@@ -212,6 +212,21 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaises(AnalysisException, lambda: df.select(df.c).first())
         self.assertRaises(AnalysisException, lambda: df.select(df["c"]).first())
 
+    def test_creating_df_from_grouped_rdd(self):
+        rdd = self.sc.parallelize(['{"foo":"1", "bar":"1"}', '{"foo":"1", "bar":"2"}', '{"foo":"2", "bar":"2"}'])
+        df = self.sqlCtx.jsonRDD(rdd)
+        grouped_rdd = df.rdd.groupBy(lambda r: r.foo)
+        def create_nested_schema(df):
+            fields = []
+            fields.append(StructField("key", StringType(), True))
+            inner = ArrayType(df.schema)
+            fields.append(StructField("data", inner))
+            return StructType(fields)
+        try:
+            grouped_df = self.sqlCtx.createDataFrame(grouped_rdd, create_nested_schema(df))
+        except:
+            self.fail()
+
     def test_explode(self):
         from pyspark.sql.functions import explode
         d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
