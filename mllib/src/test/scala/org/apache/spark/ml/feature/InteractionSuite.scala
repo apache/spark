@@ -51,53 +51,120 @@ class RInteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[SparkException] { encode(Array(0), "foo") }
     intercept[SparkException] { encode(Array(0), null) }
     intercept[AssertionError] { encode(Array(1), 2.2) }
-    intercept[AssertionError] { encode(Array(1), Vectors.dense(2.2)) }
+    intercept[AssertionError] { encode(Array(3), Vectors.dense(2.2)) }
     intercept[AssertionError] { encode(Array(1), Vectors.dense(1.0, 2.0, 3.0)) }
   }
 
-  test("new interaction") {
+  test("numeric interaction") {
     val data = sqlContext.createDataFrame(
       Seq(
-        (0, "foo", true, 4, Vectors.dense(0.0, 0.0, 1.0), Vectors.dense(5.0, 3.0)),
-        (0, "bar", true, 4, Vectors.dense(1.0, 4.0, 2.0), Vectors.dense(4.0, 3.0)),
-        (0, "bar", true, 5, Vectors.dense(2.0, 5.0, 3.0), Vectors.dense(5.0, 3.0)),
-        (0, "baz", true, 5, Vectors.dense(3.0, 8.0, 4.0), Vectors.dense(5.0, 2.0)),
-        (0, "baz", false, 5, Vectors.dense(4.0, 9.0, 8.0), Vectors.dense(7.0, 1.0)),
-        (1, "baz", false, 5, Vectors.dense(5.0, 2.0, 9.0), Vectors.dense(2.0, 0.0)))
-      ).toDF("id", "a", "bin", "b", "test", "test2")
-    val attrs = new AttributeGroup(
-      "test",
+        (2, Vectors.dense(3.0, 4.0)),
+        (1, Vectors.dense(1.0, 5.0)))
+      ).toDF("a", "b")
+    val groupAttr = new AttributeGroup(
+      "b",
       Array[Attribute](
-        NominalAttribute.defaultAttr.withValues(Array("a", "b", "c", "d", "e", "f")),
-        NumericAttribute.defaultAttr.withName("magnitude"),
-        NominalAttribute.defaultAttr.withName("colors").withValues(
-          Array("green", "blue", "red", "violet", "yellow",
-            "orange", "black", "white", "azure", "gray"))))
-
-    val idAttr = NominalAttribute.defaultAttr.withValues(Array("red", "blue"))
-    val attrs2 = new AttributeGroup(
-      "test2",
-      Array[Attribute](
-        NumericAttribute.defaultAttr,
-        NominalAttribute.defaultAttr.withValues(Array("one", "two", "three", "four"))))
+        NumericAttribute.defaultAttr.withName("foo"),
+        NumericAttribute.defaultAttr.withName("bar")))
     val df = data.select(
-      col("id").as("id", idAttr.toMetadata()), col("b"), col("bin"),
-      col("test").as("test", attrs.toMetadata()),
-      col("test2").as("test2", attrs2.toMetadata()))
-    df.collect.foreach(println)
-    println(df.schema)
-    df.schema.foreach { field =>
-      println(field.metadata)
-    }
-//    val trans = new Interaction().setInputCols(Array("id", "test2", "test")).setOutputCol("feature")
-    val trans = new Interaction().setInputCols(Array("id", "test2")).setOutputCol("feature")
+      col("a").as("a", NumericAttribute.defaultAttr.toMetadata()),
+      col("b").as("b", groupAttr.toMetadata()))
+    val trans = new Interaction().setInputCols(Array("a", "b")).setOutputCol("features")
     val res = trans.transform(df)
-    res.collect.foreach(println)
-    println(res.schema)
-    res.schema.foreach { field =>
-      println(field.metadata)
-    }
+    val expected = sqlContext.createDataFrame(
+      Seq(
+        (2, Vectors.dense(3.0, 4.0), Vectors.dense(6.0, 8.0)),
+        (1, Vectors.dense(1.0, 5.0), Vectors.dense(1.0, 5.0)))
+      ).toDF("a", "b", "features")
+    assert(res.collect() === expected.collect())
+    val attrs = AttributeGroup.fromStructField(res.schema("features"))
+    val expectedAttrs = new AttributeGroup(
+      "features",
+      Array[Attribute](
+        new NumericAttribute(Some("a:b_foo"), Some(1)),
+        new NumericAttribute(Some("a:b_bar"), Some(2))))
+    assert(attrs === expectedAttrs)
   }
+
+  test("nominal interaction") {
+    val data = sqlContext.createDataFrame(
+      Seq(
+        (2, Vectors.dense(3.0, 4.0)),
+        (1, Vectors.dense(1.0, 5.0)))
+      ).toDF("a", "b")
+    val groupAttr = new AttributeGroup(
+      "b",
+      Array[Attribute](
+        NumericAttribute.defaultAttr.withName("foo"),
+        NumericAttribute.defaultAttr.withName("bar")))
+    val df = data.select(
+      col("a").as("a",
+        NominalAttribute.defaultAttr.withValues(Array("up", "down", "left")).toMetadata()),
+      col("b").as("b", groupAttr.toMetadata()))
+    val trans = new Interaction().setInputCols(Array("a", "b")).setOutputCol("features")
+    val res = trans.transform(df)
+    val expected = sqlContext.createDataFrame(
+      Seq(
+        (2, Vectors.dense(3.0, 4.0), Vectors.dense(0, 0, 0, 0, 3, 4)),
+        (1, Vectors.dense(1.0, 5.0), Vectors.dense(0, 0, 1, 5, 0, 0)))
+      ).toDF("a", "b", "features")
+    assert(res.collect() === expected.collect())
+    val attrs = AttributeGroup.fromStructField(res.schema("features"))
+    val expectedAttrs = new AttributeGroup(
+      "features",
+      Array[Attribute](
+        new NumericAttribute(Some("a_up:b_foo"), Some(1)),
+        new NumericAttribute(Some("a_up:b_bar"), Some(2)),
+        new NumericAttribute(Some("a_down:b_foo"), Some(3)),
+        new NumericAttribute(Some("a_down:b_bar"), Some(4)),
+        new NumericAttribute(Some("a_left:b_foo"), Some(5)),
+        new NumericAttribute(Some("a_left:b_bar"), Some(6))))
+    assert(attrs === expectedAttrs)
+  }
+
+//  test("new interaction") {
+//    val data = sqlContext.createDataFrame(
+//      Seq(
+//        (0, "foo", true, 4, Vectors.dense(0.0, 0.0, 1.0), Vectors.dense(5.0, 3.0)),
+//        (0, "bar", true, 4, Vectors.dense(1.0, 4.0, 2.0), Vectors.dense(4.0, 3.0)),
+//        (0, "bar", true, 5, Vectors.dense(2.0, 5.0, 3.0), Vectors.dense(5.0, 3.0)),
+//        (0, "baz", true, 5, Vectors.dense(3.0, 8.0, 4.0), Vectors.dense(5.0, 2.0)),
+//        (0, "baz", false, 5, Vectors.dense(4.0, 9.0, 8.0), Vectors.dense(7.0, 1.0)),
+//        (1, "baz", false, 5, Vectors.dense(5.0, 2.0, 9.0), Vectors.dense(2.0, 0.0)))
+//      ).toDF("id", "a", "bin", "b", "test", "test2")
+//    val attrs = new AttributeGroup(
+//      "test",
+//      Array[Attribute](
+//        NominalAttribute.defaultAttr.withValues(Array("a", "b", "c", "d", "e", "f")),
+//        NumericAttribute.defaultAttr.withName("magnitude"),
+//        NominalAttribute.defaultAttr.withName("colors").withValues(
+//          Array("green", "blue", "red", "violet", "yellow",
+//            "orange", "black", "white", "azure", "gray"))))
+//
+//    val idAttr = NominalAttribute.defaultAttr.withValues(Array("red", "blue"))
+//    val attrs2 = new AttributeGroup(
+//      "test2",
+//      Array[Attribute](
+//        NumericAttribute.defaultAttr,
+//        NominalAttribute.defaultAttr.withValues(Array("one", "two", "three", "four"))))
+//    val df = data.select(
+//      col("id").as("id", idAttr.toMetadata()), col("b"), col("bin"),
+//      col("test").as("test", attrs.toMetadata()),
+//      col("test2").as("test2", attrs2.toMetadata()))
+//    df.collect.foreach(println)
+//    println(df.schema)
+//    df.schema.foreach { field =>
+//      println(field.metadata)
+//    }
+////    val trans = new Interaction().setInputCols(Array("id", "test2", "test")).setOutputCol("feature")
+//    val trans = new Interaction().setInputCols(Array("id", "test2")).setOutputCol("feature")
+//    val res = trans.transform(df)
+//    res.collect.foreach(println)
+//    println(res.schema)
+//    res.schema.foreach { field =>
+//      println(field.metadata)
+//    }
+//  }
 //
 //  test("parameter validation") {
 //    val data = sqlContext.createDataFrame(

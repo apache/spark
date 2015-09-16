@@ -33,14 +33,17 @@ import org.apache.spark.sql.types._
 
 /**
  * :: Experimental ::
- * Implements the transforms required for R-style feature interactions. In summary, once fitted to
- * a dataset, this transformer jointly one-hot encodes all factor input columns, then scales
- * the encoded vector by all numeric input columns. If only numeric columns are specified, the
- * output column will be a one-length vector containing their product. During one-hot encoding,
- * the last category will be preserved unless the interaction is trivial.
+ * Implements the transforms required for R-style feature interactions. This transformer takes in
+ * Double and Vector columns and outputs a flattened vector of interactions. To handle interaction,
+ * we first one-hot encode nominal columns. Then, a vector of all their cross-products is
+ * produced.
+ *
+ * For example, given the inputs Double(2), Vector(3, 4), the result would be Vector(6, 8) if
+ * all columns were numeric. If the first was nominal with three different values, the result
+ * would then be Vector(0, 0, 3, 0, 0, 4).
  *
  * See https://stat.ethz.ch/R-manual/R-devel/library/base/html/formula.html for more
- * information about factor interactions in R formulae.
+ * information about interactions in R formulae.
  */
 @Experimental
 class Interaction(override val uid: String) extends Transformer
@@ -64,13 +67,13 @@ class Interaction(override val uid: String) extends Transformer
     checkParams()
     val fieldIterators = getIterators(dataset)
 
-    def interact(vv: Any*): Vector = {
+    def interactFunc = udf { row: Row =>
       var indices = ArrayBuilder.make[Int]
       var values = ArrayBuilder.make[Double]
       var size = 1
       indices += 0
       values += 1.0
-      var fieldIndex = vv.length - 1
+      var fieldIndex = row.length - 1
       while (fieldIndex >= 0) {
         val prevIndices = indices.result()
         val prevValues = values.result()
@@ -79,7 +82,7 @@ class Interaction(override val uid: String) extends Transformer
         indices = ArrayBuilder.make[Int]
         values = ArrayBuilder.make[Double]
         size *= currentIterator.size
-        currentIterator.foreachActive(vv(fieldIndex), (i, a) => {
+        currentIterator.foreachActive(row(fieldIndex), (i, a) => {
           var j = 0
           while (j < prevIndices.length) {
             indices += prevIndices(j) + i * prevSize
@@ -92,9 +95,6 @@ class Interaction(override val uid: String) extends Transformer
       Vectors.sparse(size, indices.result(), values.result()).compressed
     }
 
-    val interactFunc = udf { r: Row =>
-      interact(r.toSeq: _*)
-    }
     val args = $(inputCols).map { c =>
       dataset.schema(c).dataType match {
         case DoubleType => dataset(c)
@@ -125,7 +125,7 @@ class Interaction(override val uid: String) extends Transformer
           Array(getCardinality(Attribute.fromStructField(field)))
         case _: VectorUDT =>
           val attrs = AttributeGroup.fromStructField(field).attributes.getOrElse(
-            throw new SparkException("Vector fields must have attributes defined."))
+            throw new SparkException("Vector attributes must be defined for interaction."))
           attrs.map(getCardinality).toArray
       }
       new EncodingIterator(cardinalities)
@@ -138,10 +138,10 @@ class Interaction(override val uid: String) extends Transformer
       val attrIterator = field.dataType match {
         case _: NumericType | BooleanType =>
           val attr = Attribute.fromStructField(field)
-          encodedAttrIterator(None, Seq(attr))
+          getAttributesAfterEncoding(None, Seq(attr))
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(field)
-          encodedAttrIterator(Some(group.name), group.attributes.get)
+          getAttributesAfterEncoding(Some(group.name), group.attributes.get)
       }
       if (attrs.isEmpty) {
         attrs = attrIterator
@@ -156,7 +156,8 @@ class Interaction(override val uid: String) extends Transformer
     new AttributeGroup($(outputCol), attrs.toArray)
   }
 
-  private def encodedAttrIterator(groupName: Option[String], attrs: Seq[Attribute]): Seq[Attribute] = {
+  private def getAttributesAfterEncoding(
+      groupName: Option[String], attrs: Seq[Attribute]): Seq[Attribute] = {
     def format(i: Int, attrName: Option[String], value: Option[String]): String = {
       val parts = Seq(groupName, Some(attrName.getOrElse(i.toString)), value)
       parts.flatten.mkString("_")
@@ -192,7 +193,7 @@ class Interaction(override val uid: String) extends Transformer
  *                      value if the field is numeric. Fields with zero cardinality will not be
  *                      one-hot encoded (output verbatim).
  */
-// TODO(ekl) do we want to support drop-last like OneHotEncoder does?
+// TODO(ekl) support drop-last option like OneHotEncoder does
 private[ml] class EncodingIterator(cardinalities: Array[Int]) {
   /** The size of the output vector. */
   val size = cardinalities.map(i => if (i > 0) i else 1).sum
@@ -220,9 +221,9 @@ private[ml] class EncodingIterator(cardinalities: Array[Int]) {
       while (i < dense.size) {
         val numOutputCols = cardinalities(i)
         if (numOutputCols > 0) {
-          val x = dense.values(i).toInt
+          val x = dense.values(i)
           assert(x >= 0.0 && x == x.toInt, s"Values from column must be indices, but got $x.")
-          f(cur + x, 1.0)
+          f(cur + x.toInt, 1.0)
           cur += numOutputCols
         } else {
           f(cur, dense.values(i))
