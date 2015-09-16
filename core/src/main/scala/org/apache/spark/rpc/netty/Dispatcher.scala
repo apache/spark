@@ -66,6 +66,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
   def getRpcEndpointRef(endpoint: RpcEndpoint): RpcEndpointRef = endpointToEndpointRef.get(endpoint)
 
+  def removeRpcEndpointRef(endpoint: RpcEndpoint): Unit = endpointToEndpointRef.remove(endpoint)
+
   def getRpcEndpointRef(name: String): RpcEndpointRef = nameToEndpoint.get(name).endpointRef
 
   // Should be idempotent
@@ -77,7 +79,6 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
         inbox.stop()
         receivers.put(inbox.endpoint)
       }
-      endpointToEndpointRef.remove(endpointPair.endpoint)
     }
   }
 
