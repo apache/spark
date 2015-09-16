@@ -1562,6 +1562,26 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
             |ORDER BY sum(b) + 1
           """.stripMargin),
       Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+            |SELECT count(*)
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY count(*)
+          """.stripMargin),
+      Row(2) :: Row(2) :: Row(2) :: Row(2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+            |SELECT a
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY a, count(*), sum(b)
+          """.stripMargin),
+      Row("1") :: Row("2") :: Row("3") :: Row("4") :: Nil)
   }
 
   test("SPARK-7952: fix the equality check between boolean and numeric types") {

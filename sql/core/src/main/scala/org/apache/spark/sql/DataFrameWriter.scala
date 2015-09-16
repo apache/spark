@@ -255,7 +255,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     val conn = JdbcUtils.createConnection(url, props)
 
     try {
-      var tableExists = JdbcUtils.tableExists(conn, table)
+      var tableExists = JdbcUtils.tableExists(conn, url, table)
 
       if (mode == SaveMode.Ignore && tableExists) {
         return

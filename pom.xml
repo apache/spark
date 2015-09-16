@@ -181,7 +181,6 @@
     <libthrift.version>0.9.2</libthrift.version>
 
     <test.java.home>${java.home}</test.java.home>
-    <test.exclude.tags></test.exclude.tags>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -338,16 +337,6 @@
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.novocode</groupId>
-      <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -753,7 +742,7 @@
       <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
-        <version>4.11</version>
+        <version>4.10</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -771,7 +760,7 @@
       <dependency>
         <groupId>com.novocode</groupId>
         <artifactId>junit-interface</artifactId>
-        <version>0.11</version>
+        <version>0.10</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1926,7 +1915,6 @@
               <test.src.tables>src</test.src.tables>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
-            <excludedGroups>${test.exclude.tags}</excludedGroups>
           </configuration>
         </plugin>
         <!-- Scalatest runs all Scala tests -->
@@ -1964,7 +1952,6 @@
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
-            <tagsToExclude>${test.exclude.tags}</tagsToExclude>
           </configuration>
           <executions>
             <execution>
