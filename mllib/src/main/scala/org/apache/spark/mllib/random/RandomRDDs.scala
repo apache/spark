@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.rdd.{RandomRDD, RandomVectorRDD}
 import org.apache.spark.rdd.RDD
@@ -393,6 +394,30 @@ object RandomRDDs {
       seed: Long = Utils.random.nextLong()): RDD[T] = {
     new RandomRDD[T](sc, size, numPartitionsOrDefault(sc, numPartitions), generator, seed)
   }
+
+  /**
+   * :: DeveloperApi ::
+   * Generates an RDD comprised of `i.i.d.` samples produced by the input RandomDataGenerator.
+   *
+   * @param sc SparkContext used to create the RDD.
+   * @param generator RandomDataGenerator used to populate the RDD.
+   * @param size Size of the RDD.
+   * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
+   * @param seed Random seed (default: a random long integer).
+   * @return RDD[Double] comprised of `i.i.d.` samples produced by generator.
+   */
+  @DeveloperApi
+  @Since("1.5.1")
+  def randomJavaRDD[T](
+      sc: SparkContext,
+      generator: RandomDataGenerator[T],
+      size: Long,
+      numPartitions: Int = 0,
+      seed: Long = Utils.random.nextLong()): JavaRDD[T] = {
+    implicit val ctag: ClassTag[T] = fakeClassTag
+    JavaRDD.fromRDD(randomRDD(sc, generator, size, numPartitions, seed))
+  }
+
 
   // TODO Generate RDD[Vector] from multivariate distributions.
 
