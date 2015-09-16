@@ -117,7 +117,7 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """ summary of model. """
         return self._java_model.toString()
 
-    @since("1.3.0")
+    @since("1.2.0")
     def toDebugString(self):
         """ full model. """
         return self._java_model.toDebugString()
