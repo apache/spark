@@ -428,6 +428,63 @@ case class Average(child: Expression) extends UnaryExpression with PartialAggreg
     TypeUtils.checkForNumericExpr(child.dataType, "function average")
 }
 
+abstract class StatisticalMoments1(child: Expression) extends UnaryExpression with PartialAggregate1 {
+
+  override def prettyName: String = "kurtosis"
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      // Add 4 digits after decimal point, like Hive
+      DecimalType.bounded(precision + 4, scale + 4)
+    case _ =>
+      DoubleType
+  }
+
+  override def asPartial: SplitEvaluation = {
+    child.dataType match {
+      case DecimalType.Fixed(precision, scale) =>
+        val partialSum = Alias(Sum(child), "PartialSum")()
+        val partialCount = Alias(Count(child), "PartialCount")()
+
+        // partialSum already increase the precision by 10
+        val castedSum = Cast(Sum(partialSum.toAttribute), partialSum.dataType)
+        val castedCount = Cast(Sum(partialCount.toAttribute), partialSum.dataType)
+        SplitEvaluation(
+          Cast(Divide(castedSum, castedCount), dataType),
+          partialCount :: partialSum :: Nil)
+
+      case _ =>
+        val partialSum = Alias(Sum(child), "PartialSum")()
+        val partialCount = Alias(Count(child), "PartialCount")()
+
+        val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
+        val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
+        SplitEvaluation(
+          Divide(castedSum, castedCount),
+          partialCount :: partialSum :: Nil)
+    }
+  }
+
+  override def newInstance(): AverageFunction = new AverageFunction(child, this)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function average")
+}
+
+case class Kurtosis(child: Expression) extends StatisticalMoments1(child) {
+
+  override def toString: String = s"KURTOSIS($child)"
+}
+
+case class Skewness(child: Expression) extends StatisticalMoments1(child) {
+
+  override def prettyName: String = "skewness"
+
+  override def toString: String = s"SKEWNESS($child)"
+}
+
 case class AverageFunction(expr: Expression, base: AggregateExpression1)
   extends AggregateFunction1 {
 

@@ -48,6 +48,18 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
 
+        case expressions.Skewness(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Skewness(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case expressions.Kurtosis(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Kurtosis(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
         case expressions.Count(child) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.Count(child),

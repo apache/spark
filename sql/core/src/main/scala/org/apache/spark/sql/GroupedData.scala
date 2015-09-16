@@ -128,6 +128,8 @@ class GroupedData protected[sql](
       case "stddev_pop" => StddevPop
       case "stddev_samp" => StddevSamp
       case "sum" => Sum
+      case "skewness" => Skewness
+      case "kurtosis" => Kurtosis
       case "count" | "size" =>
         // Turn count(*) into count(1)
         (inputExpr: Expression) => inputExpr match {
@@ -248,6 +250,30 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Average)
+  }
+
+  /**
+   * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the average values for them.
+   *
+   * @since 1.3.0
+   */
+  @scala.annotation.varargs
+  def skewness(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Skewness)
+  }
+
+  /**
+   * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the average values for them.
+   *
+   * @since 1.3.0
+   */
+  @scala.annotation.varargs
+  def kurtosis(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Kurtosis)
   }
 
   /**

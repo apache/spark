@@ -189,6 +189,8 @@ object FunctionRegistry {
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
+    expression[Skewness]("skewness"),
+    expression[Kurtosis]("kurtosis"),
 
     // string functions
     expression[Ascii]("ascii"),

@@ -221,4 +221,40 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       emptyTableData.agg(sumDistinct('a)),
       Row(null))
   }
+
+  test("moments") {
+    checkAnswer(
+      testData2.agg(skewness('a)),
+      Row(0.0))
+
+    checkAnswer(
+      testData2.agg(kurtosis('a)),
+      Row(-1.5))
+  }
+
+  test("zero moments") {
+    val emptyTableData = Seq((1,2)).toDF("a", "b")
+    assert(emptyTableData.count() === 1)
+
+    checkAnswer(
+      emptyTableData.agg(skewness('a)),
+      Row(0.0))
+
+    checkAnswer(
+      emptyTableData.agg(kurtosis('a)),
+      Row(0.0))
+  }
+
+  test("null moments") {
+    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+    assert(emptyTableData.count() === 0)
+
+    checkAnswer(
+      emptyTableData.agg(skewness('a)),
+      Row(null))
+
+    checkAnswer(
+      emptyTableData.agg(kurtosis('a)),
+      Row(null))
+  }
 }

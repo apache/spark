@@ -93,6 +93,7 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
+
 abstract class BinaryArithmetic extends BinaryOperator {
 
   override def dataType: DataType = left.dataType
