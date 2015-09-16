@@ -582,3 +582,18 @@ def round_time(dt, delta, start_date=datetime.min):
     # in the special case when start_date > dt the search for upper will
     # immediately stop for upper == 1 which results in lower = upper // 2 = 0
     # and this function returns start_date.
+
+def chain(*tasks):
+    """
+    Given a number of tasks, builds a dependency chain.
+
+    chain(task_1, task_2, task_3, task_4)
+
+    is equivalent to
+
+    task_1.set_downstream(task_2)
+    task_2.set_downstream(task_3)
+    task_3.set_downstream(task_4)
+    """
+    for up_task, down_task in zip(tasks[:-1], tasks[1:]):
+        up_task.set_downstream(down_task)
