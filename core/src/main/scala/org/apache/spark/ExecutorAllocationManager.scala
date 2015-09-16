@@ -26,7 +26,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.scheduler._
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.{MonotonicClock, ThreadUtils, Clock}
+import org.apache.spark.util.{Clock, MonotonicClock, ThreadUtils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.

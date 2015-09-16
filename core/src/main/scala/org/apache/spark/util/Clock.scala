@@ -22,9 +22,7 @@ package org.apache.spark.util
  */
 private[spark] trait Clock {
 
-  /**
-   * @return the time in milliseconds
-   */
+  /** @return the time in milliseconds */
   def getTimeMillis(): Long
 
   /**
@@ -64,7 +62,7 @@ private[spark] class SystemClock extends Clock {
     val pollTime = math.max(waitTime / 10.0, minPollTime).toLong
 
     while (true) {
-      currentTime = System.currentTimeMillis()
+      currentTime = getTimeMillis()
       waitTime = targetTime - currentTime
       if (waitTime <= 0) {
         return currentTime
@@ -72,7 +70,7 @@ private[spark] class SystemClock extends Clock {
       val sleepTime = math.min(waitTime, pollTime)
       Thread.sleep(sleepTime)
     }
-    -1
+    throw new Exception("waitTillTime reached code that should not be reachable")
   }
 }
 
@@ -82,11 +80,9 @@ private[spark] class SystemClock extends Clock {
  * initiated time shift)
  */
 private[spark] class MonotonicClock extends SystemClock {
-  /**
-   * @return the same time  in milliseconds
-   *         as is reported by `System.nanoTime()`
-   */
+
+  /** @return the same time in milliseconds as is reported by `System.nanoTime()` */
   override def getTimeMillis(): Long = {
-    (System.nanoTime() / (1000 * 1000))
+    System.nanoTime() / (1000 * 1000)
   }
 }
