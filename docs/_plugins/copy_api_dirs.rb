@@ -32,6 +32,9 @@ if not (ENV['SKIP_API'] == '1')
     puts "Moving back into docs dir."
     cd("docs")
 
+    puts "Removing old docs"
+    puts `rm -rf api`
+
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
     source = "../target/scala-2.10/unidoc"
