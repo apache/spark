@@ -85,7 +85,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
   def stop(rpcEndpointRef: RpcEndpointRef): Unit = {
     synchronized {
       if (stopped) {
-        // This endpoint will be stopped by Distpatcher.stop() method.
+        // This endpoint will be stopped by Dispatcher.stop() method.
         return
       }
       unregisterRpcEndpoint(rpcEndpointRef.name)
@@ -96,7 +96,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
    * Send a message to all registered [[RpcEndpoint]]s.
    * @param message
    */
-  def broadcastMessage(message: BroadcastMessage): Unit = {
+  def broadcastMessage(message: InboxMessage): Unit = {
     val iter = endpointToInbox.values().iterator()
     while (iter.hasNext) {
       val inbox = iter.next()

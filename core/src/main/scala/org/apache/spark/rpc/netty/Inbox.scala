@@ -33,11 +33,6 @@ private[netty] case class ContentMessage(
     needReply: Boolean,
     context: NettyRpcCallContext) extends InboxMessage
 
-/**
- * A message type that will be posted to all registered [[RpcEndpoint]]
- */
-private[netty] sealed trait BroadcastMessage extends InboxMessage
-
 private[netty] case object OnStart extends InboxMessage
 
 private[netty] case object OnStop extends InboxMessage
@@ -45,18 +40,18 @@ private[netty] case object OnStop extends InboxMessage
 /**
  * A broadcast message that indicates connecting to a remote node.
  */
-private[netty] case class Associated(remoteAddress: RpcAddress) extends BroadcastMessage
+private[netty] case class Associated(remoteAddress: RpcAddress) extends InboxMessage
 
 /**
  * A broadcast message that indicates a remote connection is lost.
  */
-private[netty] case class Disassociated(remoteAddress: RpcAddress) extends BroadcastMessage
+private[netty] case class Disassociated(remoteAddress: RpcAddress) extends InboxMessage
 
 /**
  * A broadcast message that indicates a network error
  */
 private[netty] case class AssociationError(cause: Throwable, remoteAddress: RpcAddress)
-  extends BroadcastMessage
+  extends InboxMessage
 
 /**
  * A inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
