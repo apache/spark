@@ -49,7 +49,7 @@ class ParamGridBuilder(object):
     >>> all([m in expected for m in output])
     True
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self):
@@ -110,7 +110,7 @@ class CrossValidator(Estimator):
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -271,7 +271,7 @@ class CrossValidatorModel(Model):
     """
     Model from k-fold cross validation.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self, bestModel):
