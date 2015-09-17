@@ -42,10 +42,13 @@ private[netty] case object OnStart extends InboxMessage
 
 private[netty] case object OnStop extends InboxMessage
 
+/**
+ * A broadcast message that indicates connecting to a remote node.
+ */
 private[netty] case class Associated(remoteAddress: RpcAddress) extends BroadcastMessage
 
 /**
- * A broadcast message that indicates
+ * A broadcast message that indicates a remote connection is lost.
  */
 private[netty] case class Disassociated(remoteAddress: RpcAddress) extends BroadcastMessage
 
@@ -64,8 +67,6 @@ private[netty] class Inbox(
     val endpointRef: NettyRpcEndpointRef,
     val endpoint: RpcEndpoint) extends Logging {
 
-  private val supportConcurrent = !endpoint.isInstanceOf[ThreadSafeRpcEndpoint]
-
   @GuardedBy("this")
   protected val messages = new LinkedList[InboxMessage]()
 
@@ -83,6 +84,10 @@ private[netty] class Inbox(
     messages.add(OnStart)
   }
 
+  /**
+   * Process stored messages. Return `true` if the `Inbox` is already stopped, and the caller will
+   * release all resources used by the `Inbox`.
+   */
   def process(dispatcher: Dispatcher): Boolean = {
     var message: InboxMessage = null
     synchronized {
@@ -128,12 +133,13 @@ private[netty] class Inbox(
 
             case OnStart => {
               endpoint.onStart()
-              if (supportConcurrent) {
+              if (!endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
                 synchronized {
                   enableConcurrent = true
                 }
               }
             }
+
             case OnStop =>
               dispatcher.removeRpcEndpointRef(endpoint)
               endpoint.onStop()

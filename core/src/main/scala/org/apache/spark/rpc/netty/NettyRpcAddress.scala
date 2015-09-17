@@ -49,7 +49,7 @@ private[netty] object NettyRpcAddress {
       NettyRpcAddress(host, port, name)
     } catch {
       case e: java.net.URISyntaxException =>
-        throw new SparkException("Invalid master URL: " + sparkUrl, e)
+        throw new SparkException("Invalid Spark URL: " + sparkUrl, e)
     }
   }
 
