@@ -58,6 +58,8 @@ class FPGrowth(object):
     .. note:: Experimental
 
     A Parallel FP-growth algorithm to mine frequent itemsets.
+
+    .. versionadded:: 1.4.0
     """
 
     @classmethod
@@ -78,6 +80,8 @@ class FPGrowth(object):
     class FreqItemset(namedtuple("FreqItemset", ["items", "freq"])):
         """
         Represents an (items, freq) tuple.
+
+        .. versionadded:: 1.4.0
         """
 
 
