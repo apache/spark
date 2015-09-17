@@ -245,7 +245,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.coarse</code></td>
   <td>false</td>
   <td>
-    If set to "true", runs over Mesos clusters in
+    If set to <code>true</code>, runs over Mesos clusters in
     <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
     where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
     Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
@@ -254,16 +254,16 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.mesos.extra.cores</code></td>
-  <td>0</td>
+  <td><code>0</code></td>
   <td>
     Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
     The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
-    Note that total amount of cores the executor will request in total will not exceed the spark.cores.max setting.
+    Note that total amount of cores the executor will request in total will not exceed the <code>spark.cores.max</code> setting.
   </td>
 </tr>
 <tr>
   <td><code>spark.mesos.mesosExecutor.cores</code></td>
-  <td>1.0</td>
+  <td><code>1.0</code></td>
   <td>
     (Fine-grained mode only) Number of cores to give each Mesos executor. This does not
     include the cores used to run the Spark tasks. In other words, even if no Spark task
@@ -287,7 +287,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Set the list of volumes which will be mounted into the Docker image, which was set using
     <code>spark.mesos.executor.docker.image</code>. The format of this property is a comma-separated list of
-    mappings following the form passed to <tt>docker run -v</tt>. That is they take the form:
+    mappings following the form passed to <code>docker run -v</code>. That is they take the form:
 
     <pre>[host_path:]container_path[:ro|:rw]</pre>
   </td>
@@ -318,7 +318,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>executor memory * 0.10, with minimum of 384</td>
   <td>
     The amount of additional memory, specified in MB, to be allocated per executor. By default,
-    the overhead will be larger of either 384 or 10% of `spark.executor.memory`. If it's set,
+    the overhead will be larger of either 384 or 10% of <code>spark.executor.memory</code>. If set,
     the final overhead will be this value.
   </td>
 </tr>
@@ -339,7 +339,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.mesos.secret</code></td>
-  <td>(none)/td>
+  <td>(none)</td>
   <td>
     Set the secret with which Spark framework will use to authenticate with Mesos.
   </td>
