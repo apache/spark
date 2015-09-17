@@ -40,6 +40,7 @@ import org.apache.thrift.transport.TSocket
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.hadoop.util.ShutdownHookManager
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -114,7 +115,16 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     SessionState.start(sessionState)
 
     // Clean up after we exit
-    ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
+    //ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
+     var shutdownthread = new Thread()
+    {
+      override def run(){
+        SparkSQLEnv.stop()
+      }
+    }
+    logInfo("Shutdown hook is in Definded")
+    ShutdownHookManager.get().addShutdownHook(shutdownthread,30)
+    logInfo("Shutsown Hook is add to the queue")
 
     val remoteMode = isRemoteMode(sessionState)
     // "-h" option has been passed, so connect to Hive thrift server.
