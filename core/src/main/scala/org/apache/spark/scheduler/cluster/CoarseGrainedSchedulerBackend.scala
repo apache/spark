@@ -65,7 +65,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
-  
+
   // Executors we have requested the cluster manager to replace with new ones that have killed
   private val executorsToReplace = new HashSet[String]
 
@@ -447,7 +447,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // take into account executors that are pending to be added or removed.
     if (!replace) {
       doRequestTotalExecutors(
-        numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size + numReplacingExecutors)
+        numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
+        + numReplacingExecutors)
     } else {
       executorsToReplace ++= knownExecutors
       numReplacingExecutors += knownExecutors.size
