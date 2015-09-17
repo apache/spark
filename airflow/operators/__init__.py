@@ -26,9 +26,10 @@ _operators = {
     'email_operator': ['EmailOperator'],
     'hive_to_samba_operator': ['Hive2SambaOperator'],
     'mysql_operator': ['MySqlOperator'],
-    'vertica_operator': ['VerticaOperator'],
     'sqlite_operator': ['SqliteOperator'],
     'mysql_to_hive': ['MySqlToHiveTransfer'],
+    'vertica_operator': ['VerticaOperator'],
+    'vertica_to_hive': ['VerticaToHiveTransfer'],
     'postgres_operator': ['PostgresOperator'],
     'sensors': [
         'SqlSensor',
