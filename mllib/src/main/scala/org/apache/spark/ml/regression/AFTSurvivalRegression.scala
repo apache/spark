@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
 
 import org.apache.spark.{SparkException, Logging}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.{Model, Estimator}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -49,21 +49,25 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
    * If the value is 1, it means the event has occurred i.e. uncensored; otherwise it censored.
    * @group param
    */
+  @Since("1.6.0")
   final val censoredCol: Param[String] = new Param(this, "censoredCol", "censored column name")
 
   /** @group getParam */
-  final def getCensoredCol: String = $(censoredCol)
+  @Since("1.6.0")
+  def getCensoredCol: String = $(censoredCol)
 
   /**
    * Param for quantile probabilities array.
    * Values of the quantile probabilities array should be in the range [0, 1].
    * @group param
    */
+  @Since("1.6.0")
   final val quantileProbabilities: DoubleArrayParam = new DoubleArrayParam(this, "quantile",
     "quantile probabilities array", (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1)))
 
   /** @group getParam */
-  final def getQuantileProbabilities: Array[Double] = $(quantileProbabilities)
+  @Since("1.6.0")
+  def getQuantileProbabilities: Array[Double] = $(quantileProbabilities)
 
   /** Checks whether the input has quantile probabilities array. */
   protected[regression] def hasQuantileProbabilities: Boolean = {
@@ -95,22 +99,28 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
  * based on the Weibull distribution of the survival time.
  */
 @Experimental
-class AFTSurvivalRegression(override val uid: String)
+@Since("1.6.0")
+class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with Logging {
 
+  @Since("1.6.0")
   def this() = this(Identifiable.randomUID("aftSurvReg"))
 
   /** @group setParam */
+  @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setCensoredCol(value: String): this.type = set(censoredCol, value)
   setDefault(censoredCol -> "censored")
 
   /** @group setParam */
+  @Since("1.6.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /**
@@ -118,6 +128,7 @@ class AFTSurvivalRegression(override val uid: String)
    * Default is true.
    * @group setParam
    */
+  @Since("1.6.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
 
@@ -126,6 +137,7 @@ class AFTSurvivalRegression(override val uid: String)
    * Default is 100.
    * @group setParam
    */
+  @Since("1.6.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   setDefault(maxIter -> 100)
 
@@ -135,13 +147,15 @@ class AFTSurvivalRegression(override val uid: String)
    * Default is 1E-6.
    * @group setParam
    */
+  @Since("1.6.0")
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
   /**
-   * Extracts AFTPoint from input dataset.
+   * Extract [[featuresCol]], [[labelCol]] and [[censoredCol]] from input dataset,
+   * and put it in an RDD with strong types.
    */
-  protected[ml] def extractCensoredLabeledPoints(
+  protected[ml] def extractAFTPoints(
       dataset: DataFrame): RDD[AFTPoint] = {
     dataset.select($(featuresCol), $(labelCol), $(censoredCol)).map {
       case Row(features: Vector, label: Double, censored: Double) =>
@@ -149,9 +163,10 @@ class AFTSurvivalRegression(override val uid: String)
     }
   }
 
+  @Since("1.6.0")
   override def fit(dataset: DataFrame): AFTSurvivalRegressionModel = {
     validateAndTransformSchema(dataset.schema, fitting = true)
-    val instances = extractCensoredLabeledPoints(dataset)
+    val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -195,10 +210,12 @@ class AFTSurvivalRegression(override val uid: String)
     copyValues(model.setParent(this))
   }
 
+  @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true)
   }
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): AFTSurvivalRegression = defaultCopy(extra)
 }
 
@@ -207,22 +224,27 @@ class AFTSurvivalRegression(override val uid: String)
  * Model produced by [[AFTSurvivalRegression]].
  */
 @Experimental
+@Since("1.6.0")
 class AFTSurvivalRegressionModel private[ml] (
-    override val uid: String,
-    val coefficients: Vector,
-    val intercept: Double,
-    val scale: Double)
+    @Since("1.6.0") override val uid: String,
+    @Since("1.6.0") val coefficients: Vector,
+    @Since("1.6.0") val intercept: Double,
+    @Since("1.6.0") val scale: Double)
   extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams {
 
   /** @group setParam */
+  @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
 
+  @Since("1.6.0")
   def predictQuantiles(features: Vector): Vector = {
     require(hasQuantileProbabilities,
       "AFTSurvivalRegressionModel predictQuantiles must set quantile probabilities array")
@@ -236,20 +258,24 @@ class AFTSurvivalRegressionModel private[ml] (
     Vectors.dense(quantiles)
   }
 
+  @Since("1.6.0")
   def predict(features: Vector): Double = {
     math.exp(BLAS.dot(coefficients, features) + intercept)
   }
 
+  @Since("1.6.0")
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
     val predictUDF = udf { features: Vector => predict(features) }
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
+  @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false)
   }
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): AFTSurvivalRegressionModel = {
     copyValues(new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale), extra)
       .setParent(parent)
