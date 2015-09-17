@@ -143,8 +143,6 @@ class LinearRegressionModel(JavaModel):
 class TreeRegressorParams(object):
     """
     Private class to track supported impurity measures.
-
-    .. versionadded:: 1.4.0
     """
     supportedImpurities = ["variance"]
 
@@ -152,8 +150,6 @@ class TreeRegressorParams(object):
 class RandomForestParams(object):
     """
     Private class to track supported random forest parameters.
-
-    .. versionadded:: 1.4.0
     """
     supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
 
@@ -161,8 +157,6 @@ class RandomForestParams(object):
 class GBTParams(object):
     """
     Private class to track supported GBT params.
-
-    .. versionadded:: 1.4.0
     """
     supportedLossTypes = ["squared", "absolute"]
 
