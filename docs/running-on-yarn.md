@@ -211,14 +211,14 @@ If you need a reference to the proper location to put log files in the YARN so t
 </tr>
 <tr>
   <td><code>spark.yarn.driver.memoryOverhead</code></td>
-  <td>driverMemory * 0.07, with minimum of 384 </td>
+  <td>driverMemory * 0.10, with minimum of 384 </td>
   <td>
     The amount of off heap memory (in megabytes) to be allocated per driver in cluster mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.am.memoryOverhead</code></td>
-  <td>AM memory * 0.07, with minimum of 384 </td>
+  <td>AM memory * 0.10, with minimum of 384 </td>
   <td>
     Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the Application Master in client mode.
   </td>
