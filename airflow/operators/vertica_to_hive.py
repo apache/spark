@@ -65,7 +65,7 @@ class VerticaToHiveTransfer(BaseOperator):
         self.partition = partition
         self.create = create
         self.recreate = recreate
-        self.delimiter = delimiter
+        self.delimiter = str(delimiter)
         self.vertica_conn_id = vertica_conn_id
         self.hive_cli_conn_id = hive_cli_conn_id
         self.partition = partition or {}
@@ -74,9 +74,10 @@ class VerticaToHiveTransfer(BaseOperator):
     def type_map(cls, vertica_type):
         t = datatypes
         d = {
-            t.BINARY.value: 'INT',
-            t.NUMBER.value: 'INT',
+            t.BINARY: 'INT',
+            t.NUMBER: 'INT',
         }
+        logging.info(vertica_type)
         return d[vertica_type] if vertica_type in d else 'STRING'
 
     def execute(self, context):
