@@ -22,6 +22,7 @@ import scala.beans.{BeanInfo, BeanProperty}
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -162,5 +163,15 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
     assert(IntegerType.typeName === "integer")
     assert(new MyDenseVectorUDT().typeName === "mydensevector")
     assert(new OpenHashSetUDT(IntegerType).typeName === "openhashset")
+  }
+
+  test("Catalyst type converter null handling for UDTs") {
+    val udt = new MyDenseVectorUDT()
+    val toScalaConverter = CatalystTypeConverters.createToScalaConverter(udt)
+    assert(toScalaConverter(null) === null)
+
+    val toCatalystConverter = CatalystTypeConverters.createToCatalystConverter(udt)
+    assert(toCatalystConverter(null) === null)
+
   }
 }

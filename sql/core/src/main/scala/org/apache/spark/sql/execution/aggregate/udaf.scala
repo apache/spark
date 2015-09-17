@@ -40,6 +40,9 @@ sealed trait BufferSetterGetterUtils {
     var i = 0
     while (i < getters.length) {
       getters(i) = dataTypes(i) match {
+        case NullType =>
+          (row: InternalRow, ordinal: Int) => null
+
         case BooleanType =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getBoolean(ordinal)
@@ -74,6 +77,14 @@ sealed trait BufferSetterGetterUtils {
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getDecimal(ordinal, precision, scale)
 
+        case DateType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
+
+        case TimestampType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
+
         case other =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.get(ordinal, other)
@@ -92,6 +103,9 @@ sealed trait BufferSetterGetterUtils {
     var i = 0
     while (i < setters.length) {
       setters(i) = dataTypes(i) match {
+        case NullType =>
+          (row: MutableRow, ordinal: Int, value: Any) => row.setNullAt(ordinal)
+
         case b: BooleanType =>
           (row: MutableRow, ordinal: Int, value: Any) =>
             if (value != null) {
@@ -151,8 +165,22 @@ sealed trait BufferSetterGetterUtils {
         case dt: DecimalType =>
           val precision = dt.precision
           (row: MutableRow, ordinal: Int, value: Any) =>
+            // To make it work with UnsafeRow, we cannot use setNullAt.
+            // Please see the comment of UnsafeRow's setDecimal.
+            row.setDecimal(ordinal, value.asInstanceOf[Decimal], precision)
+
+        case DateType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
             if (value != null) {
-              row.setDecimal(ordinal, value.asInstanceOf[Decimal], precision)
+              row.setInt(ordinal, value.asInstanceOf[Int])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case TimestampType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setLong(ordinal, value.asInstanceOf[Long])
             } else {
               row.setNullAt(ordinal)
             }
@@ -205,6 +233,7 @@ private[sql] class MutableAggregationBufferImpl (
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
+
     toScalaConverters(i)(bufferValueGetters(i)(underlyingBuffer, offsets(i)))
   }
 
@@ -352,6 +381,10 @@ private[sql] case class ScalaUDAF(
     }
   }
 
+  private[this] lazy val outputToCatalystConverter: Any => Any = {
+    CatalystTypeConverters.createToCatalystConverter(dataType)
+  }
+
   // This buffer is only used at executor side.
   private[this] var inputAggregateBuffer: InputAggregationBuffer = null
 
@@ -424,7 +457,7 @@ private[sql] case class ScalaUDAF(
   override def eval(buffer: InternalRow): Any = {
     evalAggregateBuffer.underlyingInputBuffer = buffer
 
-    udaf.evaluate(evalAggregateBuffer)
+    outputToCatalystConverter(udaf.evaluate(evalAggregateBuffer))
   }
 
   override def toString: String = {
