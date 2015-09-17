@@ -44,7 +44,7 @@ private[netty] object NettyRpcAddress {
         (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
         uri.getFragment != null ||
         uri.getQuery != null) {
-        throw new SparkException("Invalid master URL: " + sparkUrl)
+        throw new SparkException("Invalid Spark URL: " + sparkUrl)
       }
       NettyRpcAddress(host, port, name)
     } catch {
