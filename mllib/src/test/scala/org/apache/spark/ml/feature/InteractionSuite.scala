@@ -31,26 +31,26 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(new Interaction())
   }
 
-  test("encoding iterator") {
+  test("feature encoder") {
     def encode(cardinalities: Array[Int], value: Any): Vector = {
       var indices = ArrayBuilder.make[Int]
       var values = ArrayBuilder.make[Double]
-      val iter = new EncodingIterator(cardinalities)
-      iter.foreachActive(value, (i, v) => {
+      val encoder = new FeatureEncoder(cardinalities)
+      encoder.foreachNonzeroOutput(value, (i, v) => {
         indices += i
         values += v
       })
-      Vectors.sparse(iter.size, indices.result(), values.result()).compressed
+      Vectors.sparse(encoder.outputSize, indices.result(), values.result()).compressed
     }
-    assert(encode(Array(0), 2.2) === Vectors.dense(2.2))
+    assert(encode(Array(1), 2.2) === Vectors.dense(2.2))
     assert(encode(Array(3), Vectors.dense(1)) === Vectors.dense(0, 1, 0))
-    assert(encode(Array(0, 0), Vectors.dense(1.1, 2.2)) === Vectors.dense(1.1, 2.2))
-    assert(encode(Array(3, 0), Vectors.dense(1, 2.2)) === Vectors.dense(0, 1, 0, 2.2))
-    assert(encode(Array(2, 0), Vectors.dense(1, 2.2)) === Vectors.dense(0, 1, 2.2))
-    assert(encode(Array(2, 0, 1), Vectors.dense(0, 2.2, 0)) === Vectors.dense(1, 0, 2.2, 1))
-    intercept[SparkException] { encode(Array(0), "foo") }
-    intercept[SparkException] { encode(Array(0), null) }
-    intercept[AssertionError] { encode(Array(1), 2.2) }
+    assert(encode(Array(1, 1), Vectors.dense(1.1, 2.2)) === Vectors.dense(1.1, 2.2))
+    assert(encode(Array(3, 1), Vectors.dense(1, 2.2)) === Vectors.dense(0, 1, 0, 2.2))
+    assert(encode(Array(2, 1), Vectors.dense(1, 2.2)) === Vectors.dense(0, 1, 2.2))
+    assert(encode(Array(2, 1, 1), Vectors.dense(0, 2.2, 0)) === Vectors.dense(1, 0, 2.2, 0))
+    intercept[SparkException] { encode(Array(1), "foo") }
+    intercept[SparkException] { encode(Array(1), null) }
+    intercept[AssertionError] { encode(Array(2), 2.2) }
     intercept[AssertionError] { encode(Array(3), Vectors.dense(2.2)) }
     intercept[AssertionError] { encode(Array(1), Vectors.dense(1.0, 2.0, 3.0)) }
     intercept[AssertionError] { encode(Array(3), Vectors.dense(-1)) }
