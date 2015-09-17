@@ -534,7 +534,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         val logger =
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
-        logger.start()
         listenerBus.addListener(logger)
         Some(logger)
       } else {
