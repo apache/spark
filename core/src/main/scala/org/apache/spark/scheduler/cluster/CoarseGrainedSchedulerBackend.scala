@@ -65,6 +65,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
+  
+  // Executors we have requested the cluster manager to replace with new ones that have killed
+  private val executorsToReplace = new HashSet[String]
+
+  // Number of executors requested from the cluster manager that have not replaced yet
+  private var numReplacingExecutors = 0
 
   // A map to store hostname with its possible task number running on it
   protected var hostToLocalTaskCount: Map[String, Int] = Map.empty
@@ -146,6 +152,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
+            }
+            if (numReplacingExecutors > 0) {
+              numReplacingExecutors -= 1
+              logError(s"Decremented number of replaceing executors ($numReplacingExecutors left)")
             }
           }
           // Note: some tests expect the reply to come after we put the executor in the map
@@ -236,6 +246,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingToRemove -= executorId
+            if (executorsToReplace.contains(executorId)) {
+              executorsToReplace -= executorId
+              if (numReplacingExecutors > 0) {
+                numReplacingExecutors -= 1
+              }
+            }
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
@@ -425,6 +441,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
     val executorsToKill = knownExecutors.filter { id => !executorsPendingToRemove.contains(id) }
     executorsPendingToRemove ++= executorsToKill
+
+    // If we do not wish to replace the executors we kill, sync the target number of executors
+    // with the cluster manager to avoid allocating new ones. When computing the new target,
+    // take into account executors that are pending to be added or removed.
+    if (!replace) {
+      doRequestTotalExecutors(
+        numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size + numReplacingExecutors)
+    } else {
+      executorsToReplace ++= knownExecutors
+      numReplacingExecutors += knownExecutors.size
+    }
 
     doKillExecutors(executorsToKill)
   }
