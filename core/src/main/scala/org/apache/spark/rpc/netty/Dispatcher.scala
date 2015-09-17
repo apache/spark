@@ -100,51 +100,75 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val iter = endpointToInbox.values().iterator()
     while (iter.hasNext) {
       val inbox = iter.next()
-      postMessageToInbox(inbox, message)
+      postMessageToInbox(inbox, message, () => {
+        logWarning(s"Drop ${message} because RpcEnv has been stopped")
+      })
     }
   }
 
   def postMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
-    val receiver = nameToEndpoint.get(message.receiver.name)
-    if (receiver != null) {
-      val inbox = endpointToInbox.get(receiver.endpoint)
-      if (inbox != null) {
-        val rpcCallContext =
-          new RemoteNettyRpcCallContext(
-            nettyEnv, inbox.endpointRef, callback, message.senderAddress, message.needReply)
-        postMessageToInbox(inbox,
-          ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext))
-        return
-      }
+    def onDispatcherStop(): Unit = {
+      callback.onFailure(
+        new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
     }
-    callback.onFailure(
-      new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
+
+    val inbox = getInbox(message.receiver.name)
+    if (inbox != null) {
+      val rpcCallContext =
+        new RemoteNettyRpcCallContext(
+          nettyEnv, inbox.endpointRef, callback, message.senderAddress, message.needReply)
+      postMessageToInbox(
+        inbox,
+        ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext),
+        onDispatcherStop)
+    } else {
+      onDispatcherStop()
+    }
+  }
+
+  private def getInbox(endpointName: String): Inbox = {
+    val receiver = nameToEndpoint.get(endpointName)
+    if (receiver != null) {
+      endpointToInbox.get(receiver.endpoint)
+    } else {
+      null
+    }
   }
 
   def postMessage(message: RequestMessage, p: Promise[Any]): Unit = {
-    val receiver = nameToEndpoint.get(message.receiver.name)
-    if (receiver != null) {
-      val inbox = endpointToInbox.get(receiver.endpoint)
-      if (inbox != null) {
-        val rpcCallContext =
-          new LocalNettyRpcCallContext(
-            inbox.endpointRef, message.senderAddress, message.needReply, p)
-        postMessageToInbox(inbox,
-          ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext))
-        return
-      }
+    def onDispatcherStop(): Unit = {
+      p.tryFailure(
+        new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
     }
-    p.tryFailure(
-      new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
+
+    val inbox = getInbox(message.receiver.name)
+    if (inbox != null) {
+      val rpcCallContext =
+        new LocalNettyRpcCallContext(
+          inbox.endpointRef, message.senderAddress, message.needReply, p)
+      postMessageToInbox(
+        inbox,
+        ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext),
+        onDispatcherStop)
+    } else {
+      onDispatcherStop()
+    }
   }
 
-  private def postMessageToInbox(inbox: Inbox, message: InboxMessage): Unit = synchronized {
-    if (stopped) {
-      logWarning(s"Drop ${message} because RpcEnv has been stopped")
-      return
+  private def postMessageToInbox(inbox: Inbox, message: InboxMessage, onStop: () => Unit): Unit = {
+    var shouldCallOnStop = false
+    synchronized {
+      if (stopped) {
+        shouldCallOnStop = true
+      } else {
+        inbox.post(message)
+        receivers.put(inbox.endpoint)
+      }
     }
-    inbox.post(message)
-    receivers.put(inbox.endpoint)
+    if (shouldCallOnStop) {
+      // We don't need to call `onStop` in the `synchronized` block
+      onStop()
+    }
   }
 
   private val parallelism = nettyEnv.conf.getInt("spark.rpc.netty.dispatcher.parallelism",
