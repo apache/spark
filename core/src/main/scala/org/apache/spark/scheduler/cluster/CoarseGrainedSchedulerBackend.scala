@@ -155,7 +155,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             }
             if (numReplacingExecutors > 0) {
               numReplacingExecutors -= 1
-              logError(s"Decremented number of replaceing executors ($numReplacingExecutors left)")
+              logDebug(s"Decremented number of replaceing executors ($numReplacingExecutors left)")
             }
           }
           // Note: some tests expect the reply to come after we put the executor in the map
