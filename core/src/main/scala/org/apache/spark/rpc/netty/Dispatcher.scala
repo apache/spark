@@ -153,9 +153,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
         while (true) {
           try {
             val endpoint = receivers.take()
-            if (endpoint == DummyEndpoint) {
-              // Put DummyEndpoint back so that other MessageLoops can see it.
-              receivers.put(DummyEndpoint)
+            if (endpoint == PoisonEndpoint) {
+              // Put PoisonEndpoint back so that other MessageLoops can see it.
+              receivers.put(PoisonEndpoint)
               return
             }
             val inbox = endpointToInbox.get(endpoint)
@@ -198,10 +198,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     for (name <- nameToEndpoint.keySet().asScala) {
       unregisterRpcEndpoint(name)
     }
-    // When we reach here, the new items put into receivers will always be DummyEndpoint, others
+    // When we reach here, the new items put into receivers will always be `PoisonEndpoint`, others
     // will be rejected. So that we can make sure we will process all messages that have already in
     // the Inboxes.
-    receivers.put(DummyEndpoint)
+    receivers.put(PoisonEndpoint)
     executor.shutdown()
   }
 
@@ -216,11 +216,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     nameToEndpoint.containsKey(name)
   }
 
-}
-
-/**
- * A dummy endpoint that indicates MessageLoop should exit its loop.
- */
-private[netty] object DummyEndpoint extends RpcEndpoint {
-  override val rpcEnv: RpcEnv = null
+  /**
+   * A poison endpoint that indicates MessageLoop should exit its loop.
+   */
+  private object PoisonEndpoint extends RpcEndpoint {
+    override val rpcEnv: RpcEnv = null
+  }
 }
