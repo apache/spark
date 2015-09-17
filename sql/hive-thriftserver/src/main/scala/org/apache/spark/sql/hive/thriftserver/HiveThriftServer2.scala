@@ -95,8 +95,7 @@ object HiveThriftServer2 extends Logging {
       }
       // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
       // process can not exit, so check whether if SparkContext was stopped.
-      // The most reasonable way is use SparkContext.stopped to check, but now it is private.
-      if (SparkSQLEnv.sparkContext == null || SparkSQLEnv.sparkContext.dagScheduler == null) {
+      if (SparkSQLEnv.sparkContext.stopped.get()) {
         System.exit(-1)
       }
     } catch {
