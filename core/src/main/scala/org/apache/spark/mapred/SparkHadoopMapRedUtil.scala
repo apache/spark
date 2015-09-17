@@ -141,4 +141,15 @@ object SparkHadoopMapRedUtil extends Logging {
       logInfo(s"No need to commit output of task because needsTaskCommit=false: $mrTaskAttemptID")
     }
   }
+
+  def commitTask(
+      committer: MapReduceOutputCommitter,
+      mrTaskContext: MapReduceTaskAttemptContext,
+      sparkTaskContext: TaskContext): Unit = {
+    commitTask(
+      committer,
+      mrTaskContext,
+      sparkTaskContext.stageId(),
+      sparkTaskContext.partitionId())
+  }
 }
