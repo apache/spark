@@ -28,8 +28,6 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, DataFrame}
 
-private[ml] case class AFTPoint(features: Vector, censored: Double, label: Double)
-
 class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var datasetUnivariate: DataFrame = _
@@ -56,7 +54,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(aftr.getLabelCol === "label")
     assert(aftr.getFeaturesCol === "features")
     assert(aftr.getPredictionCol === "prediction")
-    assert(aftr.getCensorCol === "censored")
+    assert(aftr.getCensoredCol === "censored")
     assert(aftr.getFitIntercept)
     assert(aftr.getMaxIter === 100)
     assert(aftr.getTol === 1E-6)
@@ -105,7 +103,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     }
     val y = (1 to nPoints).map { i => (weibull.nextValue(), exponential.nextValue()) }
 
-    y.zip(x).map { p => AFTPoint(Vectors.dense(p._2), censored(p._1._1, p._1._2), p._1._1) }
+    y.zip(x).map { p => AFTPoint(Vectors.dense(p._2), p._1._1, censored(p._1._1, p._1._2)) }
   }
 
   test("aft survival regression with univariate") {
@@ -115,13 +113,13 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     /*
        Using the following R code to load the data and train the model using survival package.
 
-       > library("survival")
-       > data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
-       > features <- as.matrix(data.frame(as.numeric(data$V1)))
-       > censored <- as.numeric(data$V2)
-       > label <- as.numeric(data$V3)
-       > sr.fit <- survreg(Surv(label, censored)~features, dist='weibull')
-       > summary(sr.fit)
+       library("survival")
+       data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
+       features <- as.matrix(data.frame(as.numeric(data$V1)))
+       censored <- as.numeric(data$V2)
+       label <- as.numeric(data$V3)
+       sr.fit <- survreg(Surv(label, censored)~features, dist='weibull')
+       summary(sr.fit)
 
        survreg(formula = Surv(label, censored) ~ features, dist = "weibull")
                     Value Std. Error      z        p
@@ -147,11 +145,12 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
 
     /*
        Using the following R code to predict.
-       > responsePred <- predict(sr.fit)
-       > quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
+
+       responsePred <- predict(sr.fit)
+       quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
      */
     val features = Vectors.dense(6.559282795753792)
-    val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
+    val quantile = Array(0.1, 0.5, 0.9)
     val responsePredictR = 4.494763
     val quantilePredictR = Vectors.dense(0.1879174, 2.680120, 14.57794)
 
@@ -173,13 +172,13 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     /*
        Using the following R code to load the data and train the model using survival package.
 
-       > library("survival")
-       > data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
-       > features <- as.matrix(data.frame(as.numeric(data$V1), as.numeric(data$V2)))
-       > censored <- as.numeric(data$V3)
-       > label <- as.numeric(data$V4)
-       > sr.fit <- survreg(Surv(label, censored)~features, dist='weibull')
-       > summary(sr.fit)
+       library("survival")
+       data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
+       features <- as.matrix(data.frame(as.numeric(data$V1), as.numeric(data$V2)))
+       censored <- as.numeric(data$V3)
+       label <- as.numeric(data$V4)
+       sr.fit <- survreg(Surv(label, censored)~features, dist='weibull')
+       summary(sr.fit)
 
                                      Value Std. Error      z        p
        (Intercept)                  1.9206     0.1057 18.171 8.78e-74
@@ -205,11 +204,11 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
 
     /*
        Using the following R code to predict.
-       > responsePred <- predict(sr.fit)
-       > quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
+       responsePred <- predict(sr.fit)
+       quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
      */
     val features = Vectors.dense(2.233396950271428, -2.5321374085997683)
-    val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
+    val quantile = Array(0.1, 0.5, 0.9)
     val responsePredictR = 4.761219
     val quantilePredictR = Vectors.dense(0.5287044, 3.328586, 10.75171)
 
@@ -231,13 +230,13 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     /*
        Using the following R code to load the data and train the model using survival package.
 
-       > library("survival")
-       > data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
-       > features <- as.matrix(data.frame(as.numeric(data$V1), as.numeric(data$V2)))
-       > censored <- as.numeric(data$V3)
-       > label <- as.numeric(data$V4)
-       > sr.fit <- survreg(Surv(label, censored)~features-1, dist='weibull')
-       > summary(sr.fit)
+       library("survival")
+       data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
+       features <- as.matrix(data.frame(as.numeric(data$V1), as.numeric(data$V2)))
+       censored <- as.numeric(data$V3)
+       label <- as.numeric(data$V4)
+       sr.fit <- survreg(Surv(label, censored)~features-1, dist='weibull')
+       summary(sr.fit)
 
                                     Value Std. Error     z        p
        featuresas.numeric.data.V1.  0.896     0.0685  13.1 3.93e-39
@@ -262,11 +261,11 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
 
     /*
        Using the following R code to predict.
-       > responsePred <- predict(sr.fit)
-       > quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
+       responsePred <- predict(sr.fit)
+       quantilePred <- predict(sr.fit, type='quantile', p=c(0.1, 0.5, 0.9))
      */
     val features = Vectors.dense(2.233396950271428, -2.5321374085997683)
-    val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
+    val quantile = Array(0.1, 0.5, 0.9)
     val responsePredictR = 44.5446531
     val quantilePredictR = Vectors.dense(1.45210294, 25.5060774, 158.428600)
 

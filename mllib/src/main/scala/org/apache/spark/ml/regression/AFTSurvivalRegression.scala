@@ -44,25 +44,29 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 
   /**
    * Param for censored column name.
+   * The value of this column could be 0 or 1.
+   * If the value is 1, it means the event has occurred i.e. uncensored; otherwise it censored.
    * @group param
    */
-  final val censorCol: Param[String] = new Param[String](this, "censorCol", "censored column name")
+  final val censoredCol: Param[String] = new Param(this, "censoredCol", "censored column name")
 
   /** @group getParam */
-  final def getCensorCol: String = $(censorCol)
+  final def getCensoredCol: String = $(censoredCol)
 
   /**
-   * Param for quantile vector.
+   * Param for quantile array.
+   * Values of the quantile array should be in the range [0, 1].
    * @group param
    */
-  final val quantile: Param[Vector] = new Param[Vector](this,
-    "quantileCol", "quantile column name")
+  val quantile: DoubleArrayParam = new DoubleArrayParam(this, "quantile", "quantile array",
+    (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1))
+    )
 
   /** @group getParam */
-  final def getQuantile: Vector = $(quantile)
+  def getQuantile: Array[Double] = $(quantile)
 
-  /** Checks whether the input has quantile vector. */
-  protected[ml] def hasQuantile: Boolean = {
+  /** Checks whether the input has quantile array. */
+  protected[regression] def hasQuantile: Boolean = {
     isDefined(quantile) && $(quantile).size != 0
   }
 
@@ -77,7 +81,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
       fitting: Boolean): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     if (fitting) {
-      SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
+      SchemaUtils.checkColumnType(schema, $(censoredCol), DoubleType)
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
@@ -94,7 +98,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 class AFTSurvivalRegression(override val uid: String)
   extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with Logging {
 
-  def this() = this(Identifiable.randomUID("aftReg"))
+  def this() = this(Identifiable.randomUID("aftSurvReg"))
 
   /** @group setParam */
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -103,8 +107,8 @@ class AFTSurvivalRegression(override val uid: String)
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
-  def setCensorCol(value: String): this.type = set(censorCol, value)
-  setDefault(censorCol -> "censored")
+  def setCensoredCol(value: String): this.type = set(censoredCol, value)
+  setDefault(censoredCol -> "censored")
 
   /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -135,13 +139,13 @@ class AFTSurvivalRegression(override val uid: String)
   setDefault(tol -> 1E-6)
 
   /**
-   * Extracts (features, label, censored) from input dataset.
+   * Extracts AFTPoint from input dataset.
    */
   protected[ml] def extractCensoredLabeledPoints(
-      dataset: DataFrame): RDD[(Vector, Double, Double)] = {
-    dataset.select($(featuresCol), $(labelCol), $(censorCol))
+      dataset: DataFrame): RDD[AFTPoint] = {
+    dataset.select($(featuresCol), $(labelCol), $(censoredCol))
       .map { case Row(features: Vector, label: Double, censored: Double) =>
-      (features, label, censored)
+      AFTPoint(features, label, censored)
     }
   }
 
@@ -217,7 +221,7 @@ class AFTSurvivalRegressionModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
-  def setQuantile(value: Vector): this.type = set(quantile, value)
+  def setQuantile(value: Array[Double]): this.type = set(quantile, value)
 
   def quantilePredict(features: Vector): Vector = {
     require(hasQuantile, "AFTSurvivalRegressionModel quantilePredict must set quantile vector")
@@ -225,7 +229,7 @@ class AFTSurvivalRegressionModel private[ml] (
     val lambda = math.exp(weights.toBreeze.dot(features.toBreeze) + intercept)
     // shape parameter of the Weibull distribution
     val k = 1 / scale
-    val array = $(quantile).toArray.map { q => lambda * math.exp(math.log(-math.log(1-q)) / k) }
+    val array = $(quantile).map { q => lambda * math.exp(math.log(-math.log(1-q)) / k) }
     Vectors.dense(array)
   }
 
@@ -319,7 +323,9 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
   private var gradientLogSigmaSum = 0.0
 
   def count: Long = totalCnt
+
   def loss: Double = if (totalCnt == 0) 1.0 else lossSum / totalCnt
+
   // Here we optimize loss function over beta and log(sigma)
   def gradient: BDV[Double] = BDV.vertcat(BDV(Array(gradientLogSigmaSum / totalCnt.toDouble)),
     gradientBetaSum/totalCnt.toDouble)
@@ -328,19 +334,18 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
    * Add a new training data to this AFTAggregator, and update the loss and gradient
    * of the objective function.
    *
-   * @param data The (features, label, censored) triple for one data point to be added
-   *             into this aggregator.
+   * @param data The AFTPoint representation for one data point to be added into this aggregator.
    * @return This AFTAggregator object.
    */
-  def add(data: (Vector, Double, Double)): this.type = {
+  def add(data: AFTPoint): this.type = {
 
     val xi = if (fitIntercept) {
-      Vectors.dense(Array(1.0) ++ data._1.toArray).toBreeze
+      Vectors.dense(Array(1.0) ++ data.features.toArray).toBreeze
     } else {
-      Vectors.dense(Array(0.0) ++ data._1.toArray).toBreeze
+      Vectors.dense(Array(0.0) ++ data.features.toArray).toBreeze
     }
-    val ti = data._2
-    val delta = data._3
+    val ti = data.label
+    val delta = data.censored
     val epsilon = (math.log(ti) - beta.dot(xi)) / sigma
 
     lossSum += math.log(sigma) * delta
@@ -382,7 +387,7 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
  * It returns the loss and gradient at a particular point (weights).
  * It's used in Breeze's convex optimization routines.
  */
-private class AFTCostFun(data: RDD[(Vector, Double, Double)], fitIntercept: Boolean)
+private class AFTCostFun(data: RDD[AFTPoint], fitIntercept: Boolean)
   extends DiffFunction[BDV[Double]] {
 
   override def calculate(weights: BDV[Double]): (Double, BDV[Double]) = {
@@ -398,3 +403,13 @@ private class AFTCostFun(data: RDD[(Vector, Double, Double)], fitIntercept: Bool
     (aftAggregator.loss, aftAggregator.gradient)
   }
 }
+
+/**
+ * Class that represents the (features, label, censored) triplet of a data point.
+ *
+ * @param features List of features for this data point.
+ * @param label Label for this data point.
+ * @param censored Indicator of the event has occurred or not. If the value is 1, it means
+ *                 the event has occurred i.e. uncensored; otherwise it censored.
+ */
+private[ml] case class AFTPoint(features: Vector, label: Double, censored: Double)
