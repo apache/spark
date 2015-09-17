@@ -22,7 +22,8 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS
 import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -139,8 +140,8 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     val scaleR = 1.41
 
     assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.coefficients ~= coefficientsR relTol 1E-3)
-    assert(model.scale ~= scaleR relTol 1E-3)
+    assert(model.coefficients ~== coefficientsR relTol 1E-3)
+    assert(model.scale ~== scaleR relTol 1E-3)
 
     /*
        Using the following R code to predict.
@@ -158,17 +159,17 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        [1]  0.1879174  2.6801195 14.5779394
      */
     val features = Vectors.dense(6.559282795753792)
-    val quantile = Array(0.1, 0.5, 0.9)
+    val quantileProbabilities = Array(0.1, 0.5, 0.9)
     val responsePredictR = 4.494763
     val quantilePredictR = Vectors.dense(0.1879174, 2.6801195, 14.5779394)
 
     assert(model.predict(features) ~== responsePredictR relTol 1E-3)
-    model.setQuantile(quantile)
+    model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
     model.transform(datasetUnivariate).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
-        val prediction2 = math.exp(model.coefficients.toBreeze.dot(features.toBreeze) + model.intercept)
+        val prediction2 = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
@@ -208,8 +209,8 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     val scaleR = 0.977
 
     assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.coefficients ~= coefficientsR relTol 1E-3)
-    assert(model.scale ~= scaleR relTol 1E-3)
+    assert(model.coefficients ~== coefficientsR relTol 1E-3)
+    assert(model.scale ~== scaleR relTol 1E-3)
 
     /*
        Using the following R code to predict.
@@ -226,17 +227,17 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        [1]  0.5287044  3.3285858 10.7517072
      */
     val features = Vectors.dense(2.233396950271428, -2.5321374085997683)
-    val quantile = Array(0.1, 0.5, 0.9)
+    val quantileProbabilities = Array(0.1, 0.5, 0.9)
     val responsePredictR = 4.761219
     val quantilePredictR = Vectors.dense(0.5287044, 3.3285858, 10.7517072)
 
     assert(model.predict(features) ~== responsePredictR relTol 1E-3)
-    model.setQuantile(quantile)
+    model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
     model.transform(datasetMultivariate).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
-        val prediction2 = math.exp(model.coefficients.toBreeze.dot(features.toBreeze) + model.intercept)
+        val prediction2 = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
@@ -293,17 +294,17 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        [1]   1.452103  25.506077 158.428600
      */
     val features = Vectors.dense(2.233396950271428, -2.5321374085997683)
-    val quantile = Array(0.1, 0.5, 0.9)
+    val quantileProbabilities = Array(0.1, 0.5, 0.9)
     val responsePredictR = 44.54465
     val quantilePredictR = Vectors.dense(1.452103, 25.506077, 158.428600)
 
     assert(model.predict(features) ~== responsePredictR relTol 1E-3)
-    model.setQuantile(quantile)
+    model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
     model.transform(datasetMultivariate).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
-        val prediction2 = math.exp(model.coefficients.toBreeze.dot(features.toBreeze) + model.intercept)
+        val prediction2 = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }

@@ -55,20 +55,19 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   final def getCensoredCol: String = $(censoredCol)
 
   /**
-   * Param for quantile array.
-   * Values of the quantile array should be in the range [0, 1].
+   * Param for quantile probabilities array.
+   * Values of the quantile probabilities array should be in the range [0, 1].
    * @group param
    */
-  val quantile: DoubleArrayParam = new DoubleArrayParam(this, "quantile", "quantile array",
-    (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1))
-    )
+  final val quantileProbabilities: DoubleArrayParam = new DoubleArrayParam(this, "quantile",
+    "quantile probabilities array", (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1)))
 
   /** @group getParam */
-  def getQuantile: Array[Double] = $(quantile)
+  final def getQuantileProbabilities: Array[Double] = $(quantileProbabilities)
 
-  /** Checks whether the input has quantile array. */
-  protected[regression] def hasQuantile: Boolean = {
-    isDefined(quantile) && $(quantile).size != 0
+  /** Checks whether the input has quantile probabilities array. */
+  protected[regression] def hasQuantileProbabilities: Boolean = {
+    isDefined(quantileProbabilities) && $(quantileProbabilities).size != 0
   }
 
   /**
@@ -144,9 +143,9 @@ class AFTSurvivalRegression(override val uid: String)
    */
   protected[ml] def extractCensoredLabeledPoints(
       dataset: DataFrame): RDD[AFTPoint] = {
-    dataset.select($(featuresCol), $(labelCol), $(censoredCol))
-      .map { case Row(features: Vector, label: Double, censored: Double) =>
-      AFTPoint(features, label, censored)
+    dataset.select($(featuresCol), $(labelCol), $(censoredCol)).map {
+      case Row(features: Vector, label: Double, censored: Double) =>
+        AFTPoint(features, label, censored)
     }
   }
 
@@ -161,17 +160,17 @@ class AFTSurvivalRegression(override val uid: String)
 
     val numFeatures = dataset.select($(featuresCol)).take(1)(0).getAs[Vector](0).size
     /*
-       The coefficients vector has three parts:
+       The weights vector has three parts:
        the first element: Double, log(sigma), the log of scale parameter
        the second element: Double, intercept of the beta parameter
-       the third to the end elements: Doubles, coefficients vector of the beta parameter
+       the third to the end elements: Doubles, regression coefficients vector of the beta parameter
      */
-    val initialCoefficients = Vectors.zeros(numFeatures + 2)
+    val initialWeights = Vectors.zeros(numFeatures + 2)
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialCoefficients.toBreeze.toDenseVector)
+      initialWeights.toBreeze.toDenseVector)
 
-    val coefficients = {
+    val weights = {
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
       var state: optimizer.State = null
       while (states.hasNext) {
@@ -183,16 +182,16 @@ class AFTSurvivalRegression(override val uid: String)
         throw new SparkException(msg)
       }
 
-      val rawCoefficients = state.x.toArray.clone()
-      rawCoefficients
+      val rawWeights = state.x.toArray.clone()
+      rawWeights
     }
 
     if (handlePersistence) instances.unpersist()
 
-    val realCoefficients = Vectors.dense(coefficients.slice(2, coefficients.length))
-    val intercept = coefficients(1)
-    val scale = math.exp(coefficients(0))
-    val model = new AFTSurvivalRegressionModel(uid, realCoefficients, intercept, scale)
+    val coefficients = Vectors.dense(weights.slice(2, weights.length))
+    val intercept = weights(1)
+    val scale = math.exp(weights(0))
+    val model = new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
     copyValues(model.setParent(this))
   }
 
@@ -222,18 +221,19 @@ class AFTSurvivalRegressionModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
-  def setQuantile(value: Array[Double]): this.type = set(quantile, value)
+  def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
 
   def predictQuantiles(features: Vector): Vector = {
-    require(hasQuantile, "AFTSurvivalRegressionModel predictQuantiles must set quantile array")
-    // scale parameter of the Weibull distribution
-    val lambda = math.exp(coefficients.toBreeze.dot(features.toBreeze) + intercept)
-    // shape parameter of the Weibull distribution
+    require(hasQuantileProbabilities,
+      "AFTSurvivalRegressionModel predictQuantiles must set quantile probabilities array")
+    // scale parameter for the Weibull distribution of lifetime
+    val lambda = math.exp(BLAS.dot(coefficients, features) + intercept)
+    // shape parameter for the Weibull distribution of lifetime
     val k = 1 / scale
-    val lifeTimes = $(quantile).map {
+    val quantiles = $(quantileProbabilities).map {
       q => lambda * math.exp(math.log(-math.log(1-q)) / k)
     }
-    Vectors.dense(lifeTimes)
+    Vectors.dense(quantiles)
   }
 
   def predict(features: Vector): Double = {
@@ -267,21 +267,23 @@ class AFTSurvivalRegressionModel private[ml] (
  * Two AFTAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
- * For random lifetime T_{i} of subjects i = 1, ..., n, with possible right-censoring,
- * the likelihood function under the AFT model is given as
+ * Given the values of the covariates x^{'}, for random lifetime t_{i} of subjects i = 1, ..., n,
+ * with possible right-censoring, the likelihood function under the AFT model is given as
  * {{{
  *   L(\beta,\sigma)=\prod_{i=1}^n[\frac{1}{\sigma}f_{0}
  *   (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})]^{\delta_{i}}S_{0}
  *   (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})^{1-\delta_{i}}
  * }}}
+ * Where \delta_{i} is the indicator of the event has occurred i.e. uncensored or not.
  * Using \epsilon_{i}=\frac{\log{t_{i}}-x^{'}\beta}{\sigma}, the log-likelihood function
  * assumes the form
  * {{{
  *   \iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+
  *   \delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
  * }}}
- * Where S_{0}(\epsilon_{i}) is the baseline survivor function
+ * Where S_{0}(\epsilon_{i}) is the baseline survivor function,
  * and f_{0}(\epsilon_{i}) is corresponding density function.
+ *
  * The most commonly used log-linear survival regression method is based on the Weibull
  * distribution of the survival time. The Weibull distribution for lifetime corresponding
  * to extreme value distribution for log of the lifetime,
@@ -293,7 +295,7 @@ class AFTSurvivalRegressionModel private[ml] (
  * {{{
  *   f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
  * }}}
- * The log-likelihood function for Weibull distribution is
+ * The log-likelihood function for Weibull distribution of lifetime is
  * {{{
  *   \iota(\beta,\sigma)=
  *   -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
@@ -309,15 +311,17 @@ class AFTSurvivalRegressionModel private[ml] (
  *   \frac{\partial (-\iota)}{\partial (\log\sigma)}=
  *   \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
  * }}}
- * @param coefficients The the log of scale parameter,
- *                the intercept and coefficients corresponding to the features.
+ * @param weights The log of scale parameter, the intercept and
+ *                regression coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
  */
-private class AFTAggregator(coefficients: BDV[Double], fitIntercept: Boolean)
+private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
   extends Serializable {
 
-  private val beta = coefficients.slice(1, coefficients.length)
-  private val sigma = math.exp(coefficients(0))
+  // beta is the intercept and regression coefficients to the covariates
+  private val beta = weights.slice(1, weights.length)
+  // sigma is the scale parameter of the AFT model
+  private val sigma = math.exp(weights(0))
 
   private var totalCnt: Long = 0L
   private var lossSum = 0.0
@@ -407,7 +411,7 @@ private class AFTCostFun(data: RDD[AFTPoint], fitIntercept: Boolean)
 }
 
 /**
- * Class that represents the (features, label, censored) triplet of a data point.
+ * Class that represents the (features, label, censored) of a data point.
  *
  * @param features List of features for this data point.
  * @param label Label for this data point.
