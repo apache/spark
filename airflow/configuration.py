@@ -202,6 +202,36 @@ scheduler_heartbeat_sec = 5
 # statsd_host =  localhost
 # statsd_port =  8125
 # statsd_prefix = airflow
+
+[mesos]
+# Mesos master address which MesosExecutor will connect to.
+master = localhost:5050
+
+# The framework name which Airflow scheduler will register itself as on mesos
+framework_name = Airflow
+
+# Number of cpu cores required for running one task instance using
+# 'airflow run <dag_id> <task_id> <execution_date> --local -p <pickle_id>'
+# command on a mesos slave
+task_cpu = 1
+
+# Memory in MB required for running one task instance using
+# 'airflow run <dag_id> <task_id> <execution_date> --local -p <pickle_id>'
+# command on a mesos slave
+task_memory = 256
+
+# Enable framework checkpointing for mesos
+# See http://mesos.apache.org/documentation/latest/slave-recovery/
+checkpoint = False
+
+# Enable framework authentication for mesos
+# See http://mesos.apache.org/documentation/latest/configuration/
+authenticate = False
+
+# Mesos credentials, if authentication is enabled
+# default_principal = admin
+# default_secret = admin
+
 """
 
 TEST_CONFIG = """\
