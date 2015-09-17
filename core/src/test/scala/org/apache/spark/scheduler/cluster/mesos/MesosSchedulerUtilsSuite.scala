@@ -17,10 +17,13 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import scala.language.reflectiveCalls
+
 import org.apache.mesos.Protos.Value
 import org.mockito.Mockito._
 import org.scalatest._
 import org.scalatest.mock.MockitoSugar
+
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoSugar {

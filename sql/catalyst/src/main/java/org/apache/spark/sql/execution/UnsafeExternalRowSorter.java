@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
@@ -59,20 +59,21 @@ final class UnsafeExternalRowSorter {
       StructType schema,
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
-      PrefixComputer prefixComputer) throws IOException {
+      PrefixComputer prefixComputer,
+      long pageSizeBytes) throws IOException {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
-    sorter = new UnsafeExternalSorter(
+    sorter = UnsafeExternalSorter.create(
       taskContext.taskMemoryManager(),
       sparkEnv.shuffleMemoryManager(),
       sparkEnv.blockManager(),
       taskContext,
       new RowComparator(ordering, schema.length()),
       prefixComparator,
-      4096,
-      sparkEnv.conf()
+      /* initialSize */ 4096,
+      pageSizeBytes
     );
   }
 
@@ -105,8 +106,15 @@ final class UnsafeExternalRowSorter {
     sorter.spill();
   }
 
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsage() {
+    return sorter.getPeakMemoryUsedBytes();
+  }
+
   private void cleanupResources() {
-    sorter.freeMemory();
+    sorter.cleanupResources();
   }
 
   @VisibleForTesting
@@ -149,7 +157,7 @@ final class UnsafeExternalRowSorter {
             cleanupResources();
             // Scala iterators don't declare any checked exceptions, so we need to use this hack
             // to re-throw the exception:
-            PlatformDependent.throwException(e);
+            Platform.throwException(e);
           }
           throw new RuntimeException("Exception should have been re-thrown in next()");
         };

@@ -49,13 +49,18 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   test("us and julian day") {
     val (d, ns) = toJulianDay(0)
     assert(d === JULIAN_DAY_OF_EPOCH)
-    assert(ns === SECONDS_PER_DAY / 2 * NANOS_PER_SECOND)
+    assert(ns === 0)
     assert(fromJulianDay(d, ns) == 0L)
 
-    val t = new Timestamp(61394778610000L) // (2015, 6, 11, 10, 10, 10, 100)
+    val t = Timestamp.valueOf("2015-06-11 10:10:10.100")
     val (d1, ns1) = toJulianDay(fromJavaTimestamp(t))
-    val t2 = toJavaTimestamp(fromJulianDay(d1, ns1))
-    assert(t.equals(t2))
+    val t1 = toJavaTimestamp(fromJulianDay(d1, ns1))
+    assert(t.equals(t1))
+
+    val t2 = Timestamp.valueOf("2015-06-11 20:10:10.100")
+    val (d2, ns2) = toJulianDay(fromJavaTimestamp(t2))
+    val t22 = toJavaTimestamp(fromJulianDay(d2, ns2))
+    assert(t2.equals(t22))
   }
 
   test("SPARK-6785: java date conversion before and after epoch") {
@@ -397,5 +402,27 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === -36)
     c2.set(1996, 2, 31, 0, 0, 0)
     assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 11)
+  }
+
+  test("from UTC timestamp") {
+    def test(utc: String, tz: String, expected: String): Unit = {
+      assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+        === expected)
+    }
+    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "Asia/Shanghai", "2011-12-25 17:00:00.123456")
+  }
+
+  test("to UTC timestamp") {
+    def test(utc: String, tz: String, expected: String): Unit = {
+      assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+        === expected)
+    }
+    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
   }
 }

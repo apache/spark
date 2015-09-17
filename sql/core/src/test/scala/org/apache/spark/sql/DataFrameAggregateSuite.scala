@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{BinaryType, DecimalType}
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.DecimalType
 
 
-class DataFrameAggregateSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("groupBy") {
     checkAnswer(
@@ -68,12 +66,12 @@ class DataFrameAggregateSuite extends QueryTest {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
       Seq(Row(3), Row(3), Row(3))
     )
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
   }
 
   test("agg without groups") {
@@ -189,15 +187,5 @@ class DataFrameAggregateSuite extends QueryTest {
     checkAnswer(
       emptyTableData.agg(sumDistinct('a)),
       Row(null))
-  }
-
-  test("aggregation can't work on binary type") {
-    val df = Seq(1, 1, 2, 2).map(i => Tuple1(i.toString)).toDF("c").select($"c" cast BinaryType)
-    intercept[AnalysisException] {
-      df.groupBy("c").agg(count("*"))
-    }
-    intercept[AnalysisException] {
-      df.distinct
-    }
   }
 }

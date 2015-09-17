@@ -177,16 +177,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
           s"${now - lastSeenMs} ms exceeds timeout $executorTimeoutMs ms")
         scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
           s"timed out after ${now - lastSeenMs} ms"))
-        if (sc.supportDynamicAllocation) {
           // Asynchronously kill the executor to avoid blocking the current thread
-          killExecutorThread.submit(new Runnable {
-            override def run(): Unit = Utils.tryLogNonFatalError {
-              // Note: we want to get an executor back after expiring this one,
-              // so do not simply call `sc.killExecutor` here (SPARK-8119)
-              sc.killAndReplaceExecutor(executorId)
-            }
-          })
-        }
+        killExecutorThread.submit(new Runnable {
+          override def run(): Unit = Utils.tryLogNonFatalError {
+            // Note: we want to get an executor back after expiring this one,
+            // so do not simply call `sc.killExecutor` here (SPARK-8119)
+            sc.killAndReplaceExecutor(executorId)
+          }
+        })
         executorLastSeen.remove(executorId)
       }
     }

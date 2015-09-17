@@ -20,14 +20,13 @@ package org.apache.spark.streaming.api.python
 import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
-import scala.collection.JavaConversions._
+
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import py4j.GatewayServer
 
 import org.apache.spark.api.java._
-import org.apache.spark.api.python._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Interval, Duration, Time}
@@ -161,7 +160,7 @@ private[python] object PythonDStream {
    */
   def toRDDQueue(rdds: JArrayList[JavaRDD[Array[Byte]]]): java.util.Queue[JavaRDD[Array[Byte]]] = {
     val queue = new java.util.LinkedList[JavaRDD[Array[Byte]]]
-    rdds.forall(queue.add(_))
+    rdds.asScala.foreach(queue.add)
     queue
   }
 }

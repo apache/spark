@@ -251,6 +251,18 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Nil))
   }
 
+  test("nanvl casts") {
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, FloatType), Literal.create(1.0, DoubleType)),
+      NaNvl(Cast(Literal.create(1.0, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, FloatType)),
+      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0, FloatType), DoubleType)))
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)),
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)))
+  }
+
   test("type coercion for If") {
     val rule = HiveTypeCoercion.IfCoercion
     ruleTest(rule,
@@ -272,6 +284,17 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(HiveTypeCoercion.CaseWhenCoercion,
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
+    )
+    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
+      CaseWhen(Seq(Literal(true), Literal(1.2), Literal.create(1, DecimalType(7, 2)))),
+      CaseWhen(Seq(
+        Literal(true), Literal(1.2), Cast(Literal.create(1, DecimalType(7, 2)), DoubleType)))
+    )
+    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
+      CaseWhen(Seq(Literal(true), Literal(100L), Literal.create(1, DecimalType(7, 2)))),
+      CaseWhen(Seq(
+        Literal(true), Cast(Literal(100L), DecimalType(22, 2)),
+        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2))))
     )
   }
 

@@ -152,8 +152,15 @@ class Accumulable[R, T] private[spark] (
     in.defaultReadObject()
     value_ = zero
     deserialized = true
+    // Automatically register the accumulator when it is deserialized with the task closure.
+    //
+    // Note internal accumulators sent with task are deserialized before the TaskContext is created
+    // and are registered in the TaskContext constructor. Other internal accumulators, such SQL
+    // metrics, still need to register here.
     val taskContext = TaskContext.get()
-    taskContext.registerAccumulator(this)
+    if (taskContext != null) {
+      taskContext.registerAccumulator(this)
+    }
   }
 
   override def toString: String = if (value_ == null) "null" else value_.toString
@@ -248,10 +255,20 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
-  extends Accumulable[T, T](initialValue, param, name) {
+class Accumulator[T] private[spark] (
+    @transient private[spark] val initialValue: T,
+    param: AccumulatorParam[T],
+    name: Option[String],
+    internal: Boolean)
+  extends Accumulable[T, T](initialValue, param, name, internal) {
 
-  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
+  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
+    this(initialValue, param, name, false)
+  }
+
+  def this(initialValue: T, param: AccumulatorParam[T]) = {
+    this(initialValue, param, None, false)
+  }
 }
 
 /**
@@ -341,4 +358,42 @@ private[spark] object Accumulators extends Logging {
     }
   }
 
+}
+
+private[spark] object InternalAccumulator {
+  val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
+  val TEST_ACCUMULATOR = "testAccumulator"
+
+  // For testing only.
+  // This needs to be a def since we don't want to reuse the same accumulator across stages.
+  private def maybeTestAccumulator: Option[Accumulator[Long]] = {
+    if (sys.props.contains("spark.testing")) {
+      Some(new Accumulator(
+        0L, AccumulatorParam.LongAccumulatorParam, Some(TEST_ACCUMULATOR), internal = true))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Accumulators for tracking internal metrics.
+   *
+   * These accumulators are created with the stage such that all tasks in the stage will
+   * add to the same set of accumulators. We do this to report the distribution of accumulator
+   * values across all tasks within each stage.
+   */
+  def create(sc: SparkContext): Seq[Accumulator[Long]] = {
+    val internalAccumulators = Seq(
+        // Execution memory refers to the memory used by internal data structures created
+        // during shuffles, aggregations and joins. The value of this accumulator should be
+        // approximately the sum of the peak sizes across all such data structures created
+        // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
+        new Accumulator(
+          0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true)
+      ) ++ maybeTestAccumulator.toSeq
+    internalAccumulators.foreach { accumulator =>
+      sc.cleaner.foreach(_.registerAccumulatorForCleanup(accumulator))
+    }
+    internalAccumulators
+  }
 }

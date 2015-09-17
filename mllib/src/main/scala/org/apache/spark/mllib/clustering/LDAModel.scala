@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argtopk, normalize, sum}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax, argtopk, normalize, sum}
 import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
@@ -25,8 +25,8 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.JavaPairRDD
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -43,12 +43,15 @@ import org.apache.spark.util.BoundedPriorityQueue
  * including local and distributed data structures.
  */
 @Experimental
+@Since("1.3.0")
 abstract class LDAModel private[clustering] extends Saveable {
 
   /** Number of topics */
+  @Since("1.3.0")
   def k: Int
 
   /** Vocabulary size (number of terms or terms in the vocabulary) */
+  @Since("1.3.0")
   def vocabSize: Int
 
   /**
@@ -57,6 +60,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *
    * This is the parameter to a Dirichlet distribution.
    */
+  @Since("1.5.0")
   def docConcentration: Vector
 
   /**
@@ -68,6 +72,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
+  @Since("1.5.0")
   def topicConcentration: Double
 
   /**
@@ -81,20 +86,18 @@ abstract class LDAModel private[clustering] extends Saveable {
    * This is a matrix of size vocabSize x k, where each column is a topic.
    * No guarantees are given about the ordering of the topics.
    */
+  @Since("1.3.0")
   def topicsMatrix: Matrix
 
   /**
    * Return the topics described by weighted terms.
-   *
-   * This limits the number of terms per topic.
-   * This is approximate; it may not return exactly the top-weighted terms for each topic.
-   * To get a more precise set of top terms, increase maxTermsPerTopic.
    *
    * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
    * @return  Array over topics.  Each topic is represented as a pair of matching arrays:
    *          (term indices, term weights in topic).
    *          Each topic's terms are sorted in order of decreasing weight.
    */
+  @Since("1.3.0")
   def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])]
 
   /**
@@ -106,6 +109,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *          (term indices, term weights in topic).
    *          Each topic's terms are sorted in order of decreasing weight.
    */
+  @Since("1.3.0")
   def describeTopics(): Array[(Array[Int], Array[Double])] = describeTopics(vocabSize)
 
   /* TODO (once LDA can be trained with Strings or given a dictionary)
@@ -189,18 +193,24 @@ abstract class LDAModel private[clustering] extends Saveable {
  * @param topics Inferred topics (vocabSize x k matrix).
  */
 @Experimental
+@Since("1.3.0")
 class LocalLDAModel private[clustering] (
-    val topics: Matrix,
-    override val docConcentration: Vector,
-    override val topicConcentration: Double,
-    override protected[clustering] val gammaShape: Double) extends LDAModel with Serializable {
+    @Since("1.3.0") val topics: Matrix,
+    @Since("1.5.0") override val docConcentration: Vector,
+    @Since("1.5.0") override val topicConcentration: Double,
+    override protected[clustering] val gammaShape: Double = 100)
+  extends LDAModel with Serializable {
 
+  @Since("1.3.0")
   override def k: Int = topics.numCols
 
+  @Since("1.3.0")
   override def vocabSize: Int = topics.numRows
 
+  @Since("1.3.0")
   override def topicsMatrix: Matrix = topics
 
+  @Since("1.3.0")
   override def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])] = {
     val brzTopics = topics.toBreeze.toDenseMatrix
     Range(0, k).map { topicIndex =>
@@ -213,6 +223,7 @@ class LocalLDAModel private[clustering] (
 
   override protected def formatVersion = "1.0"
 
+  @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {
     LocalLDAModel.SaveLoadV1_0.save(sc, path, topicsMatrix, docConcentration, topicConcentration,
       gammaShape)
@@ -221,26 +232,44 @@ class LocalLDAModel private[clustering] (
   // TODO: declare in LDAModel and override once implemented in DistributedLDAModel
   /**
    * Calculates a lower bound on the log likelihood of the entire corpus.
+   *
+   * See Equation (16) in original Online LDA paper.
+   *
    * @param documents test corpus to use for calculating log likelihood
    * @return variational lower bound on the log likelihood of the entire corpus
    */
-  def logLikelihood(documents: RDD[(Long, Vector)]): Double = bound(documents,
+  @Since("1.5.0")
+  def logLikelihood(documents: RDD[(Long, Vector)]): Double = logLikelihoodBound(documents,
     docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
     vocabSize)
 
   /**
-   * Calculate an upper bound bound on perplexity. See Equation (16) in original Online
-   * LDA paper.
-   * @param documents test corpus to use for calculating perplexity
-   * @return variational upper bound on log perplexity per word
+   * Java-friendly version of [[logLikelihood]]
    */
+  @Since("1.5.0")
+  def logLikelihood(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
+    logLikelihood(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
+  }
+
+  /**
+   * Calculate an upper bound bound on perplexity.  (Lower is better.)
+   * See Equation (16) in original Online LDA paper.
+   *
+   * @param documents test corpus to use for calculating perplexity
+   * @return Variational upper bound on log perplexity per token.
+   */
+  @Since("1.5.0")
   def logPerplexity(documents: RDD[(Long, Vector)]): Double = {
-    val corpusWords = documents
+    val corpusTokenCount = documents
       .map { case (_, termCounts) => termCounts.toArray.sum }
       .sum()
-    val perWordBound = -logLikelihood(documents) / corpusWords
+    -logLikelihood(documents) / corpusTokenCount
+  }
 
-    perWordBound
+  /** Java-friendly version of [[logPerplexity]] */
+  @Since("1.5.0")
+  def logPerplexity(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
+    logPerplexity(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
   }
 
   /**
@@ -248,17 +277,20 @@ class LocalLDAModel private[clustering] (
    *    log p(documents) >= E_q[log p(documents)] - E_q[log q(documents)]
    * This bound is derived by decomposing the LDA model to:
    *    log p(documents) = E_q[log p(documents)] - E_q[log q(documents)] + D(q|p)
-   * and noting that the KL-divergence D(q|p) >= 0. See Equation (16) in original Online LDA paper.
+   * and noting that the KL-divergence D(q|p) >= 0.
+   *
+   * See Equation (16) in original Online LDA paper, as well as Appendix A.3 in the JMLR version of
+   * the original LDA paper.
    * @param documents a subset of the test corpus
    * @param alpha document-topic Dirichlet prior parameters
-   * @param eta topic-word Dirichlet prior parameters
+   * @param eta topic-word Dirichlet prior parameter
    * @param lambda parameters for variational q(beta | lambda) topic-word distributions
    * @param gammaShape shape parameter for random initialization of variational q(theta | gamma)
    *                   topic mixture distributions
    * @param k number of topics
    * @param vocabSize number of unique terms in the entire test corpus
    */
-  private def bound(
+  private def logLikelihoodBound(
       documents: RDD[(Long, Vector)],
       alpha: Vector,
       eta: Double,
@@ -270,33 +302,38 @@ class LocalLDAModel private[clustering] (
     // transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
+    val ElogbetaBc = documents.sparkContext.broadcast(Elogbeta)
 
-    var score = documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
-      var docScore = 0.0D
-      val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
-        termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
-      val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
+    // Sum bound components for each document:
+    //  component for prob(tokens) + component for prob(document-topic distribution)
+    val corpusPart =
+      documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
+        val localElogbeta = ElogbetaBc.value
+        var docBound = 0.0D
+        val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
+          termCounts, exp(localElogbeta), brzAlpha, gammaShape, k)
+        val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
-      // E[log p(doc | theta, beta)]
-      termCounts.foreachActive { case (idx, count) =>
-        docScore += count * LDAUtils.logSumExp(Elogthetad + Elogbeta(idx, ::).t)
-      }
-      // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
-      docScore += sum((brzAlpha - gammad) :* Elogthetad)
-      docScore += sum(lgamma(gammad) - lgamma(brzAlpha))
-      docScore += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
+        // E[log p(doc | theta, beta)]
+        termCounts.foreachActive { case (idx, count) =>
+          docBound += count * LDAUtils.logSumExp(Elogthetad + localElogbeta(idx, ::).t)
+        }
+        // E[log p(theta | alpha) - log q(theta | gamma)]
+        docBound += sum((brzAlpha - gammad) :* Elogthetad)
+        docBound += sum(lgamma(gammad) - lgamma(brzAlpha))
+        docBound += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
 
-      docScore
-    }.sum()
+        docBound
+      }.sum()
 
-    // E[log p(beta | eta) - log q (beta | lambda)]; assumes eta is a scalar
-    score += sum((eta - lambda) :* Elogbeta)
-    score += sum(lgamma(lambda) - lgamma(eta))
-
+    // Bound component for prob(topic-term distributions):
+    //   E[log p(beta | eta) - log q(beta | lambda)]
     val sumEta = eta * vocabSize
-    score += sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
+    val topicsPart = sum((eta - lambda) :* Elogbeta) +
+      sum(lgamma(lambda) - lgamma(eta)) +
+      sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
 
-    score
+    corpusPart + topicsPart
   }
 
   /**
@@ -309,11 +346,13 @@ class LocalLDAModel private[clustering] (
    * @param documents documents to predict topic mixture distributions for
    * @return An RDD of (document ID, topic mixture distribution for document)
    */
+  @Since("1.3.0")
   // TODO: declare in LDAModel and override once implemented in DistributedLDAModel
   def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
     // Double transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val expElogbetaBc = documents.sparkContext.broadcast(expElogbeta)
     val docConcentrationBrz = this.docConcentration.toBreeze
     val gammaShape = this.gammaShape
     val k = this.k
@@ -324,7 +363,7 @@ class LocalLDAModel private[clustering] (
       } else {
         val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
-          expElogbeta,
+          expElogbetaBc.value,
           docConcentrationBrz,
           gammaShape,
           k)
@@ -333,10 +372,20 @@ class LocalLDAModel private[clustering] (
     }
   }
 
+  /**
+   * Java-friendly version of [[topicDistributions]]
+   */
+  @Since("1.4.1")
+  def topicDistributions(
+      documents: JavaPairRDD[java.lang.Long, Vector]): JavaPairRDD[java.lang.Long, Vector] = {
+    val distributions = topicDistributions(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
+    JavaPairRDD.fromRDD(distributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
+  }
+
 }
 
-
 @Experimental
+@Since("1.5.0")
 object LocalLDAModel extends Loader[LocalLDAModel] {
 
   private object SaveLoadV1_0 {
@@ -388,7 +437,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       Loader.checkSchema[Data](dataFrame.schema)
       val topics = dataFrame.collect()
       val vocabSize = topics(0).getAs[Vector](0).size
-      val k = topics.size
+      val k = topics.length
 
       val brzTopics = BDM.zeros[Double](vocabSize, k)
       topics.foreach { case Row(vec: Vector, ind: Int) =>
@@ -396,11 +445,11 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       }
       val topicsMat = Matrices.fromBreeze(brzTopics)
 
-      // TODO: initialize with docConcentration, topicConcentration, and gammaShape after SPARK-9940
       new LocalLDAModel(topicsMat, docConcentration, topicConcentration, gammaShape)
     }
   }
 
+  @Since("1.5.0")
   override def load(sc: SparkContext, path: String): LocalLDAModel = {
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats
@@ -440,15 +489,17 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
  * than the [[LocalLDAModel]].
  */
 @Experimental
+@Since("1.3.0")
 class DistributedLDAModel private[clustering] (
     private[clustering] val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
     private[clustering] val globalTopicTotals: LDA.TopicCounts,
-    val k: Int,
-    val vocabSize: Int,
-    override val docConcentration: Vector,
-    override val topicConcentration: Double,
-    override protected[clustering] val gammaShape: Double,
-    private[spark] val iterationTimes: Array[Double]) extends LDAModel {
+    @Since("1.3.0") val k: Int,
+    @Since("1.3.0") val vocabSize: Int,
+    @Since("1.5.0") override val docConcentration: Vector,
+    @Since("1.5.0") override val topicConcentration: Double,
+    private[spark] val iterationTimes: Array[Double],
+    override protected[clustering] val gammaShape: Double = 100)
+  extends LDAModel {
 
   import LDA._
 
@@ -457,6 +508,7 @@ class DistributedLDAModel private[clustering] (
    * The local model stores the inferred topics but not the topic distributions for training
    * documents.
    */
+  @Since("1.3.0")
   def toLocal: LocalLDAModel = new LocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
     gammaShape)
 
@@ -467,6 +519,7 @@ class DistributedLDAModel private[clustering] (
    *
    * WARNING: This matrix is collected from an RDD. Beware memory usage when vocabSize, k are large.
    */
+  @Since("1.3.0")
   override lazy val topicsMatrix: Matrix = {
     // Collect row-major topics
     val termTopicCounts: Array[(Int, TopicCounts)] =
@@ -485,6 +538,7 @@ class DistributedLDAModel private[clustering] (
     Matrices.fromBreeze(brzTopics)
   }
 
+  @Since("1.3.0")
   override def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])] = {
     val numTopics = k
     // Note: N_k is not needed to find the top terms, but it is needed to normalize weights
@@ -519,14 +573,12 @@ class DistributedLDAModel private[clustering] (
   /**
    * Return the top documents for each topic
    *
-   * This is approximate; it may not return exactly the top-weighted documents for each topic.
-   * To get a more precise set of top documents, increase maxDocumentsPerTopic.
-   *
    * @param maxDocumentsPerTopic  Maximum number of documents to collect for each topic.
    * @return  Array over topics.  Each element represent as a pair of matching arrays:
    *          (IDs for the documents, weights of the topic in these documents).
    *          For each topic, documents are sorted in order of decreasing topic weights.
    */
+  @Since("1.5.0")
   def topDocumentsPerTopic(maxDocumentsPerTopic: Int): Array[(Array[Long], Array[Double])] = {
     val numTopics = k
     val topicsInQueues: Array[BoundedPriorityQueue[(Double, Long)]] =
@@ -553,6 +605,52 @@ class DistributedLDAModel private[clustering] (
     }
   }
 
+  /**
+   * Return the top topic for each (doc, term) pair.  I.e., for each document, what is the most
+   * likely topic generating each term?
+   *
+   * @return RDD of (doc ID, assignment of top topic index for each term),
+   *         where the assignment is specified via a pair of zippable arrays
+   *         (term indices, topic indices).  Note that terms will be omitted if not present in
+   *         the document.
+   */
+  @Since("1.5.0")
+  lazy val topicAssignments: RDD[(Long, Array[Int], Array[Int])] = {
+    // For reference, compare the below code with the core part of EMLDAOptimizer.next().
+    val eta = topicConcentration
+    val W = vocabSize
+    val alpha = docConcentration(0)
+    val N_k = globalTopicTotals
+    val sendMsg: EdgeContext[TopicCounts, TokenCount, (Array[Int], Array[Int])] => Unit =
+      (edgeContext) => {
+        // E-STEP: Compute gamma_{wjk} (smoothed topic distributions).
+        val scaledTopicDistribution: TopicCounts =
+          computePTopic(edgeContext.srcAttr, edgeContext.dstAttr, N_k, W, eta, alpha)
+        // For this (doc j, term w), send top topic k to doc vertex.
+        val topTopic: Int = argmax(scaledTopicDistribution)
+        val term: Int = index2term(edgeContext.dstId)
+        edgeContext.sendToSrc((Array(term), Array(topTopic)))
+      }
+    val mergeMsg: ((Array[Int], Array[Int]), (Array[Int], Array[Int])) => (Array[Int], Array[Int]) =
+      (terms_topics0, terms_topics1) => {
+        (terms_topics0._1 ++ terms_topics1._1, terms_topics0._2 ++ terms_topics1._2)
+      }
+    // M-STEP: Aggregation computes new N_{kj}, N_{wk} counts.
+    val perDocAssignments =
+      graph.aggregateMessages[(Array[Int], Array[Int])](sendMsg, mergeMsg).filter(isDocumentVertex)
+    perDocAssignments.map { case (docID: Long, (terms: Array[Int], topics: Array[Int])) =>
+      // TODO: Avoid zip, which is inefficient.
+      val (sortedTerms, sortedTopics) = terms.zip(topics).sortBy(_._1).unzip
+      (docID, sortedTerms.toArray, sortedTopics.toArray)
+    }
+  }
+
+  /** Java-friendly version of [[topicAssignments]] */
+  @Since("1.5.0")
+  lazy val javaTopicAssignments: JavaRDD[(java.lang.Long, Array[Int], Array[Int])] = {
+    topicAssignments.asInstanceOf[RDD[(java.lang.Long, Array[Int], Array[Int])]].toJavaRDD()
+  }
+
   // TODO
   // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
 
@@ -566,6 +664,7 @@ class DistributedLDAModel private[clustering] (
    *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
    *    hyperparameters.
    */
+  @Since("1.3.0")
   lazy val logLikelihood: Double = {
     // TODO: generalize this for asymmetric (non-scalar) alpha
     val alpha = this.docConcentration(0) // To avoid closure capture of enclosing object
@@ -590,8 +689,9 @@ class DistributedLDAModel private[clustering] (
 
   /**
    * Log probability of the current parameter estimate:
-   *  log P(topics, topic distributions for docs | alpha, eta)
+   * log P(topics, topic distributions for docs | alpha, eta)
    */
+  @Since("1.3.0")
   lazy val logPrior: Double = {
     // TODO: generalize this for asymmetric (non-scalar) alpha
     val alpha = this.docConcentration(0) // To avoid closure capture of enclosing object
@@ -623,13 +723,17 @@ class DistributedLDAModel private[clustering] (
    *
    * @return  RDD of (document ID, topic distribution) pairs
    */
+  @Since("1.3.0")
   def topicDistributions: RDD[(Long, Vector)] = {
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
       (docID.toLong, Vectors.fromBreeze(normalize(topicCounts, 1.0)))
     }
   }
 
-  /** Java-friendly version of [[topicDistributions]] */
+  /**
+   * Java-friendly version of [[topicDistributions]]
+   */
+  @Since("1.4.1")
   def javaTopicDistributions: JavaPairRDD[java.lang.Long, Vector] = {
     JavaPairRDD.fromRDD(topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
   }
@@ -638,6 +742,7 @@ class DistributedLDAModel private[clustering] (
    * For each document, return the top k weighted topics for that document and their weights.
    * @return RDD of (doc ID, topic indices, topic weights)
    */
+  @Since("1.5.0")
   def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
       val topIndices = argtopk(topicCounts, k)
@@ -651,11 +756,24 @@ class DistributedLDAModel private[clustering] (
     }
   }
 
+  /**
+   * Java-friendly version of [[topTopicsPerDocument]]
+   */
+  @Since("1.5.0")
+  def javaTopTopicsPerDocument(k: Int): JavaRDD[(java.lang.Long, Array[Int], Array[Double])] = {
+    val topics = topTopicsPerDocument(k)
+    topics.asInstanceOf[RDD[(java.lang.Long, Array[Int], Array[Double])]].toJavaRDD()
+  }
+
   // TODO:
   // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
 
   override protected def formatVersion = "1.0"
 
+  /**
+   * Java-friendly version of [[topicDistributions]]
+   */
+  @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {
     DistributedLDAModel.SaveLoadV1_0.save(
       sc, path, graph, globalTopicTotals, k, vocabSize, docConcentration, topicConcentration,
@@ -665,6 +783,7 @@ class DistributedLDAModel private[clustering] (
 
 
 @Experimental
+@Since("1.5.0")
 object DistributedLDAModel extends Loader[DistributedLDAModel] {
 
   private object SaveLoadV1_0 {
@@ -751,11 +870,12 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       val graph: Graph[LDA.TopicCounts, LDA.TokenCount] = Graph(vertices, edges)
 
       new DistributedLDAModel(graph, globalTopicTotals, globalTopicTotals.length, vocabSize,
-        docConcentration, topicConcentration, gammaShape, iterationTimes)
+        docConcentration, topicConcentration, iterationTimes, gammaShape)
     }
 
   }
 
+  @Since("1.5.0")
   override def load(sc: SparkContext, path: String): DistributedLDAModel = {
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats
@@ -769,10 +889,9 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
     val classNameV1_0 = SaveLoadV1_0.thisClassName
 
     val model = (loadedClassName, loadedVersion) match {
-      case (className, "1.0") if className == classNameV1_0 => {
+      case (className, "1.0") if className == classNameV1_0 =>
         DistributedLDAModel.SaveLoadV1_0.load(sc, path, vocabSize, docConcentration,
           topicConcentration, iterationTimes.toArray, gammaShape)
-      }
       case _ => throw new Exception(
         s"DistributedLDAModel.load did not recognize model with (className, format version):" +
           s"($loadedClassName, $loadedVersion).  Supported: ($classNameV1_0, 1.0)")

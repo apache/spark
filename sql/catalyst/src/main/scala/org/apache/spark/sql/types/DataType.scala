@@ -77,6 +77,11 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def asNullable: DataType
 
+  /**
+   * Returns true if any `DataType` of this DataType tree satisfies the given function `f`.
+   */
+  private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
+
   override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)

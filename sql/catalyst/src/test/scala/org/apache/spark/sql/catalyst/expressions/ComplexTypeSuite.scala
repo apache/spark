@@ -171,8 +171,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("error message of ExtractValue") {
     val structType = StructType(StructField("a", StringType, true) :: Nil)
-    val arrayStructType = ArrayType(structType)
-    val arrayType = ArrayType(StringType)
     val otherType = StringType
 
     def checkErrorMessage(
@@ -189,8 +187,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
-    checkErrorMessage(arrayStructType, BooleanType, "Field name should be String Literal")
-    checkErrorMessage(arrayType, StringType, "Array index should be integral type")
     checkErrorMessage(otherType, StringType, "Can't extract value from")
   }
 }

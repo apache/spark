@@ -240,7 +240,7 @@ worth optimizing.
 ## Data Locality
 
 Data locality can have a major impact on the performance of Spark jobs.  If data and the code that
-operates on it are together than computation tends to be fast.  But if code and data are separated,
+operates on it are together then computation tends to be fast.  But if code and data are separated,
 one must move to the other.  Typically it is faster to ship serialized code from place to place than
 a chunk of data because code size is much smaller than data.  Spark builds its scheduling around
 this general principle of data locality.

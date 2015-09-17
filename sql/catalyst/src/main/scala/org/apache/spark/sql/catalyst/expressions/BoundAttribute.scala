@@ -49,7 +49,10 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
         case StringType => input.getUTF8String(ordinal)
         case BinaryType => input.getBinary(ordinal)
         case CalendarIntervalType => input.getInterval(ordinal)
+        case t: DecimalType => input.getDecimal(ordinal, t.precision, t.scale)
         case t: StructType => input.getStruct(ordinal, t.size)
+        case _: ArrayType => input.getArray(ordinal)
+        case _: MapType => input.getMap(ordinal)
         case _ => input.get(ordinal, dataType)
       }
     }
