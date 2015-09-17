@@ -147,36 +147,6 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     receivers.put(inbox.endpoint)
   }
 
-  private[netty] class MessageLoop extends Runnable {
-    override def run(): Unit = {
-      try {
-        while (true) {
-          try {
-            val endpoint = receivers.take()
-            if (endpoint == PoisonEndpoint) {
-              // Put PoisonEndpoint back so that other MessageLoops can see it.
-              receivers.put(PoisonEndpoint)
-              return
-            }
-            val inbox = endpointToInbox.get(endpoint)
-            if (inbox != null) {
-              val inboxStopped = inbox.process(Dispatcher.this)
-              if (inboxStopped) {
-                endpointToInbox.remove(endpoint)
-              }
-            } else {
-              // The endpoint has been stopped
-            }
-          } catch {
-            case NonFatal(e) => logError(e.getMessage, e)
-          }
-        }
-      } catch {
-        case ie: InterruptedException => // exit
-      }
-    }
-  }
-
   private val parallelism = nettyEnv.conf.getInt("spark.rpc.netty.dispatcher.parallelism",
     Runtime.getRuntime.availableProcessors())
 
@@ -214,6 +184,36 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
    */
   def verify(name: String): Boolean = {
     nameToEndpoint.containsKey(name)
+  }
+
+  private class MessageLoop extends Runnable {
+    override def run(): Unit = {
+      try {
+        while (true) {
+          try {
+            val endpoint = receivers.take()
+            if (endpoint == PoisonEndpoint) {
+              // Put PoisonEndpoint back so that other MessageLoops can see it.
+              receivers.put(PoisonEndpoint)
+              return
+            }
+            val inbox = endpointToInbox.get(endpoint)
+            if (inbox != null) {
+              val inboxStopped = inbox.process(Dispatcher.this)
+              if (inboxStopped) {
+                endpointToInbox.remove(endpoint)
+              }
+            } else {
+              // The endpoint has been stopped
+            }
+          } catch {
+            case NonFatal(e) => logError(e.getMessage, e)
+          }
+        }
+      } catch {
+        case ie: InterruptedException => // exit
+      }
+    }
   }
 
   /**
