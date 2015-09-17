@@ -108,6 +108,11 @@ public class JavaDataFrameSuite {
 
     df2.select(rand(), acos("b"));
     df2.select(col("*"), randn(5L));
+
+    DataFrame l = df.toDF("a", "b");
+    DataFrame r = df2.toDF("a", "b");
+    l.join(r, "a", "b");
+    l.join(r, "a");
   }
 
   @Ignore
