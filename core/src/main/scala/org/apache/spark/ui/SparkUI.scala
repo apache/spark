@@ -53,6 +53,7 @@ private[spark] class SparkUI private (
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
+  var appId: String = ""
 
   val stagesTab = new StagesTab(this)
 
@@ -80,6 +81,11 @@ private[spark] class SparkUI private (
     appName = name
   }
 
+  /** Set the app id for this UI. */
+  def setApplicationId(id: String) {
+    appId = id
+  }
+
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop() {
     super.stop()
@@ -94,12 +100,17 @@ private[spark] class SparkUI private (
   private[spark] def appUIAddress = s"http://$appUIHostPort"
 
   def getSparkUI(appId: String): Option[SparkUI] = {
-    if (appId == appName) Some(this) else None
+    // SPARK-10571: appId == this.appName is a backwards-compatibility rule
+    if (appId == this.appId || appId == this.appName) {
+      Some(this)
+    } else {
+      None
+    }
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
-      id = appName,
+      id = appId,
       name = appName,
       attempts = Seq(new ApplicationAttemptInfo(
         attemptId = None,
