@@ -1,33 +1,33 @@
 # Airflow
 
-Airflow is a platform to programmatically author, schedule and monitor 
+Airflow is a platform to programmatically author, schedule and monitor
 workflows.
 
-When workflows are defined as code, they become more maintainable, 
+When workflows are defined as code, they become more maintainable,
 versionable, testable, and collaborative.
 
 ![img] (http://i.imgur.com/6Gs4hxT.gif)
 
-Use airflow to author workflows as directed acyclic graphs (DAGs) of tasks. 
-The airflow scheduler executes your tasks on an array of workers while 
-following the specified dependencies. Rich command line utilities make 
-performing complex surgeries on DAGs a snap. The rich user interface 
-makes it easy to visualize pipelines running in production, 
+Use airflow to author workflows as directed acyclic graphs (DAGs) of tasks.
+The airflow scheduler executes your tasks on an array of workers while
+following the specified dependencies. Rich command line utilities make
+performing complex surgeries on DAGs a snap. The rich user interface
+makes it easy to visualize pipelines running in production,
 monitor progress, and troubleshoot issues when needed.
 
 ## Beyond the Horizon
 
 Airflow **is not** a data streaming solution. Tasks do not move data from
 one to the other (though tasks can exchange metadata!). Airflow is not
-in the [Spark Streaming](http://spark.apache.org/streaming/) 
+in the [Spark Streaming](http://spark.apache.org/streaming/)
 or [Storm](https://storm.apache.org/) space, it is more comparable to
-[Oozie](http://oozie.apache.org/) or 
+[Oozie](http://oozie.apache.org/) or
 [Azkaban](http://data.linkedin.com/opensource/azkaban).
 
 Workflows are expected to be mostly static or slowly changing. You can think
 of the structure of the tasks in your workflow as slightly more dynamic
-than a database structure would be. Airflow workflows are expected to look 
-similar from a run to the next, this allows for clarity around 
+than a database structure would be. Airflow workflows are expected to look
+similar from a run to the next, this allows for clarity around
 unit of work and continuity.
 
 ## Principles
@@ -40,7 +40,7 @@ unit of work and continuity.
 ## Who uses Airflow?
 
 As the Airflow community grows, we'd like to keep track of who is using
-the platform. Please send a PR with your company name and @githubhandle 
+the platform. Please send a PR with your company name and @githubhandle
 if you may.
 
 Currently **officially** using Airflow:
@@ -55,11 +55,12 @@ Currently **officially** using Airflow:
 * Yahoo!
 * [Jampp](https://github.com/jampp)
 * Chartboost [[@cgelman](https://github.com/cgelman) & [@dclubb](https://github.com/dclubb)]
+* BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
 
-## Links 
+## Links
 
 * [Full documentation on pythonhosted.com](http://pythonhosted.org/airflow/)
-* [Airflow Google Group (mailing list / forum)](https://groups.google.com/forum/#!forum/airbnb_airflow) 
+* [Airflow Google Group (mailing list / forum)](https://groups.google.com/forum/#!forum/airbnb_airflow)
 * [Airbnb Blog Post about Airflow](http://nerds.airbnb.com/airflow/)
 * [Hadoop Summit Airflow Video](https://www.youtube.com/watch?v=oYp49mBwH60)
 * [Docker Airflow (externally maintained)](https://github.com/puckel/docker-airflow)
