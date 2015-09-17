@@ -28,7 +28,7 @@ class KMeansModel(JavaModel):
     """
     Model fitted by KMeans.
 
-    .. addedversion:: 1.5.0
+    .. versionadded:: 1.5.0
     """
 
     @since("1.5.0")
@@ -60,7 +60,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> rows[2].prediction == rows[3].prediction
     True
 
-    .. addedversion:: 1.5.0
+    .. versionadded:: 1.5.0
     """
 
     # a placeholder to make it appear in the generated doc
