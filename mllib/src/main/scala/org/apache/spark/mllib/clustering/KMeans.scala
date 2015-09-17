@@ -367,37 +367,26 @@ class KMeans private (
    */
   private def initKMeansParallel(data: RDD[VectorWithNorm])
   : Array[Array[VectorWithNorm]] = {
-    // Initialize empty centers and point costs.
-    val centers = Array.tabulate(runs)(r => ArrayBuffer.empty[VectorWithNorm])
+    // Initialize point costs.
     var costs = data.map(_ => Array.fill(runs)(Double.PositiveInfinity))
 
     // Initialize each run's first center to a random point.
     val seed = new XORShiftRandom(this.seed).nextInt()
     val sample = data.takeSample(true, runs, seed).toSeq
-    val newCenters = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
-
-    /** Merges new centers to centers. */
-    def mergeNewCenters(): Unit = {
-      var r = 0
-      while (r < runs) {
-        centers(r) ++= newCenters(r)
-        newCenters(r).clear()
-        r += 1
-      }
-    }
+    val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
+    var bcCenters = data.context.broadcast(centers)
 
     // On each step, sample 2 * k points on average for each run with probability proportional
-    // to their squared distance from that run's centers. Note that only distances between points
-    // and new centers are computed in each iteration.
+    // to their squared distance from that run's centers.
     var step = 0
     while (step < initializationSteps) {
-      val bcNewCenters = data.context.broadcast(newCenters)
+      bcCenters = data.context.broadcast(centers)
       val preCosts = costs
       costs = data.zip(preCosts).map { case (point, cost) =>
-          Array.tabulate(runs) { r =>
-            math.min(KMeans.pointCost(bcNewCenters.value(r), point), cost(r))
-          }
-        }.persist(StorageLevel.MEMORY_AND_DISK)
+        Array.tabulate(runs) { r =>
+          math.min(KMeans.pointCost(bcCenters.value(r), point), cost(r))
+        }
+      }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs
         .aggregate(new Array[Double](runs))(
           seqOp = (s, v) => {
@@ -429,35 +418,32 @@ class KMeans private (
           if (rs.length > 0) Some(p, rs) else None
         }
       }.collect()
-      mergeNewCenters()
+
       chosen.foreach { case (p, rs) =>
-        rs.foreach(newCenters(_) += p.toDense)
+        rs.foreach(centers(_) += p.toDense)
       }
       step += 1
     }
 
-    mergeNewCenters()
     costs.unpersist(blocking = false)
 
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
-    val bcCenters = data.context.broadcast(centers)
+    bcCenters = data.context.broadcast(centers)
     val weightMap = data.flatMap { p =>
       Iterator.tabulate(runs) { r =>
         ((r, KMeans.findClosest(bcCenters.value(r), p)._1), 1.0)
       }
     }.reduceByKey(_ + _).collectAsMap()
     val finalCenters = (0 until runs).par.map { r =>
-      val myCenters = centers(r).toArray
-      val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), 0.0)).toArray
-      LocalKMeans.kMeansPlusPlus(r, myCenters, myWeights, k, 30)
+      val myWeights = (0 until centers(r).toArray.length).map(i => weightMap.
+        getOrElse((r, i), 0.0)).toArray
+      LocalKMeans.kMeansPlusPlus(r, centers(r).toArray, myWeights, k, 30)
     }
-
     finalCenters.toArray
   }
 }
-
 
 /**
  * Top-level methods for calling K-means clustering.
