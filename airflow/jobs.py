@@ -190,6 +190,9 @@ class SchedulerJob(BaseJob):
     :param refresh_dags_every: force refresh the DAG definition every N
         runs, as specified here
     :type refresh_dags_every: int
+    :param do_pickle: to pickle the DAG object and send over to workers
+        for non-local executors
+    :type do_pickle: bool
     """
 
     __mapper_args__ = {
@@ -203,6 +206,7 @@ class SchedulerJob(BaseJob):
             test_mode=False,
             refresh_dags_every=10,
             num_runs=None,
+            do_pickle=False,
             *args, **kwargs):
 
         self.dag_id = dag_id
@@ -211,7 +215,8 @@ class SchedulerJob(BaseJob):
             self.num_runs = 1
         else:
             self.num_runs = num_runs
-        self.refresh_dags_every = refresh_dags_every
+        self.refresh_dags_every = refresh_dags_every	
+        self.do_pickle = do_pickle	
         super(SchedulerJob, self).__init__(*args, **kwargs)
 
         self.heartrate = conf.getint('scheduler', 'SCHEDULER_HEARTBEAT_SEC')
@@ -316,6 +321,12 @@ class SchedulerJob(BaseJob):
         DagModel = models.DagModel
         session = settings.Session()
 
+        # picklin'
+        pickle_id = None
+        if self.do_pickle and self.executor.__class__ not in (
+                executors.LocalExecutor, executors.SequentialExecutor):
+            pickle_id = dag.pickle(session).id
+
         db_dag = session.query(
             DagModel).filter(DagModel.dag_id == dag.dag_id).first()
         last_scheduler_run = db_dag.last_scheduler_run or datetime(2000, 1, 1)
@@ -367,7 +378,7 @@ class SchedulerJob(BaseJob):
                 if ti.is_queueable(flag_upstream_failed=True):
                     logging.info(
                         'First run for {ti}'.format(**locals()))
-                    executor.queue_task_instance(ti)
+                    executor.queue_task_instance(ti, pickle_id=pickle_id)
             else:
                 ti = ti_dict[task.task_id]
                 ti.task = task  # Hacky but worky
@@ -378,7 +389,7 @@ class SchedulerJob(BaseJob):
                     # the retry delay is met
                     if ti.is_runnable():
                         logging.debug('Triggering retry: ' + str(ti))
-                        executor.queue_task_instance(ti)
+                        executor.queue_task_instance(ti, pickle_id=pickle_id)
                 elif ti.state == State.QUEUED:
                     # If was queued we skipped so that in gets prioritized
                     # in self.prioritize_queued
@@ -398,7 +409,7 @@ class SchedulerJob(BaseJob):
                     ti.refresh_from_db()
                     if ti.is_queueable(flag_upstream_failed=True):
                         logging.debug('Queuing next run: ' + str(ti))
-                        executor.queue_task_instance(ti)
+                        executor.queue_task_instance(ti, pickle_id=pickle_id)
         # Releasing the lock
         logging.debug("Unlocking DAG (scheduler_lock)")
         db_dag = (
@@ -449,8 +460,16 @@ class SchedulerJob(BaseJob):
                         session.delete(ti)
                     if task:
                         ti.task = task
+
+                        # picklin'
+                        dag = dagbag.dags[ti.dag_id]
+                        pickle_id = None
+                        if self.do_pickle and self.executor.__class__ not in (
+                            executors.LocalExecutor, executors.SequentialExecutor):
+                            pickle_id = dag.pickle(session).id
+
                         if ti.are_dependencies_met():
-                            executor.queue_task_instance(ti, force=True)
+                            executor.queue_task_instance(ti, force=True, pickle_id=pickle_id)
                         else:
                             session.delete(ti)
                     session.commit()
