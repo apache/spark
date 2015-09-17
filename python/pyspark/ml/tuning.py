@@ -78,6 +78,7 @@ class ParamGridBuilder(object):
 
         return self
 
+    @since("1.4.0")
     def build(self):
         """
         Builds and returns all combinations of parameters specified
