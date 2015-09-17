@@ -96,7 +96,7 @@ class VerticaToHiveTransfer(BaseOperator):
                 col_count += 1
                 col_position = "Column{position}".format(position=col_count)
                 field_dict[col_position if field[0] == '' else field[0]] = self.type_map(field[1])
-            csv_writer.writerows(cursor)
+            csv_writer.writerows(cursor.iterate())
             f.flush()
             cursor.close()
             conn.close()
