@@ -64,7 +64,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         ...
     TypeError: Method setParams forces keyword arguments.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -120,7 +120,7 @@ class LinearRegressionModel(JavaModel):
     """
     Model fitted by LinearRegression.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     @property
@@ -144,7 +144,7 @@ class TreeRegressorParams(object):
     """
     Private class to track supported impurity measures.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
     supportedImpurities = ["variance"]
 
@@ -153,7 +153,7 @@ class RandomForestParams(object):
     """
     Private class to track supported random forest parameters.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
     supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
 
@@ -162,7 +162,7 @@ class GBTParams(object):
     """
     Private class to track supported GBT params.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
     supportedLossTypes = ["squared", "absolute"]
 
@@ -192,7 +192,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model.transform(test1).head().prediction
     1.0
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -261,7 +261,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 class DecisionTreeModel(JavaModel):
     """Abstraction for Decision Tree models.
 
-    .. addedversion:: 1.5.0
+    .. versionadded:: 1.5.0
     """
 
     @property
@@ -284,7 +284,7 @@ class DecisionTreeModel(JavaModel):
 class TreeEnsembleModels(JavaModel):
     """Represents a tree ensemble model.
 
-    .. addedversion:: 1.5.0
+    .. versionadded:: 1.5.0
     """
 
     @property
@@ -302,7 +302,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel):
     """
     Model fitted by DecisionTreeRegressor.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
 
@@ -330,7 +330,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model.transform(test1).head().prediction
     0.5
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -468,7 +468,7 @@ class RandomForestRegressionModel(TreeEnsembleModels):
     """
     Model fitted by RandomForestRegressor.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
 
@@ -496,7 +496,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> model.transform(test1).head().prediction
     1.0
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -611,7 +611,7 @@ class GBTRegressionModel(TreeEnsembleModels):
     """
     Model fitted by GBTRegressor.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
 
