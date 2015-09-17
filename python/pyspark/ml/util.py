@@ -18,7 +18,10 @@
 from functools import wraps
 import uuid
 
+from pyspark import since
 
+
+@since("1.3.0")
 def keyword_only(func):
     """
     A decorator that forces keyword arguments in the wrapped method
@@ -36,6 +39,8 @@ def keyword_only(func):
 class Identifiable(object):
     """
     Object with a unique ID.
+
+    .. addedversion:: 1.3.0
     """
 
     def __init__(self):
