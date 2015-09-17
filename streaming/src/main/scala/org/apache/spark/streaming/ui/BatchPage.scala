@@ -19,7 +19,7 @@ package org.apache.spark.streaming.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, NodeSeq, Text, Unparsed}
+import scala.xml._
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -207,7 +207,6 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             sparkListener.stageIdToInfo.get(sparkJob.stageIds.max)
           }
         }
-    Text(lastStageInfo.map { _.name }.getOrElse("(Unknown Stage)"))
     lastStageInfo match {
       case Some(stageInfo) =>
         val details = if (stageInfo.details.nonEmpty) {
@@ -218,6 +217,8 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
           <div class="stage-details collapsed">
             <pre>{stageInfo.details}</pre>
           </div>
+        } else {
+          NodeSeq.Empty
         }
 
         <div> {stageInfo.name} {details} </div>
