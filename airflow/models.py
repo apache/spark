@@ -1127,7 +1127,7 @@ class TaskInstance(Base):
         """
         Pull XComs that optionally meet certain criteria.
 
-        The default value for `key` ("{return_key}") limits the search to XComs
+        The default value for `key` limits the search to XComs
         that were returned by other tasks (as opposed to those that were pushed
         manually). To remove this filter, pass key=None (or any desired value).
 
@@ -1137,9 +1137,10 @@ class TaskInstance(Base):
         whenever no matches are found.
 
         :param key: A key for the XCom. If provided, only XComs with matching
-            keys will be returned. The default value is "{return_key}",
-            the key automatically given to XComs returned by tasks (as opposed
-            to being pushed manually). To remove the filter, pass key=None.
+            keys will be returned. The default key is 'return_value', also 
+            available as a constant XCOM_RETURN_KEY. This key is automatically 
+            given to XComs returned by tasks (as opposed to being pushed 
+            manually). To remove the filter, pass key=None.
         :type key: string
         :param task_ids: Only XComs from tasks with matching ids will be
             pulled. Can pass None to remove the filter.
@@ -1154,7 +1155,7 @@ class TaskInstance(Base):
         :param limit: the maximum number of results to return. Pass None for
             no limit.
         :type limit: int
-        """.format(return_key=XCOM_RETURN_KEY)
+        """
 
         if dag_id is None:
             dag_id = self.dag_id
