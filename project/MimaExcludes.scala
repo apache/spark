@@ -153,7 +153,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
-          ) Seq(
+          ) ++ Seq(
             // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
             // This class is marked as `private` but MiMa still seems to be confused by the change.
             ProblemFilters.exclude[MissingMethodProblem](
