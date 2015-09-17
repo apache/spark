@@ -466,7 +466,7 @@ val test = sqlContext.createDataFrame(Seq(
 )).toDF("id", "text")
 
 // Make predictions on test documents.
-model.transform(test)
+model.transform(test.toDF)
   .select("id", "text", "probability", "prediction")
   .collect()
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
