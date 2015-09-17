@@ -101,85 +101,75 @@ private[netty] class Inbox(
         return false
       }
     }
-    var skipFinally = false
-    try {
-      while (true) {
-        safelyCall(endpoint) {
-          message match {
-            case ContentMessage(_sender, content, needReply, context) =>
-              val pf: PartialFunction[Any, Unit] =
+    while (true) {
+      safelyCall(endpoint) {
+        message match {
+          case ContentMessage(_sender, content, needReply, context) =>
+            val pf: PartialFunction[Any, Unit] =
+              if (needReply) {
+                endpoint.receiveAndReply(context)
+              } else {
+                endpoint.receive
+              }
+            try {
+              pf.applyOrElse[Any, Unit](content, { msg =>
+                throw new SparkException(s"Unmatched message $message from ${_sender}")
+              })
+              if (!needReply) {
+                context.finish()
+              }
+            } catch {
+              case NonFatal(e) =>
                 if (needReply) {
-                  endpoint.receiveAndReply(context)
+                  // If the sender asks a reply, we should send the error back to the sender
+                  context.sendFailure(e)
                 } else {
-                  endpoint.receive
-                }
-              try {
-                pf.applyOrElse[Any, Unit](content, { msg =>
-                  throw new SparkException(s"Unmatched message $message from ${_sender}")
-                })
-                if (!needReply) {
                   context.finish()
+                  throw e
                 }
-              } catch {
-                case NonFatal(e) =>
-                  if (needReply) {
-                    // If the sender asks a reply, we should send the error back to the sender
-                    context.sendFailure(e)
-                  } else {
-                    context.finish()
-                    throw e
-                  }
-              }
-
-            case OnStart => {
-              endpoint.onStart()
-              if (!endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
-                synchronized {
-                  enableConcurrent = true
-                }
-              }
             }
 
-            case OnStop =>
-              dispatcher.removeRpcEndpointRef(endpoint)
-              endpoint.onStop()
-              assert(isEmpty, "OnStop should be the last message")
-              return true
-            case Associated(remoteAddress) =>
-              endpoint.onConnected(remoteAddress)
-            case Disassociated(remoteAddress) =>
-              endpoint.onDisconnected(remoteAddress)
-            case AssociationError(cause, remoteAddress) =>
-              endpoint.onNetworkError(cause, remoteAddress)
+          case OnStart => {
+            endpoint.onStart()
+            if (!endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
+              synchronized {
+                enableConcurrent = true
+              }
+            }
           }
-        }
 
-        synchronized {
-          // "enableConcurrent" will be set to false after `onStop` is called, so we should check it
-          // every time.
-          if (!enableConcurrent && workerCount != 1) {
-            // If we are not the only one worker, exit
-            skipFinally = true
+          case OnStop =>
+            dispatcher.removeRpcEndpointRef(endpoint)
+            endpoint.onStop()
+            assert(isEmpty, "OnStop should be the last message")
             workerCount -= 1
-            return false
-          }
-          message = messages.poll()
-          if (message == null) {
-            skipFinally = true
-            workerCount -= 1
-            return false
-          }
+            return true
+          case Associated(remoteAddress) =>
+            endpoint.onConnected(remoteAddress)
+          case Disassociated(remoteAddress) =>
+            endpoint.onDisconnected(remoteAddress)
+          case AssociationError(cause, remoteAddress) =>
+            endpoint.onNetworkError(cause, remoteAddress)
         }
       }
-      return false
-    } finally {
-      if (!skipFinally) {
-        // Reset `workerCount` if some exception is thrown.
-        synchronized {
+
+      synchronized {
+        // "enableConcurrent" will be set to false after `onStop` is called, so we should check it
+        // every time.
+        if (!enableConcurrent && workerCount != 1) {
+          // If we are not the only one worker, exit
           workerCount -= 1
+          return false
+        }
+        message = messages.poll()
+        if (message == null) {
+          workerCount -= 1
+          return false
         }
       }
     }
+    // We won't reach here. Just make the compiler happy.
+    return false
   }
 
   def post(message: InboxMessage): Unit = {
