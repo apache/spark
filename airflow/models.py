@@ -425,7 +425,7 @@ class DagPickle(Base):
     id = Column(Integer, primary_key=True)
     pickle = Column(PickleType(pickler=dill))
     created_dttm = Column(DateTime, default=func.now())
-    pickle_hash = Column(BigInteger)
+    pickle_hash = Column(Text)
 
     __tablename__ = "dag_pickle"
 
@@ -2119,7 +2119,7 @@ class DAG(object):
     def pickle(self, main_session=None):
         session = main_session or settings.Session()
         dag = session.query(
-            DagModel).filter(DAG.dag_id == self.dag_id).first()
+            DagModel).filter(DagModel.dag_id == self.dag_id).first()
         dp = None
         if dag and dag.pickle_id:
             dp = session.query(DagPickle).filter(
@@ -2133,6 +2133,7 @@ class DAG(object):
 
         if not main_session:
             session.close()
+        return dp
 
     def tree_view(self):
         """

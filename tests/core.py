@@ -5,6 +5,7 @@ import unittest
 from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, executors, utils, operators, hooks
+from airflow.configuration import conf
 from airflow.www.app import app
 
 NUM_EXAMPLE_DAGS = 6
@@ -187,6 +188,10 @@ class CoreTest(unittest.TestCase):
 
     def test_confirm_unittest_mod(self):
         assert configuration.conf.get('core', 'unit_test_mode')
+
+    def test_pickling(self):
+        dp = self.dag.pickle()
+        assert self.dag.dag_id == dp.pickle.dag_id
 
     def test_rich_comparison_ops(self):
 
