@@ -42,6 +42,12 @@ private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  protected def withPPD(f: () => Unit) {
+    sqlContext.setConf("spark.sql.orc.filterPushdown", "true")
+    f()
+    sqlContext.setConf("spark.sql.orc.filterPushdown", "false")
+  }
+
   /**
    * Writes `data` to a Orc file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Orc file will be deleted after `f` returns.
