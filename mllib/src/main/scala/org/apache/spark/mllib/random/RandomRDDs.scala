@@ -422,6 +422,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#randomJavaRDD]] with the default seed.
    */
+  @DeveloperApi
   @Since("1.6.0")
   def randomJavaRDD[T](
     jsc: JavaSparkContext,
@@ -434,6 +435,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#randomJavaRDD]] with the default seed & numPartitions
    */
+  @DeveloperApi
   @Since("1.6.0")
   def randomJavaRDD[T](
     jsc: JavaSparkContext,
