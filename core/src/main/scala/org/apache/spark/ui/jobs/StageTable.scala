@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 
 import scala.util.control.NonFatal
-import scala.xml.{Node, Text, XML}
+import scala.xml.{Utility, Node, Text, XML}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -121,7 +121,7 @@ private[ui] class StageTableBase(
       try {
         // Try to load the description as unescaped HTML
         val xml = XML.loadString("<span class=\"description-input\" " +
-          s"title=${"\"" + StringEscapeUtils.escapeHtml4(desc) + "\""}>$desc</span>")
+          s"title=${"\"" + Utility.escape(desc) + "\""}>$desc</span>")
         val allLinks = xml \\ "_" flatMap { _.attributes } filter { _.key == "href" }
         val areAllLinksRelative = allLinks.forall { _.value.toString.startsWith ("/") }
         if (areAllLinksRelative) {

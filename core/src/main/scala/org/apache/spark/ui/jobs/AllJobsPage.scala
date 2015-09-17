@@ -17,18 +17,16 @@
 
 package org.apache.spark.ui.jobs
 
+import java.util.Date
+import javax.servlet.http.HttpServletRequest
+
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.util.control.NonFatal
 import scala.xml._
 
-import java.util.Date
-import javax.servlet.http.HttpServletRequest
-
-import org.apache.commons.lang3.StringEscapeUtils
-
-import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
-import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
@@ -234,7 +232,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         try {
           // Try to load the description as unescaped HTML
           val xml = XML.loadString("<span class=\"description-input\" " +
-            s"title=${"\"" + StringEscapeUtils.escapeHtml4(d) + "\""}>$d</span>")
+            s"title=${"\"" + Utility.escape(d) + "\""}>$d</span>")
           val allLinks = xml \\ "_" flatMap { _.attributes } filter { _.key == "href" }
           val areAllLinksRelative = allLinks.forall { _.value.toString.startsWith ("/") }
           if (areAllLinksRelative) {
