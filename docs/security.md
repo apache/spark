@@ -26,6 +26,10 @@ If your applications are using event logging, the directory where the event logs
 Spark supports SSL for Akka and HTTP (for broadcast and file server) protocols. SASL encryption is
 supported for the block transfer service. Encryption is not yet supported for the WebUI.
 
+Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
+files, cached data, and other application files. If encrypting this data is desired, a workaround is
+to configure your cluster manager to store application data on encrypted disks.
+
 Connection encryption (SSL) configuration is organized hierarchically. The user can configure the default SSL settings which will be used for all the supported communication protocols unless they are overwritten by protocol-specific settings. This way the user can easily provide the common settings for all the protocols without disabling the ability to configure each one individually. The common SSL settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at `spark.ssl.akka` and HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`. The full breakdown can be found on the [configuration page](configuration.html).
 
 SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
@@ -50,9 +54,9 @@ follows:
 
 ### Configuring SASL Encryption
 
-To enable SASL encryption for an application, set `spark.authenticate.enableSaslEncryption` to
-`true`. Authentication (`spark.authenticate`) must also be turned on for this option to take
-effect.
+SASL encryption is currently supported for the block transfer service when authentication
+(`spark.authenticate`) is enabled. To enable SASL encryption for an application, set
+`spark.authenticate.enableSaslEncryption` to `true` in the application's configuration.
 
 When using an external shuffle service, it's possible to disable unencrypted connections by setting
 `spark.network.sasl.serverAlwaysEncrypt` to `true` in the shuffle service's configuration. If that
