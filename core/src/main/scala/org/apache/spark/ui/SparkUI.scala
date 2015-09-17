@@ -77,11 +77,6 @@ private[spark] class SparkUI private (
 
   def getAppName: String = appName
 
-  /** Set the app name for this UI. */
-  def setAppName(name: String) {
-    appName = name
-  }
-
   def setAppId(id: String): Unit = {
     appId = id
   }
