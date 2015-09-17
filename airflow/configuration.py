@@ -42,6 +42,7 @@ defaults = {
         'smtp_starttls': True,
     },
     'security': {
+        'enabled': False,
         'ccache': '/tmp/airflow_krb5_ccache',
         'principal': 'airflow',                 # gets augmented with fqdn
         'reinit_frequency': '3600',
