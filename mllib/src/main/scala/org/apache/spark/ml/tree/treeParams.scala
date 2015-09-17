@@ -393,7 +393,8 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
 
   override def validateParams(): Unit = {
     require(ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)(
-      getStepSize), s"GBT parameter stepSize given invalid value $getStepSize.")
+      getStepSize), "GBT parameter stepSize should be in interval (0, 1], " +
+      s"but it given invalid value $getStepSize.")
   }
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
