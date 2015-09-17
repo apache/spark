@@ -44,7 +44,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{CallSite, ShutdownHookManager, Utils}
+import org.apache.spark.util.{CallSite, ShutdownHookManager}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -198,7 +198,7 @@ class StreamingContext private[streaming] (
 
   private var state: StreamingContextState = INITIALIZED
 
-  private val startSite = new AtomicReference[CallSite](null)
+  private[streaming] val startSite = new AtomicReference[CallSite](null)
 
   private var shutdownHookRef: AnyRef = _
 

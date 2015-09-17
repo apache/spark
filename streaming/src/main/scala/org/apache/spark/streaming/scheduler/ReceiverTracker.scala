@@ -554,6 +554,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           ssc.sc.makeRDD(Seq(receiver -> scheduledExecutors))
         }
       receiverRDD.setName(s"Receiver $receiverId")
+      ssc.sparkContext.setJobDescription(s"Streaming job running receiver $receiverId")
+      ssc.sparkContext.setCallSite(ssc.startSite.get)
+
       val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](
         receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ())
       // We will keep restarting the receiver job until ReceiverTracker is stopped
