@@ -137,12 +137,12 @@ readEnv <- function(con) {
 }
 
 # Read a field of StructType from DataFrame
-# into a named list in R
+# into a named list in R whose class is "struct"
 readStruct <- function(con) {
   names <- readObject(con)
   fields <- readObject(con)
   names(fields) <- names
-  fields
+  listToStruct(fields)
 }
 
 readRaw <- function(con) {

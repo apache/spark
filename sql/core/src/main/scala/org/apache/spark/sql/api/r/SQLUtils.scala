@@ -29,7 +29,7 @@ import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, Sa
 import scala.util.matching.Regex
 
 private[r] object SQLUtils {
-  SerDe.registerSqlSerDe(writeSqlObject)
+  SerDe.registerSqlSerDe((readSqlObject, writeSqlObject))
 
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
     new SQLContext(jsc)
@@ -63,15 +63,27 @@ private[r] object SQLUtils {
       case "boolean" => org.apache.spark.sql.types.BooleanType
       case "timestamp" => org.apache.spark.sql.types.TimestampType
       case "date" => org.apache.spark.sql.types.DateType
-      case r"\Aarray<(.*)${elemType}>\Z" => {
+      case r"\Aarray<(.+)${elemType}>\Z" =>
         org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
-      }
-      case r"\Amap<(.*)${keyType},(.*)${valueType}>\Z" => {
+      case r"\Amap<(.+)${keyType},(.+)${valueType}>\Z" =>
         if (keyType != "string" && keyType != "character") {
           throw new IllegalArgumentException("Key type of a map must be string or character")
         }
         org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
-      }
+      case r"\Astruct<(.+)${fieldsStr}>\Z" =>
+        if (fieldsStr(fieldsStr.length - 1) == ',') {
+          throw new IllegalArgumentException(s"Invaid type $dataType")
+        }
+        val fields = fieldsStr.split(",")
+        val structFields = fields.map { field =>
+          field match {
+            case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
+              createStructField(fieldName, fieldType, true)
+
+            case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
+          }
+        }
+        createStructType(structFields)
       case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
     }
   }
@@ -152,6 +164,16 @@ private[r] object SQLUtils {
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
     sqlContext.read.format(source).schema(schema).options(options).load()
+  }
+
+  def readSqlObject(dis: DataInputStream, dataType: Char): Object = {
+    dataType match {
+      case 's' =>
+        // Read StructType for DataFrame
+        val fields = SerDe.readList(dis).asInstanceOf[Array[Object]]
+        Row.fromSeq(fields)
+      case _ => null
+    }
   }
 
   def writeSqlObject(dos: DataOutputStream, obj: Object): Boolean = {

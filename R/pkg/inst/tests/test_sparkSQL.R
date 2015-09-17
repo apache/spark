@@ -66,10 +66,7 @@ test_that("infer types and check types", {
   expect_equal(infer_type(as.POSIXlt("2015-03-11 12:13:04.043")), "timestamp")
   expect_equal(infer_type(c(1L, 2L)), "array<integer>")
   expect_equal(infer_type(list(1L, 2L)), "array<integer>")
-  testStruct <- infer_type(list(a = 1L, b = "2"))
-  expect_equal(class(testStruct), "structType")
-  checkStructField(testStruct$fields()[[1]], "a", "IntegerType", TRUE)
-  checkStructField(testStruct$fields()[[2]], "b", "StringType", TRUE)
+  expect_equal(infer_type(listToStruct(list(a = 1L, b = "2"))), "struct<a:integer,b:string>")
   e <- new.env()
   assign("a", 1L, envir = e)
   expect_equal(infer_type(e), "map<string,integer>")
@@ -242,35 +239,33 @@ test_that("create DataFrame with different data types", {
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
 })
 
-test_that("create DataFrame with nested array and map", {
-#  e <- new.env()
-#  assign("n", 3L, envir = e)
-#  l <- list(1:10, list("a", "b"), e, list(a="aa", b=3L))
-#  df <- createDataFrame(sqlContext, list(l), c("a", "b", "c", "d"))
-#  expect_equal(dtypes(df), list(c("a", "array<int>"), c("b", "array<string>"),
-#                                c("c", "map<string,int>"), c("d", "struct<a:string,b:int>")))
-#  expect_equal(count(df), 1)
-#  ldf <- collect(df)
-#  expect_equal(ldf[1,], l[[1]])
-
-  #  ArrayType and MapType
+test_that("create DataFrame with complex types", {
   e <- new.env()
   assign("n", 3L, envir = e)
+  
+  s <- listToStruct(list(a = "aa", b = 3L))
 
-  l <- list(as.list(1:10), list("a", "b"), e)
-  df <- createDataFrame(sqlContext, list(l), c("a", "b", "c"))
+  l <- list(as.list(1:10), list("a", "b"), e, s)
+  df <- createDataFrame(sqlContext, list(l), c("a", "b", "c", "d"))
   expect_equal(dtypes(df), list(c("a", "array<int>"),
                                 c("b", "array<string>"),
-                                c("c", "map<string,int>")))
+                                c("c", "map<string,int>"),
+                                c("d", "struct<a:string,b:int>")))
   expect_equal(count(df), 1)
   ldf <- collect(df)
-  expect_equal(names(ldf), c("a", "b", "c"))
+  expect_equal(names(ldf), c("a", "b", "c", "d"))
   expect_equal(ldf[1, 1][[1]], l[[1]])
   expect_equal(ldf[1, 2][[1]], l[[2]])
+
   e <- ldf$c[[1]]
   expect_equal(class(e), "environment")
   expect_equal(ls(e), "n")
   expect_equal(e$n, 3L)
+
+  s <- ldf$d[[1]]
+  expect_equal(class(s), "struct")
+  expect_equal(s$a, "aa")
+  expect_equal(s$b, 3L)  
 })
 
 # For test map type and struct type in DataFrame
@@ -318,7 +313,7 @@ test_that("Collect DataFrame with complex types", {
   expect_equal(names(ldf), c("info", "name"))
   expect_equal(ldf$name, c("Bob", "Alice", "David"))
   bob <- ldf$info[[1]]
-  expect_equal(class(bob), "list")
+  expect_equal(class(bob), "struct")
   expect_equal(bob$age, 16)
   expect_equal(bob$height, 176.5)
 })

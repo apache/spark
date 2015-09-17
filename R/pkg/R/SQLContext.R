@@ -32,6 +32,7 @@ infer_type <- function(x) {
                  numeric = "double",
                  raw = "binary",
                  list = "array",
+                 struct = "struct",
                  environment = "map",
                  Date = "date",
                  POSIXlt = "timestamp",
@@ -44,17 +45,18 @@ infer_type <- function(x) {
     paste0("map<string,", infer_type(get(key, x)), ">")
   } else if (type == "array") {
     stopifnot(length(x) > 0)
+
+    paste0("array<", infer_type(x[[1]]), ">")
+  } else if (type == "struct") {
+    stopifnot(length(x) > 0)
     names <- names(x)
-    if (is.null(names)) {
-      paste0("array<", infer_type(x[[1]]), ">")
-    } else {
-      # StructType
-      types <- lapply(x, infer_type)
-      fields <- lapply(1:length(x), function(i) {
-        structField(names[[i]], types[[i]], TRUE)
-      })
-      do.call(structType, fields)
-    }
+    stopifnot(!is.null(names))
+
+    type <- lapply(seq_along(x), function(i) {
+      paste0(names[[i]], ":", infer_type(x[[i]]), ",")
+    })
+    type <- Reduce(paste0, type)
+    type <- paste0("struct<", substr(type, 1, nchar(type) - 1), ">")
   } else if (length(x) > 1) {
     paste0("array<", infer_type(x[[1]]), ">")
   } else {
