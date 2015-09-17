@@ -82,7 +82,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     >>> predictions[2]
     Row(user=2, item=0, prediction=-1.15...)
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -289,7 +289,7 @@ class ALSModel(JavaModel):
     """
     Model fitted by ALS.
 
-    .. addedversion:: 1.4.0
+    .. versionadded:: 1.4.0
     """
 
     @property
