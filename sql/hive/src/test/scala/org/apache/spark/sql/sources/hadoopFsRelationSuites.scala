@@ -114,8 +114,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new MyDenseVectorUDT()
   ).filter(supportsDataType)
 
-  for (dataType <- supportedDataTypes) {
-    test(s"test all data types - $dataType") {
+  for (i <- 0 until 100; dataType <- supportedDataTypes) {
+    test(s"test all data types - $dataType - $i") {
       withTempPath { file =>
         val path = file.getCanonicalPath
 
