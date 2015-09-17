@@ -29,6 +29,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.BLAS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.functions._
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
- * Params for Accelerated Failure Time regression.
+ * Params for accelerated failure time (AFT) regression.
  */
 private[regression] trait AFTSurvivalRegressionParams extends Params
   with HasFeaturesCol with HasLabelCol with HasPredictionCol with HasMaxIter
@@ -90,7 +91,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 
 /**
  * :: Experimental ::
- * Fit a parametric survival regression model named Accelerated failure time model
+ * Fit a parametric survival regression model named accelerated failure time (AFT) model
  * ([[https://en.wikipedia.org/wiki/Accelerated_failure_time_model]])
  * based on the Weibull distribution of the survival time.
  */
@@ -224,18 +225,19 @@ class AFTSurvivalRegressionModel private[ml] (
   def setQuantile(value: Array[Double]): this.type = set(quantile, value)
 
   def predictQuantiles(features: Vector): Vector = {
-    require(hasQuantile, "AFTSurvivalRegressionModel predictQuantiles must set quantile vector")
+    require(hasQuantile, "AFTSurvivalRegressionModel predictQuantiles must set quantile array")
     // scale parameter of the Weibull distribution
     val lambda = math.exp(coefficients.toBreeze.dot(features.toBreeze) + intercept)
     // shape parameter of the Weibull distribution
     val k = 1 / scale
-    val array = $(quantile).map { q => lambda * math.exp(math.log(-math.log(1-q)) / k) }
-    Vectors.dense(array)
+    val lifeTimes = $(quantile).map {
+      q => lambda * math.exp(math.log(-math.log(1-q)) / k)
+    }
+    Vectors.dense(lifeTimes)
   }
 
   def predict(features: Vector): Double = {
-    val lambda = math.exp(coefficients.toBreeze.dot(features.toBreeze) + intercept)
-    lambda
+    math.exp(BLAS.dot(coefficients, features) + intercept)
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
