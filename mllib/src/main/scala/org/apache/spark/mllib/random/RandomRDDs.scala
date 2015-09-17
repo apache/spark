@@ -382,7 +382,7 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of `i.i.d.` samples produced by generator.
+   * @return RDD[T] comprised of `i.i.d.` samples produced by generator.
    */
   @DeveloperApi
   @Since("1.1.0")
@@ -404,7 +404,7 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of `i.i.d.` samples produced by generator.
+   * @return RDD[T] comprised of `i.i.d.` samples produced by generator.
    */
   @DeveloperApi
   @Since("1.6.0")
