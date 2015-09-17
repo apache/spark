@@ -33,6 +33,14 @@ pyspark.ml.classification module
     :undoc-members:
     :inherited-members:
 
+pyspark.ml.clustering module
+----------------------------
+
+.. automodule:: pyspark.ml.clustering
+    :members:
+    :undoc-members:
+    :inherited-members:
+
 pyspark.ml.recommendation module
 --------------------------------
 

@@ -30,7 +30,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.functions.callUDF
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -43,6 +43,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
    * Must be >= 2.
    *
    * (default = 20)
+   * @group param
    */
   val maxCategories = new IntParam(this, "maxCategories",
     "Threshold for the number of values a categorical feature can take (>= 2)." +
@@ -339,8 +340,9 @@ class VectorIndexerModel private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
-    val newCol = callUDF(transformFunc, new VectorUDT, dataset($(inputCol)))
-    dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
+    val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
+    val newCol = transformUDF(dataset($(inputCol)))
+    dataset.withColumn($(outputCol), newCol, newField.metadata)
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -404,6 +406,6 @@ class VectorIndexerModel private[ml] (
 
   override def copy(extra: ParamMap): VectorIndexerModel = {
     val copied = new VectorIndexerModel(uid, numFeatures, categoryMaps)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

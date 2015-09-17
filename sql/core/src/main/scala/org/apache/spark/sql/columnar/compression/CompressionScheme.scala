@@ -46,7 +46,7 @@ private[sql] trait Decoder[T <: AtomicType] {
 private[sql] trait CompressionScheme {
   def typeId: Int
 
-  def supports(columnType: ColumnType[_, _]): Boolean
+  def supports(columnType: ColumnType[_]): Boolean
 
   def encoder[T <: AtomicType](columnType: NativeColumnType[T]): Encoder[T]
 

@@ -28,7 +28,8 @@ __all__ = ['DecisionTreeRegressor', 'DecisionTreeRegressionModel', 'GBTRegressor
 
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                       HasRegParam, HasTol):
+                       HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
+                       HasStandardization):
     """
     Linear regression.
 
@@ -63,38 +64,30 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     TypeError: Method setParams forces keyword arguments.
     """
 
-    # a placeholder to make it appear in the generated doc
-    elasticNetParam = \
-        Param(Params._dummy(), "elasticNetParam",
-              "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-              "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6):
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                 standardization=True):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                 standardization=True)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
-        #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty
-        #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
-        self.elasticNetParam = \
-            Param(self, "elasticNetParam",
-                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty " +
-                  "is an L2 penalty. For alpha = 1, it is an L1 penalty.")
-        self._setDefault(maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6):
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                  standardization=True):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                  standardization=True)
         Sets params for linear regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -102,19 +95,6 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
 
     def _create_model(self, java_model):
         return LinearRegressionModel(java_model)
-
-    def setElasticNetParam(self, value):
-        """
-        Sets the value of :py:attr:`elasticNetParam`.
-        """
-        self._paramMap[self.elasticNetParam] = value
-        return self
-
-    def getElasticNetParam(self):
-        """
-        Gets the value of elasticNetParam or its default value.
-        """
-        return self.getOrDefault(self.elasticNetParam)
 
 
 class LinearRegressionModel(JavaModel):
@@ -172,6 +152,10 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> dt = DecisionTreeRegressor(maxDepth=2)
     >>> model = dt.fit(df)
+    >>> model.depth
+    1
+    >>> model.numNodes
+    3
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -239,7 +223,37 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.impurity)
 
 
-class DecisionTreeRegressionModel(JavaModel):
+@inherit_doc
+class DecisionTreeModel(JavaModel):
+
+    @property
+    def numNodes(self):
+        """Return number of nodes of the decision tree."""
+        return self._call_java("numNodes")
+
+    @property
+    def depth(self):
+        """Return depth of the decision tree."""
+        return self._call_java("depth")
+
+    def __repr__(self):
+        return self._call_java("toString")
+
+
+@inherit_doc
+class TreeEnsembleModels(JavaModel):
+
+    @property
+    def treeWeights(self):
+        """Return the weights for each tree"""
+        return list(self._call_java("javaTreeWeights"))
+
+    def __repr__(self):
+        return self._call_java("toString")
+
+
+@inherit_doc
+class DecisionTreeRegressionModel(DecisionTreeModel):
     """
     Model fitted by DecisionTreeRegressor.
     """
@@ -253,12 +267,15 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
+    >>> from numpy import allclose
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
     >>> model = rf.fit(df)
+    >>> allclose(model.treeWeights, [1.0, 1.0])
+    True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -389,7 +406,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.featureSubsetStrategy)
 
 
-class RandomForestRegressionModel(JavaModel):
+class RandomForestRegressionModel(TreeEnsembleModels):
     """
     Model fitted by RandomForestRegressor.
     """
@@ -403,12 +420,15 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
+    >>> from numpy import allclose
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> gbt = GBTRegressor(maxIter=5, maxDepth=2)
     >>> model = gbt.fit(df)
+    >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
+    True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -518,7 +538,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.stepSize)
 
 
-class GBTRegressionModel(JavaModel):
+class GBTRegressionModel(TreeEnsembleModels):
     """
     Model fitted by GBTRegressor.
     """

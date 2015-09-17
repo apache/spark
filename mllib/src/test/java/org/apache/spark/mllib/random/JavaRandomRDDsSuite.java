@@ -17,7 +17,8 @@
 
 package org.apache.spark.mllib.random;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.junit.Assert;
 import org.junit.After;
@@ -51,7 +52,7 @@ public class JavaRandomRDDsSuite {
     JavaDoubleRDD rdd1 = uniformJavaRDD(sc, m);
     JavaDoubleRDD rdd2 = uniformJavaRDD(sc, m, p);
     JavaDoubleRDD rdd3 = uniformJavaRDD(sc, m, p, seed);
-    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaDoubleRDD rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
     }
   }
@@ -64,7 +65,7 @@ public class JavaRandomRDDsSuite {
     JavaDoubleRDD rdd1 = normalJavaRDD(sc, m);
     JavaDoubleRDD rdd2 = normalJavaRDD(sc, m, p);
     JavaDoubleRDD rdd3 = normalJavaRDD(sc, m, p, seed);
-    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaDoubleRDD rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
     }
   }
@@ -79,7 +80,7 @@ public class JavaRandomRDDsSuite {
     JavaDoubleRDD rdd1 = logNormalJavaRDD(sc, mean, std, m);
     JavaDoubleRDD rdd2 = logNormalJavaRDD(sc, mean, std, m, p);
     JavaDoubleRDD rdd3 = logNormalJavaRDD(sc, mean, std, m, p, seed);
-    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaDoubleRDD rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
     }
   }
@@ -93,7 +94,7 @@ public class JavaRandomRDDsSuite {
     JavaDoubleRDD rdd1 = poissonJavaRDD(sc, mean, m);
     JavaDoubleRDD rdd2 = poissonJavaRDD(sc, mean, m, p);
     JavaDoubleRDD rdd3 = poissonJavaRDD(sc, mean, m, p, seed);
-    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaDoubleRDD rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
     }
   }
@@ -107,7 +108,7 @@ public class JavaRandomRDDsSuite {
     JavaDoubleRDD rdd1 = exponentialJavaRDD(sc, mean, m);
     JavaDoubleRDD rdd2 = exponentialJavaRDD(sc, mean, m, p);
     JavaDoubleRDD rdd3 = exponentialJavaRDD(sc, mean, m, p, seed);
-    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaDoubleRDD rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
     }
   }
@@ -122,7 +123,7 @@ public class JavaRandomRDDsSuite {
     JavaDoubleRDD rdd1 = gammaJavaRDD(sc, shape, scale, m);
     JavaDoubleRDD rdd2 = gammaJavaRDD(sc, shape, scale, m, p);
     JavaDoubleRDD rdd3 = gammaJavaRDD(sc, shape, scale, m, p, seed);
-    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaDoubleRDD rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
     }
   }
@@ -138,7 +139,7 @@ public class JavaRandomRDDsSuite {
     JavaRDD<Vector> rdd1 = uniformJavaVectorRDD(sc, m, n);
     JavaRDD<Vector> rdd2 = uniformJavaVectorRDD(sc, m, n, p);
     JavaRDD<Vector> rdd3 = uniformJavaVectorRDD(sc, m, n, p, seed);
-    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaRDD<Vector> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
       Assert.assertEquals(n, rdd.first().size());
     }
@@ -154,7 +155,7 @@ public class JavaRandomRDDsSuite {
     JavaRDD<Vector> rdd1 = normalJavaVectorRDD(sc, m, n);
     JavaRDD<Vector> rdd2 = normalJavaVectorRDD(sc, m, n, p);
     JavaRDD<Vector> rdd3 = normalJavaVectorRDD(sc, m, n, p, seed);
-    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaRDD<Vector> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
       Assert.assertEquals(n, rdd.first().size());
     }
@@ -172,7 +173,7 @@ public class JavaRandomRDDsSuite {
     JavaRDD<Vector> rdd1 = logNormalJavaVectorRDD(sc, mean, std, m, n);
     JavaRDD<Vector> rdd2 = logNormalJavaVectorRDD(sc, mean, std, m, n, p);
     JavaRDD<Vector> rdd3 = logNormalJavaVectorRDD(sc, mean, std, m, n, p, seed);
-    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaRDD<Vector> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
       Assert.assertEquals(n, rdd.first().size());
     }
@@ -189,7 +190,7 @@ public class JavaRandomRDDsSuite {
     JavaRDD<Vector> rdd1 = poissonJavaVectorRDD(sc, mean, m, n);
     JavaRDD<Vector> rdd2 = poissonJavaVectorRDD(sc, mean, m, n, p);
     JavaRDD<Vector> rdd3 = poissonJavaVectorRDD(sc, mean, m, n, p, seed);
-    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaRDD<Vector> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
       Assert.assertEquals(n, rdd.first().size());
     }
@@ -206,7 +207,7 @@ public class JavaRandomRDDsSuite {
     JavaRDD<Vector> rdd1 = exponentialJavaVectorRDD(sc, mean, m, n);
     JavaRDD<Vector> rdd2 = exponentialJavaVectorRDD(sc, mean, m, n, p);
     JavaRDD<Vector> rdd3 = exponentialJavaVectorRDD(sc, mean, m, n, p, seed);
-    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaRDD<Vector> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
       Assert.assertEquals(n, rdd.first().size());
     }
@@ -224,7 +225,7 @@ public class JavaRandomRDDsSuite {
     JavaRDD<Vector> rdd1 = gammaJavaVectorRDD(sc, shape, scale, m, n);
     JavaRDD<Vector> rdd2 = gammaJavaVectorRDD(sc, shape, scale, m, n, p);
     JavaRDD<Vector> rdd3 = gammaJavaVectorRDD(sc, shape, scale, m, n, p, seed);
-    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+    for (JavaRDD<Vector> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
       Assert.assertEquals(m, rdd.count());
       Assert.assertEquals(n, rdd.first().size());
     }

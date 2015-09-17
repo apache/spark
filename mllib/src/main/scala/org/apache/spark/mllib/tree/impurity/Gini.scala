@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 
 /**
  * :: Experimental ::
@@ -25,6 +25,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
  * during binary classification.
  */
+@Since("1.0.0")
 @Experimental
 object Gini extends Impurity {
 
@@ -35,6 +36,7 @@ object Gini extends Impurity {
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
+  @Since("1.1.0")
   @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double = {
     if (totalCount == 0) {
@@ -59,6 +61,7 @@ object Gini extends Impurity {
    * @param sumSquares summation of squares of the labels
    * @return information value, or 0 if count = 0
    */
+  @Since("1.0.0")
   @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Gini.calculate")
@@ -67,6 +70,7 @@ object Gini extends Impurity {
    * Get this impurity instance.
    * This is useful for passing impurity parameters to a Strategy in Java.
    */
+  @Since("1.1.0")
   def instance: this.type = this
 
 }
@@ -114,7 +118,7 @@ private[tree] class GiniAggregator(numClasses: Int)
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[tree] class GiniCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class GiniCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.SparkContext._
@@ -74,3 +75,4 @@ object SparkPageRank {
     ctx.stop()
   }
 }
+// scalastyle:on println

@@ -16,14 +16,15 @@
 #
 
 import sys
+import warnings
 
 if sys.version >= '3':
     basestring = str
     long = int
 
+from pyspark import since
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql import since
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "Column", "SchemaRDD", "DataFrameNaFunctions",
@@ -60,6 +61,18 @@ def _to_seq(sc, cols, converter=None):
     return sc._jvm.PythonUtils.toSeq(cols)
 
 
+def _to_list(sc, cols, converter=None):
+    """
+    Convert a list of Column (or names) into a JVM (Scala) List of Column.
+
+    An optional `converter` could be used to convert items in `cols`
+    into JVM Column objects.
+    """
+    if converter:
+        cols = [converter(c) for c in cols]
+    return sc._jvm.PythonUtils.toList(cols)
+
+
 def _unary_op(name, doc="unary operator"):
     """ Create a method for given unary operator """
     def _(self):
@@ -74,6 +87,17 @@ def _func_op(name, doc=''):
         sc = SparkContext._active_spark_context
         jc = getattr(sc._jvm.functions, name)(self._jc)
         return Column(jc)
+    _.__doc__ = doc
+    return _
+
+
+def _bin_func_op(name, reverse=False, doc="binary function"):
+    def _(self, other):
+        sc = SparkContext._active_spark_context
+        fn = getattr(sc._jvm.functions, name)
+        jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
+        njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
+        return Column(njc)
     _.__doc__ = doc
     return _
 
@@ -138,6 +162,8 @@ class Column(object):
     __rdiv__ = _reverse_op("divide")
     __rtruediv__ = _reverse_op("divide")
     __rmod__ = _reverse_op("mod")
+    __pow__ = _bin_func_op("pow")
+    __rpow__ = _bin_func_op("pow", reverse=True)
 
     # logistic operators
     __eq__ = _bin_op("equalTo")
@@ -213,6 +239,9 @@ class Column(object):
             raise AttributeError(item)
         return self.getField(item)
 
+    def __iter__(self):
+        raise TypeError("Column is not iterable")
+
     # string methods
     rlike = _bin_op("rlike")
     like = _bin_op("like")
@@ -254,12 +283,29 @@ class Column(object):
         [Row(age=5, name=u'Bob')]
         >>> df[df.age.inSet([1, 2, 3])].collect()
         [Row(age=2, name=u'Alice')]
+
+        .. note:: Deprecated in 1.5, use :func:`Column.isin` instead.
+        """
+        warnings.warn("inSet is deprecated. Use isin() instead.")
+        return self.isin(*cols)
+
+    @ignore_unicode_prefix
+    @since(1.5)
+    def isin(self, *cols):
+        """
+        A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        >>> df[df.name.isin("Bob", "Mike")].collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df[df.age.isin([1, 2, 3])].collect()
+        [Row(age=2, name=u'Alice')]
         """
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             cols = cols[0]
         cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
         sc = SparkContext._active_spark_context
-        jc = getattr(self._jc, "in")(_to_seq(sc, cols))
+        jc = getattr(self._jc, "isin")(_to_seq(sc, cols))
         return Column(jc)
 
     # order
@@ -395,6 +441,11 @@ class Column(object):
             raise TypeError("window should be WindowSpec")
         jc = self._jc.over(window._jspec)
         return Column(jc)
+
+    def __nonzero__(self):
+        raise ValueError("Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
+                         "'~' for 'not' when building DataFrame boolean expressions.")
+    __bool__ = __nonzero__
 
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')

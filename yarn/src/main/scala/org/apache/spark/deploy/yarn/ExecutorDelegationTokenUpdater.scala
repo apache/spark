@@ -35,6 +35,9 @@ private[spark] class ExecutorDelegationTokenUpdater(
   @volatile private var lastCredentialsFileSuffix = 0
 
   private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
+  private val freshHadoopConf =
+    SparkHadoopUtil.get.getConfBypassingFSCache(
+      hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
   private val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
@@ -49,7 +52,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
   def updateCredentialsIfRequired(): Unit = {
     try {
       val credentialsFilePath = new Path(credentialsFile)
-      val remoteFs = FileSystem.get(hadoopConf)
+      val remoteFs = FileSystem.get(freshHadoopConf)
       SparkHadoopUtil.get.listFilesSorted(
         remoteFs, credentialsFilePath.getParent,
         credentialsFilePath.getName, SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)

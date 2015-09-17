@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
 
 abstract sealed class SortDirection
 case object Ascending extends SortDirection
@@ -29,15 +32,78 @@ case object Descending extends SortDirection
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
  */
-case class SortOrder(child: Expression, direction: SortDirection) extends Expression
-    with trees.UnaryNode[Expression] {
+case class SortOrder(child: Expression, direction: SortDirection)
+  extends UnaryExpression with Unevaluable {
+
+  /** Sort order is not foldable because we don't have an eval for it. */
+  override def foldable: Boolean = false
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (RowOrdering.isOrderable(dataType)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.simpleString}")
+    }
+  }
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
 
-  // SortOrder itself is never evaluated.
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-
   override def toString: String = s"$child ${if (direction == Ascending) "ASC" else "DESC"}"
+
+  def isAscending: Boolean = direction == Ascending
+}
+
+/**
+ * An expression to generate a 64-bit long prefix used in sorting.
+ */
+case class SortPrefix(child: SortOrder) extends UnaryExpression {
+
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val childCode = child.child.gen(ctx)
+    val input = childCode.primitive
+    val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
+    val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
+
+    val (nullValue: Long, prefixCode: String) = child.child.dataType match {
+      case BooleanType =>
+        (Long.MinValue, s"$input ? 1L : 0L")
+      case _: IntegralType =>
+        (Long.MinValue, s"(long) $input")
+      case DateType | TimestampType =>
+        (Long.MinValue, s"(long) $input")
+      case FloatType | DoubleType =>
+        (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
+          s"$DoublePrefixCmp.computePrefix((double)$input)")
+      case StringType => (0L, s"$input.getPrefix()")
+      case BinaryType => (0L, s"$BinaryPrefixCmp.computePrefix($input)")
+      case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+        val prefix = if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+          s"$input.toUnscaledLong()"
+        } else {
+          // reduce the scale to fit in a long
+          val p = Decimal.MAX_LONG_DIGITS
+          val s = p - (dt.precision - dt.scale)
+          s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : ${Long.MinValue}L"
+        }
+        (Long.MinValue, prefix)
+      case dt: DecimalType =>
+        (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
+          s"$DoublePrefixCmp.computePrefix($input.toDouble())")
+      case _ => (0L, "0L")
+    }
+
+    childCode.code +
+    s"""
+      |long ${ev.primitive} = ${nullValue}L;
+      |boolean ${ev.isNull} = false;
+      |if (!${childCode.isNull}) {
+      |  ${ev.primitive} = $prefixCode;
+      |}
+    """.stripMargin
+  }
+
+  override def dataType: DataType = LongType
 }

@@ -41,19 +41,31 @@ private[hive] object IsolatedClientLoader {
    */
   def forVersion(
       version: String,
-      config: Map[String, String] = Map.empty): IsolatedClientLoader = synchronized {
+      config: Map[String, String] = Map.empty,
+      ivyPath: Option[String] = None,
+      sharedPrefixes: Seq[String] = Seq.empty,
+      barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(version)
-    val files = resolvedVersions.getOrElseUpdate(resolvedVersion, downloadVersion(resolvedVersion))
-    new IsolatedClientLoader(hiveVersion(version), files, config)
+    val files = resolvedVersions.getOrElseUpdate(resolvedVersion,
+      downloadVersion(resolvedVersion, ivyPath))
+    new IsolatedClientLoader(
+      version = hiveVersion(version),
+      execJars = files,
+      config = config,
+      sharedPrefixes = sharedPrefixes,
+      barrierPrefixes = barrierPrefixes)
   }
 
   def hiveVersion(version: String): HiveVersion = version match {
     case "12" | "0.12" | "0.12.0" => hive.v12
     case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
     case "14" | "0.14" | "0.14.0" => hive.v14
+    case "1.0" | "1.0.0" => hive.v1_0
+    case "1.1" | "1.1.0" => hive.v1_1
+    case "1.2" | "1.2.0" | "1.2.1" => hive.v1_2
   }
 
-  private def downloadVersion(version: HiveVersion): Seq[URL] = {
+  private def downloadVersion(version: HiveVersion, ivyPath: Option[String]): Seq[URL] = {
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
@@ -64,7 +76,7 @@ private[hive] object IsolatedClientLoader {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         Some("http://www.datanucleus.org/downloads/maven2"),
-        None,
+        ivyPath,
         exclusions = version.exclusions)
     }
     val allFiles = classpath.split(",").map(new File(_)).toSet
@@ -72,7 +84,7 @@ private[hive] object IsolatedClientLoader {
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
-    tempDir.listFiles().map(_.toURL)
+    tempDir.listFiles().map(_.toURI.toURL)
   }
 
   private def resolvedVersions = new scala.collection.mutable.HashMap[HiveVersion, Seq[URL]]
@@ -119,8 +131,9 @@ private[hive] class IsolatedClientLoader(
     name.contains("slf4j") ||
     name.contains("log4j") ||
     name.startsWith("org.apache.spark.") ||
+    (name.startsWith("org.apache.hadoop.") && !name.startsWith("org.apache.hadoop.hive.")) ||
     name.startsWith("scala.") ||
-    name.startsWith("com.google") ||
+    (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
     name.startsWith("java.lang.") ||
     name.startsWith("java.net") ||
     sharedPrefixes.exists(name.startsWith)

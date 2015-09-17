@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.types._
 
 /**
@@ -29,11 +29,34 @@ import org.apache.spark.sql.types._
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends NamedExpression with trees.LeafNode[Expression] {
+  extends LeafExpression with NamedExpression {
 
-  override def toString: String = s"input[$ordinal]"
+  override def toString: String = s"input[$ordinal, $dataType]"
 
-  override def eval(input: InternalRow): Any = input(ordinal)
+  // Use special getter for primitive types (for UnsafeRow)
+  override def eval(input: InternalRow): Any = {
+    if (input.isNullAt(ordinal)) {
+      null
+    } else {
+      dataType match {
+        case BooleanType => input.getBoolean(ordinal)
+        case ByteType => input.getByte(ordinal)
+        case ShortType => input.getShort(ordinal)
+        case IntegerType | DateType => input.getInt(ordinal)
+        case LongType | TimestampType => input.getLong(ordinal)
+        case FloatType => input.getFloat(ordinal)
+        case DoubleType => input.getDouble(ordinal)
+        case StringType => input.getUTF8String(ordinal)
+        case BinaryType => input.getBinary(ordinal)
+        case CalendarIntervalType => input.getInterval(ordinal)
+        case t: DecimalType => input.getDecimal(ordinal, t.precision, t.scale)
+        case t: StructType => input.getStruct(ordinal, t.size)
+        case _: ArrayType => input.getArray(ordinal)
+        case _: MapType => input.getMap(ordinal)
+        case _ => input.get(ordinal, dataType)
+      }
+    }
+  }
 
   override def name: String = s"i[$ordinal]"
 
@@ -44,10 +67,11 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   override def exprId: ExprId = throw new UnsupportedOperationException
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val javaType = ctx.javaType(dataType)
+    val value = ctx.getValue("i", dataType, ordinal.toString)
     s"""
-        boolean ${ev.isNull} = i.isNullAt($ordinal);
-        ${ctx.javaType(dataType)} ${ev.primitive} = ${ev.isNull} ?
-            ${ctx.defaultValue(dataType)} : (${ctx.getColumn(dataType, ordinal)});
+      boolean ${ev.isNull} = i.isNullAt($ordinal);
+      $javaType ${ev.primitive} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
     """
   }
 }

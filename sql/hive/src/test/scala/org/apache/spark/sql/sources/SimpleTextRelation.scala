@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputForma
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -53,9 +54,12 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
   numberFormat.setGroupingUsed(false)
 
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    val split = context.getTaskAttemptID.getTaskID.getId
+    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+    val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+    val split = taskAttemptId.getTaskID.getId
     val name = FileOutputFormat.getOutputName(context)
-    new Path(outputFile, s"$name-${numberFormat.format(split)}-${UUID.randomUUID()}")
+    new Path(outputFile, s"$name-${numberFormat.format(split)}-$uniqueWriteJobId")
   }
 }
 
@@ -64,7 +68,9 @@ class SimpleTextOutputWriter(path: String, context: TaskAttemptContext) extends 
     new AppendingTextOutputFormat(new Path(path)).getRecordWriter(context)
 
   override def write(row: Row): Unit = {
-    val serialized = row.toSeq.map(_.toString).mkString(",")
+    val serialized = row.toSeq.map { v =>
+      if (v == null) "" else v.toString
+    }.mkString(",")
     recordWriter.write(null, new Text(serialized))
   }
 
@@ -108,7 +114,8 @@ class SimpleTextRelation(
     val fields = dataSchema.map(_.dataType)
 
     sparkContext.textFile(inputStatuses.map(_.getPath).mkString(",")).map { record =>
-      Row(record.split(",").zip(fields).map { case (value, dataType) =>
+      Row(record.split(",", -1).zip(fields).map { case (v, dataType) =>
+        val value = if (v == "") null else v
         // `Cast`ed values are always of Catalyst types (i.e. UTF8String instead of String, etc.)
         val catalystValue = Cast(Literal(value), dataType).eval()
         // Here we're converting Catalyst values to Scala values to test `needsConversion`
@@ -118,6 +125,8 @@ class SimpleTextRelation(
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
+    job.setOutputFormatClass(classOf[TextOutputFormat[_, _]])
+
     override def newInstance(
         path: String,
         dataSchema: StructType,
@@ -156,6 +165,7 @@ class CommitFailureTestRelation(
         context: TaskAttemptContext): OutputWriter = {
       new SimpleTextOutputWriter(path, context) {
         override def close(): Unit = {
+          super.close()
           sys.error("Intentional task commitment failure for testing purpose.")
         }
       }

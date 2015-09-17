@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import java.io.File
@@ -119,3 +120,4 @@ object DatasetExample {
   }
 
 }
+// scalastyle:on println

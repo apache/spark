@@ -22,7 +22,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Clock, EventLoop, ManualClock}
+import org.apache.spark.util.{Utils, Clock, EventLoop, ManualClock}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -47,11 +47,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.util.SystemClock")
     try {
-      Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+      Utils.classForName(clockClass).newInstance().asInstanceOf[Clock]
     } catch {
       case e: ClassNotFoundException if clockClass.startsWith("org.apache.spark.streaming") =>
         val newClockClass = clockClass.replace("org.apache.spark.streaming", "org.apache.spark")
-        Class.forName(newClockClass).newInstance().asInstanceOf[Clock]
+        Utils.classForName(newClockClass).newInstance().asInstanceOf[Clock]
     }
   }
 
@@ -78,6 +78,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Start generation of jobs */
   def start(): Unit = synchronized {
     if (eventLoop != null) return // generator has already been started
+
+    // Call checkpointWriter here to initialize it before eventLoop uses it to avoid a deadlock.
+    // See SPARK-10125
+    checkpointWriter
 
     eventLoop = new EventLoop[JobGeneratorEvent]("JobGenerator") {
       override protected def onReceive(event: JobGeneratorEvent): Unit = processEvent(event)
@@ -244,8 +248,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     } match {
       case Success(jobs) =>
         val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
-        val streamIdToNumRecords = streamIdToInputInfos.mapValues(_.numRecords)
-        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToNumRecords))
+        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }

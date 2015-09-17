@@ -17,25 +17,21 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.io.File
 import java.net.URL
-import java.util.Properties
-import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable
 
 import com.google.common.base.Charsets.UTF_8
-import com.google.common.io.ByteStreams
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.server.MiniYARNCluster
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalatest.Matchers
 
 import org.apache.spark._
-import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.launcher.TestClasspathBuilder
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
   SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
 
 /**
@@ -43,17 +39,9 @@ import org.apache.spark.util.Utils
  * applications, and require the Spark assembly to be built before they can be successfully
  * run.
  */
-class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
+class YarnClusterSuite extends BaseYarnClusterSuite {
 
-  // log4j configuration for the YARN containers, so that their output is collected
-  // by YARN instead of trying to overwrite unit-tests.log.
-  private val LOG4J_CONF = """
-    |log4j.rootCategory=DEBUG, console
-    |log4j.appender.console=org.apache.log4j.ConsoleAppender
-    |log4j.appender.console.target=System.err
-    |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-    |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
-    """.stripMargin
+  override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
   private val TEST_PYFILE = """
     |import mod1, mod2
@@ -81,65 +69,6 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
     |def func():
     |    return 42
     """.stripMargin
-
-  private var yarnCluster: MiniYARNCluster = _
-  private var tempDir: File = _
-  private var fakeSparkJar: File = _
-  private var hadoopConfDir: File = _
-  private var logConfDir: File = _
-
-  override def beforeAll() {
-    super.beforeAll()
-
-    tempDir = Utils.createTempDir()
-    logConfDir = new File(tempDir, "log4j")
-    logConfDir.mkdir()
-    System.setProperty("SPARK_YARN_MODE", "true")
-
-    val logConfFile = new File(logConfDir, "log4j.properties")
-    Files.write(LOG4J_CONF, logConfFile, UTF_8)
-
-    yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
-    yarnCluster.init(new YarnConfiguration())
-    yarnCluster.start()
-
-    // There's a race in MiniYARNCluster in which start() may return before the RM has updated
-    // its address in the configuration. You can see this in the logs by noticing that when
-    // MiniYARNCluster prints the address, it still has port "0" assigned, although later the
-    // test works sometimes:
-    //
-    //    INFO MiniYARNCluster: MiniYARN ResourceManager address: blah:0
-    //
-    // That log message prints the contents of the RM_ADDRESS config variable. If you check it
-    // later on, it looks something like this:
-    //
-    //    INFO YarnClusterSuite: RM address in configuration is blah:42631
-    //
-    // This hack loops for a bit waiting for the port to change, and fails the test if it hasn't
-    // done so in a timely manner (defined to be 10 seconds).
-    val config = yarnCluster.getConfig()
-    val deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(10)
-    while (config.get(YarnConfiguration.RM_ADDRESS).split(":")(1) == "0") {
-      if (System.currentTimeMillis() > deadline) {
-        throw new IllegalStateException("Timed out waiting for RM to come up.")
-      }
-      logDebug("RM address still not set in configuration, waiting...")
-      TimeUnit.MILLISECONDS.sleep(100)
-    }
-
-    logInfo(s"RM address in configuration is ${config.get(YarnConfiguration.RM_ADDRESS)}")
-
-    fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
-    hadoopConfDir = new File(tempDir, Client.LOCALIZED_CONF_DIR)
-    assert(hadoopConfDir.mkdir())
-    File.createTempFile("token", ".txt", hadoopConfDir)
-  }
-
-  override def afterAll() {
-    yarnCluster.stop()
-    System.clearProperty("SPARK_YARN_MODE")
-    super.afterAll()
-  }
 
   test("run Spark in yarn-client mode") {
     testBasicYarnApp(true)
@@ -174,7 +103,7 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
   }
 
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
-    var result = File.createTempFile("result", null, tempDir)
+    val result = File.createTempFile("result", null, tempDir)
     runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()))
     checkResult(result)
@@ -183,6 +112,17 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
   private def testPySpark(clientMode: Boolean): Unit = {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
+
+    // When running tests, let's not assume the user has built the assembly module, which also
+    // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
+    // needed locations.
+    val sparkHome = sys.props("spark.test.home");
+    val pythonPath = Seq(
+        s"$sparkHome/python/lib/py4j-0.8.2.1-src.zip",
+        s"$sparkHome/python")
+    val extraEnv = Map(
+      "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator))
 
     val moduleDir =
       if (clientMode) {
@@ -203,7 +143,8 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
 
     runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files", pyFiles),
-      appArgs = Seq(result.getAbsolutePath()))
+      appArgs = Seq(result.getAbsolutePath()),
+      extraEnv = extraEnv)
     checkResult(result)
   }
 
@@ -222,89 +163,6 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
         "spark.executor.userClassPathFirst" -> "true"))
     checkResult(driverResult, "OVERRIDDEN")
     checkResult(executorResult, "OVERRIDDEN")
-  }
-
-  private def runSpark(
-      clientMode: Boolean,
-      klass: String,
-      appArgs: Seq[String] = Nil,
-      sparkArgs: Seq[String] = Nil,
-      extraClassPath: Seq[String] = Nil,
-      extraJars: Seq[String] = Nil,
-      extraConf: Map[String, String] = Map()): Unit = {
-    val master = if (clientMode) "yarn-client" else "yarn-cluster"
-    val props = new Properties()
-
-    props.setProperty("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
-
-    val childClasspath = logConfDir.getAbsolutePath() +
-      File.pathSeparator +
-      sys.props("java.class.path") +
-      File.pathSeparator +
-      extraClassPath.mkString(File.pathSeparator)
-    props.setProperty("spark.driver.extraClassPath", childClasspath)
-    props.setProperty("spark.executor.extraClassPath", childClasspath)
-
-    // SPARK-4267: make sure java options are propagated correctly.
-    props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
-    props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
-
-    yarnCluster.getConfig().foreach { e =>
-      props.setProperty("spark.hadoop." + e.getKey(), e.getValue())
-    }
-
-    sys.props.foreach { case (k, v) =>
-      if (k.startsWith("spark.")) {
-        props.setProperty(k, v)
-      }
-    }
-
-    extraConf.foreach { case (k, v) => props.setProperty(k, v) }
-
-    val propsFile = File.createTempFile("spark", ".properties", tempDir)
-    val writer = new OutputStreamWriter(new FileOutputStream(propsFile), UTF_8)
-    props.store(writer, "Spark properties.")
-    writer.close()
-
-    val extraJarArgs = if (!extraJars.isEmpty()) Seq("--jars", extraJars.mkString(",")) else Nil
-    val mainArgs =
-      if (klass.endsWith(".py")) {
-        Seq(klass)
-      } else {
-        Seq("--class", klass, fakeSparkJar.getAbsolutePath())
-      }
-    val argv =
-      Seq(
-        new File(sys.props("spark.test.home"), "bin/spark-submit").getAbsolutePath(),
-        "--master", master,
-        "--num-executors", "1",
-        "--properties-file", propsFile.getAbsolutePath()) ++
-      extraJarArgs ++
-      sparkArgs ++
-      mainArgs ++
-      appArgs
-
-    Utils.executeAndGetOutput(argv,
-      extraEnvironment = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()))
-  }
-
-  /**
-   * This is a workaround for an issue with yarn-cluster mode: the Client class will not provide
-   * any sort of error when the job process finishes successfully, but the job itself fails. So
-   * the tests enforce that something is written to a file after everything is ok to indicate
-   * that the job succeeded.
-   */
-  private def checkResult(result: File): Unit = {
-    checkResult(result, "success")
-  }
-
-  private def checkResult(result: File, expected: String): Unit = {
-    var resultString = Files.toString(result, UTF_8)
-    resultString should be (expected)
-  }
-
-  private def mainClassName(klass: Class[_]): String = {
-    klass.getName().stripSuffix("$")
   }
 
 }
@@ -328,12 +186,14 @@ private object YarnClusterDriver extends Logging with Matchers {
 
   def main(args: Array[String]): Unit = {
     if (args.length != 1) {
+      // scalastyle:off println
       System.err.println(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
         |Usage: YarnClusterDriver [result file]
         """.stripMargin)
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -369,8 +229,8 @@ private object YarnClusterDriver extends Logging with Matchers {
       assert(listener.driverLogs.nonEmpty)
       val driverLogs = listener.driverLogs.get
       assert(driverLogs.size === 2)
-      assert(driverLogs.containsKey("stderr"))
-      assert(driverLogs.containsKey("stdout"))
+      assert(driverLogs.contains("stderr"))
+      assert(driverLogs.contains("stdout"))
       val urlStr = driverLogs("stderr")
       // Ensure that this is a valid URL, else this will throw an exception
       new URL(urlStr)
@@ -382,17 +242,29 @@ private object YarnClusterDriver extends Logging with Matchers {
 
 }
 
-private object YarnClasspathTest {
+private object YarnClasspathTest extends Logging {
+
+  var exitCode = 0
+
+  def error(m: String, ex: Throwable = null): Unit = {
+    logError(m, ex)
+    // scalastyle:off println
+    System.out.println(m)
+    if (ex != null) {
+      ex.printStackTrace(System.out)
+    }
+    // scalastyle:on println
+  }
 
   def main(args: Array[String]): Unit = {
     if (args.length != 2) {
-      System.err.println(
+      error(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
         |Usage: YarnClasspathTest [driver result file] [executor result file]
         """.stripMargin)
-      System.exit(1)
+      // scalastyle:on println
     }
 
     readResource(args(0))
@@ -402,6 +274,7 @@ private object YarnClasspathTest {
     } finally {
       sc.stop()
     }
+    System.exit(exitCode)
   }
 
   private def readResource(resultPath: String): Unit = {
@@ -411,6 +284,11 @@ private object YarnClasspathTest {
       val resource = ccl.getResourceAsStream("test.resource")
       val bytes = ByteStreams.toByteArray(resource)
       result = new String(bytes, 0, bytes.length, UTF_8)
+    } catch {
+      case t: Throwable =>
+        error(s"loading test.resource to $resultPath", t)
+        // set the exit code if not yet set
+        exitCode = 2
     } finally {
       Files.write(result, new File(resultPath), UTF_8)
     }
