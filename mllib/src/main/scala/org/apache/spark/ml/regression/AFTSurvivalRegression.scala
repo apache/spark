@@ -160,17 +160,17 @@ class AFTSurvivalRegression(override val uid: String)
 
     val numFeatures = dataset.select($(featuresCol)).take(1)(0).getAs[Vector](0).size
     /*
-       The weights vector has three parts:
+       The coefficients vector has three parts:
        the first element: Double, log(sigma), the log of scale parameter
        the second element: Double, intercept of the beta parameter
-       the third to the end elements: Doubles, weights vector of the beta parameter
+       the third to the end elements: Doubles, coefficients vector of the beta parameter
      */
-    val initialWeights = Vectors.zeros(numFeatures + 2)
+    val initialCoefficients = Vectors.zeros(numFeatures + 2)
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialWeights.toBreeze.toDenseVector)
+      initialCoefficients.toBreeze.toDenseVector)
 
-    val weights = {
+    val coefficients = {
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
       var state: optimizer.State = null
       while (states.hasNext) {
@@ -182,16 +182,16 @@ class AFTSurvivalRegression(override val uid: String)
         throw new SparkException(msg)
       }
 
-      val rawWeights = state.x.toArray.clone()
-      rawWeights
+      val rawCoefficients = state.x.toArray.clone()
+      rawCoefficients
     }
 
     if (handlePersistence) instances.unpersist()
 
-    val realWeights = Vectors.dense(weights.slice(2, weights.length))
-    val intercept = weights(1)
-    val scale = math.exp(weights(0))
-    val model = new AFTSurvivalRegressionModel(uid, realWeights, intercept, scale)
+    val realCoefficients = Vectors.dense(coefficients.slice(2, coefficients.length))
+    val intercept = coefficients(1)
+    val scale = math.exp(coefficients(0))
+    val model = new AFTSurvivalRegressionModel(uid, realCoefficients, intercept, scale)
     copyValues(model.setParent(this))
   }
 
@@ -209,7 +209,7 @@ class AFTSurvivalRegression(override val uid: String)
 @Experimental
 class AFTSurvivalRegressionModel private[ml] (
     override val uid: String,
-    val weights: Vector,
+    val coefficients: Vector,
     val intercept: Double,
     val scale: Double)
   extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams {
@@ -223,10 +223,10 @@ class AFTSurvivalRegressionModel private[ml] (
   /** @group setParam */
   def setQuantile(value: Array[Double]): this.type = set(quantile, value)
 
-  def quantilePredict(features: Vector): Vector = {
-    require(hasQuantile, "AFTSurvivalRegressionModel quantilePredict must set quantile vector")
+  def predictQuantiles(features: Vector): Vector = {
+    require(hasQuantile, "AFTSurvivalRegressionModel predictQuantiles must set quantile vector")
     // scale parameter of the Weibull distribution
-    val lambda = math.exp(weights.toBreeze.dot(features.toBreeze) + intercept)
+    val lambda = math.exp(coefficients.toBreeze.dot(features.toBreeze) + intercept)
     // shape parameter of the Weibull distribution
     val k = 1 / scale
     val array = $(quantile).map { q => lambda * math.exp(math.log(-math.log(1-q)) / k) }
@@ -234,7 +234,7 @@ class AFTSurvivalRegressionModel private[ml] (
   }
 
   def predict(features: Vector): Double = {
-    val lambda = math.exp(weights.toBreeze.dot(features.toBreeze) + intercept)
+    val lambda = math.exp(coefficients.toBreeze.dot(features.toBreeze) + intercept)
     lambda
   }
 
@@ -249,7 +249,7 @@ class AFTSurvivalRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): AFTSurvivalRegressionModel = {
-    copyValues(new AFTSurvivalRegressionModel(uid, weights, intercept, scale), extra)
+    copyValues(new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale), extra)
       .setParent(parent)
   }
 }
@@ -307,15 +307,15 @@ class AFTSurvivalRegressionModel private[ml] (
  *   \frac{\partial (-\iota)}{\partial (\log\sigma)}=
  *   \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
  * }}}
- * @param weights The the log of scale parameter,
- *                the intercept and weights/coefficients corresponding to the features.
+ * @param coefficients The the log of scale parameter,
+ *                the intercept and coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
  */
-private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
+private class AFTAggregator(coefficients: BDV[Double], fitIntercept: Boolean)
   extends Serializable {
 
-  private val beta = weights.slice(1, weights.length)
-  private val sigma = math.exp(weights(0))
+  private val beta = coefficients.slice(1, coefficients.length)
+  private val sigma = math.exp(coefficients(0))
 
   private var totalCnt: Long = 0L
   private var lossSum = 0.0
@@ -384,15 +384,15 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
 
 /**
  * AFTCostFun implements Breeze's DiffFunction[T] for AFT cost.
- * It returns the loss and gradient at a particular point (weights).
+ * It returns the loss and gradient at a particular point (coefficients).
  * It's used in Breeze's convex optimization routines.
  */
 private class AFTCostFun(data: RDD[AFTPoint], fitIntercept: Boolean)
   extends DiffFunction[BDV[Double]] {
 
-  override def calculate(weights: BDV[Double]): (Double, BDV[Double]) = {
+  override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
 
-    val aftAggregator = data.treeAggregate(new AFTAggregator(weights, fitIntercept))(
+    val aftAggregator = data.treeAggregate(new AFTAggregator(coefficients, fitIntercept))(
       seqOp = (c, v) => (c, v) match {
         case (aggregator, instance) => aggregator.add(instance)
       },
