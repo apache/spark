@@ -278,25 +278,25 @@ private[spark] class MesosSchedulerBackend(
     var availableCores = Math.max(0, maxCores - totalCoresAcquired)
 
     val workerOffers = (for (o <- usableOffers) yield {
-      val coresInOffer = getResource(o.getResourcesList, "cpus")
-      val cores = if (slaveIdToExecutorInfo.contains(o.getSlaveId.getValue)) {
-        coresInOffer.toInt
+      val coresInOffer = getResource(o.getResourcesList, "cpus").toInt
+      val extraCores = if (slaveIdToExecutorInfo.contains(o.getSlaveId.getValue)) {
+        0D
       } else {
         // If the Mesos executor has not been started on this slave yet, set aside a few
         // cores for the Mesos executor by offering fewer cores to the Spark executor
-        availableCores -= mesosExecutorCores
-        (coresInOffer - mesosExecutorCores).toInt
+        mesosExecutorCores
       }
 
-      // check that we can still acquire cpus
-      val actualCores = Math.min(availableCores, cores).toInt
-      availableCores -= actualCores
+      // the cores we can offer for tasks on workers should not exceed neither availableCores
+      // nor cores in the current offer, after accounting for non-task cores
+      val taskCores = Math.min(availableCores - extraCores, coresInOffer - extraCores)
 
-      if (actualCores > 0) {
+      if (taskCores > 0) {
+        availableCores -= taskCores + extraCores
         Option(new WorkerOffer(
           o.getSlaveId.getValue,
           o.getHostname,
-          actualCores))
+          taskCores.toInt))
       } else {
         None
       }

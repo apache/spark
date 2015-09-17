@@ -328,11 +328,37 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val (usableOffers, workerOffers) = backend.usableWorkerOffers(driver, offers.asJava)
 
-    assert(usableOffers === offers) // both offers are usable
+    assert(usableOffers === offers, "All offers are usable")
     // 1 core is set aside for the executor, so only 4 cores are available in the worker offer
     // the second Mesos offer is not translated to a worker offer since all available cores are
     // already consumed
     assert(workerOffers === List(new WorkerOffer("s1", "hosts1", 4)))
+  }
+
+  test("correctly accounts for mesossExecutor.cores when calculating total acquired cores") {
+    val driver = mock[SchedulerDriver]
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
+
+    val conf = new SparkConf
+    conf.set("spark.cores.max", "6")
+    conf.set("spark.mesos.mesosExecutor.cores", "3")
+
+    val sc = setupSparkContext()
+    when(sc.conf).thenReturn(conf)
+
+    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+
+    val minMem = backend.calculateTotalMemory(sc)
+    val offers = List(createOffer("o1", "s1", minMem, 8), createOffer("o2", "s2", minMem, 10))
+
+    val (usableOffers, workerOffers) = backend.usableWorkerOffers(driver, offers.asJava)
+
+    // 3 cores are set aside for the executor, so only 3 cores are available without going
+    // above `spark.cores.max`.
+    // the second Mesos offer is not translated to a worker offer since all available cores are
+    // already consumed
+    assert(workerOffers === List(new WorkerOffer("s1", "hosts1", 3)))
   }
 
   test("does not launch tasks above spark.cores.max") {
@@ -377,16 +403,12 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
       for (taskInfo <- launchedTaskInfos) yield
         getResource(taskInfo.getResourcesList.asScala, "cpus")
 
-    // TODO: the condition should really check against Seq(2.0, 2.0), but
-    // the scheduler backend needs to be fixed to use mesosExecutor.cores for ExecutorInfo,
-    // instead of CPUS_PER_TASK
-    assert(launchedCores === Seq(2.0, 1.0))
+    assert(launchedCores === Seq(2.0, 2.0))
 
     assert(backend.totalCoresAcquired == 5)
   }
 
-  // this test depends on `mesosExecutor.cores` being followed and needs PR 8653
-  ignore("cores are released when tasks are done") {
+  test("cores are released when tasks are done") {
     val driver = mock[SchedulerDriver]
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
