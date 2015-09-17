@@ -127,12 +127,10 @@ private[ui] class StageTableBase(
         if (areAllLinksRelative) {
           xml
         } else {
-          println("links not relative")
           <span class="description-input" title={desc}> {desc} </span>
         }
       } catch {
         case NonFatal(e) =>
-          println(e)
           <span class="description-input" title={desc}> {desc} </span>
       }
     }
