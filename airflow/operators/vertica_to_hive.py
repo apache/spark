@@ -6,16 +6,14 @@ from tempfile import NamedTemporaryFile
 
 from vertica_python import datatypes
 
-
 from airflow.hooks import HiveCliHook, VerticaHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 
-
 class VerticaToHiveTransfer(BaseOperator):
     """
-    Moves data from Microsoft SQL Server to Hive. The operator runs
-    your query against Microsoft SQL Server, stores the file locally
+    Moves data from Vertia to Hive. The operator runs
+    your query against Vertia, stores the file locally
     before loading it into a Hive table. If the ``create`` or
     ``recreate`` arguments are set to ``True``,
     a ``CREATE TABLE`` and ``DROP TABLE`` statements are generated.
@@ -26,7 +24,7 @@ class VerticaToHiveTransfer(BaseOperator):
     queried considerably, you may want to use this operator only to
     stage the data into a temporary table before loading it into its
     final destination using a ``HiveOperator``.
-    :param sql: SQL query to execute against the Microsoft SQL Server database
+    :param sql: SQL query to execute against the Vertia database
     :type sql: str
     :param hive_table: target Hive table, use dot notation to target a
     specific database
@@ -47,7 +45,7 @@ class VerticaToHiveTransfer(BaseOperator):
 
     template_fields = ('sql', 'partition', 'hive_table')
     template_ext = ('.sql',)
-    ui_color = '#a0e08c'
+    ui_color = '#b4e0ff'
 
     @apply_defaults
     def __init__(
@@ -85,7 +83,7 @@ class VerticaToHiveTransfer(BaseOperator):
         hive = HiveCliHook(hive_cli_conn_id=self.hive_cli_conn_id)
         vertica = VerticaHook(vertica_conn_id=self.vertica_conn_id)
 
-        logging.info("Dumping Microsoft SQL Server query results to local file")
+        logging.info("Dumping Vertica query results to local file")
         conn = vertica.get_conn()
         cursor = conn.cursor()
         cursor.execute(self.sql)
