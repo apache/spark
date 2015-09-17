@@ -209,9 +209,21 @@ private[spark] object SerDe {
       case "array" => dos.writeByte('a')
       // Array of objects
       case "list" => dos.writeByte('l')
+      case "map" => dos.writeByte('e')
       case "jobj" => dos.writeByte('j')
       case _ => throw new IllegalArgumentException(s"Invalid type $typeStr")
     }
+  }
+
+  private def writeKeyValue(dos: DataOutputStream, key: Object, value: Object): Unit = {
+    if (key == null) {
+      throw new IllegalArgumentException("Key in map can't be null.")
+    } else if (!key.isInstanceOf[String]) {
+      throw new IllegalArgumentException(s"Invalid map key type: ${key.getClass.getName}")
+    }
+
+    writeString(dos, key.asInstanceOf[String])
+    writeObject(dos, value)
   }
 
   def writeObject(dos: DataOutputStream, obj: Object): Unit = {
@@ -305,6 +317,25 @@ private[spark] object SerDe {
           writeType(dos, "list")
           writeInt(dos, v.length)
           v.foreach(elem => writeObject(dos, elem))
+
+        // Handle map
+        case v: java.util.Map[_, _] =>
+          writeType(dos, "map")
+          writeInt(dos, v.size)
+          val iter = v.entrySet.iterator
+          while(iter.hasNext) {
+            val entry = iter.next
+            val key = entry.getKey
+            val value = entry.getValue
+
+            writeKeyValue(dos, key.asInstanceOf[Object], value.asInstanceOf[Object])
+          }
+        case v: scala.collection.Map[_, _] =>
+          writeType(dos, "map")
+          writeInt(dos, v.size)
+          v.foreach { case (key, value) =>
+            writeKeyValue(dos, key.asInstanceOf[Object], value.asInstanceOf[Object])
+          }
 
         case _ =>
           writeType(dos, "jobj")
