@@ -19,7 +19,7 @@ class VerticaOperator(BaseOperator):
 
     template_fields = ('sql',)
     template_ext = ('.sql',)
-    ui_color = '#004372'
+    ui_color = '#b4e0ff'
 
     @apply_defaults
     def __init__(self, sql, vertica_conn_id='vertica_default', *args, **kwargs):
