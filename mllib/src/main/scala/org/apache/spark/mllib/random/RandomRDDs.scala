@@ -415,7 +415,8 @@ object RandomRDDs {
       numPartitions: Int,
       seed: Long): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
-    JavaRDD.fromRDD(randomRDD(jsc.sc, generator, size, numPartitions, seed))
+    val rdd = randomRDD(jsc.sc, generator, size, numPartitions, seed)
+    JavaRDD.fromRDD(rdd)
   }
 
   /**
