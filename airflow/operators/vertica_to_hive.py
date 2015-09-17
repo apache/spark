@@ -4,7 +4,7 @@ import unicodecsv as csv
 import logging
 from tempfile import NamedTemporaryFile
 
-from vertical_python import datatypes
+from vertica_python import datatypes
 
 
 from airflow.hooks import HiveCliHook, VerticaHook
