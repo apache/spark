@@ -161,7 +161,7 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     for (i <- 0 until n; j <- i + 1 until n) {
       val trueResult = gram(i, j) / scala.math.sqrt(gram(i, i) * gram(j, j))
-      assert(math.abs(G(i, j) - trueResult) < 1e-6 || math.abs(G(j, i) - trueResult) < 1e-6 )
+      assert(math.abs(G(i, j) - trueResult) < 1e-6)
     }
   }
 
