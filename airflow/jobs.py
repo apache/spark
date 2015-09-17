@@ -23,7 +23,7 @@ ID_LEN = models.ID_LEN
 
 # Setting up a statsd client if needed
 statsd = None
-if conf.get('scheduler', 'statsd_on'):
+if conf.getboolean('scheduler', 'statsd_on'):
     from statsd import StatsClient
     statsd = StatsClient(
         host=conf.get('scheduler', 'statsd_host'),
@@ -473,56 +473,58 @@ class SchedulerJob(BaseJob):
         executor.start()
         i = 0
         while not self.num_runs or self.num_runs > i:
-            loop_start_dttm = datetime.now()
             try:
-                self.prioritize_queued(executor=executor, dagbag=dagbag)
-            except Exception as e:
-                logging.exception(e)
-
-            i += 1
-            try:
-                if i % self.refresh_dags_every == 0:
-                    dagbag = models.DagBag(self.subdir, sync_to_db=True)
-                else:
-                    dagbag.collect_dags(only_if_updated=True)
-            except:
-                logging.error("Failed at reloading the dagbag")
-                if statsd:
-                    statsd.incr('dag_refresh_error', 1, 1)
-                sleep(5)
-
-            if dag_id:
-                dags = [dagbag.dags[dag_id]]
-            else:
-                dags = [
-                    dag for dag in dagbag.dags.values() if not dag.parent_dag]
-            paused_dag_ids = dagbag.paused_dags()
-            for dag in dags:
-                logging.debug("Scheduling {}".format(dag.dag_id))
-                dag = dagbag.get_dag(dag.dag_id)
-                if not dag or (dag.dag_id in paused_dag_ids):
-                    continue
+                loop_start_dttm = datetime.now()
                 try:
-                    self.process_dag(dag, executor)
-                    self.manage_slas(dag)
+                    self.prioritize_queued(executor=executor, dagbag=dagbag)
                 except Exception as e:
                     logging.exception(e)
-            logging.info(
-                "Done queuing tasks, calling the executor's heartbeat")
-            duration_sec = (datetime.now() - loop_start_dttm).total_seconds()
-            logging.info("Loop took: {} seconds".format(duration_sec))
-            try:
-                self.import_errors(dagbag)
-            except Exception as e:
-                logging.exception(e)
-            try:
-                # We really just want the scheduler to never ever stop.
-                executor.heartbeat()
-                self.heartbeat()
-            except Exception as e:
-                logging.exception(e)
-                logging.error("Tachycardia!")
 
+                i += 1
+                try:
+                    if i % self.refresh_dags_every == 0:
+                        dagbag = models.DagBag(self.subdir, sync_to_db=True)
+                    else:
+                        dagbag.collect_dags(only_if_updated=True)
+                except:
+                    logging.error("Failed at reloading the dagbag")
+                    if statsd:
+                        statsd.incr('dag_refresh_error', 1, 1)
+                    sleep(5)
+
+                if dag_id:
+                    dags = [dagbag.dags[dag_id]]
+                else:
+                    dags = [
+                        dag for dag in dagbag.dags.values() if not dag.parent_dag]
+                paused_dag_ids = dagbag.paused_dags()
+                for dag in dags:
+                    logging.debug("Scheduling {}".format(dag.dag_id))
+                    dag = dagbag.get_dag(dag.dag_id)
+                    if not dag or (dag.dag_id in paused_dag_ids):
+                        continue
+                    try:
+                        self.process_dag(dag, executor)
+                        self.manage_slas(dag)
+                    except Exception as e:
+                        logging.exception(e)
+                logging.info(
+                    "Done queuing tasks, calling the executor's heartbeat")
+                duration_sec = (datetime.now() - loop_start_dttm).total_seconds()
+                logging.info("Loop took: {} seconds".format(duration_sec))
+                try:
+                    self.import_errors(dagbag)
+                except Exception as e:
+                    logging.exception(e)
+                try:
+                    # We really just want the scheduler to never ever stop.
+                    executor.heartbeat()
+                    self.heartbeat()
+                except Exception as e:
+                    logging.exception(e)
+                    logging.error("Tachycardia!")
+            except Exception as deep_e:
+                logging.exception(deep_e)
 
     def heartbeat_callback(self):
         if statsd:
@@ -623,11 +625,15 @@ class BackfillJob(BaseJob):
                     continue
                 ti = tasks_to_run[key]
                 ti.refresh_from_db()
-                if ti.state == State.FAILED:
-                    failed.append(key)
-                    logging.error("Task instance " + str(key) + " failed")
+                if ti.state in (State.FAILED, State.SKIPPED):
+                    if ti.state == State.FAILED:
+                        failed.append(key)
+                        logging.error("Task instance " + str(key) + " failed")
+                    elif ti.state == State.SKIPPED:
+                        wont_run.append(key)
+                        logging.error("Skipping " + str(key) + " failed")
                     del tasks_to_run[key]
-                    # Removing downstream tasks from the one that has failed
+                    # Removing downstream tasks that also shouldn't run
                     for t in self.dag.get_task(task_id).get_flat_relatives(
                             upstream=False):
                         key = (ti.dag_id, t.task_id, execution_date)
@@ -644,7 +650,7 @@ class BackfillJob(BaseJob):
                 "succeeded: {1} | "
                 "kicked_off: {2} | "
                 "failed: {3} | "
-                "skipped: {4} ").format(
+                "wont_run: {4} ").format(
                     len(tasks_to_run),
                     len(succeeded),
                     len(started),

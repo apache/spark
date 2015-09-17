@@ -42,6 +42,7 @@ Operator API
         DummyOperator,
         EmailOperator,
         ExternalTaskSensor,
+        GenericTransfer,
         HdfsSensor,
         Hive2SambaOperator,
         HiveOperator,
@@ -66,6 +67,8 @@ Operator API
         SqlSensor,
         SubDagOperator,
         TimeSensor
+
+.. _macros:
 
 Macros
 ---------

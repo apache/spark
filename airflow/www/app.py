@@ -12,7 +12,9 @@ import logging
 import os
 import socket
 import sys
+import time
 
+from flask._compat import PY2
 from flask import (
     Flask, url_for, Markup, Blueprint, redirect,
     flash, Response, render_template)
@@ -66,6 +68,10 @@ AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
 if AUTHENTICATE is False:
     login_required = lambda x: x
 
+FILTER_BY_OWNER = False
+if conf.getboolean('webserver', 'FILTER_BY_OWNER'):
+    # filter_by_owner if authentication is enabled and filter_by_owner is true
+    FILTER_BY_OWNER = AUTHENTICATE
 
 class VisiblePasswordInput(widgets.PasswordInput):
     def __init__(self, hide_value=False):
@@ -124,16 +130,31 @@ def pygment_html_render(s, lexer=lexers.TextLexer):
 def wrapped_markdown(s):
     return '<div class="rich_doc">' + markdown.markdown(s) + "</div>"
 
+def render(obj, lexer):
+    out = ""
+    if isinstance(obj, basestring):
+        out += pygment_html_render(obj, lexer)
+    elif isinstance(obj, (tuple, list)):
+        for i, s in enumerate(obj):
+            out += "<div>List item #{}</div>".format(i)
+            out += "<div>" + pygment_html_render(s, lexer) + "</div>"
+    elif isinstance(obj, dict):
+        for k, v in obj.iteritems():
+            out += '<div>Dict item "{}"</div>'.format(k)
+            out += "<div>" + pygment_html_render(v, lexer) + "</div>"
+    return out
+
+
 attr_renderer = {
-    'bash_command': lambda x: pygment_html_render(x, lexers.BashLexer),
-    'hql': lambda x: pygment_html_render(x, lexers.SqlLexer),
-    'sql': lambda x: pygment_html_render(x, lexers.SqlLexer),
-    'doc': lambda x: pygment_html_render(x, lexers.TextLexer),
-    'doc_json': lambda x: pygment_html_render(x, lexers.JsonLexer),
-    'doc_rst': lambda x: pygment_html_render(x, lexers.RstLexer),
-    'doc_yaml': lambda x: pygment_html_render(x, lexers.YamlLexer),
+    'bash_command': lambda x: render(x, lexers.BashLexer),
+    'hql': lambda x: render(x, lexers.SqlLexer),
+    'sql': lambda x: render(x, lexers.SqlLexer),
+    'doc': lambda x: render(x, lexers.TextLexer),
+    'doc_json': lambda x: render(x, lexers.JsonLexer),
+    'doc_rst': lambda x: render(x, lexers.RstLexer),
+    'doc_yaml': lambda x: render(x, lexers.YamlLexer),
     'doc_md': wrapped_markdown,
-    'python_callable': lambda x: pygment_html_render(
+    'python_callable': lambda x: render(
         inspect.getsource(x), lexers.PythonLexer),
 }
 
@@ -179,6 +200,18 @@ class GraphForm(Form):
         ('RL', "Right->Left"),
         ('TB', "Top->Bottom"),
         ('BT', "Bottom->Top"),
+    ))
+
+
+class TreeForm(Form):
+    base_date = DateTimeField(
+        "Anchor date", widget=DateTimePickerWidget(), default=datetime.now())
+    num_runs = SelectField("Number of runs", default=25, choices=(
+        (5, "5"),
+        (25, "25"),
+        (50, "50"),
+        (100, "100"),
+        (365, "365"),
     ))
 
 
@@ -265,7 +298,13 @@ class HomeView(AdminIndexView):
     def index(self):
         session = Session()
         DM = models.DagModel
-        qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
+        qry = None
+        # filter the dags if filter_by_owner and current user is not superuser
+        do_filter = FILTER_BY_OWNER and (not current_user.is_superuser())
+        if do_filter:
+            qry = session.query(DM).filter(~DM.is_subdag, DM.is_active, DM.owners == current_user.username).all()
+        else:
+            qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
         orm_dags = {dag.dag_id: dag for dag in qry}
         import_errors = session.query(models.ImportError).all()
         for ie in import_errors:
@@ -276,7 +315,10 @@ class HomeView(AdminIndexView):
         session.commit()
         session.close()
         dags = dagbag.dags.values()
-        dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
+        if do_filter:
+            dags = {dag.dag_id: dag for dag in dags if (dag.owner == current_user.username and (not dag.parent_dag))}
+        else:
+            dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
         all_dag_ids = sorted(set(orm_dags.keys()) | set(dags.keys()))
         return self.render(
             'airflow/dags.html',
@@ -799,6 +841,7 @@ class Airflow(BaseView):
                     log += "Failed to fetch log file.".format(**locals())
             session.commit()
             session.close()
+        log = log.decode('utf-8') if PY2 else log
 
         title = "Log"
 
@@ -1004,25 +1047,31 @@ class Airflow(BaseView):
 
         session = settings.Session()
 
+        start_date = dag.start_date
+        if not start_date and 'start_date' in dag.default_args:
+            start_date = dag.default_args['start_date']
+
         base_date = request.args.get('base_date')
+        num_runs = request.args.get('num_runs')
+        num_runs = int(num_runs) if num_runs else 25
+
         if not base_date:
-            base_date = datetime.now()
+            base_date = dag.latest_execution_date or datetime.now()
         else:
             base_date = dateutil.parser.parse(base_date)
         base_date = utils.round_time(base_date, dag.schedule_interval)
+        form = TreeForm(data={'base_date': base_date, 'num_runs': num_runs})
 
         start_date = dag.start_date
         if not start_date and 'start_date' in dag.default_args:
             start_date = dag.default_args['start_date']
 
         if start_date:
-            difference = base_date - start_date
-            offset = timedelta(seconds=int(difference.total_seconds() % dag.schedule_interval.total_seconds()))
-            base_date -= offset
-            base_date -= timedelta(microseconds=base_date.microsecond)
+            base_date = utils.round_time(base_date, dag.schedule_interval, start_date)
+        else:
+            base_date = utils.round_time(base_date, dag.schedule_interval)
 
-        num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else 25
+
         from_date = (base_date - (num_runs * dag.schedule_interval))
 
         dates = utils.date_range(
@@ -1033,8 +1082,19 @@ class Airflow(BaseView):
 
         expanded = []
 
-        def recurse_nodes(task):
-            children = [recurse_nodes(t) for t in task.upstream_list]
+        # The default recursion traces every path so that tree view has full
+        # expand/collapse functionality. After 5,000 nodes we stop and fall
+        # back on a quick DFS search for performance. See PR #320.
+        node_count = [0]
+        node_limit = 5000 / len(dag.roots)
+
+        def recurse_nodes(task, visited):
+            visited.add(task)
+            node_count[0] += 1
+
+            children = [
+                recurse_nodes(t, visited) for t in task.upstream_list
+                if node_count[0] < node_limit or t not in visited]
 
             # D3 tree uses children vs _children to define what is
             # expanded or not. The following block makes it such that
@@ -1070,10 +1130,10 @@ class Airflow(BaseView):
             data = {
                 'name': 'root',
                 'instances': [],
-                'children': [recurse_nodes(t) for t in dag.roots]
+                'children': [recurse_nodes(t, set()) for t in dag.roots]
             }
         elif len(dag.roots) == 1:
-            data = recurse_nodes(dag.roots[0])
+            data = recurse_nodes(dag.roots[0], set())
         else:
             flash("No tasks found.", "error")
             data = []
@@ -1089,6 +1149,7 @@ class Airflow(BaseView):
                 key=lambda x: x.__name__
             ),
             root=root,
+            form=form,
             dag=dag, data=data, blur=blur)
 
     @expose('/graph')
@@ -1594,7 +1655,7 @@ class TaskInstanceModelView(ModelViewOnly):
     verbose_name = "task instance"
     column_filters = (
         'state', 'dag_id', 'task_id', 'execution_date', 'hostname',
-        'queue', 'pool')
+        'queue', 'pool', 'operator')
     named_filter_urls = True
     column_formatters = dict(
         log=log_link, task_id=task_instance_link,
@@ -1607,9 +1668,9 @@ class TaskInstanceModelView(ModelViewOnly):
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_default_sort = ('start_date', True)
     column_list = (
-        'state', 'dag_id', 'task_id', 'execution_date',
+        'state', 'dag_id', 'task_id', 'execution_date', 'operator',
         'start_date', 'end_date', 'duration', 'job_id', 'hostname',
-        'unixname', 'priority_weight', 'log')
+        'unixname', 'priority_weight', 'queued_dttm', 'log')
     can_delete = True
     page_size = 500
 mv = TaskInstanceModelView(
@@ -1625,11 +1686,27 @@ admin._menu = admin._menu[:-1]
 class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     create_template = 'airflow/conn_create.html'
     edit_template = 'airflow/conn_edit.html'
+    list_template = 'airflow/conn_list.html'
+    form_columns = (
+        'conn_id',
+        'conn_type',
+        'host',
+        'schema',
+        'login',
+        'password',
+        'port',
+        'extra',
+        'extra__jdbc__drv_path',
+        'extra__jdbc__drv_clsname',
+    )
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
     column_default_sort = ('conn_id', False)
-    column_list = ('conn_id', 'conn_type', 'host', 'port')
-    form_overrides = dict(password=VisiblePasswordField)
+    column_list = ('conn_id', 'conn_type', 'host', 'port', 'is_encrypted',)
+    form_overrides = dict(_password=VisiblePasswordField)
+    form_widget_args = {
+        'is_encrypted': {'disabled': True},
+    }
     # Used to customized the form, the forms elements get rendered
     # and results are stored in the extra field as json. All of these
     # need to be prefixed with extra__ and then the conn_type ___ as in
@@ -1666,6 +1743,21 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
                 key:formdata[key]
                 for key in self.form_extra_fields.keys() if key in formdata}
             model.extra = json.dumps(extra)
+
+    @classmethod
+    def is_secure(self):
+        """
+        Used to display a message in the Connection list view making it clear
+        that the passwords can't be encrypted.
+        """
+        is_secure = False
+        try:
+            import cryptography
+            conf.get('core', 'fernet_key')
+            is_secure = True
+        except:
+            pass
+        return is_secure
 
     def on_form_prefill(self, form, id):
         try:

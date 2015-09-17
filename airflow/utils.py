@@ -1,12 +1,12 @@
 from __future__ import print_function
-from builtins import str
-from builtins import input
-from builtins import object
+from builtins import str, input, object
 from past.builtins import basestring
 from copy import copy
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta  # for doctest
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 import errno
 from functools import wraps
 import imp
@@ -18,6 +18,10 @@ import shutil
 import signal
 import smtplib
 from tempfile import mkdtemp
+
+from alembic.config import Config
+from alembic import command
+from alembic.migration import MigrationContext
 
 from contextlib import contextmanager
 
@@ -34,6 +38,15 @@ class AirflowException(Exception):
 
 class AirflowSensorTimeout(Exception):
     pass
+
+
+class TriggerRule(object):
+    ALL_SUCCESS = 'all_success'
+    ALL_FAILED = 'all_failed'
+    ALL_DONE = 'all_done'
+    ONE_SUCCESS = 'one_success'
+    ONE_FAILED = 'one_failed'
+    DUMMY = 'dummy'
 
 
 class State(object):
@@ -89,8 +102,7 @@ def pessimistic_connection_handling():
 
 def initdb():
     from airflow import models
-    logging.info("Creating all tables")
-    models.Base.metadata.create_all(settings.engine)
+    upgradedb()
 
     # Creating the local_mysql DB connection
     C = models.Connection
@@ -192,6 +204,17 @@ def initdb():
     models.DagBag(sync_to_db=True)
 
 
+def upgradedb():
+    logging.info("Creating tables")
+    package_dir = os.path.abspath(os.path.dirname(__file__))
+    directory = os.path.join(package_dir, 'migrations')
+    config = Config(os.path.join(package_dir, 'alembic.ini'))
+    config.set_main_option('script_location', directory)
+    config.set_main_option('sqlalchemy.url',
+                           conf.get('core', 'SQL_ALCHEMY_CONN'))
+    command.upgrade(config, 'head')
+
+
 def resetdb():
     '''
     Clear out the database
@@ -200,6 +223,9 @@ def resetdb():
 
     logging.info("Dropping tables that exist")
     models.Base.metadata.drop_all(settings.engine)
+    mc = MigrationContext.configure(settings.engine)
+    if mc._version.exists(settings.engine):
+        mc._version.drop(settings.engine)
     initdb()
 
 
@@ -207,8 +233,8 @@ def validate_key(k, max_length=250):
     if not isinstance(k, basestring):
         raise TypeError("The key has to be a string")
     elif len(k) > max_length:
-        raise AirflowException("The key has to be less than {0} characters".format(
-            max_length))
+        raise AirflowException(
+            "The key has to be less than {0} characters".format(max_length))
     elif not re.match(r'^[A-Za-z0-9_\-\.]+$', k):
         raise AirflowException(
             "The key ({k}) has to be made of alphanumeric characters, dashes, "
@@ -355,7 +381,7 @@ def ask_yesno(question):
             print("Please respond by yes or no.")
 
 
-def send_email(to, subject, html_content):
+def send_email(to, subject, html_content, files=None):
     SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
 
     if isinstance(to, basestring):
@@ -373,12 +399,21 @@ def send_email(to, subject, html_content):
     mime_text = MIMEText(html_content, 'html')
     msg.attach(mime_text)
 
+    for fname in files or []:
+        basename = os.path.basename(fname)
+        with open(fname, "rb") as f:
+            msg.attach(MIMEApplication(
+                f.read(),
+                Content_Disposition='attachment; filename="%s"' % basename,
+                Name=basename
+            ))
+
     send_MIME_email(SMTP_MAIL_FROM, to, msg)
 
 
 def send_MIME_email(e_from, e_to, mime_msg):
     SMTP_HOST = conf.get('smtp', 'SMTP_HOST')
-    SMTP_PORT = conf.get('smtp', 'SMTP_PORT')
+    SMTP_PORT = conf.getint('smtp', 'SMTP_PORT')
     SMTP_USER = conf.get('smtp', 'SMTP_USER')
     SMTP_PASSWORD = conf.get('smtp', 'SMTP_PASSWORD')
     SMTP_STARTTLS = conf.getboolean('smtp', 'SMTP_STARTTLS')
@@ -469,8 +504,96 @@ class timeout(object):
         signal.alarm(0)
 
 
-def round_time(dt, delta):
-    delta = delta.total_seconds()
-    seconds = (dt - dt.min).seconds
-    rounding = (seconds + delta / 2) // delta * delta
-    return dt + timedelta(0, rounding - seconds, -dt.microsecond)
+def is_container(obj):
+    """
+    Test if an object is a container (iterable) but not a string
+    """
+    return hasattr(obj, '__iter__') and not isinstance(obj, basestring)
+
+
+def as_tuple(obj):
+    """
+    If obj is a container, returns obj as a tuple.
+    Otherwise, returns a tuple containing obj.
+    """
+    if is_container(obj):
+        return tuple(obj)
+    else:
+        return tuple([obj])
+
+
+def round_time(dt, delta, start_date=datetime.min):
+    """
+    Returns the datetime of the form start_date + i * delta
+    which is closest to dt for any non-negative integer i.
+
+    Note that delta may be a datetime.timedelta or a dateutil.relativedelta
+
+    >>> round_time(datetime(2015, 1, 1, 6), timedelta(days=1))
+    datetime.datetime(2015, 1, 1, 0, 0)
+    >>> round_time(datetime(2015, 1, 2), relativedelta(months=1))
+    datetime.datetime(2015, 1, 1, 0, 0)
+    """
+    # Ignore the microseconds of dt
+    dt -= timedelta(microseconds = dt.microsecond)
+
+    # We are looking for a datetime in the form start_date + i * delta
+    # which is as close as possible to dt. Since delta could be a relative
+    # delta we don't know it's exact length in seconds so we cannot rely on
+    # division to find i. Instead we employ a binary search algorithm, first
+    # finding an upper and lower limit and then disecting the interval until
+    # we have found the closest match.
+
+    # We first search an upper limit for i for which start_date + upper * delta
+    # exceeds dt.
+    upper = 1
+    while start_date + upper*delta < dt:
+        # To speed up finding an upper limit we grow this exponentially by a
+        # factor of 2
+        upper *= 2
+
+    # Since upper is the first value for which start_date + upper * delta
+    # exceeds dt, upper // 2 is below dt and therefore forms a lower limited
+    # for the i we are looking for
+    lower = upper // 2
+
+    # We now continue to intersect the interval between
+    # start_date + lower * delta and start_date + upper * delta
+    # until we find the closest value
+    while True:
+        # If start_date + (lower + 1)*delta exceeds dt, then either lower or
+        # lower+1 has to be the solution we are searching for
+        if start_date + (lower + 1)*delta > dt:
+            # Check if start_date + (lower + 1)*delta or
+            # start_date + lower*delta is closer to dt and return the solution
+            if (start_date + (lower + 1)*delta) - dt <= dt - (start_date + lower*delta):
+                return start_date + (lower + 1)*delta
+            else:
+                return start_date + lower*delta
+
+        # We intersect the interval and either replace the lower or upper
+        # limit with the candidate
+        candidate = lower + (upper - lower) // 2
+        if start_date + candidate*delta > dt:
+            upper = candidate
+        else:
+            lower = candidate
+
+    # in the special case when start_date > dt the search for upper will
+    # immediately stop for upper == 1 which results in lower = upper // 2 = 0
+    # and this function returns start_date.
+
+def chain(*tasks):
+    """
+    Given a number of tasks, builds a dependency chain.
+
+    chain(task_1, task_2, task_3, task_4)
+
+    is equivalent to
+
+    task_1.set_downstream(task_2)
+    task_2.set_downstream(task_3)
+    task_3.set_downstream(task_4)
+    """
+    for up_task, down_task in zip(tasks[:-1], tasks[1:]):
+        up_task.set_downstream(down_task)

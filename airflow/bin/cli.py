@@ -62,6 +62,7 @@ def backfill(args):
         mark_success=args.mark_success,
         include_adhoc=args.include_adhoc,
         local=args.local,
+        donot_pickle=args.donot_pickle,
         ignore_dependencies=args.ignore_dependencies)
 
 
@@ -229,13 +230,14 @@ def clear(args):
         end_date=args.end_date,
         only_failed=args.only_failed,
         only_running=args.only_running,
-        confirm_prompt=True)
+        confirm_prompt=not args.no_confirm)
 
 
 def webserver(args):
     print(settings.HEADER)
     log_to_stdout()
     from airflow.www.app import app
+    threads = args.threads or conf.get('webserver', 'threads')
     if args.debug:
         print(
             "Starting the web server on port {0} and host {1}.".format(
@@ -243,14 +245,13 @@ def webserver(args):
         app.run(debug=True, port=args.port, host=args.hostname)
     else:
         print(
-            'Running Tornado server on host {host} and port {port}...'.format(
-                host=args.hostname, port=args.port))
-        from tornado.httpserver import HTTPServer
-        from tornado.ioloop import IOLoop
-        from tornado.wsgi import WSGIContainer
-        http_server = HTTPServer(WSGIContainer(app))
-        http_server.listen(args.port)
-        IOLoop.instance().start()
+            'Running the Gunicorn server with {threads}'
+            'on host {args.hostname} and port '
+            '{args.port}...'.format(**locals()))
+        sp = subprocess.Popen([
+            'gunicorn', '-w', str(args.threads), '-t', '120', '-b',
+            args.hostname + ':' + str(args.port), 'airflow.www.app:app'])
+        sp.wait()
 
 
 def scheduler(args):
@@ -323,12 +324,18 @@ def resetdb(args):
         print("Bail.")
 
 
+def upgradedb(args):
+    print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
+    utils.upgradedb()
+
+
 def version(args):
     print(settings.HEADER + "  v" + airflow.__version__)
 
 
 def flower(args):
     broka = conf.get('celery', 'BROKER_URL')
+    args.port = args.port or conf.get('celery', 'FLOWER_PORT')
     port = '--port=' + args.port
     api = ''
     if args.broker_api:
@@ -364,6 +371,13 @@ def get_parser():
     parser_backfill.add_argument(
         "-l", "--local",
         help="Run the task using the LocalExecutor", action="store_true")
+    parser_backfill.add_argument(
+        "-x", "--donot_pickle",
+        help=(
+            "Do not attempt to pickle the DAG object to send over "
+            "to the workers, just tell the workers to run their version "
+            "of the code."),
+        action="store_true")
     parser_backfill.add_argument(
         "-a", "--include_adhoc",
         help="Include dags with the adhoc parameter.", action="store_true")
@@ -403,6 +417,8 @@ def get_parser():
     parser_clear.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
+    parser_clear.add_argument(
+        "-c", "--no_confirm", help=ht, action="store_true")
     parser_clear.set_defaults(func=clear)
 
     ht = "Run a single task instance"
@@ -479,6 +495,11 @@ def get_parser():
         type=int,
         help="Set the port on which to run the web server")
     parser_webserver.add_argument(
+        "-w", "--threads",
+        default=conf.get('webserver', 'THREADS'),
+        type=int,
+        help="Number of threads to run the webserver on")
+    parser_webserver.add_argument(
         "-hn", "--hostname",
         default=conf.get('webserver', 'WEB_SERVER_HOST'),
         help="Set the hostname on which to run the web server")
@@ -508,6 +529,10 @@ def get_parser():
     ht = "Burn down and rebuild the metadata database"
     parser_resetdb = subparsers.add_parser('resetdb', help=ht)
     parser_resetdb.set_defaults(func=resetdb)
+
+    ht = "Upgrade metadata database to latest version"
+    parser_upgradedb = subparsers.add_parser('upgradedb', help=ht)
+    parser_upgradedb.set_defaults(func=upgradedb)
 
     ht = "List the DAGs"
     parser_list_dags = subparsers.add_parser('list_dags', help=ht)
@@ -542,8 +567,7 @@ def get_parser():
     ht = "Start a Celery Flower"
     parser_flower = subparsers.add_parser('flower', help=ht)
     parser_flower.add_argument(
-        "-p", "--port", help="The port",
-        default='5555')
+        "-p", "--port", help="The port")
     parser_flower.add_argument(
         "-a", "--broker_api", help="Broker api")
     parser_flower.set_defaults(func=flower)
