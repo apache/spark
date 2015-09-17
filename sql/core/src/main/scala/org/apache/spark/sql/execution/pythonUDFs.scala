@@ -337,6 +337,10 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def children: Seq[SparkPlan] = child :: Nil
 
+  override def outputsUnsafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   protected override def doExecute(): RDD[InternalRow] = {
     val childResults = child.execute().map(_.copy())
 
