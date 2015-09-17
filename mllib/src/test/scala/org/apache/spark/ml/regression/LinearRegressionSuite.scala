@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
@@ -25,8 +27,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
-
-import scala.util.Random
 
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -532,21 +532,21 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val weightedSignedData = signedData flatMap {
         case (true, LabeledPoint(label, features)) =>
           Iterator(
-            WeightedLabeledPoint(label, features, 1.2),
-            WeightedLabeledPoint(label, features, 0.8)
+            Instance(label, 1.2, features),
+            Instance(label, 0.8, features)
           )
         case (false, LabeledPoint(label, features)) =>
           Iterator(
-            WeightedLabeledPoint(label, features, 0.3),
-            WeightedLabeledPoint(label, features, 0.1),
-            WeightedLabeledPoint(label, features, 0.6)
+            Instance(label, 0.3, features),
+            Instance(label, 0.1, features),
+            Instance(label, 0.6, features)
           )
       }
 
       val noiseData = LinearDataGenerator.generateLinearInput(
         2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
       val weightedNoiseData = noiseData map {
-        case LabeledPoint(label, features) => WeightedLabeledPoint(label, features, 0)
+        case LabeledPoint(label, features) => Instance(label, 0, features)
       }
       val data2 = weightedSignedData ++ weightedNoiseData
 
@@ -563,8 +563,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model1b = trainer1b.fit(weightedData)
     assert(model1a0.weights !~= model1a1.weights absTol 1E-3)
     assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
-    assert(model1a0.weights ~== model1b.weights absTol 1E-10)
-    assert(model1a0.intercept ~== model1b.intercept absTol 1E-10)
+    assert(model1a0.weights ~== model1b.weights absTol 1E-3)
+    assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
 
     val trainer2a = (new LinearRegression).setFitIntercept(true)
       .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
@@ -575,8 +575,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model2b = trainer2b.fit(weightedData)
     assert(model2a0.weights !~= model2a1.weights absTol 1E-3)
     assert(model2a0.intercept !~= model2a1.intercept absTol 1E-3)
-    assert(model2a0.weights ~== model2b.weights absTol 1E-10)
-    assert(model2a0.intercept ~== model2b.intercept absTol 1E-10)
+    assert(model2a0.weights ~== model2b.weights absTol 1E-3)
+    assert(model2a0.intercept ~== model2b.intercept absTol 1E-3)
 
     val trainer3a = (new LinearRegression).setFitIntercept(false)
       .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
@@ -586,7 +586,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model3a1 = trainer3a.fit(weightedData)
     val model3b = trainer3b.fit(weightedData)
     assert(model3a0.weights !~= model3a1.weights absTol 1E-3)
-    assert(model3a0.weights ~== model3b.weights absTol 1E-10)
+    assert(model3a0.weights ~== model3b.weights absTol 1E-3)
 
     val trainer4a = (new LinearRegression).setFitIntercept(false)
       .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
@@ -596,7 +596,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model4a1 = trainer4a.fit(weightedData)
     val model4b = trainer4b.fit(weightedData)
     assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
-    assert(model4a0.weights ~== model4b.weights absTol 1E-10)
+    assert(model4a0.weights ~== model4b.weights absTol 1E-3)
 
   }
 }

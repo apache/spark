@@ -31,14 +31,12 @@ import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.StructField
+import org.apache.spark.sql.functions.{col, udf, lit}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.StatCounter
+
 
 /**
  * Params for linear regression.
@@ -46,6 +44,17 @@ import org.apache.spark.util.StatCounter
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol
+
+/**
+ * Class that represents an instance of weighted data point with label and features.
+ *
+ * TODO: Refactor this class to proper place.
+ *
+ * @param label Label for this data point.
+ * @param weight The weight of this instance.
+ * @param features The vector of features for this data point.
+ */
+private[regression] case class Instance(label: Double, weight: Double, features: Vector)
 
 /**
  * :: Experimental ::
@@ -124,9 +133,9 @@ class LinearRegression(override val uid: String)
   setDefault(tol -> 1E-6)
 
   /**
-   * Whether to over-/undersamples each of training instance according to the given
-   * weight in `weightCol`. If empty, all samples are supposed to have weights as 1.0.
-   * Default is empty, so all samples have weight one.
+   * Whether to over-/under-sample training instances according to the given weights in weightCol.
+   * If empty, all instances are treated equally (weight 1.0).
+   * Default is empty, so all instances have weight one.
    * @group setParam
    */
   def setWeightCol(value: String): this.type = set(weightCol, value)
@@ -134,33 +143,26 @@ class LinearRegression(override val uid: String)
 
   override protected def train(dataset: DataFrame): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist instances.
-    val instances: RDD[(Double, Vector, Double)] = if ($(weightCol).isEmpty) {
-      dataset.select($(labelCol), $(featuresCol)).map {
-        case Row(label: Double, features: Vector) =>
-          (label, features, 1.0)
-      }
-    } else {
-      dataset.select($(labelCol), $(weightCol), $(featuresCol)).map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          (label, features, weight)
-      }
+    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
+      case Row(label: Double, weight: Double, features: Vector) =>
+        Instance(label, weight, features)
     }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val (featuresSummarizer, ySummarizer) = instances.treeAggregate(
-      (new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer))(
-        seqOp = (c, v) => (c, v) match {
-          case ((fs: MultivariateOnlineSummarizer, ys: MultivariateOnlineSummarizer),
-          (label: Double, features: Vector, weight: Double)) =>
-            (fs.add(features, weight), ys.add(Vectors.dense(label), weight))
-        },
-        combOp = (c1, c2) => (c1, c2) match {
-          case ((summarizer1: MultivariateOnlineSummarizer, statCounter1: MultivariateOnlineSummarizer),
-          (summarizer2: MultivariateOnlineSummarizer, statCounter2: MultivariateOnlineSummarizer)) =>
-            (summarizer1.merge(summarizer2), statCounter1.merge(statCounter2))
-        })
+    val (featuresSummarizer, ySummarizer) = {
+      val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
+                   instance: Instance) =>
+        (c._1.add(instance.features, instance.weight),
+          c._2.add(Vectors.dense(instance.label), instance.weight))
+      val combOp = (c1: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
+                    c2: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer)) =>
+        (c1._1.merge(c2._1), c1._2.merge(c2._2))
+      instances.treeAggregate(
+        new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer)(seqOp, combOp)
+    }
 
     val numFeatures = featuresSummarizer.mean.size
     val yMean = ySummarizer.mean(0)
@@ -510,7 +512,8 @@ private class LeastSquaresAggregator(
     featuresStd: Array[Double],
     featuresMean: Array[Double]) extends Serializable {
 
-  private var totalCnt: Double = 0
+  private var totalCnt: Long = 0L
+  private var weightSum: Double = 0
   private var lossSum = 0.0
 
   private val (effectiveCoefficientsArray: Array[Double], offset: Double, dim: Int) = {
@@ -527,7 +530,8 @@ private class LeastSquaresAggregator(
       }
       i += 1
     }
-    (coefficientsArray, if (fitIntercept) labelMean / labelStd - sum else 0.0, coefficientsArray.length)
+    val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
+    (coefficientsArray, offset, coefficientsArray.length)
   }
 
   private val effectiveCoefficientsVector = Vectors.dense(effectiveCoefficientsArray)
@@ -538,21 +542,19 @@ private class LeastSquaresAggregator(
    * Add a new training data to this LeastSquaresAggregator, and update the loss and gradient
    * of the objective function.
    *
-   * @param label The label for this data point.
-   * @param data The features for one data point in dense/sparse vector format to be added
-   *             into this aggregator.
-   * @param weight The weight for this data point.
+   * @param data  The data point to be added.
    * @return This LeastSquaresAggregator object.
    */
-  def add(label: Double, data: Vector, weight: Double): this.type = {
-    require(dim == data.size, s"Dimensions mismatch when adding new sample." +
-      s" Expecting $dim but got ${data.size}.")
+  def add(data: Instance): this.type = data match { case Instance(label, weight, features) =>
+    require(dim == features.size, s"Dimensions mismatch when adding new sample." +
+      s" Expecting $dim but got ${features.size}.")
+    require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
 
-    val diff = dot(data, effectiveCoefficientsVector) - label / labelStd + offset
+    val diff = dot(features, effectiveCoefficientsVector) - label / labelStd + offset
 
     if (diff != 0) {
       val localGradientSumArray = gradientSumArray
-      data.foreachActive { (index, value) =>
+      features.foreachActive { (index, value) =>
         if (featuresStd(index) != 0.0 && value != 0.0) {
           localGradientSumArray(index) += weight * diff * value / featuresStd(index)
         }
@@ -560,7 +562,8 @@ private class LeastSquaresAggregator(
       lossSum += weight * diff * diff / 2.0
     }
 
-    totalCnt += weight
+    totalCnt += 1
+    weightSum += weight
     this
   }
 
@@ -576,8 +579,9 @@ private class LeastSquaresAggregator(
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
 
-    if (other.totalCnt != 0) {
+    if (other.weightSum != 0) {
       totalCnt += other.totalCnt
+      weightSum += other.weightSum
       lossSum += other.lossSum
 
       var i = 0
@@ -591,13 +595,19 @@ private class LeastSquaresAggregator(
     this
   }
 
-  def count: Double = totalCnt
+  def count: Long = totalCnt
 
-  def loss: Double = lossSum / totalCnt
+  def loss: Double = {
+    require(weightSum > 0.0, s"The effective number of instances should be " +
+      s"greater than 0.0, but $weightSum.")
+    lossSum / weightSum
+  }
 
   def gradient: Vector = {
+    require(weightSum > 0.0, s"The effective number of instances should be " +
+      s"greater than 0.0, but $weightSum.")
     val result = Vectors.dense(gradientSumArray.clone())
-    scal(1.0 / totalCnt, result)
+    scal(1.0 / weightSum, result)
     result
   }
 }
@@ -608,7 +618,7 @@ private class LeastSquaresAggregator(
  * It's used in Breeze's convex optimization routines.
  */
 private class LeastSquaresCostFun(
-    data: RDD[(Double, Vector, Double)],
+    data: RDD[Instance],
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
@@ -622,12 +632,9 @@ private class LeastSquaresCostFun(
 
     val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(coeff, labelStd,
       labelMean, fitIntercept, featuresStd, featuresMean))(
-        seqOp = (c, v) => (c, v) match {
-          case (aggregator, (label, features, weight)) => aggregator.add(label, features, weight)
-        },
-        combOp = (c1, c2) => (c1, c2) match {
-          case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
-        })
+        seqOp = (aggregator, instance) => aggregator.add(instance),
+        combOp = (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
+        )
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
 
@@ -664,5 +671,3 @@ private class LeastSquaresCostFun(
     (leastSquaresAggregator.loss + regVal, new BDV(totalGradientArray))
   }
 }
-
-case class WeightedLabeledPoint(label: Double, features: Vector, weight: Double)
