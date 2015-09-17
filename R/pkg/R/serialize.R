@@ -168,10 +168,10 @@ writeArray <- function(con, arr) {
   } else {
     elemType <- getSerdeType(arr[[1]])
   }
-  
+
   writeType(con, elemType)
   writeInt(con, length(arr))
-  
+
   if (length(arr) > 0) {
     for (a in arr) {
       writeObject(con, a, FALSE)

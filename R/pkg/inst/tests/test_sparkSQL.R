@@ -242,7 +242,7 @@ test_that("create DataFrame with different data types", {
 test_that("create DataFrame with complex types", {
   e <- new.env()
   assign("n", 3L, envir = e)
-  
+
   s <- listToStruct(list(a = "aa", b = 3L))
 
   l <- list(as.list(1:10), list("a", "b"), e, s)
@@ -265,7 +265,7 @@ test_that("create DataFrame with complex types", {
   s <- ldf$d[[1]]
   expect_equal(class(s), "struct")
   expect_equal(s$a, "aa")
-  expect_equal(s$b, 3L)  
+  expect_equal(s$b, 3L)
 })
 
 # For test map type and struct type in DataFrame

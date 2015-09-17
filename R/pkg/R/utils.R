@@ -601,7 +601,7 @@ listToStruct <- function(list) {
 # Convert a struct to a named list
 structToList <- function(struct) {
   stopifnot(class(list) == "struct")
-  
+
   class(struct) <- "list"
   struct
 }
