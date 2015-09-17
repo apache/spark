@@ -177,7 +177,8 @@ private[spark] object OutputCommitCoordinator {
 
     override def receiveWithLogging = {
       case AskPermissionToCommitOutput(stage, partition, attemptNumber) =>
-        sender ! outputCommitCoordinator.handleAskPermissionToCommit(stage, partition, attemptNumber)
+        sender ! outputCommitCoordinator.handleAskPermissionToCommit(
+          stage, partition, attemptNumber)
       case StopCoordinator =>
         logInfo("OutputCommitCoordinator stopped!")
         context.stop(self)
