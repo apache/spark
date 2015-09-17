@@ -84,7 +84,7 @@ def portable_hash(x):
         h ^= len(x)
         if h == -1:
             h = -2
-        return h
+        return int(h)
     return hash(x)
 
 
