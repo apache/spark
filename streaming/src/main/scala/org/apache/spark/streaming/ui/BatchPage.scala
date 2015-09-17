@@ -210,9 +210,10 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     lastStageInfo match {
       case Some(stageInfo) =>
         val details = if (stageInfo.details.nonEmpty) {
-          <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
-                class="expand-details">
-            +details
+          <span
+            onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+            class="expand-details">
+              +details
           </span> ++
           <div class="stage-details collapsed">
             <pre>{stageInfo.details}</pre>
