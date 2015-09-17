@@ -1728,6 +1728,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('mysql', 'MySQL',),
             ('postgres', 'Postgres',),
             ('oracle', 'Oracle',),
+            ('vertica', 'Vertica',),
             ('presto', 'Presto',),
             ('s3', 'S3',),
             ('samba', 'Samba',),
