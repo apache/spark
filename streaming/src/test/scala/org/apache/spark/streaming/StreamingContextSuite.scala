@@ -185,9 +185,9 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.sc.setJobGroup("non-streaming", "non-streaming", true)
     val sc = ssc.sc
 
-    @volatile var jobGroupFound: String = null
-    @volatile var jobDescFound: String = null
-    @volatile var jobInterruptFound: String = null
+    @volatile var jobGroupFound: String = ""
+    @volatile var jobDescFound: String = ""
+    @volatile var jobInterruptFound: String = ""
     @volatile var allFound: Boolean = false
 
     addInputStream(ssc).foreachRDD { rdd =>
@@ -203,8 +203,8 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
 
     // Verify streaming jobs have expected thread-local properties
-    assert(jobGroupFound === StreamingContext.STREAMING_JOB_GROUP_ID)
-    assert(jobDescFound === StreamingContext.STREAMING_JOB_DESCRIPTION)
+    assert(jobGroupFound === null)
+    assert(jobDescFound === null)
     assert(jobInterruptFound === "false")
 
     // Verify current thread's thread-local properties have not changed
