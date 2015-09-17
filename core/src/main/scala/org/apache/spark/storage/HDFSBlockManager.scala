@@ -52,11 +52,12 @@ private[spark]  class HDFSBlockManager extends ExternalBlockManager with Logging
     val appFolderName = blockManager.conf.get(ExternalBlockStore.FOLD_NAME)
     rootDirs = s"$storeDir/$appFolderName/$executorId"
     master = conf.getOption(ExternalBlockStore.MASTER_URL)
-    fs = master.map(m=>FileSystem.get(new URI(m), hadoopConf)).getOrElse(FileSystem.get(hadoopConf))
+    fs = master.map(m =>
+      FileSystem.get(new URI(m), hadoopConf)).getOrElse(FileSystem.get(hadoopConf))
     hdfsDirs = createDirs()
     subDirsPerDir = blockManager.conf.get("spark.externalBlockStore.subDirectories",
       ExternalBlockStore.SUB_DIRS_PER_DIR).toInt
-    subDirs  = Array.fill(hdfsDirs.length)(new Array[String](subDirsPerDir))
+    subDirs = Array.fill(hdfsDirs.length)(new Array[String](subDirsPerDir))
   }
 
   override def toString(): String = {"ExternalBlockStore-HDFS"}

@@ -563,7 +563,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("hdfs storage") {
     conf.set(ExternalBlockStore.BLOCK_MANAGER_NAME, "org.apache.spark.storage.HDFSBlockManager")
-    conf.set(ExternalBlockStore.FOLD_NAME,   "spark-hdfs")
+    conf.set(ExternalBlockStore.FOLD_NAME, "spark-hdfs")
     var tmpDir = File.createTempFile("tmp_spark", "")
     tmpDir.delete()
     conf.set(ExternalBlockStore.BASE_DIR, tmpDir.getCanonicalPath)
