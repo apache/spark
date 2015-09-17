@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import java.io.IOException
+
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.{InternalAccumulator, Logging, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.expressions._
@@ -375,7 +377,11 @@ class TungstenAggregationIterator(
         val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
         if (buffer == null) {
           // buffer == null means that we could not allocate more memory.
-          // Now, we need to spill the map and switch to sort-based aggregation.
+          throw new IOException("Not enough memory for more records")
+        }
+
+        if (hashMap.size() > 8888) {
+          // To avoid OOM, we need to spill the map and switch to sort-based aggregation.
           switchToSortBasedAggregation(groupingKey, newInput)
         } else {
           processRow(buffer, newInput)
