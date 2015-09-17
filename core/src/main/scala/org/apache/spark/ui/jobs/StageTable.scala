@@ -17,10 +17,10 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.xml.Node
-import scala.xml.Text
-
 import java.util.Date
+
+import scala.util.control.NonFatal
+import scala.xml.{Node, Text}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -116,7 +116,23 @@ private[ui] class StageTableBase(
       stageData <- listener.stageIdToData.get((s.stageId, s.attemptId))
       desc <- stageData.description
     } yield {
-      <span class="description-input" title={desc}>{desc}</span>
+      // If the description can be parsed as HTML and has only relative links, then render
+      // as HTML, otherwise render as escaped string
+      try {
+        val xml = scala.xml.XML.loadString(s"""<span class="description-input">$desc</span>""")
+        val allLinks = xml \\ "_" flatMap { _.attributes } filter { _.key == "href" }
+        val areAllLinksRelative = allLinks.forall { _.value.toString.startsWith ("/") }
+        if (areAllLinksRelative) {
+          xml
+        } else {
+          println("some not relative; all links: " + allLinks.mkString(";"))
+          <span class="description-input"> {desc} </span>
+        }
+      } catch {
+        case NonFatal(e) =>
+          println(e)
+          <span class="description-input"> {desc} </span>
+      }
     }
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }

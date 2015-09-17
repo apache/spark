@@ -196,8 +196,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString)
       val formattedTime = UIUtils.formatBatchTime(
         job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
+      val batchLink = s"/streaming/batch/?id=${job.time.milliseconds}"
       ssc.sc.setJobDescription(
-        s"Streaming job from [output operation ${job.outputOpId}, batch time ${formattedTime}]")
+        s"""Streaming job from <a href="$batchLink">[output operation ${job.outputOpId}, batch time ${formattedTime}]</a>""")
       try {
         // We need to assign `eventLoop` to a temp variable. Otherwise, because
         // `JobScheduler.stop(false)` may set `eventLoop` to null when this method is running, then
