@@ -59,19 +59,34 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
 
       val functionClassName = functionInfo.getFunctionClass.getName
 
-      if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveSimpleUDF(new HiveFunctionWrapper(functionClassName), children)
-      } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveGenericUDF(new HiveFunctionWrapper(functionClassName), children)
-      } else if (
-        classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveGenericUDAF(new HiveFunctionWrapper(functionClassName), children)
-      } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveUDAF(new HiveFunctionWrapper(functionClassName), children)
-      } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveGenericUDTF(new HiveFunctionWrapper(functionClassName), children)
-      } else {
-        sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
+      try {
+        val resolvedHiveFunction =
+          if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
+            HiveSimpleUDF(new HiveFunctionWrapper(functionClassName), children)
+          } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
+            HiveGenericUDF(new HiveFunctionWrapper(functionClassName), children)
+          } else if (
+            classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
+            HiveGenericUDAF(new HiveFunctionWrapper(functionClassName), children)
+          } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
+            HiveUDAF(new HiveFunctionWrapper(functionClassName), children)
+          } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
+            HiveGenericUDTF(new HiveFunctionWrapper(functionClassName), children)
+          } else {
+            throw new AnalysisException(
+              s"No handler for Hive udf ${functionInfo.getFunctionClass}")
+          }
+
+        resolvedHiveFunction
+      } catch {
+        case analysisException: AnalysisException =>
+          // If the exception is an AnalysisException, just throw it.
+          throw analysisException
+        case throwable: Throwable =>
+          // If there is any error, we throw an AnalysisException.
+          val errorMessage = s"No handler for Hive udf ${functionInfo.getFunctionClass} " +
+            s"because: ${throwable.getMessage}."
+          throw new AnalysisException(errorMessage)
       }
     }
   }
@@ -203,7 +218,7 @@ private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, childr
     new DeferredObjectAdapter(inspect, child.dataType)
   }.toArray[DeferredObject]
 
-  lazy val dataType: DataType = inspectorToDataType(returnInspector)
+  val dataType: DataType = inspectorToDataType(returnInspector)
 
   override def eval(input: InternalRow): Any = {
     returnInspector // Make sure initialized.
@@ -236,6 +251,7 @@ private[spark] object ResolveHiveWindowFunction extends Rule[LogicalPlan] {
     // replaced those WindowSpecReferences.
     case p: LogicalPlan =>
       p transformExpressions {
+        case u if !u.childrenResolved => u // Skip until children are resolved.
         case WindowExpression(
           UnresolvedWindowFunction(name, children),
           windowSpec: WindowSpecDefinition) =>
@@ -254,7 +270,7 @@ private[spark] object ResolveHiveWindowFunction extends Rule[LogicalPlan] {
             // are expressions in Order By clause.
             if (classOf[GenericUDAFRank].isAssignableFrom(functionClass)) {
               if (children.nonEmpty) {
-               throw  new AnalysisException(s"$name does not take input parameters.")
+               throw new AnalysisException(s"$name does not take input parameters.")
               }
               windowSpec.orderSpec.map(_.child)
             } else {
@@ -356,7 +372,7 @@ private[hive] case class HiveWindowFunction(
     evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inputInspectors)
   }
 
-  override def dataType: DataType =
+  override val dataType: DataType =
     if (!pivotResult) {
       inspectorToDataType(returnInspector)
     } else {
@@ -461,9 +477,9 @@ private[hive] case class HiveGenericUDAF(
   @transient
   protected lazy val inspectors = children.map(toInspector)
 
-  def dataType: DataType = inspectorToDataType(objectInspector)
+  override val dataType: DataType = inspectorToDataType(objectInspector)
 
-  def nullable: Boolean = true
+  override def nullable: Boolean = true
 
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
@@ -494,9 +510,9 @@ private[hive] case class HiveUDAF(
   @transient
   protected lazy val inspectors = children.map(toInspector)
 
-  def dataType: DataType = inspectorToDataType(objectInspector)
+  override val dataType: DataType = inspectorToDataType(objectInspector)
 
-  def nullable: Boolean = true
+  override def nullable: Boolean = true
 
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
