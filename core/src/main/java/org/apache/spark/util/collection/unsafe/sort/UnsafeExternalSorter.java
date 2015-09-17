@@ -161,16 +161,9 @@ public final class UnsafeExternalSorter {
    */
   private void initializeForWriting() throws IOException {
     this.writeMetrics = new ShuffleWriteMetrics();
-    final long pointerArrayMemory =
-      UnsafeInMemorySorter.getMemoryRequirementsForPointerArray(initialSize);
-    final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pointerArrayMemory);
-    if (memoryAcquired != pointerArrayMemory) {
-      shuffleMemoryManager.release(memoryAcquired);
-      throw new IOException("Could not acquire " + pointerArrayMemory + " bytes of memory");
-    }
-
     this.inMemSorter =
-      new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
+      new UnsafeInMemorySorter(taskMemoryManager, shuffleMemoryManager, recordComparator,
+        prefixComparator, initialSize);
     this.isInMemSorterExternal = false;
   }
 
@@ -268,8 +261,8 @@ public final class UnsafeExternalSorter {
     if (inMemSorter != null) {
       if (!isInMemSorterExternal) {
         long sorterMemoryUsage = inMemSorter.getMemoryUsage();
+        inMemSorter.releaseMemory();
         memoryFreed += sorterMemoryUsage;
-        shuffleMemoryManager.release(sorterMemoryUsage);
       }
       inMemSorter = null;
     }
@@ -318,8 +311,8 @@ public final class UnsafeExternalSorter {
         shuffleMemoryManager.release(memoryAcquired);
         spill();
       } else {
+        shuffleMemoryManager.release(memoryAcquired);
         inMemSorter.expandPointerArray();
-        shuffleMemoryManager.release(oldPointerArrayMemoryUsage);
       }
     }
   }
