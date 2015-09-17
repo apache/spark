@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable.{ArrayBuffer, ArrayBuilder}
+import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Experimental
@@ -25,7 +25,7 @@ import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
+import org.apache.spark.ml.Transformer
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -230,8 +230,10 @@ private[ml] class FeatureEncoder(numFeatures: Array[Int]) {
   /** Precomputed offsets for the location of each output feature. */
   private val outputOffsets = {
     val arr = new Array[Int](numFeatures.length)
-    for (i <- 1 until arr.length) {
+    var i = 1
+    while (i < arr.length) {
       arr(i) = arr(i - 1) + numFeatures(i - 1)
+      i += 1
     }
     arr
   }
