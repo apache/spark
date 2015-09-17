@@ -29,5 +29,5 @@ class VerticaOperator(BaseOperator):
 
     def execute(self, context):
         logging.info('Executing: ' + str(self.sql))
-        hook = VerticaOperator(vertica_conn_id=self.vertica_conn_id)
+        hook = VerticaHook(vertica_conn_id=self.vertica_conn_id)
         hook.run(self.sql)
