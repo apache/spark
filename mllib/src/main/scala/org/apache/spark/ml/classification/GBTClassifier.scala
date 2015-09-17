@@ -165,7 +165,7 @@ object GBTClassifier {
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
 @Experimental
-final class GBTClassificationModel(
+final class GBTClassificationModel private[ml](
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
