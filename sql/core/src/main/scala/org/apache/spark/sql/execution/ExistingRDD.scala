@@ -87,7 +87,7 @@ private[sql] case class LogicalRDD(
   }
 
   @transient
-  override def statistics(conf: CatalystConf): Statistics = Statistics(
+  protected override def computeStats(conf: CatalystConf): Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(sqlContext.conf.defaultSizeInBytes)
@@ -130,7 +130,7 @@ case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[InternalRow])(sql
   }
 
   @transient
-  override def statistics(conf: CatalystConf): Statistics = Statistics(
+  protected override def computeStats(conf: CatalystConf): Statistics = Statistics(
     // TODO: Improve the statistics estimation.
     // This is made small enough so it can be broadcasted.
     sizeInBytes = sqlContext.conf.autoBroadcastJoinThreshold - 1

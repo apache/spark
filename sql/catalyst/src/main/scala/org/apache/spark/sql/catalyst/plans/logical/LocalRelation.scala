@@ -62,6 +62,6 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     case _ => false
   }
 
-  override def statistics(conf: CatalystConf): Statistics =
+  protected override def computeStats(conf: CatalystConf): Statistics =
     Statistics(sizeInBytes = output.map(_.dataType.defaultSize).sum * data.length)
 }

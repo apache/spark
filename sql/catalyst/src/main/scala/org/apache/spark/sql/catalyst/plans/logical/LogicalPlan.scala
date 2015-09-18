@@ -77,6 +77,16 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
   }
 
+  @transient
+  protected var _statistics: Option[Statistics] = None
+
+  def statistics(conf: CatalystConf = EmptyConf): Statistics = {
+    if (!_statistics.isDefined) {
+      _statistics = Some(computeStats(conf))
+    }
+    _statistics.get
+  }
+
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
    * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
@@ -84,7 +94,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * [[LeafNode]]s must override this.
    */
-  def statistics(conf: CatalystConf = EmptyConf): Statistics = {
+  protected def computeStats(conf: CatalystConf = EmptyConf): Statistics = {
     if (children.size == 0) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }

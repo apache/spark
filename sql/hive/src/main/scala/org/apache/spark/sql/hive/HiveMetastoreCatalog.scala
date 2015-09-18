@@ -818,7 +818,7 @@ private[hive] case class MetastoreRelation
     new Table(tTable)
   }
 
-  override def statistics(conf: CatalystConf = EmptyConf): Statistics = Statistics(
+  protected override def computeStats(conf: CatalystConf = EmptyConf): Statistics = Statistics(
     sizeInBytes = {
       val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
       val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)

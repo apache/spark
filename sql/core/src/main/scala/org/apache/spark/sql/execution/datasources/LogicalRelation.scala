@@ -47,7 +47,7 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
   }
 
   @transient
-  override def statistics(conf: CatalystConf): Statistics = Statistics(
+  protected override def computeStats(conf: CatalystConf): Statistics = Statistics(
     sizeInBytes = BigInt(relation.sizeInBytes)
   )
 

@@ -106,14 +106,14 @@ private[sql] object SetOperation {
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
-  override def statistics(conf: CatalystConf): Statistics = {
+  protected override def computeStats(conf: CatalystConf): Statistics = {
     val sizeInBytes = left.statistics(conf).sizeInBytes + right.statistics(conf).sizeInBytes
     Statistics(sizeInBytes = sizeInBytes)
   }
 }
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-  override def statistics(conf: CatalystConf): Statistics = {
+  protected override def computeStats(conf: CatalystConf): Statistics = {
     val selectionFactor = conf.getOrElse(CatalystConf.INTERSECT_SELECTION_FACTOR, "0.2F").toFloat
     Statistics(sizeInBytes = math.max(0L,
       (left.statistics(conf).sizeInBytes.longValue * selectionFactor).toLong))
@@ -121,7 +121,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-  override def statistics(conf: CatalystConf): Statistics = {
+  protected override def computeStats(conf: CatalystConf): Statistics = {
     val selectionFactor = conf.getOrElse(CatalystConf.EXCEPT_SELECTION_FACTOR, "0.2F").toFloat
     Statistics(sizeInBytes =
       (left.statistics(conf).sizeInBytes.longValue * (1 - selectionFactor)).toLong)
@@ -159,7 +159,7 @@ case class Join(
       condition.forall(_.dataType == BooleanType)
   }
 
-  override def statistics(conf: CatalystConf): Statistics = {
+  protected override def computeStats(conf: CatalystConf): Statistics = {
     val sizeLeft: BigInt = left.statistics(conf).sizeInBytes
     val sizeRight: BigInt = right.statistics(conf).sizeInBytes
     val sizeCurrent: Long =
@@ -287,7 +287,7 @@ case class Expand(
     gid: Attribute,
     child: LogicalPlan) extends UnaryNode {
 
-  override def statistics(conf: CatalystConf): Statistics = {
+  protected override def computeStats(conf: CatalystConf): Statistics = {
     val sizeInBytes = child.statistics(conf).sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -419,7 +419,7 @@ case class Rollup(
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def statistics(conf: CatalystConf): Statistics = {
+  protected override def computeStats(conf: CatalystConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
     Statistics(sizeInBytes = sizeInBytes)
@@ -481,6 +481,6 @@ case object OneRowRelation extends LeafNode {
    *
    * [[LeafNode]]s must override this.
    */
-  override def statistics(conf: CatalystConf): Statistics = Statistics(sizeInBytes = 1)
+  protected override def computeStats(conf: CatalystConf): Statistics = Statistics(sizeInBytes = 1)
 }
 

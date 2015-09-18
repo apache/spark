@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystConf, InternalRow}
+import org.apache.spark.sql.catalyst.{EmptyConf, CatalystConf, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -51,9 +51,11 @@ private[sql] case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient private var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    @transient private var _statistics: Statistics = null,
+    @transient private var __statistics: Option[Statistics] = None,
     private var _batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] = null)
   extends LogicalPlan with MultiInstanceRelation {
+
+  _statistics = __statistics
 
   private val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
     if (_batchStats == null) {
@@ -76,25 +78,23 @@ private[sql] case class InMemoryRelation(
   // Statistics propagation contracts:
   // 1. Non-null `_statistics` must reflect the actual statistics of the underlying data
   // 2. Only propagate statistics when `_statistics` is non-null
-  private def statisticsToBePropagated = _statistics
+  private def statisticsToBePropagated = this._statistics
 
   override def statistics(conf: CatalystConf): Statistics = {
-    if (_statistics == null) {
-      if (batchStats.value.isEmpty) {
-        // Underlying columnar RDD hasn't been materialized, no useful statistics information
-        // available, return the default statistics.
-        Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
-      } else {
-        // Underlying columnar RDD has been materialized, required information has also been
-        // collected via the `batchStats` accumulator, compute the final statistics,
-        // and update `_statistics`.
-        _statistics = Statistics(sizeInBytes = computeSizeInBytes)
-        _statistics
-      }
+    if (batchStats.value.isEmpty) {
+      // Underlying columnar RDD hasn't been materialized, no useful statistics information
+      // available, return the default statistics.
+      Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
     } else {
-      // Pre-computed statistics
-      _statistics
+      // Underlying columnar RDD has been materialized, required information has also been
+      // collected via the `batchStats` accumulator, compute the final statistics,
+      // and update `_statistics`.
+      super.statistics(conf)
     }
+  }
+
+  protected override def computeStats(conf: CatalystConf = EmptyConf): Statistics = {
+    Statistics(sizeInBytes = computeSizeInBytes)
   }
 
   // If the cached column buffers were not passed in, we calculate them in the constructor.
@@ -163,18 +163,8 @@ private[sql] case class InMemoryRelation(
 
   override def children: Seq[LogicalPlan] = Seq.empty
 
-  override def newInstance(): this.type = {
-    new InMemoryRelation(
-      output.map(_.newInstance()),
-      useCompression,
-      batchSize,
-      storageLevel,
-      child,
-      tableName)(
-      _cachedColumnBuffers,
-      statisticsToBePropagated,
-      batchStats).asInstanceOf[this.type]
-  }
+  override def newInstance(): this.type =
+    withOutput(output.map(_.newInstance())).asInstanceOf[this.type]
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
