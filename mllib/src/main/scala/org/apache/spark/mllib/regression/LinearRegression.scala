@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
@@ -31,11 +32,11 @@ import org.apache.spark.rdd.RDD
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  *
- * @since 0.8.0
  */
-class LinearRegressionModel (
-    override val weights: Vector,
-    override val intercept: Double)
+@Since("0.8.0")
+class LinearRegressionModel @Since("1.1.0") (
+    @Since("1.0.0") override val weights: Vector,
+    @Since("0.8.0") override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable
   with Saveable with PMMLExportable {
 
@@ -46,9 +47,7 @@ class LinearRegressionModel (
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 
-  /**
-   * @since 1.3.0
-   */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     GLMRegressionModel.SaveLoadV1_0.save(sc, path, this.getClass.getName, weights, intercept)
   }
@@ -56,14 +55,10 @@ class LinearRegressionModel (
   override protected def formatVersion: String = "1.0"
 }
 
-/**
- * @since 1.3.0
- */
+@Since("1.3.0")
 object LinearRegressionModel extends Loader[LinearRegressionModel] {
 
-  /**
-   * @since 1.3.0
-   */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): LinearRegressionModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     // Hard-code class name string in case it changes in the future
@@ -90,6 +85,7 @@ object LinearRegressionModel extends Loader[LinearRegressionModel] {
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
+@Since("0.8.0")
 class LinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -98,6 +94,7 @@ class LinearRegressionWithSGD private[mllib] (
 
   private val gradient = new LeastSquaresGradient()
   private val updater = new SimpleUpdater()
+  @Since("0.8.0")
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -107,6 +104,7 @@ class LinearRegressionWithSGD private[mllib] (
    * Construct a LinearRegression object with default parameters: {stepSize: 1.0,
    * numIterations: 100, miniBatchFraction: 1.0}.
    */
+  @Since("0.8.0")
   def this() = this(1.0, 100, 1.0)
 
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
@@ -117,8 +115,8 @@ class LinearRegressionWithSGD private[mllib] (
 /**
  * Top-level methods for calling LinearRegression.
  *
- * @since 0.8.0
  */
+@Since("0.8.0")
 object LinearRegressionWithSGD {
 
   /**
@@ -135,8 +133,8 @@ object LinearRegressionWithSGD {
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
    *
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -158,8 +156,8 @@ object LinearRegressionWithSGD {
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    *
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -179,8 +177,8 @@ object LinearRegressionWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LinearRegressionModel which has the weights and offset from training.
    *
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -198,8 +196,8 @@ object LinearRegressionWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LinearRegressionModel which has the weights and offset from training.
    *
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int): LinearRegressionModel = {
