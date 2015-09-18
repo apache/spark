@@ -406,6 +406,7 @@ private[spark] class ExecutorAllocationManager(
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$executorIdleTimeoutS seconds (new desired total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
+      numExecutorsTarget = math.min(numExecutorsTarget, numExistingExecutors - 1)
       true
     } else {
       logWarning(s"Unable to reach the cluster manager to kill executor $executorId!")
