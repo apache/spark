@@ -594,8 +594,7 @@ class StreamingContext private[streaming] (
             validate()
             ThreadUtils.runInNewThread("streaming-start") {
               sparkContext.setCallSite(startSite.get)
-              sparkContext.setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
-              sparkContext.setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
+              sparkContext.clearJobGroup()
               sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
               scheduler.start()
             }

@@ -74,10 +74,9 @@ class ThreadUtilsSuite extends SparkFunSuite {
     assert(
       runInNewThread("thread-name", isDaemon = false) { Thread.currentThread().isDaemon } === false
     )
-    val exception = intercept[Exception] {
+    val exception = intercept[IllegalArgumentException] {
       runInNewThread("thread-name") { throw new IllegalArgumentException("test") }
     }
-    assert(exception.isInstanceOf[IllegalArgumentException])
     assert(exception.asInstanceOf[IllegalArgumentException].getMessage.contains("test"))
     assert(exception.getStackTrace.mkString("\n").contains(
       "... run in separate thread using org.apache.spark.util.ThreadUtils ...") === true,

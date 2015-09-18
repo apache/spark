@@ -122,6 +122,8 @@ private[spark] object ThreadUtils {
     exception match {
       case Some(realException) =>
         // Remove the part of the stack that shows method calls into this helper method
+        // This means drop everything from the top until the stack element
+        // ThreadUtils.runInNewThread(), and then drop that as well (hence the `drop(1)`).
         val baseStackTrace = Thread.currentThread().getStackTrace().dropWhile(
           ! _.getClassName.contains(this.getClass.getSimpleName)).drop(1)
 
