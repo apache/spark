@@ -273,7 +273,8 @@ def scheduler(args):
     job = jobs.SchedulerJob(
         dag_id=args.dag_id,
         subdir=args.subdir,
-        num_runs=args.num_runs)
+        num_runs=args.num_runs,
+        do_pickle=args.do_pickle)
     job.run()
 
 
@@ -530,6 +531,14 @@ def get_parser():
         default=None,
         type=int,
         help="Set the number of runs to execute before exiting")
+    parser_scheduler.add_argument(
+        "-p", "--do_pickle",
+        default=False,
+        help=(
+            "Attempt to pickle the DAG object to send over "
+            "to the workers, instead of letting workers run their version "
+            "of the code."),
+        action="store_true")
     parser_scheduler.set_defaults(func=scheduler)
 
     ht = "Initialize the metadata database"
