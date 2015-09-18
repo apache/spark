@@ -578,6 +578,11 @@ class JsonProtocolSuite extends SparkFunSuite {
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
+      case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
+          TaskCommitDenied(jobId2, partitionId2, attemptNumber2)) =>
+        assert(jobId1 === jobId2)
+        assert(partitionId1 === partitionId2)
+        assert(attemptNumber1 === attemptNumber2)
       case (ExecutorLostFailure(execId1, isNormalExit1),
           ExecutorLostFailure(execId2, isNormalExit2)) =>
         assert(execId1 === execId2)
