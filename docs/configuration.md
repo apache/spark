@@ -833,15 +833,6 @@ Apart from these, the following properties are also available, and may be useful
     are not affected by these issues.</td>
 </tr>
 <tr>
-    <td><code>spark.inputFormat.cache.enabled</code></td>
-    <td>true</td>
-    <td>
-      Whether to cache the inputFormat. If set to false, all tasks will has its own InputFormat
-      object. If set to true, all tasks of an Executor will use one InputFormat object, so the 
-      InputFormat should be thread-safety.
-    </td>
-</tr>
-<tr>
     <td><code>spark.hadoop.validateOutputSpecs</code></td>
     <td>true</td>
     <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
