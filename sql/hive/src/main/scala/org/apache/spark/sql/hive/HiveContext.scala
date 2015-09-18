@@ -21,6 +21,7 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
+import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
@@ -592,10 +593,14 @@ class HiveContext private[hive](
     )
   }
 
+  private val matcher = Pattern.compile(
+    "^(create|drop)\\s+(temporary\\s+)?(function|macro).*").matcher("")
+
   protected[hive] def runSqlHive(sql: String): Seq[String] = {
-    if (sql.toLowerCase.contains("create temporary function")) {
+    val command = sql.trim.toLowerCase
+    if (matcher.reset(command).matches()) {
       executionHive.runSqlHive(sql)
-    } else if (sql.trim.toLowerCase.startsWith("set")) {
+    } else if (command.startsWith("set")) {
       metadataHive.runSqlHive(sql)
       executionHive.runSqlHive(sql)
     } else {
