@@ -70,6 +70,10 @@ object MimaExcludes {
           "org.apache.spark.scheduler.AskPermissionToCommitOutput.this"),
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
+      ) ++
+      Seq(
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.shuffle.FileShuffleBlockResolver$ShuffleFileGroup")
       )
     case v if v.startsWith("1.5") =>
       Seq(

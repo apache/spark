@@ -106,15 +106,6 @@ private[spark] class BlockManager(
     }
   }
 
-  // Check that we're not using external shuffle service with consolidated shuffle files.
-  if (externalShuffleServiceEnabled
-      && conf.getBoolean("spark.shuffle.consolidateFiles", false)
-      && shuffleManager.isInstanceOf[HashShuffleManager]) {
-    throw new UnsupportedOperationException("Cannot use external shuffle service with consolidated"
-      + " shuffle files in hash-based shuffle. Please disable spark.shuffle.consolidateFiles or "
-      + " switch to sort-based shuffle.")
-  }
-
   var blockManagerId: BlockManagerId = _
 
   // Address of the server that serves this executor's shuffle files. This is either an external
