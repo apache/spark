@@ -244,6 +244,12 @@ private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, childr
  * Resolves [[UnresolvedWindowFunction]] to [[HiveWindowFunction]].
  */
 private[spark] object ResolveHiveWindowFunction extends Rule[LogicalPlan] {
+  private def shouldResolveFunction(
+      unresolvedWindowFunction: UnresolvedWindowFunction,
+      windowSpec: WindowSpecDefinition): Boolean = {
+    unresolvedWindowFunction.childrenResolved && windowSpec.childrenResolved
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p: LogicalPlan if !p.childrenResolved => p
 
@@ -251,10 +257,11 @@ private[spark] object ResolveHiveWindowFunction extends Rule[LogicalPlan] {
     // replaced those WindowSpecReferences.
     case p: LogicalPlan =>
       p transformExpressions {
-        case u if !u.childrenResolved => u // Skip until children are resolved.
+        // We will not start to resolve the function unless all arguments are resolved
+        // and all expressions in window spec are fixed.
         case WindowExpression(
-          UnresolvedWindowFunction(name, children),
-          windowSpec: WindowSpecDefinition) =>
+          u @ UnresolvedWindowFunction(name, children),
+          windowSpec: WindowSpecDefinition) if shouldResolveFunction(u, windowSpec) =>
           // First, let's find the window function info.
           val windowFunctionInfo: WindowFunctionInfo =
             Option(FunctionRegistry.getWindowFunctionInfo(name.toLowerCase)).getOrElse(
