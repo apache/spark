@@ -154,12 +154,14 @@ class LinearRegression(override val uid: String)
 
     val (featuresSummarizer, ySummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
-                   instance: Instance) =>
-        (c._1.add(instance.features, instance.weight),
-          c._2.add(Vectors.dense(instance.label), instance.weight))
+        instance: Instance) =>
+          (c._1.add(instance.features, instance.weight),
+            c._2.add(Vectors.dense(instance.label), instance.weight))
+
       val combOp = (c1: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
-                    c2: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer)) =>
-        (c1._1.merge(c2._1), c1._2.merge(c2._2))
+        c2: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer)) =>
+          (c1._1.merge(c2._1), c1._2.merge(c2._2))
+
       instances.treeAggregate(
         new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer)(seqOp, combOp)
     }
