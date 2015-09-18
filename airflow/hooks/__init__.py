@@ -27,7 +27,6 @@ _hooks = {
 }
 
 _import_module_attrs(globals(), _hooks)
-from airflow.contrib.hooks import *
 
 
 def integrate_plugins():
