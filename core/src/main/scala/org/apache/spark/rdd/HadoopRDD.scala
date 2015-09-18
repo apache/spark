@@ -138,7 +138,6 @@ class HadoopRDD[K, V](
   private val createTime = new Date()
 
   private val shouldCloneJobConf = sc.conf.getBoolean("spark.hadoop.cloneConf", false)
-  private val shouldCacheInputFormat = sc.conf.getBoolean("spark.inputFormat.cache.enabled", true)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
@@ -183,18 +182,12 @@ class HadoopRDD[K, V](
   }
 
   protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
-    if (HadoopRDD.containsCachedMetadata(inputFormatCacheKey)) {
-      return HadoopRDD.getCachedMetadata(inputFormatCacheKey).asInstanceOf[InputFormat[K, V]]
-    }
-    // Once an InputFormat for this RDD is created, cache it so that only one reflection call is
+    // Once a constructor of InputFormat for this RDD is created, cache it so that only one reflection call is
     // done in each local process.
     val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
     if (newInputFormat.isInstanceOf[Configurable]) {
       newInputFormat.asInstanceOf[Configurable].setConf(conf)
-    }
-    if (shouldCacheInputFormat) {
-      HadoopRDD.putCachedMetadata(inputFormatCacheKey, newInputFormat)
     }
     newInputFormat
   }
