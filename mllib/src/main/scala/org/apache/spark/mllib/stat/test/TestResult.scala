@@ -122,7 +122,7 @@ class KolmogorovSmirnovTestResult private[stat] (
  */
 @Experimental
 @Since("1.6.0")
-private[stat] class StreamingTestResult(
+private[stat] class StreamingTestResult @Since("1.6.0") (
     @Since("1.6.0") override val pValue: Double,
     @Since("1.6.0") override val degreesOfFreedom: Double,
     @Since("1.6.0") override val statistic: Double,

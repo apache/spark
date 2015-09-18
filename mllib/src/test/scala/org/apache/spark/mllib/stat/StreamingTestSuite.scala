@@ -52,7 +52,7 @@ class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
     val outputBatches = runStreams[StreamingTestResult](ssc, numBatches, numBatches)
 
     assert(outputBatches.flatten.forall(res =>
-      res.pValue > 0.05 && res.method == WelchTTest.MethodName))
+      res.pValue > 0.05 && res.method == WelchTTest.methodName))
   }
 
   test("accuracy for alternative hypothesis using welch t-test") {
@@ -79,7 +79,7 @@ class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
     val outputBatches = runStreams[StreamingTestResult](ssc, numBatches, numBatches)
 
     assert(outputBatches.flatten.forall(res =>
-      res.pValue < 0.05 && res.method == WelchTTest.MethodName))
+      res.pValue < 0.05 && res.method == WelchTTest.methodName))
   }
 
   test("accuracy for null hypothesis using student t-test") {
@@ -107,7 +107,7 @@ class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
 
 
     assert(outputBatches.flatten.forall(res =>
-      res.pValue > 0.05 && res.method == StudentTTest.MethodName))
+      res.pValue > 0.05 && res.method == StudentTTest.methodName))
   }
 
   test("accuracy for alternative hypothesis using student t-test") {
@@ -134,7 +134,7 @@ class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
     val outputBatches = runStreams[StreamingTestResult](ssc, numBatches, numBatches)
 
     assert(outputBatches.flatten.forall(res =>
-      res.pValue < 0.05 && res.method == StudentTTest.MethodName))
+      res.pValue < 0.05 && res.method == StudentTTest.methodName))
   }
 
   test("batches within same test window are grouped") {

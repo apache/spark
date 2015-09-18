@@ -37,8 +37,8 @@ import org.apache.spark.util.StatCounter
  */
 private[stat] sealed trait StreamingTestMethod extends Serializable {
 
-  val MethodName: String
-  val NullHypothesis: String
+  val methodName: String
+  val nullHypothesis: String
 
   protected type SummaryPairStream =
     DStream[(StatCounter, StatCounter)]
@@ -73,16 +73,16 @@ private[stat] sealed trait StreamingTestMethod extends Serializable {
  * This test does not assume equal variance between the two samples and does not assume equal
  * sample size.
  *
- * More information: http://en.wikipedia.org/wiki/Welch%27s_t_test
+ * @see http://en.wikipedia.org/wiki/Welch%27s_t_test
  */
 private[stat] object WelchTTest extends StreamingTestMethod with Logging {
 
-  final val MethodName = "Welch's 2-sample T-test"
-  final val NullHypothesis = "Both groups have same mean"
+  override final val methodName = "Welch's 2-sample t-test"
+  override final val nullHypothesis = "Both groups have same mean"
 
-  private final val TTester = MeatLocker(new TTest())
+  private final val tTester = MeatLocker(new TTest())
 
-  def doTest(data: SummaryPairStream): DStream[StreamingTestResult] =
+  override def doTest(data: SummaryPairStream): DStream[StreamingTestResult] =
     data.map[StreamingTestResult]((test _).tupled)
 
   private def test(
@@ -101,11 +101,11 @@ private[stat] object WelchTTest extends StreamingTestMethod with Logging {
     }
 
     new StreamingTestResult(
-      TTester.get.tTest(statsA, statsB),
+      tTester.get.tTest(statsA, statsB),
       welchDF(statsA, statsB),
-      TTester.get.t(statsA, statsB),
-      MethodName,
-      NullHypothesis
+      tTester.get.t(statsA, statsB),
+      methodName,
+      nullHypothesis
     )
   }
 }
@@ -115,16 +115,16 @@ private[stat] object WelchTTest extends StreamingTestMethod with Logging {
  * mean. This test assumes equal variance between the two samples and does not assume equal sample
  * size. For unequal variances, Welch's t-test should be used instead.
  *
- * More information: http://en.wikipedia.org/wiki/Student%27s_t-test
+ * @see http://en.wikipedia.org/wiki/Student%27s_t-test
  */
 private[stat] object StudentTTest extends StreamingTestMethod with Logging {
 
-  final val MethodName = "Student's 2-sample T-test"
-  final val NullHypothesis = "Both groups have same mean"
+  override final val methodName = "Student's 2-sample t-test"
+  override final val nullHypothesis = "Both groups have same mean"
 
-  private final val TTester = MeatLocker(new TTest())
+  private final val tTester = MeatLocker(new TTest())
 
-  def doTest(data: SummaryPairStream): DStream[StreamingTestResult] =
+  override def doTest(data: SummaryPairStream): DStream[StreamingTestResult] =
     data.map[StreamingTestResult]((test _).tupled)
 
   private def test(
@@ -134,11 +134,11 @@ private[stat] object StudentTTest extends StreamingTestMethod with Logging {
       sample1.getN + sample2.getN - 2
 
     new StreamingTestResult(
-      TTester.get.homoscedasticTTest(statsA, statsB),
+      tTester.get.homoscedasticTTest(statsA, statsB),
       studentDF(statsA, statsB),
-      TTester.get.homoscedasticT(statsA, statsB),
-      MethodName,
-      NullHypothesis
+      tTester.get.homoscedasticT(statsA, statsB),
+      methodName,
+      nullHypothesis
     )
   }
 }
@@ -151,7 +151,9 @@ private[stat] object StudentTTest extends StreamingTestMethod with Logging {
  */
 private[stat] object StreamingTestMethod {
   // Note: after new `StreamingTestMethod`s are implemented, please update this map.
-  final val TEST_NAME_TO_OBJECT = Map(("welch", WelchTTest), ("student", StudentTTest))
+  private final val TEST_NAME_TO_OBJECT: Map[String, StreamingTestMethod] = Map(
+    "welch"->WelchTTest,
+    "student"->StudentTTest)
 
   def getTestMethodFromName(method: String): StreamingTestMethod =
     TEST_NAME_TO_OBJECT.get(method) match {

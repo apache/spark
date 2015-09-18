@@ -19,6 +19,7 @@ package org.apache.spark.mllib.stat.test
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.StatCounter
 
@@ -40,23 +41,22 @@ import org.apache.spark.util.StatCounter
  * which test will be used.
  *
  * Use a builder pattern to construct a streaming test in an application, for example:
- *   ```
- *   val model = new OnlineABTest()
+ * {{{
+ *   val model = new StreamingTest()
  *     .setPeacePeriod(10)
  *     .setWindowSize(0)
  *     .setTestMethod("welch")
  *     .registerStream(DStream)
- *   ```
+ * }}}
  */
 @Experimental
 @Since("1.6.0")
-class StreamingTest(
-    @Since("1.6.0") var peacePeriod: Int = 0,
-    @Since("1.6.0") var windowSize: Int = 0,
-    @Since("1.6.0") var testMethod: StreamingTestMethod = WelchTTest)
-  extends Logging with Serializable {
+class StreamingTest @Since("1.6.0") () extends Logging with Serializable {
+  private var peacePeriod: Int = 0
+  private var windowSize: Int = 0
+  private var testMethod: StreamingTestMethod = WelchTTest
 
-  /** Set the number of initial batches to ignore. */
+  /** Set the number of initial batches to ignore. Default: 0. */
   @Since("1.6.0")
   def setPeacePeriod(peacePeriod: Int): this.type = {
     this.peacePeriod = peacePeriod
@@ -64,7 +64,7 @@ class StreamingTest(
   }
 
   /**
-   * Set the number of batches to compute significance tests over.
+   * Set the number of batches to compute significance tests over. Default: 0.
    * A value of 0 will use all batches seen so far.
    */
   @Since("1.6.0")
@@ -73,7 +73,7 @@ class StreamingTest(
     this
   }
 
-  /** Set the statistical method used for significance testing. */
+  /** Set the statistical method used for significance testing. Default: "welch" */
   @Since("1.6.0")
   def setTestMethod(method: String): this.type = {
     this.testMethod = StreamingTestMethod.getTestMethodFromName(method)
@@ -83,8 +83,9 @@ class StreamingTest(
   /**
    * Register a [[DStream]] of values for significance testing.
    *
-   * @param data stream of (key,value) pairs where the key is the group membership (control or
-   *             treatment) and the value is the numerical metric to test for significance
+   * @param data stream of (key,value) pairs where the key denotes group membership (true =
+   *             experiment, false = control) and the value is the numerical metric to test for
+   *             significance
    * @return stream of significance testing results
    */
   @Since("1.6.0")
@@ -92,9 +93,8 @@ class StreamingTest(
     val dataAfterPeacePeriod = dropPeacePeriod(data)
     val summarizedData = summarizeByKeyAndWindow(dataAfterPeacePeriod)
     val pairedSummaries = pairSummaries(summarizedData)
-    val testResults = testMethod.doTest(pairedSummaries)
 
-    testResults
+    testMethod.doTest(pairedSummaries)
   }
 
   /** Drop all batches inside the peace period. */
@@ -104,7 +104,7 @@ class StreamingTest(
       if (time.milliseconds > data.slideDuration.milliseconds * peacePeriod) {
         rdd
       } else {
-        rdd.filter(_ => false) // TODO: Is there a better way to drop a RDD from a DStream?
+        data.context.sparkContext.parallelize(Seq())
       }
     }
   }
@@ -132,14 +132,14 @@ class StreamingTest(
   }
 
   /**
-   * Transform a stream of summaries into pairs representing summary statistics for group A and
-   * group B up to this batch.
+   * Transform a stream of summaries into pairs representing summary statistics for control group
+   * and experiment group up to this batch.
    */
   private[stat] def pairSummaries(summarizedData: DStream[(Boolean, StatCounter)])
       : DStream[(StatCounter, StatCounter)] = {
     summarizedData
       .map[(Int, StatCounter)](x => (0, x._2))
-      .groupByKey()  // Iterable[StatCounter] should be length two, one for each A/B group
-      .map(x => (x._2.head, x._2.last) )
+      .groupByKey()  // should be length two (control/experiment group)
+      .map(x => (x._2.head, x._2.last))
   }
 }
