@@ -157,7 +157,7 @@ class DataTypeTests(unittest.TestCase):
     def test_data_type_eq(self):
         lt = LongType()
         lt2 = pickle.loads(pickle.dumps(LongType()))
-        self.assertEquals(lt, lt2)
+        self.assertEqual(lt, lt2)
 
     # regression test for SPARK-7978
     def test_decimal_type(self):
@@ -393,7 +393,7 @@ class SQLTests(ReusedPySparkTestCase):
                                    CustomRow(field1=2, field2="row2"),
                                    CustomRow(field1=3, field2="row3")])
         df = self.sqlCtx.inferSchema(rdd)
-        self.assertEquals(Row(field1=1, field2=u'row1'), df.first())
+        self.assertEqual(Row(field1=1, field2=u'row1'), df.first())
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -403,7 +403,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_select_null_literal(self):
         df = self.sqlCtx.sql("select null as col")
-        self.assertEquals(Row(col=None), df.first())
+        self.assertEqual(Row(col=None), df.first())
 
     def test_apply_schema(self):
         from datetime import date, datetime
@@ -519,14 +519,14 @@ class SQLTests(ReusedPySparkTestCase):
                              StructField("point", ExamplePointUDT(), False)])
         df = self.sqlCtx.createDataFrame([row], schema)
         point = df.head().point
-        self.assertEquals(point, ExamplePoint(1.0, 2.0))
+        self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
         row = (1.0, PythonOnlyPoint(1.0, 2.0))
         schema = StructType([StructField("label", DoubleType(), False),
                              StructField("point", PythonOnlyUDT(), False)])
         df = self.sqlCtx.createDataFrame([row], schema)
         point = df.head().point
-        self.assertEquals(point, PythonOnlyPoint(1.0, 2.0))
+        self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
     def test_udf_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
@@ -554,14 +554,14 @@ class SQLTests(ReusedPySparkTestCase):
         df0.write.parquet(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
         point = df1.head().point
-        self.assertEquals(point, ExamplePoint(1.0, 2.0))
+        self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
         row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
         df0 = self.sqlCtx.createDataFrame([row])
         df0.write.parquet(output_dir, mode='overwrite')
         df1 = self.sqlCtx.parquetFile(output_dir)
         point = df1.head().point
-        self.assertEquals(point, PythonOnlyPoint(1.0, 2.0))
+        self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
     def test_column_operators(self):
         ci = self.df.key
@@ -826,8 +826,8 @@ class SQLTests(ReusedPySparkTestCase):
         output_dir = os.path.join(self.tempdir.name, "infer_long_type")
         df.saveAsParquetFile(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
-        self.assertEquals('a', df1.first().f1)
-        self.assertEquals(100000000000000, df1.first().f2)
+        self.assertEqual('a', df1.first().f1)
+        self.assertEqual(100000000000000, df1.first().f2)
 
         self.assertEqual(_infer_type(1), LongType())
         self.assertEqual(_infer_type(2**10), LongType())
