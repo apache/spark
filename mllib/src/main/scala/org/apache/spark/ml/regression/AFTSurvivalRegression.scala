@@ -46,7 +46,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   /**
    * Param for censor column name.
    * The value of this column could be 0 or 1.
-   * If the value is 1, it means the event has occurred i.e. uncensored; otherwise it censored.
+   * If the value is 1, it means the event has occurred i.e. uncensored; otherwise censored.
    * @group param
    */
   @Since("1.6.0")
@@ -55,6 +55,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   /** @group getParam */
   @Since("1.6.0")
   def getCensorCol: String = $(censorCol)
+  setDefault(censorCol -> "censor")
 
   /**
    * Param for quantile probabilities array.
@@ -62,8 +63,9 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
    * @group param
    */
   @Since("1.6.0")
-  final val quantileProbabilities: DoubleArrayParam = new DoubleArrayParam(this, "quantile",
-    "quantile probabilities array", (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1)))
+  final val quantileProbabilities: DoubleArrayParam = new DoubleArrayParam(this,
+    "quantileProbabilities", "quantile probabilities array",
+    (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1)))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -117,7 +119,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   /** @group setParam */
   @Since("1.6.0")
   def setCensorCol(value: String): this.type = set(censorCol, value)
-  setDefault(censorCol -> "censor")
 
   /** @group setParam */
   @Since("1.6.0")
@@ -155,8 +156,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    * Extract [[featuresCol]], [[labelCol]] and [[censorCol]] from input dataset,
    * and put it in an RDD with strong types.
    */
-  protected[ml] def extractAFTPoints(
-      dataset: DataFrame): RDD[AFTPoint] = {
+  protected[ml] def extractAFTPoints(dataset: DataFrame): RDD[AFTPoint] = {
     dataset.select($(featuresCol), $(labelCol), $(censorCol)).map {
       case Row(features: Vector, label: Double, censor: Double) =>
         AFTPoint(features, label, censor)
@@ -197,8 +197,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         throw new SparkException(msg)
       }
 
-      val rawWeights = state.x.toArray.clone()
-      rawWeights
+      state.x.toArray.clone()
     }
 
     if (handlePersistence) instances.unpersist()
@@ -253,7 +252,7 @@ class AFTSurvivalRegressionModel private[ml] (
     // shape parameter for the Weibull distribution of lifetime
     val k = 1 / scale
     val quantiles = $(quantileProbabilities).map {
-      q => lambda * math.exp(math.log(-math.log(1-q)) / k)
+      q => lambda * math.exp(math.log(-math.log(1 - q)) / k)
     }
     Vectors.dense(quantiles)
   }
@@ -371,6 +370,7 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
    */
   def add(data: AFTPoint): this.type = {
 
+    // TODO: Don't create a new xi vector each time.
     val xi = if (fitIntercept) {
       Vectors.dense(Array(1.0) ++ data.features.toArray).toBreeze
     } else {
@@ -442,6 +442,8 @@ private class AFTCostFun(data: RDD[AFTPoint], fitIntercept: Boolean)
  * @param features List of features for this data point.
  * @param label Label for this data point.
  * @param censor Indicator of the event has occurred or not. If the value is 1, it means
- *                 the event has occurred i.e. uncensored; otherwise it censored.
+ *                 the event has occurred i.e. uncensored; otherwise censored.
  */
-private[ml] case class AFTPoint(features: Vector, label: Double, censor: Double)
+private[regression] case class AFTPoint(features: Vector, label: Double, censor: Double) {
+  require(censor == 1.0 || censor == 0.0, "censor of class AFTPoint must be 1.0 or 0.0")
+}
