@@ -576,10 +576,10 @@ class HiveContext private[hive](
   override protected[sql] def newOptimizer: Optimizer = new Optimizer {
     override protected val batches =
       DefaultOptimizer.batches.asInstanceOf[Seq[Batch]] ++
-      Seq(Batch("Hive Table Stats", Once, HiveTableStats))
+      Seq(Batch("Hive Table Stats", Once, new HiveTableStats))
   }
 
-  object HiveTableStats extends Rule[LogicalPlan] {
+  class HiveTableStats extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan match {
       case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
