@@ -533,6 +533,14 @@ def round_time(dt, delta, start_date=datetime.min):
     datetime.datetime(2015, 1, 1, 0, 0)
     >>> round_time(datetime(2015, 1, 2), relativedelta(months=1))
     datetime.datetime(2015, 1, 1, 0, 0)
+    >>> round_time(datetime(2015, 9, 16, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
+    datetime.datetime(2015, 9, 16, 0, 0)
+    >>> round_time(datetime(2015, 9, 15, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
+    datetime.datetime(2015, 9, 15, 0, 0)
+    >>> round_time(datetime(2015, 9, 14, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
+    datetime.datetime(2015, 9, 14, 0, 0)
+    >>> round_time(datetime(2015, 9, 13, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
+    datetime.datetime(2015, 9, 14, 0, 0)
     """
     # Ignore the microseconds of dt
     dt -= timedelta(microseconds = dt.microsecond)
@@ -561,9 +569,10 @@ def round_time(dt, delta, start_date=datetime.min):
     # start_date + lower * delta and start_date + upper * delta
     # until we find the closest value
     while True:
+        # Invariant: start + lower * delta < dt <= start + upper * delta
         # If start_date + (lower + 1)*delta exceeds dt, then either lower or
         # lower+1 has to be the solution we are searching for
-        if start_date + (lower + 1)*delta > dt:
+        if start_date + (lower + 1)*delta >= dt:
             # Check if start_date + (lower + 1)*delta or
             # start_date + lower*delta is closer to dt and return the solution
             if (start_date + (lower + 1)*delta) - dt <= dt - (start_date + lower*delta):
@@ -574,7 +583,7 @@ def round_time(dt, delta, start_date=datetime.min):
         # We intersect the interval and either replace the lower or upper
         # limit with the candidate
         candidate = lower + (upper - lower) // 2
-        if start_date + candidate*delta > dt:
+        if start_date + candidate*delta >= dt:
             upper = candidate
         else:
             lower = candidate
