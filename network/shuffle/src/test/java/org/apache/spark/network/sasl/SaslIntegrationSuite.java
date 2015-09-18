@@ -56,6 +56,11 @@ import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class SaslIntegrationSuite {
+
+  // Use a long timeout to account for slow / overloaded build machines. In the normal case,
+  // tests should finish way before the timeout expires.
+  private final static long TIMEOUT_MS = 10_000;
+
   static TransportServer server;
   static TransportConf conf;
   static TransportContext context;
@@ -102,7 +107,7 @@ public class SaslIntegrationSuite {
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     String msg = "Hello, World!";
-    byte[] resp = client.sendRpcSync(msg.getBytes(), 1000);
+    byte[] resp = client.sendRpcSync(msg.getBytes(), TIMEOUT_MS);
     assertEquals(msg, new String(resp)); // our rpc handler should just return the given msg
   }
 
@@ -131,7 +136,7 @@ public class SaslIntegrationSuite {
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     try {
-      client.sendRpcSync(new byte[13], 1000);
+      client.sendRpcSync(new byte[13], TIMEOUT_MS);
       fail("Should have failed");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Expected SaslMessage"));
@@ -139,7 +144,7 @@ public class SaslIntegrationSuite {
 
     try {
       // Guessing the right tag byte doesn't magically get you in...
-      client.sendRpcSync(new byte[] { (byte) 0xEA }, 1000);
+      client.sendRpcSync(new byte[] { (byte) 0xEA }, TIMEOUT_MS);
       fail("Should have failed");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("java.lang.IndexOutOfBoundsException"));
@@ -217,12 +222,12 @@ public class SaslIntegrationSuite {
         new String[] { System.getProperty("java.io.tmpdir") }, 1,
         "org.apache.spark.shuffle.sort.SortShuffleManager");
       RegisterExecutor regmsg = new RegisterExecutor("app-1", "0", executorInfo);
-      client1.sendRpcSync(regmsg.toByteArray(), 10000);
+      client1.sendRpcSync(regmsg.toByteArray(), TIMEOUT_MS);
 
       // Make a successful request to fetch blocks, which creates a new stream. But do not actually
       // fetch any blocks, to keep the stream open.
       OpenBlocks openMessage = new OpenBlocks("app-1", "0", blockIds);
-      byte[] response = client1.sendRpcSync(openMessage.toByteArray(), 10000);
+      byte[] response = client1.sendRpcSync(openMessage.toByteArray(), TIMEOUT_MS);
       StreamHandle stream = (StreamHandle) BlockTransferMessage.Decoder.fromByteArray(response);
       long streamId = stream.streamId;
 
