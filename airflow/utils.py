@@ -632,7 +632,7 @@ class AirflowJsonEncoder(json.JSONEncoder):
         elif type(obj) in [numpy.bool_]:
             return bool(obj)
         elif type(obj) in [numpy.float_, numpy.float16, numpy.float32, numpy.float64,
-         numpy.complex_, numpy.complex64, numpy.complex128,:
+         numpy.complex_, numpy.complex64, numpy.complex128]:
             return float(obj)
 
         # Let the base class default method raise the TypeError
