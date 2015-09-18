@@ -141,16 +141,6 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
     }
   }
 
-  /**
-   * Get a reader for a reduce partition. Called on executors by reduce tasks.
-   */
-  override def getReader[K, C](
-      handle: ShuffleHandle,
-      partition: Int,
-      context: TaskContext): ShuffleReader[K, C] = {
-    sortShuffleManager.getReader(handle, partition, context)
-  }
-
   /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](
       handle: ShuffleHandle,
