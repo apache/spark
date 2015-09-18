@@ -336,6 +336,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       testCodeGen(
         "SELECT stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2",
         Row(math.sqrt(1.5 / 5), math.sqrt(1.5 / 6), math.sqrt(1.5 / 5)) :: Nil)
+      // SKEWNESS
+      testCodeGen(
+        "SELECT a, skewness(b) FROM testData2 GROUP BY a",
+        (1 to 3).map(i => Row(i, 0.0)))
+      testCodeGen(
+        "SELECT skewness(b) FROM testData2",
+        Row(0.0) :: Nil)
+      // KURTOSIS
+      testCodeGen(
+        "SELECT a, kurtosis(b) FROM testData2 GROUP BY a",
+        (1 to 3).map(i => Row(i, -2.0)))
+      testCodeGen(
+        "SELECT kurtosis(b) FROM testData2",
+        Row(-2.0) :: Nil)
       // Some combinations.
       testCodeGen(
         """
@@ -356,8 +370,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(100, 1, 50.5, 300, 100) :: Nil)
       // Aggregate with Code generation handling all null values
       testCodeGen(
-        "SELECT  sum('a'), avg('a'), stddev('a'), count(null) FROM testData",
-        Row(null, null, null, 0) :: Nil)
+        "SELECT  sum('a'), avg('a'), stddev('a'), skewness('a'), kurtosis('a'), count(null) FROM testData",
+        Row(null, null, null, null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
@@ -523,8 +537,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("aggregates with nulls") {
     checkAnswer(
-      sql("SELECT MIN(a), MAX(a), AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(1, 3, 2, 1, 6, 3)
+      sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
+      Row(0, -1.5, 1, 3, 2, 1, 6, 3)
     )
   }
 
@@ -732,13 +746,31 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT STDDEV_SAMP(a) FROM testData2"),
       Row(math.sqrt(4/5.0))
+  }
+
+  test("skewness") {
+    checkAnswer(
+      sql("SELECT skewness(a) FROM testData2"),
+      Row(0.0)
+    )
+  }
+
+  test("kurtosis") {
+    checkAnswer(
+      sql("SELECT kurtosis(a) FROM testData2"),
+      Row(-1.5)
     )
   }
 
   test("stddev agg") {
     checkAnswer(
-      sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
-      (1 to 3).map(i => Row(i, math.sqrt(1/2.0), math.sqrt(1/4.0), math.sqrt(1/2.0))))
+        sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
+      (1 to 3).map(i => Row(i, math.sqrt(1 / 2.0), math.sqrt(1 / 4.0), math.sqrt(1 / 2.0))))
+  }
+
+  test("skewness and kurtosis agg") {
+      sql("SELECT a, skewness(b), kurtosis(b)  FROM testData2 GROUP BY a"),
+      (1 to 3).map(i => Row(i, 0.0, -2.0)))
   }
 
   test("inner join where, one match per row") {

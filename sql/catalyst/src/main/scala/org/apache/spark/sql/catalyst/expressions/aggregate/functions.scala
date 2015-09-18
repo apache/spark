@@ -113,7 +113,7 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
   protected val currentM3 = AttributeReference("currentM3", resultType)()
   protected val currentM2 = AttributeReference("currentM2", resultType)()
   protected val currentM1 = AttributeReference("currentM1", resultType)()
-  protected val currentM0 = AttributeReference("currentM2", resultType)()
+  protected val currentM0 = AttributeReference("currentM0", resultType)()
 
   override val bufferAttributes = currentM4 :: currentM3 :: currentM2 :: currentM1 :: currentM0 :: Nil
 
@@ -155,8 +155,8 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
       /* currentM4 = */ If(IsNull(child), currentM4, updateM4),
       /* currentM3 = */ If(IsNull(child), currentM3, updateM3),
       /* currentM2 = */ If(IsNull(child), currentM2, updateM2),
-      /* currentMean = */ If(IsNull(child), currentM1, updateM1),
-      /* currentCount = */ If(IsNull(child), currentM0,updateM0)
+      /* currentM1 = */ If(IsNull(child), currentM1, updateM1),
+      /* currentM0 = */ If(IsNull(child), currentM0,updateM0)
     )
   }
 
@@ -171,8 +171,8 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
 
     lazy val M2 = currentM2.left + currentM2.right + delta * deltaN * currentM0.left * currentM0.right
 
-    lazy val M3 = currentM3.left + currentM3.right + delta * delta * delta * currentM0.left *
-      currentM0.right * (currentM0.left - currentM0.right) / (currentM0.right * currentM0.right) +
+    lazy val M3 = currentM3.left + currentM3.right + deltaN * deltaN * delta * currentM0.left *
+      currentM0.right * (currentM0.left - currentM0.right) +
       deltaN * (currentM0.left * currentM2.right - currentM0.right * currentM2.left) *
         Cast(Literal(3), resultType)
 
@@ -190,31 +190,27 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
                           If(IsNull(currentM3.right), currentM3.left, M3)),
       /* currentM2 = */ If(IsNull(currentM2.left), currentM2.right,
                           If(IsNull(currentM2.right), currentM2.left, M2)),
-      /* currentMean = */ If(IsNull(currentM1.left), currentM1.right,
+      /* currentM1 = */ If(IsNull(currentM1.left), currentM1.right,
                             If(IsNull(currentM1.right), currentM1.left, M1)),
-      /* currentCount = */ If(IsNull(currentM0.left), currentM0.right,
+      /* currentM0 = */ If(IsNull(currentM0.left), currentM0.right,
                             If(IsNull(currentM0.right), currentM0.left, M0))
     )
   }
 }
 
 case class Skewness(child: Expression) extends StatisticalMoments(child) {
-  override def prettyName = "skewness"
+  override def prettyName = "min"
   // TODO: protect against neg sqrt
   override val evaluateExpression: Expression = {
-    Cast(currentM1, resultType)
+    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+        Cast(Sqrt(currentM0) * currentM3 / Sqrt(currentM2 * currentM2 * currentM2), resultType)))
   }
-//  override val evaluateExpression: Expression = {
-//    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
-//      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-//        Cast(Sqrt(currentM0) * currentM3 / Sqrt(currentM2 * currentM2 * currentM2), resultType)))
-//  }
 }
 
 case class Kurtosis(child: Expression) extends StatisticalMoments(child) {
   override def prettyName = "kurtosis"
   override val evaluateExpression = {
-//    Cast(currentM0 * currentM4 / (currentM2 * currentM2) - Cast(Literal(3), resultType), resultType)
     If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
       If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
         Cast(currentM0 * currentM4 / (currentM2 * currentM2) - Cast(Literal(3), resultType), resultType)))
@@ -1062,7 +1058,8 @@ object HyperLogLogPlusPlus {
   // scalastyle:on
 }
 
-case class KahanAverage(child: Expression) extends AlgebraicAggregate {
+
+abstract class StableMoments(child: Expression) extends AlgebraicAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -1079,19 +1076,33 @@ case class KahanAverage(child: Expression) extends AlgebraicAggregate {
   // we remove the old aggregate functions. Then, we will not need NullType at here.
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
 
-  private val resultType = DoubleType
+  protected val resultType = DoubleType
 
-  private val currentMean = AttributeReference("currentMean", resultType)()
-  private val currentMeanErr = AttributeReference("currentMeanErr", resultType)()
-  private val currentCount = AttributeReference("currentCount", resultType)()
+  protected val currentM4 = AttributeReference("currentM4", resultType)()
+  protected val currentM3 = AttributeReference("currentM3", resultType)()
+  protected val currentM2 = AttributeReference("currentM2", resultType)()
+  protected val currentM1 = AttributeReference("currentM1", resultType)()
+  protected val currentM4Err = AttributeReference("currentM4Err", resultType)()
+  protected val currentM3Err = AttributeReference("currentM3Err", resultType)()
+  protected val currentM2Err = AttributeReference("currentM2Err", resultType)()
+  protected val currentM1Err = AttributeReference("currentM1Err", resultType)()
+  protected val currentM0 = AttributeReference("currentM0", resultType)()
 
-  override val bufferAttributes = currentMean :: currentMeanErr :: currentCount :: Nil
+  override val bufferAttributes = currentM4 :: currentM3 :: currentM2 :: currentM1 ::
+    currentM4Err :: currentM3Err :: currentM2Err :: currentM1Err :: currentM0 :: Nil
 
   override val initialValues = Seq(
-    /* currentMean = */ Cast(Literal(0), resultType),
-    /* currentMeanErr = */ Cast(Literal(0), resultType),
-    /* currentCount = */ Cast(Literal(0), resultType)
+    /* currentM4 = */ Cast(Literal(0), resultType),
+    /* currentM3 = */ Cast(Literal(0), resultType),
+    /* currentM2 = */ Cast(Literal(0), resultType),
+    /* currentM1 = */ Cast(Literal(0), resultType),
+    /* currentM4Err = */ Cast(Literal(0), resultType),
+    /* currentM3Err = */ Cast(Literal(0), resultType),
+    /* currentM2Err = */ Cast(Literal(0), resultType),
+    /* currentM1Err = */ Cast(Literal(0), resultType),
+    /* currentM0 = */ Cast(Literal(0), resultType)
   )
+
   def kahan(s1: Expression, c1: Expression, s2: Expression, c2: Expression) = {
     val correctedS2 = s2 + (c1 + c2)
     val s = s1 + correctedS2
@@ -1104,35 +1115,103 @@ case class KahanAverage(child: Expression) extends AlgebraicAggregate {
     val x = Coalesce(
       Cast(child, resultType) :: Cast(Literal(0), resultType) :: Nil
     )
-    lazy val updateCount = {
-      If(IsNull(child), currentCount, currentCount + Cast(Literal(1), resultType))
+    lazy val updateM0: Expression = {
+      If(IsNull(child), currentM0, currentM0 + Cast(Literal(1), resultType))
     }
-    lazy val delta = Subtract(x, currentMean)
-    lazy val (updateMean, updateMeanErr) = kahan(currentMean, currentMeanErr, delta / updateCount, Cast(Literal(0), resultType))
+    lazy val delta = Subtract(x, currentM1)
+    lazy val deltaN = Divide(delta, updateM0)
+
+    lazy val (updateM2, updateM2Err) = kahan(currentM2, currentM2Err, deltaN * delta * (updateM0 - Cast(Literal(1), resultType)), Cast(Literal(0), resultType))
+    lazy val (updateM1, updateM1Err) = kahan(currentM1, currentM1Err, deltaN, Cast(Literal(0), resultType))
+
+    lazy val (updateM3, updateM3Err) = kahan(currentM3, currentM3Err, deltaN * deltaN * delta * (updateM0 - Cast(Literal(1), resultType)) *
+      (updateM0 - Cast(Literal(2), resultType)) - deltaN * currentM2 * Cast(Literal(3), resultType), Cast(Literal(0), resultType))
+
+    lazy val (updateM4, updateM4Err) = kahan(currentM4, currentM4Err, deltaN * deltaN * deltaN * delta * (updateM0 - Cast(Literal(1), resultType)) *
+      (updateM0 * updateM0 - updateM0 * Cast(Literal(3), resultType) + Cast(Literal(3), resultType)) +
+      deltaN * deltaN * currentM2 * Cast(Literal(6), resultType) - deltaN * currentM3 * Cast(Literal(4), resultType),
+      Cast(Literal(0), resultType))
+
     Seq(
-      /* currentMean = */ If(IsNull(child), currentMean, updateMean),
-      If(IsNull(child), currentMeanErr, updateMeanErr),
-      /* currentCount = */ If(IsNull(child), currentCount, updateCount)
+      /* currentM4 = */ If(IsNull(child), currentM4, updateM4),
+      /* currentM3 = */ If(IsNull(child), currentM3, updateM3),
+      /* currentM2 = */ If(IsNull(child), currentM2, updateM2),
+      /* currentM1 = */ If(IsNull(child), currentM1, updateM1),
+      /* currentM4Err = */ If(IsNull(child), currentM4Err, updateM4Err),
+      /* currentM3Err = */ If(IsNull(child), currentM3Err, updateM3Err),
+      /* currentM2Err = */ If(IsNull(child), currentM2Err, updateM2Err),
+      /* currentM1Err = */ If(IsNull(child), currentM1Err, updateM1Err),
+      /* currentM0 = */ If(IsNull(child), currentM0, updateM0)
     )
   }
-
 
   override val mergeExpressions = {
-    lazy val updateCount = currentCount.left + currentCount.right
-    lazy val delta = currentMean.right - currentMean.left
 
-    lazy val (updateMean, updateMeanErr) = kahan(currentMean.left, currentMeanErr.left, delta * (currentCount.right / updateCount), Cast(Literal(0), resultType))
+    lazy val M0 = currentM0.left + currentM0.right
+    lazy val delta = currentM1.right - currentM1.left
+    lazy val deltaN = delta / M0
+
+    lazy val (updateM1, updateM1Err) = kahan(currentM1.left, currentM1Err.left, delta * (currentM0.right / M0), Cast(Literal(0), resultType))
+
+    lazy val (tmpM2, tmpM2Err) = kahan(currentM2.left, currentM2Err.left, currentM2.right, currentM2Err.right)
+    lazy val (updateM2, updateM2Err) = kahan(tmpM2, tmpM2Err, delta * deltaN * currentM0.left * currentM0.right, Cast(Literal(0), resultType))
+
+    lazy val (tmpM3, tmpM3Err) = kahan(currentM3.left, currentM3Err.left, currentM3.right, currentM3Err.right)
+    lazy val (updateM3, updateM3Err) = kahan(tmpM3, tmpM3Err, deltaN * deltaN * delta * currentM0.left *
+      currentM0.right * (currentM0.left - currentM0.right) +
+      deltaN * (currentM0.left * currentM2.right - currentM0.right * currentM2.left) *
+        Cast(Literal(3), resultType), Cast(Literal(0), resultType))
+
+    lazy val (tmpM4, tmpM4Err) = kahan(currentM4.left, currentM4Err.left, currentM4.right, currentM4Err.right)
+    lazy val (updateM4, updateM4Err) = kahan(tmpM4, tmpM4Err, deltaN * deltaN * deltaN * delta * currentM0.left *
+      currentM0.right * (currentM0.left * currentM0.left - currentM0.left * currentM0.right +
+      currentM0.right * currentM0.right) + deltaN * deltaN * Cast(Literal(6), resultType) *
+      (currentM0.left * currentM0.left * currentM2.right +
+        currentM0.right * currentM0.right * currentM2.left) +
+      deltaN * Cast(Literal(4), resultType) * (currentM0.left * currentM3.right - currentM0.right * currentM3.left),
+      Cast(Literal(0), resultType))
 
     Seq(
-      /* currentMean = */ If(IsNull(currentMean.left), currentMean.right,
-        If(IsNull(currentMean.right), currentMean.left, updateMean)),
-      If(IsNull(currentMeanErr.left), currentMeanErr.right,
-        If(IsNull(currentMeanErr.right), currentMeanErr.left, updateMeanErr)),
-      /* currentCount = */ If(IsNull(currentCount.left), currentCount.right,
-        If(IsNull(currentCount.right), currentCount.left, updateCount))
+      /* currentM4 = */ If(IsNull(currentM4.left), currentM4.right,
+        If(IsNull(currentM4.right), currentM4.left, updateM4)),
+      /* currentM3 = */ If(IsNull(currentM3.left), currentM3.right,
+        If(IsNull(currentM3.right), currentM3.left, updateM3)),
+      /* currentM2 = */ If(IsNull(currentM2.left), currentM2.right,
+        If(IsNull(currentM2.right), currentM2.left, updateM2)),
+      /* currentM1 = */ If(IsNull(currentM1.left), currentM1.right,
+        If(IsNull(currentM1.right), currentM1.left, updateM1)),
+      /* currentM4Err = */ If(IsNull(currentM4Err.left), currentM4Err.right,
+        If(IsNull(currentM4Err.right), currentM4Err.left, updateM4Err)),
+      /* currentM3Err = */ If(IsNull(currentM3Err.left), currentM3Err.right,
+        If(IsNull(currentM3Err.right), currentM3Err.left, updateM3Err)),
+      /* currentM2Err = */ If(IsNull(currentM2Err.left), currentM2Err.right,
+        If(IsNull(currentM2Err.right), currentM2Err.left, updateM2Err)),
+      /* currentM1Err = */ If(IsNull(currentM1Err.left), currentM1Err.right,
+        If(IsNull(currentM1Err.right), currentM1Err.left, updateM1Err)),
+      /* currentM0 = */ If(IsNull(currentM0.left), currentM0.right,
+        If(IsNull(currentM0.right), currentM0.left, M0))
     )
   }
+}
 
-  // If all input are nulls, currentCount will be 0 and we will get null after the division.
-  override val evaluateExpression = currentMean * Cast(Literal(1), resultType)
+case class KahanSkewness(child: Expression) extends StableMoments(child) {
+  override def prettyName = "skewness"
+  // TODO: protect against neg sqrt
+  // TODO: skewness divides by zero if var is 0
+  override val evaluateExpression: Expression = {
+    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+        Cast(Sqrt(currentM0) * currentM3 / Sqrt(currentM2 * currentM2 * currentM2), resultType)))
+  }
+}
+
+case class KahanKurtosis(child: Expression) extends StableMoments(child) {
+  override def prettyName = "skewness"
+  // TODO: protect against neg sqrt
+  // TODO: skewness divides by zero if var is 0
+  override val evaluateExpression: Expression = {
+    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+        Cast(currentM0 * currentM4 / (currentM2 * currentM2) - Cast(Literal(3), resultType), resultType)))
+  }
 }
