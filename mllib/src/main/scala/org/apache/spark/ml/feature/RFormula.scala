@@ -42,8 +42,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 /**
  * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '.', '~', '+', and '-'. Also see the
- * R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
+ * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
 @Experimental
 class RFormula(override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
@@ -82,36 +82,59 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     require(isDefined(formula), "Formula must be defined first.")
     val parsedFormula = RFormulaParser.parse($(formula))
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
-    // StringType terms and terms representing interactions need to be encoded before assembly.
-    // TODO(ekl) add support for feature interactions
     val encoderStages = ArrayBuffer[PipelineStage]()
+
+    val groupPrefixes = mutable.Map[String, String]()
     val tempColumns = ArrayBuffer[String]()
     val takenNames = mutable.Set(dataset.columns: _*)
-    val encodedTerms = resolvedFormula.terms.map { term =>
+    def tmpColumn(prefix: String): String = {
+      var col = prefix
+      while (takenNames.contains(col)) {
+        col += "_"
+      }
+      takenNames.add(col)
+      tempColumns += col
+      col
+    }
+
+    // First we index each string column referenced by the input terms.
+    val indexed: Map[String, String] = resolvedFormula.terms.flatten.distinct.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
-          val indexCol = term + "_idx_" + uid
-          val encodedCol = {
-            var tmp = term
-            while (takenNames.contains(tmp)) {
-              tmp += "_"
-            }
-            tmp
-          }
-          takenNames.add(indexCol)
-          takenNames.add(encodedCol)
-          encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
-          encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
-          tempColumns += indexCol
-          tempColumns += encodedCol
-          encodedCol
+          val indexCol = tmpColumn(term + "_stridx")
+          encoderStages += new StringIndexer()
+            .setInputCol(term)
+            .setOutputCol(indexCol)
+          (term, indexCol)
         case _ =>
-          term
+          (term, term)
       }
+    }.toMap
+
+    // Then we handle one-hot encoding and interactions between terms.
+    val encodedTerms = resolvedFormula.terms.map {
+      case Seq(term) if dataset.schema(term).dataType == StringType =>
+        val encodedCol = tmpColumn(term + "_onehot")
+        encoderStages += new OneHotEncoder()
+          .setInputCol(indexed(term))
+          .setOutputCol(encodedCol)
+        groupPrefixes(encodedCol) = term + "_"
+        encodedCol
+      case Seq(term) =>
+        term
+      case terms =>
+        val interactionCol = tmpColumn("interaction_" + terms.hashCode)
+        encoderStages += new Interaction()
+          .setInputCols(terms.map(indexed).toArray)
+          .setOutputCol(interactionCol)
+        groupPrefixes(interactionCol) = ""
+        interactionCol
     }
+
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
+      .setGroupPrefixes(groupPrefixes.toMap)
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))

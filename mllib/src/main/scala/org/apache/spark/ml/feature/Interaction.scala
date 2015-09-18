@@ -149,8 +149,14 @@ class Interaction(override val uid: String) extends Transformer
     features.reverse.foreach { f =>
       val encodedAttrs = f.dataType match {
         case _: NumericType | BooleanType =>
-          val attr = Attribute.fromStructField(f)
-          encodedFeatureAttrs(Seq(attr), None)
+          val attr = Attribute.decodeStructField(f, preserveName = true)
+          if (attr == UnresolvedAttribute) {
+            encodedFeatureAttrs(Seq(NumericAttribute.defaultAttr.withName(f.name)), None)
+          } else if (!attr.name.isDefined) {
+            encodedFeatureAttrs(Seq(attr.withName(f.name)), None)
+          } else {
+            encodedFeatureAttrs(Seq(attr), None)
+          }
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(f)
           encodedFeatureAttrs(group.attributes.get, Some(group.name))
