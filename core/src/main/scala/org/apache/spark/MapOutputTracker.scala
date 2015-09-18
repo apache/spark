@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io._
+import java.util.Arrays
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
@@ -132,13 +133,43 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    *         describing the shuffle blocks that are stored at that block manager.
    */
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
-  : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, reduce $reduceId")
-    val startTime = System.currentTimeMillis
+    val statuses = getStatuses(shuffleId)
+    // Synchronize on the returned array because, on the driver, it gets mutated in place
+    statuses.synchronized {
+      return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses)
+    }
+  }
 
+  /**
+   * Return statistics about all of the outputs for a given shuffle.
+   */
+  def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
+    val statuses = getStatuses(dep.shuffleId)
+    // Synchronize on the returned array because, on the driver, it gets mutated in place
+    statuses.synchronized {
+      val totalSizes = new Array[Long](dep.partitioner.numPartitions)
+      for (s <- statuses) {
+        for (i <- 0 until totalSizes.length) {
+          totalSizes(i) += s.getSizeForBlock(i)
+        }
+      }
+      new MapOutputStatistics(dep.shuffleId, totalSizes)
+    }
+  }
+
+  /**
+   * Get or fetch the array of MapStatuses for a given shuffle ID. NOTE: clients MUST synchronize
+   * on this array when reading it, because on the driver, we may be changing it in place.
+   *
+   * (It would be nice to remove this restriction in the future.)
+   */
+  private def getStatuses(shuffleId: Int): Array[MapStatus] = {
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
+      val startTime = System.currentTimeMillis
       var fetchedStatuses: Array[MapStatus] = null
       fetching.synchronized {
         // Someone else is fetching it; wait for them to be done
@@ -160,7 +191,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
 
       if (fetchedStatuses == null) {
-        // We won the race to fetch the output locs; do so
+        // We won the race to fetch the statuses; do so
         logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
         // This try-finally prevents hangs due to timeouts:
         try {
@@ -175,22 +206,18 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           }
         }
       }
-      logDebug(s"Fetching map output location for shuffle $shuffleId, reduce $reduceId took " +
+      logDebug(s"Fetching map output statuses for shuffle $shuffleId took " +
         s"${System.currentTimeMillis - startTime} ms")
 
       if (fetchedStatuses != null) {
-        fetchedStatuses.synchronized {
-          return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
-        }
+        return fetchedStatuses
       } else {
         logError("Missing all output locations for shuffle " + shuffleId)
         throw new MetadataFetchFailedException(
-          shuffleId, reduceId, "Missing all output locations for shuffle " + shuffleId)
+          shuffleId, -1, "Missing all output locations for shuffle " + shuffleId)
       }
     } else {
-      statuses.synchronized {
-        return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses)
-      }
+      return statuses
     }
   }
 

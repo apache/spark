@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
+import java.util.UUID
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -73,7 +74,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // The modification time of the newest log detected during the last scan. This is used
   // to ignore logs that are older during subsequent scans, to avoid processing data that
   // is already known.
-  private var lastModifiedTime = -1L
+  private var lastScanTime = -1L
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -145,16 +146,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appId,
+            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
               HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
           val appListener = new ApplicationEventListener()
           replayBus.addListener(appListener)
-          val appInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)), replayBus)
-          appInfo.map { info =>
-            ui.setAppName(s"${info.name} ($appId)")
-
+          val appAttemptInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
+            replayBus)
+          appAttemptInfo.map { info =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
             // make sure to set admin acls before view acls so they are properly picked up
@@ -179,15 +179,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private[history] def checkForLogs(): Unit = {
     try {
+      val newLastScanTime = getNewLastScanTime()
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
         .getOrElse(Seq[FileStatus]())
-      var newLastModifiedTime = lastModifiedTime
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           try {
             getModificationTime(entry).map { time =>
-              newLastModifiedTime = math.max(newLastModifiedTime, time)
-              time >= lastModifiedTime
+              time >= lastScanTime
             }.getOrElse(false)
           } catch {
             case e: AccessControlException =>
@@ -224,9 +223,26 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
 
-      lastModifiedTime = newLastModifiedTime
+      lastScanTime = newLastScanTime
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
+    }
+  }
+
+  private def getNewLastScanTime(): Long = {
+    val fileName = "." + UUID.randomUUID().toString
+    val path = new Path(logDir, fileName)
+    val fos = fs.create(path)
+
+    try {
+      fos.close()
+      fs.getFileStatus(path).getModificationTime
+    } catch {
+      case e: Exception =>
+        logError("Exception encountered when attempting to update last scan time", e)
+        lastScanTime
+    } finally {
+      fs.delete(path)
     }
   }
 

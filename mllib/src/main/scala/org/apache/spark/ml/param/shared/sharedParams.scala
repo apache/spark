@@ -127,10 +127,10 @@ private[ml] trait HasRawPredictionCol extends Params {
 private[ml] trait HasProbabilityCol extends Params {
 
   /**
-   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
+   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
    * @group param
    */
-  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
+  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities")
 
   setDefault(probabilityCol, "probability")
 
@@ -223,10 +223,10 @@ private[ml] trait HasOutputCol extends Params {
 private[ml] trait HasCheckpointInterval extends Params {
 
   /**
-   * Param for checkpoint interval (>= 1).
+   * Param for checkpoint interval (>= 1). E.g. 10 means that the cache will get checkpointed every 10 iterations..
    * @group param
    */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1)", ParamValidators.gtEq(1))
+  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", ParamValidators.gtEq(1))
 
   /** @group getParam */
   final def getCheckpointInterval: Int = $(checkpointInterval)
@@ -270,10 +270,10 @@ private[ml] trait HasHandleInvalid extends Params {
 private[ml] trait HasStandardization extends Params {
 
   /**
-   * Param for whether to standardize the training features before fitting the model..
+   * Param for whether to standardize the training features before fitting the model.
    * @group param
    */
-  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features before fitting the model.")
+  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features before fitting the model")
 
   setDefault(standardization, true)
 
@@ -304,10 +304,10 @@ private[ml] trait HasSeed extends Params {
 private[ml] trait HasElasticNetParam extends Params {
 
   /**
-   * Param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
+   * Param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
    * @group param
    */
-  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", ParamValidators.inRange(0, 1))
+  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
   final def getElasticNetParam: Double = $(elasticNetParam)

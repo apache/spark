@@ -94,7 +94,7 @@ private[spark] object ClosureCleaner extends Logging {
     if (cls.isPrimitive) {
       cls match {
         case java.lang.Boolean.TYPE => new java.lang.Boolean(false)
-        case java.lang.Character.TYPE => new java.lang.Character('\0')
+        case java.lang.Character.TYPE => new java.lang.Character('\u0000')
         case java.lang.Void.TYPE =>
           // This should not happen because `Foo(void x) {}` does not compile.
           throw new IllegalStateException("Unexpected void parameter in constructor")

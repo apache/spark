@@ -17,130 +17,54 @@
 
 package org.apache.spark.sql.execution.local
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.types.{IntegerType, StringType}
+
 
 class LocalNodeTest extends SparkFunSuite {
 
-  /**
-   * Runs the LocalNode and makes sure the answer matches the expected result.
-   * @param input the input data to be used.
-   * @param nodeFunction a function which accepts the input LocalNode and uses it to instantiate
-   *                     the local physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
-   */
-  protected def checkAnswer(
-      input: DataFrame,
-      nodeFunction: LocalNode => LocalNode,
-      expectedAnswer: Seq[Row],
-      sortAnswers: Boolean = true): Unit = {
-    doCheckAnswer(
-      input :: Nil,
-      nodes => nodeFunction(nodes.head),
-      expectedAnswer,
-      sortAnswers)
-  }
+  protected val conf: SQLConf = new SQLConf
+  protected val kvIntAttributes = Seq(
+    AttributeReference("k", IntegerType)(),
+    AttributeReference("v", IntegerType)())
+  protected val joinNameAttributes = Seq(
+    AttributeReference("id1", IntegerType)(),
+    AttributeReference("name", StringType)())
+  protected val joinNicknameAttributes = Seq(
+    AttributeReference("id2", IntegerType)(),
+    AttributeReference("nickname", StringType)())
 
   /**
-   * Runs the LocalNode and makes sure the answer matches the expected result.
-   * @param left the left input data to be used.
-   * @param right the right input data to be used.
-   * @param nodeFunction a function which accepts the input LocalNode and uses it to instantiate
-   *                     the local physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
+   * Wrap a function processing two [[LocalNode]]s such that:
+   *   (1) all input rows are automatically converted to unsafe rows
+   *   (2) all output rows are automatically converted back to safe rows
    */
-  protected def checkAnswer2(
-      left: DataFrame,
-      right: DataFrame,
-      nodeFunction: (LocalNode, LocalNode) => LocalNode,
-      expectedAnswer: Seq[Row],
-      sortAnswers: Boolean = true): Unit = {
-    doCheckAnswer(
-      left :: right :: Nil,
-      nodes => nodeFunction(nodes(0), nodes(1)),
-      expectedAnswer,
-      sortAnswers)
-  }
-
-  /**
-   * Runs the `LocalNode`s and makes sure the answer matches the expected result.
-   * @param input the input data to be used.
-   * @param nodeFunction a function which accepts a sequence of input `LocalNode`s and uses them to
-   *                     instantiate the local physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
-   */
-  protected def doCheckAnswer(
-    input: Seq[DataFrame],
-    nodeFunction: Seq[LocalNode] => LocalNode,
-    expectedAnswer: Seq[Row],
-    sortAnswers: Boolean = true): Unit = {
-    LocalNodeTest.checkAnswer(
-      input.map(dataFrameToSeqScanNode), nodeFunction, expectedAnswer, sortAnswers) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
+  protected def wrapForUnsafe(
+      f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
+    (left: LocalNode, right: LocalNode) => {
+      val _left = ConvertToUnsafeNode(conf, left)
+      val _right = ConvertToUnsafeNode(conf, right)
+      val r = f(_left, _right)
+      ConvertToSafeNode(conf, r)
     }
   }
 
-  protected def dataFrameToSeqScanNode(df: DataFrame): SeqScanNode = {
-    new SeqScanNode(
-      df.queryExecution.sparkPlan.output,
-      df.queryExecution.toRdd.map(_.copy()).collect())
-  }
-
-}
-
-/**
- * Helper methods for writing tests of individual local physical operators.
- */
-object LocalNodeTest {
-
   /**
-   * Runs the `LocalNode`s and makes sure the answer matches the expected result.
-   * @param input the input data to be used.
-   * @param nodeFunction a function which accepts the input `LocalNode`s and uses them to
-   *                     instantiate the local physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
+   * Recursively resolve all expressions in a [[LocalNode]] using the node's attributes.
    */
-  def checkAnswer(
-    input: Seq[SeqScanNode],
-    nodeFunction: Seq[LocalNode] => LocalNode,
-    expectedAnswer: Seq[Row],
-    sortAnswers: Boolean): Option[String] = {
-
-    val outputNode = nodeFunction(input)
-
-    val outputResult: Seq[Row] = try {
-      outputNode.collect()
-    } catch {
-      case NonFatal(e) =>
-        val errorMessage =
-          s"""
-              | Exception thrown while executing local plan:
-              | $outputNode
-              | == Exception ==
-              | $e
-              | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
-          """.stripMargin
-        return Some(errorMessage)
-    }
-
-    SQLTestUtils.compareAnswers(outputResult, expectedAnswer, sortAnswers).map { errorMessage =>
-      s"""
-          | Results do not match for local plan:
-          | $outputNode
-          | $errorMessage
-       """.stripMargin
+  protected def resolveExpressions(outputNode: LocalNode): LocalNode = {
+    outputNode transform {
+      case node: LocalNode =>
+        val inputMap = node.output.map { a => (a.name, a) }.toMap
+        node transformExpressions {
+          case UnresolvedAttribute(Seq(u)) =>
+            inputMap.getOrElse(u,
+              sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
+        }
     }
   }
+
 }

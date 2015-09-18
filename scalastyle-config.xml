@@ -168,6 +168,14 @@ This file is divided into 3 sections:
     scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <!-- As of SPARK-10330 JobContext methods should not be called directly -->
+  <check customId="jobcontext" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">^getConfiguration$|^getTaskAttemptID$</parameter></parameters>
+    <customMessage>Instead of calling .getConfiguration() or .getTaskAttemptID() directly,
+    use SparkHadoopUtil's getConfigurationFromJobContext() and getTaskAttemptIDFromTaskAttemptContext() methods.
+    </customMessage>
+  </check>
+
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->

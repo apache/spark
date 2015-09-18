@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.sql.types.{StringType, StructType, StructField, DoubleType}
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
@@ -164,5 +165,12 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       case Row(a: String, b: String) =>
         assert(a === b)
     }
+  }
+
+  test("IndexToString.transformSchema (SPARK-10573)") {
+    val idxToStr = new IndexToString().setInputCol("input").setOutputCol("output")
+    val inSchema = StructType(Seq(StructField("input", DoubleType)))
+    val outSchema = idxToStr.transformSchema(inSchema)
+    assert(outSchema("output").dataType === StringType)
   }
 }
