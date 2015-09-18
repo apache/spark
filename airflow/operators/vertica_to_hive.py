@@ -72,12 +72,16 @@ class VerticaToHiveTransfer(BaseOperator):
 
     @classmethod
     def type_map(cls, vertica_type):
-        t = datatypes
+        # vertica-python datatype.py donot provied the full type mapping access.
+        # Manual hack. Reference: https://github.com/uber/vertica-python/blob/master/vertica_python/vertica/column.py
         d = {
-            t.BINARY: 'INT',
-            t.NUMBER: 'INT',
+            5: 'BOOLEAN',
+            6: 'INT',
+            7: 'FLOAT'
+            8: 'STRING',
+            9: 'STRING',
+            16: 'FLOAT',
         }
-        logging.info(vertica_type)
         return d[vertica_type] if vertica_type in d else 'STRING'
 
     def execute(self, context):
@@ -93,6 +97,7 @@ class VerticaToHiveTransfer(BaseOperator):
             field_dict = OrderedDict()
             col_count = 0
             for field in cursor.description:
+                logging.info(field)
                 col_count += 1
                 col_position = "Column{position}".format(position=col_count)
                 field_dict[col_position if field[0] == '' else field[0]] = self.type_map(field[1])
