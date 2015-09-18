@@ -34,12 +34,13 @@ private[spark] class BinaryFileRDD[T](
 
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
+    val conf = getConf
     inputFormat match {
       case configurable: Configurable =>
-        configurable.setConf(getConf)
+        configurable.setConf(conf)
       case _ =>
     }
-    val jobContext = newJobContext(getConf, jobId)
+    val jobContext = newJobContext(conf, jobId)
     inputFormat.setMinPartitions(jobContext, minPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
