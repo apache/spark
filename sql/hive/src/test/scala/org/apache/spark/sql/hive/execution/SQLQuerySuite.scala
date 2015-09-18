@@ -1116,6 +1116,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
 
+  test("SPARK-10656: select(df(*)) fails when a column has special characters") {
+    // user should backtick the name if the column with special character '.'
+    // otherwise it's hard to differentiate the intention of "a.b" and "g.f"
+    val df = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+      """{"a.b": 10, "d": 11, "f": {"g": 12} }""" :: Nil))
+    checkAnswer(df.select("f.g"), Row(12))
+    checkAnswer(df.select("`a.b`"), Row(10))
+    checkAnswer(df.select("*"), Row(10, 11, Row(12)))
+    checkAnswer(df.withColumnRenamed("f", "h").select("h"), Row(Row(12)))
+    checkAnswer(df.withColumnRenamed("f", "h").select("`a.b`"), Row(10))
+  }
+
   test("Convert hive interval term into Literal of CalendarIntervalType") {
     checkAnswer(sql("select interval '10-9' year to month"),
       Row(CalendarInterval.fromString("interval 10 years 9 months")))

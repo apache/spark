@@ -648,7 +648,7 @@ class DataFrame private[sql](
    */
   def col(colName: String): Column = colName match {
     case "*" =>
-      Column(ResolvedStar(schema.fieldNames.map(resolve)))
+      Column(ResolvedStar(schema.fieldNames.map(name => resolve(s"`$name`"))))
     case _ =>
       val expr = resolve(colName)
       Column(expr)
@@ -1181,7 +1181,7 @@ class DataFrame private[sql](
     if (shouldRename) {
       val colNames = schema.map { field =>
         val name = field.name
-        if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
+        if (resolver(name, existingName)) Column(s"`$name`").as(newName) else Column(s"`$name`")
       }
       select(colNames : _*)
     } else {
