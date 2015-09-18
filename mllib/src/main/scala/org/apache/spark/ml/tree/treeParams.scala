@@ -20,7 +20,7 @@ package org.apache.spark.ml.tree
 import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasThresholds}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
@@ -30,7 +30,7 @@ import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait DecisionTreeParams extends PredictorParams {
+private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointInterval {
 
   /**
    * Maximum depth of the tree (>= 0).
@@ -96,21 +96,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
-  /**
-   * Specifies how often to checkpoint the cached node IDs.
-   * E.g. 10 means that the cache will get checkpointed every 10 iterations.
-   * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
-   * [[org.apache.spark.SparkContext]].
-   * Must be >= 1.
-   * (default = 10)
-   * @group expertParam
-   */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "Specifies" +
-    " how often to checkpoint the cached node IDs.  E.g. 10 means that the cache will get" +
-    " checkpointed every 10 iterations. This is only used if cacheNodeIds is true and if the" +
-    " checkpoint directory is set in the SparkContext. Must be >= 1.",
-    ParamValidators.gtEq(1))
-
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
@@ -150,11 +135,16 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
-  /** @group expertSetParam */
+  /**
+   * Specifies how often to checkpoint the cached node IDs.
+   * E.g. 10 means that the cache will get checkpointed every 10 iterations.
+   * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
+   * [[org.apache.spark.SparkContext]].
+   * Must be >= 1.
+   * (default = 10)
+   * @group expertSetParam
+   */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
-
-  /** @group expertGetParam */
-  final def getCheckpointInterval: Int = $(checkpointInterval)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
@@ -375,17 +365,7 @@ private[ml] object RandomForestParams {
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
-
-  /**
-   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
-   * estimator.
-   * (default = 0.1)
-   * @group param
-   */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size (a.k.a." +
-    " learning rate) in interval (0, 1] for shrinking the contribution of each estimator",
-    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
@@ -403,11 +383,19 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-  /** @group setParam */
+  /**
+   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
+   * estimator.
+   * (default = 0.1)
+   * @group setParam
+   */
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
-  /** @group getParam */
-  final def getStepSize: Double = $(stepSize)
+  override def validateParams(): Unit = {
+    require(ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)(
+      getStepSize), "GBT parameter stepSize should be in interval (0, 1], " +
+      s"but it given invalid value $getStepSize.")
+  }
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(

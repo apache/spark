@@ -17,23 +17,25 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.test.SharedSQLContext
 
-class LimitNodeSuite extends LocalNodeTest with SharedSQLContext {
+class LimitNodeSuite extends LocalNodeTest {
 
-  test("basic") {
-    checkAnswer(
-      testData,
-      node => LimitNode(10, node),
-      testData.limit(10).collect()
-    )
+  private def testLimit(inputData: Array[(Int, Int)] = Array.empty, limit: Int = 10): Unit = {
+    val inputNode = new DummyNode(kvIntAttributes, inputData)
+    val limitNode = new LimitNode(conf, limit, inputNode)
+    val expectedOutput = inputData.take(limit)
+    val actualOutput = limitNode.collect().map { case row =>
+      (row.getInt(0), row.getInt(1))
+    }
+    assert(actualOutput === expectedOutput)
   }
 
   test("empty") {
-    checkAnswer(
-      emptyTestData,
-      node => LimitNode(10, node),
-      emptyTestData.limit(10).collect()
-    )
+    testLimit()
   }
+
+  test("basic") {
+    testLimit((1 to 100).map { i => (i, i) }.toArray, 20)
+  }
+
 }

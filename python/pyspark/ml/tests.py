@@ -31,7 +31,7 @@ else:
     import unittest
 
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
-from pyspark.sql import DataFrame, SQLContext
+from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.param import Param, Params
@@ -182,7 +182,7 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(testParams.getMaxIter(), 10)
         testParams.setMaxIter(100)
         self.assertTrue(testParams.isSet(maxIter))
-        self.assertEquals(testParams.getMaxIter(), 100)
+        self.assertEqual(testParams.getMaxIter(), 100)
 
         self.assertTrue(testParams.hasParam(inputCol))
         self.assertFalse(testParams.hasDefault(inputCol))
@@ -195,7 +195,7 @@ class ParamTests(PySparkTestCase):
         testParams._setDefault(seed=41)
         testParams.setSeed(43)
 
-        self.assertEquals(
+        self.assertEqual(
             testParams.explainParams(),
             "\n".join(["inputCol: input column name (undefined)",
                        "maxIter: max number of iterations (>= 0) (default: 10, current: 100)",
@@ -258,13 +258,29 @@ class FeatureTests(PySparkTestCase):
     def test_ngram(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
-            ([["a", "b", "c", "d", "e"]])], ["input"])
+            Row(input=["a", "b", "c", "d", "e"])])
         ngram0 = NGram(n=4, inputCol="input", outputCol="output")
         self.assertEqual(ngram0.getN(), 4)
         self.assertEqual(ngram0.getInputCol(), "input")
         self.assertEqual(ngram0.getOutputCol(), "output")
         transformedDF = ngram0.transform(dataset)
-        self.assertEquals(transformedDF.head().output, ["a b c d", "b c d e"])
+        self.assertEqual(transformedDF.head().output, ["a b c d", "b c d e"])
+
+    def test_stopwordsremover(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([Row(input=["a", "panda"])])
+        stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
+        # Default
+        self.assertEqual(stopWordRemover.getInputCol(), "input")
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, ["panda"])
+        # Custom
+        stopwords = ["panda"]
+        stopWordRemover.setStopWords(stopwords)
+        self.assertEqual(stopWordRemover.getInputCol(), "input")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, ["a"])
 
 
 class HasInducedError(Params):

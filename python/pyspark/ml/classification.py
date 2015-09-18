@@ -26,12 +26,14 @@ from pyspark.mllib.common import inherit_doc
 __all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassifier',
            'DecisionTreeClassificationModel', 'GBTClassifier', 'GBTClassificationModel',
            'RandomForestClassifier', 'RandomForestClassificationModel', 'NaiveBayes',
-           'NaiveBayesModel']
+           'NaiveBayesModel', 'MultilayerPerceptronClassifier',
+           'MultilayerPerceptronClassificationModel']
 
 
 @inherit_doc
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                         HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol):
+                         HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
+                         HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds):
     """
     Logistic regression.
     Currently, this class only supports binary classification.
@@ -65,17 +67,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     """
 
     # a placeholder to make it appear in the generated doc
-    elasticNetParam = \
-        Param(Params._dummy(), "elasticNetParam",
-              "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-              "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
-    fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.")
-    thresholds = Param(Params._dummy(), "thresholds",
-                       "Thresholds in multi-class classification" +
-                       " to adjust the probability of predicting each class." +
-                       " Array must have length equal to the number of classes, with values >= 0." +
-                       " The class with largest value p/t is predicted, where p is the original" +
-                       " probability of that class and t is the class' threshold.")
     threshold = Param(Params._dummy(), "threshold",
                       "Threshold in binary classification prediction, in range [0, 1]." +
                       " If threshold and thresholds are both set, they must match.")
@@ -83,40 +74,23 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 threshold=0.5, thresholds=None,
-                 probabilityCol="probability", rawPredictionCol="rawPrediction"):
+                 threshold=0.5, thresholds=None, probabilityCol="probability",
+                 rawPredictionCol="rawPrediction", standardization=True):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, thresholds=None, \
-                 probabilityCol="probability", rawPredictionCol="rawPrediction")
+                 threshold=0.5, thresholds=None, probabilityCol="probability", \
+                 rawPredictionCol="rawPrediction", standardization=True)
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty
-        #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
-        self.elasticNetParam = \
-            Param(self, "elasticNetParam",
-                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-                  "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
-        #: param for whether to fit an intercept term.
-        self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
         #: param for threshold in binary classification, in range [0, 1].
         self.threshold = Param(self, "threshold",
                                "Threshold in binary classification prediction, in range [0, 1]." +
                                " If threshold and thresholds are both set, they must match.")
-        #: param for thresholds or cutoffs in binary or multiclass classification
-        self.thresholds = \
-            Param(self, "thresholds",
-                  "Thresholds in multi-class classification" +
-                  " to adjust the probability of predicting each class." +
-                  " Array must have length equal to the number of classes, with values >= 0." +
-                  " The class with largest value p/t is predicted, where p is the original" +
-                  " probability of that class and t is the class' threshold.")
-        self._setDefault(maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1E-6,
-                         fitIntercept=True, threshold=0.5)
+        self._setDefault(maxIter=100, regParam=0.1, tol=1E-6, threshold=0.5)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
@@ -124,13 +98,13 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  threshold=0.5, thresholds=None,
-                  probabilityCol="probability", rawPredictionCol="rawPrediction"):
+                  threshold=0.5, thresholds=None, probabilityCol="probability",
+                  rawPredictionCol="rawPrediction", standardization=True):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  threshold=0.5, thresholds=None, \
-                  probabilityCol="probability", rawPredictionCol="rawPrediction")
+                  threshold=0.5, thresholds=None, probabilityCol="probability", \
+                  rawPredictionCol="rawPrediction", standardization=True)
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
@@ -141,32 +115,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
-
-    def setElasticNetParam(self, value):
-        """
-        Sets the value of :py:attr:`elasticNetParam`.
-        """
-        self._paramMap[self.elasticNetParam] = value
-        return self
-
-    def getElasticNetParam(self):
-        """
-        Gets the value of elasticNetParam or its default value.
-        """
-        return self.getOrDefault(self.elasticNetParam)
-
-    def setFitIntercept(self, value):
-        """
-        Sets the value of :py:attr:`fitIntercept`.
-        """
-        self._paramMap[self.fitIntercept] = value
-        return self
-
-    def getFitIntercept(self):
-        """
-        Gets the value of fitIntercept or its default value.
-        """
-        return self.getOrDefault(self.fitIntercept)
 
     def setThreshold(self, value):
         """
@@ -806,6 +754,135 @@ class NaiveBayesModel(JavaModel):
         log of class conditional probabilities.
         """
         return self._call_java("theta")
+
+
+@inherit_doc
+class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                                     HasMaxIter, HasTol, HasSeed):
+    """
+    Classifier trainer based on the Multilayer Perceptron.
+    Each layer has sigmoid activation function, output layer has softmax.
+    Number of inputs has to be equal to the size of feature vectors.
+    Number of outputs has to be equal to the total number of labels.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([
+    ...     (0.0, Vectors.dense([0.0, 0.0])),
+    ...     (1.0, Vectors.dense([0.0, 1.0])),
+    ...     (1.0, Vectors.dense([1.0, 0.0])),
+    ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
+    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 5, 2], blockSize=1, seed=11)
+    >>> model = mlp.fit(df)
+    >>> model.layers
+    [2, 5, 2]
+    >>> model.weights.size
+    27
+    >>> testDF = sqlContext.createDataFrame([
+    ...     (Vectors.dense([1.0, 0.0]),),
+    ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
+    >>> model.transform(testDF).show()
+    +---------+----------+
+    | features|prediction|
+    +---------+----------+
+    |[1.0,0.0]|       1.0|
+    |[0.0,0.0]|       0.0|
+    +---------+----------+
+    ...
+    """
+
+    # a placeholder to make it appear in the generated doc
+    layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
+                   "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
+                   "neurons and output layer of 10 neurons, default is [1, 1].")
+    blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
+                      "matrices. Data is stacked within partitions. If block size is more than " +
+                      "remaining data in a partition then it is adjusted to the size of this " +
+                      "data. Recommended size is between 10 and 1000, default is 128.")
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
+        """
+        super(MultilayerPerceptronClassifier, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
+        self.layers = Param(self, "layers", "Sizes of layers from input layer to output layer " +
+                            "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with " +
+                            "100 neurons and output layer of 10 neurons, default is [1, 1].")
+        self.blockSize = Param(self, "blockSize", "Block size for stacking input data in " +
+                               "matrices. Data is stacked within partitions. If block size is " +
+                               "more than remaining data in a partition then it is adjusted to " +
+                               "the size of this data. Recommended size is between 10 and 1000, " +
+                               "default is 128.")
+        self._setDefault(maxIter=100, tol=1E-4, layers=[1, 1], blockSize=128)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
+        Sets params for MultilayerPerceptronClassifier.
+        """
+        kwargs = self.setParams._input_kwargs
+        if layers is None:
+            return self._set(**kwargs).setLayers([1, 1])
+        else:
+            return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return MultilayerPerceptronClassificationModel(java_model)
+
+    def setLayers(self, value):
+        """
+        Sets the value of :py:attr:`layers`.
+        """
+        self._paramMap[self.layers] = value
+        return self
+
+    def getLayers(self):
+        """
+        Gets the value of layers or its default value.
+        """
+        return self.getOrDefault(self.layers)
+
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        self._paramMap[self.blockSize] = value
+        return self
+
+    def getBlockSize(self):
+        """
+        Gets the value of blockSize or its default value.
+        """
+        return self.getOrDefault(self.blockSize)
+
+
+class MultilayerPerceptronClassificationModel(JavaModel):
+    """
+    Model fitted by MultilayerPerceptronClassifier.
+    """
+
+    @property
+    def layers(self):
+        """
+        array of layer sizes including input and output layers.
+        """
+        return self._call_java("javaLayers")
+
+    @property
+    def weights(self):
+        """
+        vector of initial weights for the model that consists of the weights of layers.
+        """
+        return self._call_java("weights")
 
 
 if __name__ == "__main__":

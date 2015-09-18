@@ -31,14 +31,7 @@ import org.apache.spark.sql.test.SQLTestUtils
  * class's test helper methods can be used, see [[SortSuite]].
  */
 private[sql] abstract class SparkPlanTest extends SparkFunSuite {
-  protected def _sqlContext: SQLContext
-
-  /**
-   * Creates a DataFrame from a local Seq of Product.
-   */
-  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
-    _sqlContext.implicits.localSeqToDataFrameHolder(data)
-  }
+  protected def sqlContext: SQLContext
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
@@ -98,7 +91,7 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite {
       planFunction: Seq[SparkPlan] => SparkPlan,
       expectedAnswer: Seq[Row],
       sortAnswers: Boolean = true): Unit = {
-    SparkPlanTest.checkAnswer(input, planFunction, expectedAnswer, sortAnswers, _sqlContext) match {
+    SparkPlanTest.checkAnswer(input, planFunction, expectedAnswer, sortAnswers, sqlContext) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
@@ -122,7 +115,7 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite {
       expectedPlanFunction: SparkPlan => SparkPlan,
       sortAnswers: Boolean = true): Unit = {
     SparkPlanTest.checkAnswer(
-        input, planFunction, expectedPlanFunction, sortAnswers, _sqlContext) match {
+        input, planFunction, expectedPlanFunction, sortAnswers, sqlContext) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
@@ -149,13 +142,13 @@ object SparkPlanTest {
       planFunction: SparkPlan => SparkPlan,
       expectedPlanFunction: SparkPlan => SparkPlan,
       sortAnswers: Boolean,
-      _sqlContext: SQLContext): Option[String] = {
+      sqlContext: SQLContext): Option[String] = {
 
     val outputPlan = planFunction(input.queryExecution.sparkPlan)
     val expectedOutputPlan = expectedPlanFunction(input.queryExecution.sparkPlan)
 
     val expectedAnswer: Seq[Row] = try {
-      executePlan(expectedOutputPlan, _sqlContext)
+      executePlan(expectedOutputPlan, sqlContext)
     } catch {
       case NonFatal(e) =>
         val errorMessage =
@@ -170,7 +163,7 @@ object SparkPlanTest {
     }
 
     val actualAnswer: Seq[Row] = try {
-      executePlan(outputPlan, _sqlContext)
+      executePlan(outputPlan, sqlContext)
     } catch {
       case NonFatal(e) =>
         val errorMessage =
@@ -210,12 +203,12 @@ object SparkPlanTest {
       planFunction: Seq[SparkPlan] => SparkPlan,
       expectedAnswer: Seq[Row],
       sortAnswers: Boolean,
-      _sqlContext: SQLContext): Option[String] = {
+      sqlContext: SQLContext): Option[String] = {
 
     val outputPlan = planFunction(input.map(_.queryExecution.sparkPlan))
 
     val sparkAnswer: Seq[Row] = try {
-      executePlan(outputPlan, _sqlContext)
+      executePlan(outputPlan, sqlContext)
     } catch {
       case NonFatal(e) =>
         val errorMessage =
@@ -238,14 +231,14 @@ object SparkPlanTest {
     }
   }
 
-  private def executePlan(outputPlan: SparkPlan, _sqlContext: SQLContext): Seq[Row] = {
+  private def executePlan(outputPlan: SparkPlan, sqlContext: SQLContext): Seq[Row] = {
     // A very simple resolver to make writing tests easier. In contrast to the real resolver
     // this is always case sensitive and does not try to handle scoping or complex type resolution.
-    val resolvedPlan = _sqlContext.prepareForExecution.execute(
+    val resolvedPlan = sqlContext.prepareForExecution.execute(
       outputPlan transform {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
-          plan.transformExpressions {
+          plan transformExpressions {
             case UnresolvedAttribute(Seq(u)) =>
               inputMap.getOrElse(u,
                 sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
