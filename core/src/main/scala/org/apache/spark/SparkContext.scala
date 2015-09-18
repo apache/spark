@@ -832,8 +832,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *   sc.avroFile("/input-path")
    * }}}
    */
-  def avroFile(path: String, schemas: Schema*): RDD[GenericRecord] = {
-    conf.registerAvroSchemas(schemas : _*)
+  def avroFile(path: String, schema: Schema): RDD[GenericRecord] = {
+    conf.registerAvroSchemas(schema)
     hadoopFile[AvroWrapper[GenericRecord], NullWritable, AvroInputFormat[GenericRecord]](path)
       .map(_._1.datum).setName(path)
   }
