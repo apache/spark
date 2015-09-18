@@ -24,7 +24,9 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
-// NOTE: new task end reasons MUST be accompanied with serialization logic in util.JsonProtocol.
+// ==============================================================================================
+// NOTE: new task end reasons MUST be accompanied with serialization logic in util.JsonProtocol!
+// ==============================================================================================
 
 /**
  * :: DeveloperApi ::
