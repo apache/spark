@@ -85,7 +85,22 @@ object SamplePushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes operations to either side of a Union, Intersect or Except.
+ * Pushes certain operations to both sides of a Union, Intersect or Except operator.
+ * Operations that are safe to pushdown are listed as follows.
+ * Union:
+ * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
+ * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
+ * we will not be able to pushdown Projections.
+ *
+ * Intersect:
+ * It is not safe to pushdown Projections through it because we need to get the
+ * intersect of rows by comparing the entire rows. It is fine to pushdown Filters
+ * because we will not have non-deterministic expressions.
+ *
+ * Except:
+ * It is not safe to pushdown Projections through it because we need to get the
+ * intersect of rows by comparing the entire rows. It is fine to pushdown Filters
+ * because we will not have non-deterministic expressions.
  */
 object SetOperationPushDown extends Rule[LogicalPlan] {
 
@@ -122,40 +137,26 @@ object SetOperationPushDown extends Rule[LogicalPlan] {
         Filter(condition, left),
         Filter(pushToRight(condition, rewrites), right))
 
-    // Push down projection into union
+    // Push down projection through UNION ALL
     case Project(projectList, u @ Union(left, right)) =>
       val rewrites = buildRewrites(u)
       Union(
         Project(projectList, left),
         Project(projectList.map(pushToRight(_, rewrites)), right))
 
-    // Push down filter into intersect
+    // Push down filter through INTERSECT
     case Filter(condition, i @ Intersect(left, right)) =>
       val rewrites = buildRewrites(i)
       Intersect(
         Filter(condition, left),
         Filter(pushToRight(condition, rewrites), right))
 
-    // Push down projection into intersect
-    case Project(projectList, i @ Intersect(left, right)) =>
-      val rewrites = buildRewrites(i)
-      Intersect(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
-
-    // Push down filter into except
+    // Push down filter through EXCEPT
     case Filter(condition, e @ Except(left, right)) =>
       val rewrites = buildRewrites(e)
       Except(
         Filter(condition, left),
         Filter(pushToRight(condition, rewrites), right))
-
-    // Push down projection into except
-    case Project(projectList, e @ Except(left, right)) =>
-      val rewrites = buildRewrites(e)
-      Except(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
   }
 }
 
