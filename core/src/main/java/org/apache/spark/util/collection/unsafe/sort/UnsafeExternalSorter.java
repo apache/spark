@@ -131,7 +131,7 @@ public final class UnsafeExternalSorter {
     this.writeMetrics = new ShuffleWriteMetrics();
 
     if (existingInMemorySorter == null) {
-      initializeForWriting();
+      initializeForWriting(0);
       // Acquire a new page as soon as we construct the sorter to ensure that we have at
       // least one page to work with. Otherwise, other operators in the same task may starve
       // this sorter (SPARK-9709). We don't need to do this if we already have an existing sorter.
@@ -156,19 +156,27 @@ public final class UnsafeExternalSorter {
   // TODO: metrics tracking + integration with shuffle write metrics
   // need to connect the write metrics to task metrics so we count the spill IO somewhere.
 
+  private long pointerArrayMemory() {
+    assert initialSize > 0 : "cannot access pointer array memory before sorter is initialized";
+    return UnsafeInMemorySorter.getMemoryRequirementsForPointerArray(initialSize);
+  }
+
   /**
    * Allocates new sort data structures. Called when creating the sorter and after each spill.
+   * @param bytesPreAllocated number of bytes pre-allocated for the pointer array
    */
-  private void initializeForWriting() throws IOException {
+  private void initializeForWriting(long bytesPreAllocated) throws IOException {
     this.writeMetrics = new ShuffleWriteMetrics();
-    final long pointerArrayMemory =
-      UnsafeInMemorySorter.getMemoryRequirementsForPointerArray(initialSize);
-    final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pointerArrayMemory);
-    if (memoryAcquired != pointerArrayMemory) {
-      shuffleMemoryManager.release(memoryAcquired);
-      throw new IOException("Could not acquire " + pointerArrayMemory + " bytes of memory");
+    assert bytesPreAllocated <= pointerArrayMemory() :
+      "expected pre-allocated bytes to be at most the memory needed for our pointer array";
+    final long memoryToAcquire = pointerArrayMemory() - bytesPreAllocated;
+    if (memoryToAcquire > 0) {
+      final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryToAcquire);
+      if (memoryAcquired != memoryToAcquire) {
+        shuffleMemoryManager.release(memoryAcquired);
+        throw new IOException("Could not acquire " + memoryToAcquire + " bytes of memory");
+      }
     }
-
     this.inMemSorter =
       new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
     this.isInMemSorterExternal = false;
@@ -187,6 +195,15 @@ public final class UnsafeExternalSorter {
    * Sort and spill the current records in response to memory pressure.
    */
   public void spill() throws IOException {
+    spill(0);
+  }
+
+  /**
+   * Sort and spill the current records in response to memory pressure.
+   * @param bytesToReserve number of bytes to hold onto when releasing memory for this task.
+   * @return number of bytes reserved for immediate use, must be <= `bytesToReserve`
+   */
+  private long spill(long bytesToReserve) throws IOException {
     assert(inMemSorter != null);
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
@@ -211,13 +228,23 @@ public final class UnsafeExternalSorter {
       spillWriter.close();
     }
 
-    final long spillSize = freeMemory();
+    // Take into account memory for the pointer array, which is reinitialized after each spill
+    final long actualBytesToReserve = bytesToReserve + pointerArrayMemory();
+
+    final long spillSize = freeMemory(actualBytesToReserve);
     // Note that this is more-or-less going to be a multiple of the page size, so wasted space in
     // pages will currently be counted as memory spilled even though that space isn't actually
     // written to disk. This also counts the space needed to store the sorter's pointer array.
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
 
-    initializeForWriting();
+    final long bytesReserved = Math.min(spillSize, actualBytesToReserve);
+    final long bytesReservedForPointerArray = Math.min(bytesReserved, pointerArrayMemory());
+    final long bytesReservedForOtherThings = bytesReserved - bytesReservedForPointerArray;
+    initializeForWriting(bytesReservedForPointerArray);
+
+    assert bytesReservedForOtherThings <= bytesToReserve :
+      "bytes actually reserved exceed bytes requested to be reserved";
+    return bytesReservedForOtherThings;
   }
 
   /**
@@ -254,22 +281,25 @@ public final class UnsafeExternalSorter {
 
   /**
    * Free this sorter's in-memory data structures, including its data pages and pointer array.
-   *
+   * @param bytesToReserve number of bytes to hold onto when releasing memory for this task.
    * @return the number of bytes freed.
    */
-  private long freeMemory() {
+  private long freeMemory(long bytesToReserve) {
     updatePeakMemoryUsed();
     long memoryFreed = 0;
+    long remainingBytesToReserve = bytesToReserve;
     for (MemoryBlock block : allocatedPages) {
       taskMemoryManager.freePage(block);
-      shuffleMemoryManager.release(block.size());
+      long bytesReserved = releaseButReserve(block.size(), remainingBytesToReserve);
+      remainingBytesToReserve -= bytesReserved;
+      remainingBytesToReserve = Math.max(0, remainingBytesToReserve);
       memoryFreed += block.size();
     }
     if (inMemSorter != null) {
       if (!isInMemSorterExternal) {
         long sorterMemoryUsage = inMemSorter.getMemoryUsage();
         memoryFreed += sorterMemoryUsage;
-        shuffleMemoryManager.release(sorterMemoryUsage);
+        releaseButReserve(sorterMemoryUsage, remainingBytesToReserve);
       }
       inMemSorter = null;
     }
@@ -278,6 +308,22 @@ public final class UnsafeExternalSorter {
     currentPagePosition = -1;
     freeSpaceInCurrentPage = 0;
     return memoryFreed;
+  }
+
+  /**
+   * Release memory for this task, but keep a fraction of it for immediate use afterwards.
+   *
+   * @param bytesToRelease number of bytes to release
+   * @param bytesToReserve number of bytes to reserve
+   * @return number of bytes actually reserved.
+   */
+  private long releaseButReserve(long bytesToRelease, long bytesToReserve) {
+    long bytesReserved = Math.min(bytesToRelease, bytesToReserve);
+    long bytesReleased = bytesToRelease - bytesReserved;
+    if (bytesReleased > 0) {
+      shuffleMemoryManager.release(bytesReleased);
+    }
+    return bytesReserved;
   }
 
   /**
@@ -299,7 +345,7 @@ public final class UnsafeExternalSorter {
    */
   public void cleanupResources() {
     deleteSpillFiles();
-    freeMemory();
+    freeMemory(0);
   }
 
   /**
@@ -358,20 +404,40 @@ public final class UnsafeExternalSorter {
    * and try again. If there is still not enough space, report error to the caller.
    */
   private void acquireNewPage() throws IOException {
-    final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-    if (memoryAcquired < pageSizeBytes) {
-      shuffleMemoryManager.release(memoryAcquired);
-      spill();
-      final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-      if (memoryAcquiredAfterSpilling != pageSizeBytes) {
-        shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
-        throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
-      }
-    }
+    acquireAndMaybeSpill(pageSizeBytes);
     currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
     currentPagePosition = currentPage.getBaseOffset();
     freeSpaceInCurrentPage = pageSizeBytes;
     allocatedPages.add(currentPage);
+  }
+
+  /**
+   * Acquire some memory for this task and possibly spill in the process.
+   *
+   * If we did not successfully acquire all the bytes we requested, we spill and try again.
+   * If we still cannot acquire all the bytes we requested, then return error.
+   *
+   * @param bytesRequested number of bytes to request
+   */
+  private void acquireAndMaybeSpill(long bytesRequested) throws IOException {
+    final long memoryAcquired = shuffleMemoryManager.tryToAcquire(bytesRequested);
+    if (memoryAcquired < bytesRequested) {
+      // Our first attempt to acquire the memory failed, so we spill and try again.
+      // Note: since we know we're going to acquire memory again immediately after releasing
+      // our current share, we can continue to hold onto a fraction of it instead of releasing
+      // everything. In other words, by making release and acquire atomic, other threads can't
+      // jump in and steal the memory we intend to acquire back (SPARK-10677).
+      final long bytesReservedFromSpilling = spill(bytesRequested - memoryAcquired);
+      final long bytesReserved = bytesReservedFromSpilling + memoryAcquired;
+      final long bytesToAcquire = Math.max(0, bytesRequested - bytesReserved);
+      if (bytesToAcquire > 0) {
+        final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(bytesToAcquire);
+        if (memoryAcquiredAfterSpilling != bytesToAcquire) {
+          shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
+          throw new IOException("Unable to acquire " + bytesToAcquire + " bytes of memory");
+        }
+      }
+    }
   }
 
   /**
@@ -396,16 +462,7 @@ public final class UnsafeExternalSorter {
       long overflowPageSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSpaceRequired);
       // The record is larger than the page size, so allocate a special overflow page just to hold
       // that record.
-      final long memoryGranted = shuffleMemoryManager.tryToAcquire(overflowPageSize);
-      if (memoryGranted != overflowPageSize) {
-        shuffleMemoryManager.release(memoryGranted);
-        spill();
-        final long memoryGrantedAfterSpill = shuffleMemoryManager.tryToAcquire(overflowPageSize);
-        if (memoryGrantedAfterSpill != overflowPageSize) {
-          shuffleMemoryManager.release(memoryGrantedAfterSpill);
-          throw new IOException("Unable to acquire " + overflowPageSize + " bytes of memory");
-        }
-      }
+      acquireAndMaybeSpill(overflowPageSize);
       MemoryBlock overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
       allocatedPages.add(overflowPage);
       dataPage = overflowPage;
@@ -458,16 +515,7 @@ public final class UnsafeExternalSorter {
       long overflowPageSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSpaceRequired);
       // The record is larger than the page size, so allocate a special overflow page just to hold
       // that record.
-      final long memoryGranted = shuffleMemoryManager.tryToAcquire(overflowPageSize);
-      if (memoryGranted != overflowPageSize) {
-        shuffleMemoryManager.release(memoryGranted);
-        spill();
-        final long memoryGrantedAfterSpill = shuffleMemoryManager.tryToAcquire(overflowPageSize);
-        if (memoryGrantedAfterSpill != overflowPageSize) {
-          shuffleMemoryManager.release(memoryGrantedAfterSpill);
-          throw new IOException("Unable to acquire " + overflowPageSize + " bytes of memory");
-        }
-      }
+      acquireAndMaybeSpill(overflowPageSize);
       MemoryBlock overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
       allocatedPages.add(overflowPage);
       dataPage = overflowPage;
