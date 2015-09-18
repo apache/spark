@@ -461,7 +461,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.hasSummary)
 
     // Schema should be a superset of the input dataset
-    assert(model.summary.predictions.schema.fieldNames.toSet ===
+    assert(model.summary.predictions.schema.fieldNames.toSet contains
       dataset.schema.fieldNames.toSet ++ Set("prediction"))
 
     // Residuals in [[LinearRegressionResults]] should equal those manually computed
