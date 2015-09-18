@@ -2260,8 +2260,10 @@ Several caching related features are not supported yet:
 
 ## Compatibility with Apache Hive
 
-Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.  Currently Spark
-SQL is based on Hive 0.12.0 and 1.2.1.
+Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
+Currently Hive SerDes and UDFs are based on Hive 1.2.1,
+and Spark SQL can be connected to different versions of Hive Metastore
+(from 0.12.0 to 1.2.1. Also see http://spark.apache.org/docs/latest/sql-programming-guide.html#interacting-with-different-versions-of-hive-metastore).
 
 #### Deploying in Existing Hive Warehouses
 
