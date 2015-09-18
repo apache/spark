@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
+import org.apache.spark.shuffle.sort.PackedRecordPointer;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -24,7 +25,7 @@ import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
-import static org.apache.spark.shuffle.unsafe.PackedRecordPointer.*;
+import static org.apache.spark.shuffle.sort.PackedRecordPointer.*;
 
 public class PackedRecordPointerSuite {
 

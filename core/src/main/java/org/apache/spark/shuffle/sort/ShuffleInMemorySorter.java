@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import java.util.Comparator;
 
 import org.apache.spark.util.collection.Sorter;
 
-final class UnsafeShuffleInMemorySorter {
+final class ShuffleInMemorySorter {
 
   private final Sorter<PackedRecordPointer, long[]> sorter;
   private static final class SortComparator implements Comparator<PackedRecordPointer> {
@@ -44,10 +44,10 @@ final class UnsafeShuffleInMemorySorter {
    */
   private int pointerArrayInsertPosition = 0;
 
-  public UnsafeShuffleInMemorySorter(int initialSize) {
+  public ShuffleInMemorySorter(int initialSize) {
     assert (initialSize > 0);
     this.pointerArray = new long[initialSize];
-    this.sorter = new Sorter<PackedRecordPointer, long[]>(UnsafeShuffleSortDataFormat.INSTANCE);
+    this.sorter = new Sorter<PackedRecordPointer, long[]>(ShuffleSortDataFormat.INSTANCE);
   }
 
   public void expandPointerArray() {
@@ -92,14 +92,14 @@ final class UnsafeShuffleInMemorySorter {
   /**
    * An iterator-like class that's used instead of Java's Iterator in order to facilitate inlining.
    */
-  public static final class UnsafeShuffleSorterIterator {
+  public static final class ShuffleSorterIterator {
 
     private final long[] pointerArray;
     private final int numRecords;
     final PackedRecordPointer packedRecordPointer = new PackedRecordPointer();
     private int position = 0;
 
-    public UnsafeShuffleSorterIterator(int numRecords, long[] pointerArray) {
+    public ShuffleSorterIterator(int numRecords, long[] pointerArray) {
       this.numRecords = numRecords;
       this.pointerArray = pointerArray;
     }
@@ -117,8 +117,8 @@ final class UnsafeShuffleInMemorySorter {
   /**
    * Return an iterator over record pointers in sorted order.
    */
-  public UnsafeShuffleSorterIterator getSortedIterator() {
+  public ShuffleSorterIterator getSortedIterator() {
     sorter.sort(pointerArray, 0, pointerArrayInsertPosition, SORT_COMPARATOR);
-    return new UnsafeShuffleSorterIterator(pointerArrayInsertPosition, pointerArray);
+    return new ShuffleSorterIterator(pointerArrayInsertPosition, pointerArray);
   }
 }

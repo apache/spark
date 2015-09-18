@@ -128,23 +128,11 @@ private[spark] class ExternalSorter[K, V, C](
   // grow internal data structures by growing + copying every time the number of objects doubles.
   private val serializerBatchSize = conf.getLong("spark.shuffle.spill.batchSize", 10000)
 
-  private val useSerializedPairBuffer =
-    ordering.isEmpty &&
-      conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true) &&
-      ser.supportsRelocationOfSerializedObjects
-  private val kvChunkSize = conf.getInt("spark.shuffle.sort.kvChunkSize", 1 << 22) // 4 MB
-  private def newBuffer(): WritablePartitionedPairCollection[K, C] with SizeTracker = {
-    if (useSerializedPairBuffer) {
-      new PartitionedSerializedPairBuffer(metaInitialRecords = 256, kvChunkSize, serInstance)
-    } else {
-      new PartitionedPairBuffer[K, C]
-    }
-  }
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
   private var map = new PartitionedAppendOnlyMap[K, C]
-  private var buffer = newBuffer()
+  private var buffer = new PartitionedPairBuffer[K, C]
 
   // Total spilling statistics
   private var _diskBytesSpilled = 0L
@@ -236,7 +224,7 @@ private[spark] class ExternalSorter[K, V, C](
     } else {
       estimatedSize = buffer.estimateSize()
       if (maybeSpill(buffer, estimatedSize)) {
-        buffer = newBuffer()
+        buffer = new PartitionedPairBuffer[K, C]
       }
     }
 

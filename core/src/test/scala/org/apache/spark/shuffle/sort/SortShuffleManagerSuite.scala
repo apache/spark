@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe
+package org.apache.spark.shuffle.sort
 
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -29,9 +29,9 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
  * Tests for the fallback logic in UnsafeShuffleManager. Actual tests of shuffling data are
  * performed in other suites.
  */
-class UnsafeShuffleManagerSuite extends SparkFunSuite with Matchers {
+class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
 
-  import UnsafeShuffleManager.canUseUnsafeShuffle
+  import SortShuffleManager.canUseUnsafeShuffle
 
   private class RuntimeExceptionAnswer extends Answer[Object] {
     override def answer(invocation: InvocationOnMock): Object = {
@@ -102,7 +102,7 @@ class UnsafeShuffleManagerSuite extends SparkFunSuite with Matchers {
 
     // We do not support shuffles with more than 16 million output partitions
     assert(!canUseUnsafeShuffle(shuffleDep(
-      partitioner = new HashPartitioner(UnsafeShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS + 1),
+      partitioner = new HashPartitioner(SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS + 1),
       serializer = kryo,
       keyOrdering = None,
       aggregator = None,

@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.apache.spark.shuffle.sort.UnsafeShuffleHandle;
 import scala.*;
 import scala.collection.Iterator;
-import scala.reflect.ClassTag;
 import scala.runtime.AbstractFunction1;
 
 import com.google.common.collect.Iterators;
@@ -462,7 +462,7 @@ public class UnsafeShuffleWriterSuite {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite =
       new ArrayList<Product2<Object, Object>>();
-    final byte[] bytes = new byte[(int) (UnsafeShuffleExternalSorter.DISK_WRITE_BUFFER_SIZE * 2.5)];
+    final byte[] bytes = new byte[(int) (ShuffleExternalSorter.DISK_WRITE_BUFFER_SIZE * 2.5)];
     new Random(42).nextBytes(bytes);
     dataToWrite.add(new Tuple2<Object, Object>(1, ByteBuffer.wrap(bytes)));
     writer.write(dataToWrite.iterator());

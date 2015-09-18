@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
 
+import org.apache.spark.shuffle.sort.SortShuffleManager;
+import org.apache.spark.shuffle.sort.UnsafeShuffleHandle;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -80,7 +82,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final boolean transferToEnabled;
 
   @Nullable private MapStatus mapStatus;
-  @Nullable private UnsafeShuffleExternalSorter sorter;
+  @Nullable private ShuffleExternalSorter sorter;
   private long peakMemoryUsedBytes = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
@@ -109,10 +111,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       TaskContext taskContext,
       SparkConf sparkConf) throws IOException {
     final int numPartitions = handle.dependency().partitioner().numPartitions();
-    if (numPartitions > UnsafeShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS()) {
+    if (numPartitions > SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS()) {
       throw new IllegalArgumentException(
         "UnsafeShuffleWriter can only be used for shuffles with at most " +
-          UnsafeShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS() + " reduce partitions");
+          SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS() + " reduce partitions");
     }
     this.blockManager = blockManager;
     this.shuffleBlockResolver = shuffleBlockResolver;
@@ -195,7 +197,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private void open() throws IOException {
     assert (sorter == null);
-    sorter = new UnsafeShuffleExternalSorter(
+    sorter = new ShuffleExternalSorter(
       memoryManager,
       shuffleMemoryManager,
       blockManager,
