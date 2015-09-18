@@ -426,7 +426,7 @@ private[spark] object SQLConf {
     doc = "initialize size of hash for (partial or full) aggregation")
 
   val PARTIAL_AGGREGATION_MAX_ENTRY = intConf(
-    "spark.sql.partial.aggregation.maxEntry",
+    "spark.sql.partialAggregation.maxEntry",
     defaultValue = Some(-1),
     doc = "maximum size of hash for partial aggregation. -1 for unlimited, which is default")
 
