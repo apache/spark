@@ -305,7 +305,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
 
-  private[sql] val interpretedOrdering = InterpretedOrdering.forSchema(this.fields.map(_.dataType))
+  @transient
+  private[sql] lazy val interpretedOrdering =
+    InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 }
 
 object StructType extends AbstractDataType {

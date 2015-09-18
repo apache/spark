@@ -93,6 +93,12 @@ object HiveThriftServer2 extends Logging {
       } else {
         None
       }
+      // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
+      // process can not exit, so check whether if SparkContext was stopped.
+      if (SparkSQLEnv.sparkContext.stopped.get()) {
+        logError("SparkContext has stopped even if HiveServer2 has started, so exit")
+        System.exit(-1)
+      }
     } catch {
       case e: Exception =>
         logError("Error starting HiveThriftServer2", e)
