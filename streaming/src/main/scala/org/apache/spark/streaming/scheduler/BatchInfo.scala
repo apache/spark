@@ -36,8 +36,8 @@ case class BatchInfo(
     streamIdToInputInfo: Map[Int, StreamInputInfo],
     submissionTime: Long,
     processingStartTime: Option[Long],
-    processingEndTime: Option[Long]
-  ) {
+    processingEndTime: Option[Long],
+    errorMessage: Option[String] = None) {
 
   @deprecated("Use streamIdToInputInfo instead", "1.5.0")
   def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)

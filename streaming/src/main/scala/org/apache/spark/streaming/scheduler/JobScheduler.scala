@@ -25,7 +25,7 @@ import scala.util.{Failure, Success}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
-import org.apache.spark.util.{EventLoop, ThreadUtils}
+import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
@@ -120,7 +120,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
-      listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))
+      listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo()))
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
       logInfo("Added jobs for time " + jobSet.time)
@@ -159,7 +159,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (isFirstJobOfJobSet) {
       // "StreamingListenerBatchStarted" should be posted after calling "handleJobStart" to get the
       // correct "jobSet.processingStartTime".
-      listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
+      listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo()))
     }
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
@@ -177,9 +177,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
             jobSet.totalDelay / 1000.0, jobSet.time.toString,
             jobSet.processingDelay / 1000.0
           ))
-          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
+          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo()))
         }
       case Failure(e) =>
+        val jobSet = jobSets.get(job.time)
+        val errorMessage = Some(Utils.exceptionString(e))
+        listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo(errorMessage)))
         reportError("Error running job " + job, e)
     }
   }

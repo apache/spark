@@ -61,13 +61,14 @@ case class JobSet(
     processingEndTime - time.milliseconds
   }
 
-  def toBatchInfo: BatchInfo = {
+  def toBatchInfo(errorMessage: Option[String] = None): BatchInfo = {
     new BatchInfo(
       time,
       streamIdToInputInfo,
       submissionTime,
       if (processingStartTime >= 0 ) Some(processingStartTime) else None,
-      if (processingEndTime >= 0 ) Some(processingEndTime) else None
+      if (processingEndTime >= 0 ) Some(processingEndTime) else None,
+      errorMessage
     )
   }
 }

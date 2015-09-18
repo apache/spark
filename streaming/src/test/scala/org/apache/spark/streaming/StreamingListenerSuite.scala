@@ -140,6 +140,51 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     }
   }
 
+  test("onBatchCompleted") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count)
+
+    @volatile var errorMessage: Option[String] = None
+    ssc.addStreamingListener(new StreamingListener {
+      override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
+        errorMessage = batchCompleted.batchInfo.errorMessage
+      }
+    })
+    val batchCounter = new BatchCounter(ssc)
+    ssc.start()
+    // Make sure running at least one batch
+    batchCounter.waitUntilBatchesCompleted(expectedNumCompletedBatches = 1, timeout = 10000)
+    ssc.stop()
+    assert(errorMessage.isEmpty, "A successful batch should not set errorMessage")
+  }
+
+  test("onBatchCompleted: error") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD { _ =>
+      throw new RuntimeException("This is an unsuccessful batch")
+    }
+
+    @volatile var errorMessage: Option[String] = None
+    ssc.addStreamingListener(new StreamingListener {
+      override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
+        errorMessage = batchCompleted.batchInfo.errorMessage
+      }
+    })
+    val batchCounter = new BatchCounter(ssc)
+    ssc.start()
+    // Make sure running at least one batch
+    batchCounter.waitUntilBatchesCompleted(expectedNumCompletedBatches = 1, timeout = 10000)
+    val e = intercept[RuntimeException] {
+      ssc.awaitTerminationOrTimeout(10000)
+    }
+    assert(e.getMessage === "This is an unsuccessful batch")
+    ssc.stop()
+    assert(errorMessage.nonEmpty && errorMessage.get.contains("This is an unsuccessful batch"),
+      "An unsuccessful batch should set errorMessage")
+  }
+
   /** Check if a sequence of numbers is in increasing order */
   def isInIncreasingOrder(seq: Seq[Long]): Boolean = {
     for (i <- 1 until seq.size) {
