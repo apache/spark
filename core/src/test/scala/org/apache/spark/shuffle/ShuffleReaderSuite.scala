@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.hash
+package org.apache.spark.shuffle
 
 import java.io.{ByteArrayOutputStream, InputStream}
 import java.nio.ByteBuffer
@@ -28,7 +28,6 @@ import org.mockito.stubbing.Answer
 import org.apache.spark._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.shuffle.BaseShuffleHandle
 import org.apache.spark.storage.{BlockManager, BlockManagerId, ShuffleBlockId}
 
 /**
@@ -56,10 +55,10 @@ class RecordingManagedBuffer(underlyingBuffer: NioManagedBuffer) extends Managed
   }
 }
 
-class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
+class ShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
 
   /**
-   * This test makes sure that, when data is read from a HashShuffleReader, the underlying
+   * This test makes sure that, when data is read from a ShuffleReader, the underlying
    * ManagedBuffers that contain the data are eventually released.
    */
   test("read() releases resources on completion") {
@@ -125,7 +124,7 @@ class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
       Seq((localBlockManagerId, shuffleBlockIdsAndSizes))
     }
 
-    // Create a mocked shuffle handle to pass into HashShuffleReader.
+    // Create a mocked shuffle handle to pass into ShuffleReader.
     val shuffleHandle = {
       val dependency = mock(classOf[ShuffleDependency[Int, Int, Int]])
       when(dependency.serializer).thenReturn(Some(serializer))
@@ -134,7 +133,7 @@ class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
       new BaseShuffleHandle(shuffleId, numMaps, dependency)
     }
 
-    val shuffleReader = new HashShuffleReader(
+    val shuffleReader = new ShuffleReader(
       shuffleHandle,
       reduceId,
       reduceId + 1,
