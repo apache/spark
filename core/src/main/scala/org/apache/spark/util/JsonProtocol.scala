@@ -362,6 +362,10 @@ private[spark] object JsonProtocol {
         ("Stack Trace" -> stackTrace) ~
         ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
         ("Metrics" -> metrics)
+      case taskCommitDenied: TaskCommitDenied =>
+        ("Job ID" -> taskCommitDenied.jobID) ~
+        ("Partition ID" -> taskCommitDenied.partitionID) ~
+        ("Attempt Number" -> taskCommitDenied.attemptNumber)
       case ExecutorLostFailure(executorId, isNormalExit) =>
         ("Executor ID" -> executorId) ~
         ("Normal Exit" -> isNormalExit)
@@ -770,6 +774,7 @@ private[spark] object JsonProtocol {
     val exceptionFailure = Utils.getFormattedClassName(ExceptionFailure)
     val taskResultLost = Utils.getFormattedClassName(TaskResultLost)
     val taskKilled = Utils.getFormattedClassName(TaskKilled)
+    val taskCommitDenied = Utils.getFormattedClassName(TaskCommitDenied)
     val executorLostFailure = Utils.getFormattedClassName(ExecutorLostFailure)
     val unknownReason = Utils.getFormattedClassName(UnknownReason)
 
@@ -794,6 +799,11 @@ private[spark] object JsonProtocol {
         ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics, None)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
+      case `taskCommitDenied` =>
+        val jobId = (json \ "Job ID").extract[Int]
+        val partitionId = (json \ "Partition ID").extract[Int]
+        val attemptNumber = (json \ "Attempt Number").extract[Int]
+        TaskCommitDenied(jobId, partitionId, attemptNumber)
       case `executorLostFailure` =>
         val isNormalExit = Utils.jsonOption(json \ "Normal Exit").
           map(_.extract[Boolean])
