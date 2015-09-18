@@ -44,17 +44,17 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   with HasTol with HasFitIntercept {
 
   /**
-   * Param for censored column name.
+   * Param for censor column name.
    * The value of this column could be 0 or 1.
    * If the value is 1, it means the event has occurred i.e. uncensored; otherwise it censored.
    * @group param
    */
   @Since("1.6.0")
-  final val censoredCol: Param[String] = new Param(this, "censoredCol", "censored column name")
+  final val censorCol: Param[String] = new Param(this, "censorCol", "censor column name")
 
   /** @group getParam */
   @Since("1.6.0")
-  def getCensoredCol: String = $(censoredCol)
+  def getCensorCol: String = $(censorCol)
 
   /**
    * Param for quantile probabilities array.
@@ -85,7 +85,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
       fitting: Boolean): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     if (fitting) {
-      SchemaUtils.checkColumnType(schema, $(censoredCol), DoubleType)
+      SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
@@ -116,8 +116,8 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   /** @group setParam */
   @Since("1.6.0")
-  def setCensoredCol(value: String): this.type = set(censoredCol, value)
-  setDefault(censoredCol -> "censored")
+  def setCensorCol(value: String): this.type = set(censorCol, value)
+  setDefault(censorCol -> "censor")
 
   /** @group setParam */
   @Since("1.6.0")
@@ -152,14 +152,14 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   setDefault(tol -> 1E-6)
 
   /**
-   * Extract [[featuresCol]], [[labelCol]] and [[censoredCol]] from input dataset,
+   * Extract [[featuresCol]], [[labelCol]] and [[censorCol]] from input dataset,
    * and put it in an RDD with strong types.
    */
   protected[ml] def extractAFTPoints(
       dataset: DataFrame): RDD[AFTPoint] = {
-    dataset.select($(featuresCol), $(labelCol), $(censoredCol)).map {
-      case Row(features: Vector, label: Double, censored: Double) =>
-        AFTPoint(features, label, censored)
+    dataset.select($(featuresCol), $(labelCol), $(censorCol)).map {
+      case Row(features: Vector, label: Double, censor: Double) =>
+        AFTPoint(features, label, censor)
     }
   }
 
@@ -377,7 +377,7 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
       Vectors.dense(Array(0.0) ++ data.features.toArray).toBreeze
     }
     val ti = data.label
-    val delta = data.censored
+    val delta = data.censor
     val epsilon = (math.log(ti) - beta.dot(xi)) / sigma
 
     lossSum += math.log(sigma) * delta
@@ -437,11 +437,11 @@ private class AFTCostFun(data: RDD[AFTPoint], fitIntercept: Boolean)
 }
 
 /**
- * Class that represents the (features, label, censored) of a data point.
+ * Class that represents the (features, label, censor) of a data point.
  *
  * @param features List of features for this data point.
  * @param label Label for this data point.
- * @param censored Indicator of the event has occurred or not. If the value is 1, it means
+ * @param censor Indicator of the event has occurred or not. If the value is 1, it means
  *                 the event has occurred i.e. uncensored; otherwise it censored.
  */
-private[ml] case class AFTPoint(features: Vector, label: Double, censored: Double)
+private[ml] case class AFTPoint(features: Vector, label: Double, censor: Double)

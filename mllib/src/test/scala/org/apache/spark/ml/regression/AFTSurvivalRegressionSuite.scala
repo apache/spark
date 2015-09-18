@@ -55,7 +55,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(aftr.getLabelCol === "label")
     assert(aftr.getFeaturesCol === "features")
     assert(aftr.getPredictionCol === "prediction")
-    assert(aftr.getCensoredCol === "censored")
+    assert(aftr.getCensorCol === "censor")
     assert(aftr.getFitIntercept)
     assert(aftr.getMaxIter === 100)
     assert(aftr.getTol === 1E-6)
@@ -83,7 +83,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
       weibullScale: Double,
       exponentialMean: Double): Seq[AFTPoint] = {
 
-    def censored(x: Double, y: Double): Double = { if (x <= y) 1.0 else 0.0 }
+    def censor(x: Double, y: Double): Double = { if (x <= y) 1.0 else 0.0 }
 
     val weibull = new WeibullGenerator(weibullShape, weibullScale)
     weibull.setSeed(seed)
@@ -104,7 +104,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     }
     val y = (1 to nPoints).map { i => (weibull.nextValue(), exponential.nextValue()) }
 
-    y.zip(x).map { p => AFTPoint(Vectors.dense(p._2), p._1._1, censored(p._1._1, p._1._2)) }
+    y.zip(x).map { p => AFTPoint(Vectors.dense(p._2), p._1._1, censor(p._1._1, p._1._2)) }
   }
 
   test("aft survival regression with univariate") {
@@ -117,9 +117,9 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        library("survival")
        data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
        features <- data$V1
-       censored <- data$V2
+       censor <- data$V2
        label <- data$V3
-       sr.fit <- survreg(Surv(label, censored) ~ features, dist='weibull')
+       sr.fit <- survreg(Surv(label, censor) ~ features, dist='weibull')
        summary(sr.fit)
 
                     Value Std. Error      z        p
@@ -185,9 +185,9 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
        feature1 <- data$V1
        feature2 <- data$V2
-       censored <- data$V3
+       censor <- data$V3
        label <- data$V4
-       sr.fit <- survreg(Surv(label, censored) ~ feature1 + feature2, dist='weibull')
+       sr.fit <- survreg(Surv(label, censor) ~ feature1 + feature2, dist='weibull')
        summary(sr.fit)
 
                      Value Std. Error      z        p
@@ -253,9 +253,9 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
        feature1 <- data$V1
        feature2 <- data$V2
-       censored <- data$V3
+       censor <- data$V3
        label <- data$V4
-       sr.fit <- survreg(Surv(label, censored) ~ feature1 + feature2 - 1, dist='weibull')
+       sr.fit <- survreg(Surv(label, censor) ~ feature1 + feature2 - 1, dist='weibull')
        summary(sr.fit)
 
                    Value Std. Error     z        p
