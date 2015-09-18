@@ -390,6 +390,8 @@ class Connection(Base):
                 return hooks.MsSqlHook(mssql_conn_id=self.conn_id)
             elif self.conn_type == 'oracle':
                 return hooks.OracleHook(oracle_conn_id=self.conn_id)
+            elif self.conn_type == 'vertica':
+                return hooks.VerticaHook(vertica_conn_id=self.conn_id)
         except:
             return None
 
@@ -425,7 +427,7 @@ class DagPickle(Base):
     id = Column(Integer, primary_key=True)
     pickle = Column(PickleType(pickler=dill))
     created_dttm = Column(DateTime, default=func.now())
-    pickle_hash = Column(BigInteger)
+    pickle_hash = Column(Text)
 
     __tablename__ = "dag_pickle"
 
@@ -958,6 +960,15 @@ class TaskInstance(Base):
 
         session.commit()
 
+    def dry_run(self):
+        task = self.task
+        task_copy = copy.copy(task)
+        self.task = task_copy
+
+        self.render_templates()
+        task_copy.dry_run()
+
+
     def handle_failure(self, error, test_mode, context):
         logging.exception(error)
         task = self.task
@@ -1127,7 +1138,7 @@ class TaskInstance(Base):
         """
         Pull XComs that optionally meet certain criteria.
 
-        The default value for `key` ("{return_key}") limits the search to XComs
+        The default value for `key` limits the search to XComs
         that were returned by other tasks (as opposed to those that were pushed
         manually). To remove this filter, pass key=None (or any desired value).
 
@@ -1137,9 +1148,10 @@ class TaskInstance(Base):
         whenever no matches are found.
 
         :param key: A key for the XCom. If provided, only XComs with matching
-            keys will be returned. The default value is "{return_key}",
-            the key automatically given to XComs returned by tasks (as opposed
-            to being pushed manually). To remove the filter, pass key=None.
+            keys will be returned. The default key is 'return_value', also 
+            available as a constant XCOM_RETURN_KEY. This key is automatically 
+            given to XComs returned by tasks (as opposed to being pushed 
+            manually). To remove the filter, pass key=None.
         :type key: string
         :param task_ids: Only XComs from tasks with matching ids will be
             pulled. Can pass None to remove the filter.
@@ -1154,7 +1166,7 @@ class TaskInstance(Base):
         :param limit: the maximum number of results to return. Pass None for
             no limit.
         :type limit: int
-        """.format(return_key=XCOM_RETURN_KEY)
+        """
 
         if dag_id is None:
             dag_id = self.dag_id
@@ -1633,6 +1645,15 @@ class BaseOperator(object):
                 mark_success=mark_success,
                 ignore_dependencies=ignore_dependencies,
                 force=force,)
+
+    def dry_run(self):
+        logging.info('Dry run')
+        for attr in self.template_fields:
+            content = getattr(self, attr)
+            if content and isinstance(content, basestring):
+                logging.info('Rendering template for {0}'.format(attr))
+                logging.info(content)
+
 
     def get_direct_relatives(self, upstream=False):
         """
@@ -2119,7 +2140,7 @@ class DAG(object):
     def pickle(self, main_session=None):
         session = main_session or settings.Session()
         dag = session.query(
-            DagModel).filter(DAG.dag_id == self.dag_id).first()
+            DagModel).filter(DagModel.dag_id == self.dag_id).first()
         dp = None
         if dag and dag.pickle_id:
             dp = session.query(DagPickle).filter(
@@ -2133,6 +2154,7 @@ class DAG(object):
 
         if not main_session:
             session.close()
+        return dp
 
     def tree_view(self):
         """

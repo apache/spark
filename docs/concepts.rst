@@ -159,13 +159,19 @@ passed, then a correpsonding list of XCom values is returned.
     def push_function():
         return value
 
-    # inside another PythonOperator
+    # inside another PythonOperator where provide_context=True
     def pull_function(**context):
-        value = context['ti'].xcom_pull(task_ids='pushing_task')
+        value = context['task_instance'].xcom_pull(task_ids='pushing_task')
 
+It is also possible to pull XCom directly in a template, here's an example
+of what this may look like:
 
-XComs are similar to Variables, but are specifically designed for inter-task
-communication rather than global settings.
+.. code:: sql
+    
+    SELECT * FROM {{ task_instance.xcom_pull(task_ids='foo', key='table_name') }}
+
+Note that XComs are similar to `Variables`_, but are specifically designed 
+for inter-task communication rather than global settings.
 
 
 Variables

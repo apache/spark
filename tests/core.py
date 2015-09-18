@@ -5,6 +5,7 @@ import unittest
 from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, executors, utils, operators, hooks
+from airflow.configuration import conf
 from airflow.www.app import app
 
 NUM_EXAMPLE_DAGS = 6
@@ -99,6 +100,11 @@ class HivePrestoTest(unittest.TestCase):
             task_id='basic_hql', hql=self.hql, dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_hive_dryrun(self):
+        t = operators.HiveOperator(
+            task_id='basic_hql', hql=self.hql, dag=self.dag)
+        t.dry_run()
+
     def test_beeline(self):
         t = operators.HiveOperator(
             task_id='beeline_hql', hive_cli_conn_id='beeline_default',
@@ -188,6 +194,10 @@ class CoreTest(unittest.TestCase):
     def test_confirm_unittest_mod(self):
         assert configuration.conf.get('core', 'unit_test_mode')
 
+    def test_pickling(self):
+        dp = self.dag.pickle()
+        assert self.dag.dag_id == dp.pickle.dag_id
+
     def test_rich_comparison_ops(self):
 
         class DAGsubclass(DAG):
@@ -272,6 +282,13 @@ class CoreTest(unittest.TestCase):
             bash_command="echo success",
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_dryrun(self):
+        t = operators.BashOperator(
+            task_id='time_sensor_check',
+            bash_command="echo success",
+            dag=self.dag)
+        t.dry_run()
 
     def test_sqlite(self):
         t = operators.SqliteOperator(

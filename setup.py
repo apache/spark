@@ -27,8 +27,9 @@ hdfs = ['snakebite>=2.4.13']
 slack = ['slackclient>=0.15']
 crypto = ['cryptography>=0.9.3']
 oracle = ['cx_Oracle>=5.1.2']
+vertica = ['vertica-python>=0.5.1']
 
-all_dbs = postgres + mysql + hive + mssql + hdfs
+all_dbs = postgres + mysql + hive + mssql + hdfs + vertica
 devel = all_dbs + doc + samba + s3 + ['nose'] + slack + crypto + oracle
 
 setup(
@@ -54,7 +55,7 @@ setup(
         'gunicorn>=19.3.0, <20.0',
         'jinja2>=2.7.3, <3.0',
         'markdown>=2.5.2, <3.0',
-        'pandas>=0.15.2, <0.16',
+        'pandas>=0.15.2, <1.0.0',
         'pygments>=2.0.1, <3.0',
         'python-dateutil>=2.3, <3',
         'requests>=2.5.1, <3',
@@ -80,6 +81,7 @@ setup(
         'slack': slack,
         'crypto': crypto,
         'oracle': oracle,
+        'vertica': vertica,
     },
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',

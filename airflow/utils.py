@@ -186,6 +186,14 @@ def initdb():
                 host='localhost', port=1433))
         session.commit()
 
+    conn = session.query(C).filter(C.conn_id == 'vertica_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='vertica_default', conn_type='vertica',
+                host='localhost', port=5433))
+        session.commit()
+
     # Known event types
     KET = models.KnownEventType
     if not session.query(KET).filter(KET.know_event_type == 'Holiday').first():
@@ -533,6 +541,14 @@ def round_time(dt, delta, start_date=datetime.min):
     datetime.datetime(2015, 1, 1, 0, 0)
     >>> round_time(datetime(2015, 1, 2), relativedelta(months=1))
     datetime.datetime(2015, 1, 1, 0, 0)
+    >>> round_time(datetime(2015, 9, 16, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
+    datetime.datetime(2015, 9, 16, 0, 0)
+    >>> round_time(datetime(2015, 9, 15, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
+    datetime.datetime(2015, 9, 15, 0, 0)
+    >>> round_time(datetime(2015, 9, 14, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
+    datetime.datetime(2015, 9, 14, 0, 0)
+    >>> round_time(datetime(2015, 9, 13, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
+    datetime.datetime(2015, 9, 14, 0, 0)
     """
     # Ignore the microseconds of dt
     dt -= timedelta(microseconds = dt.microsecond)
@@ -561,9 +577,10 @@ def round_time(dt, delta, start_date=datetime.min):
     # start_date + lower * delta and start_date + upper * delta
     # until we find the closest value
     while True:
+        # Invariant: start + lower * delta < dt <= start + upper * delta
         # If start_date + (lower + 1)*delta exceeds dt, then either lower or
         # lower+1 has to be the solution we are searching for
-        if start_date + (lower + 1)*delta > dt:
+        if start_date + (lower + 1)*delta >= dt:
             # Check if start_date + (lower + 1)*delta or
             # start_date + lower*delta is closer to dt and return the solution
             if (start_date + (lower + 1)*delta) - dt <= dt - (start_date + lower*delta):
@@ -574,7 +591,7 @@ def round_time(dt, delta, start_date=datetime.min):
         # We intersect the interval and either replace the lower or upper
         # limit with the candidate
         candidate = lower + (upper - lower) // 2
-        if start_date + candidate*delta > dt:
+        if start_date + candidate*delta >= dt:
             upper = candidate
         else:
             lower = candidate
@@ -582,3 +599,18 @@ def round_time(dt, delta, start_date=datetime.min):
     # in the special case when start_date > dt the search for upper will
     # immediately stop for upper == 1 which results in lower = upper // 2 = 0
     # and this function returns start_date.
+
+def chain(*tasks):
+    """
+    Given a number of tasks, builds a dependency chain.
+
+    chain(task_1, task_2, task_3, task_4)
+
+    is equivalent to
+
+    task_1.set_downstream(task_2)
+    task_2.set_downstream(task_3)
+    task_3.set_downstream(task_4)
+    """
+    for up_task, down_task in zip(tasks[:-1], tasks[1:]):
+        up_task.set_downstream(down_task)

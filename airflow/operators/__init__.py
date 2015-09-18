@@ -28,6 +28,8 @@ _operators = {
     'mysql_operator': ['MySqlOperator'],
     'sqlite_operator': ['SqliteOperator'],
     'mysql_to_hive': ['MySqlToHiveTransfer'],
+    'vertica_operator': ['VerticaOperator'],
+    'vertica_to_hive': ['VerticaToHiveTransfer'],
     'postgres_operator': ['PostgresOperator'],
     'sensors': [
         'SqlSensor',

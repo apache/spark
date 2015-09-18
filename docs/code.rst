@@ -68,6 +68,8 @@ Operator API
         SubDagOperator,
         TimeSensor
 
+.. _macros:
+
 Macros
 ---------
 Here's a list of variables and macros that can be used in templates
@@ -157,4 +159,4 @@ Executors are the mechanism by which task instances get run.
 
 .. automodule:: airflow.executors
     :show-inheritance:
-    :members: LocalExecutor, CeleryExecutor, SequentialExecutor
+    :members: LocalExecutor, CeleryExecutor, SequentialExecutor, MesosExecutor
