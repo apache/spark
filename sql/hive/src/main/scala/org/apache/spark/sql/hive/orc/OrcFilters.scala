@@ -31,9 +31,11 @@ import org.apache.spark.sql.sources._
  * and cannot be used anymore.
  */
 private[orc] object OrcFilters extends Logging {
-  def createFilter(expr: Array[Filter]): Option[SearchArgument] = {
+  def createFilter(filters: Array[Filter]): Option[SearchArgument] = {
     for {
-      conjunction <- expr.reduceOption(And)
+      // Combines all filters with `And`s to produce a single conjunction predicate
+      conjunction <- filters.reduceOption(And)
+      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()
   }
