@@ -136,7 +136,6 @@ class ShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
     val shuffleReader = new ShuffleReader(
       shuffleHandle,
       reduceId,
-      reduceId + 1,
       TaskContext.empty(),
       blockManager,
       mapOutputTracker)

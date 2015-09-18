@@ -28,14 +28,10 @@ import org.apache.spark.util.collection.ExternalSorter
  */
 private[spark] class ShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
-    startPartition: Int,
-    endPartition: Int,
+    partition: Int,
     context: TaskContext,
     blockManager: BlockManager = SparkEnv.get.blockManager,
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker) extends Logging {
-
-  require(endPartition == startPartition + 1,
-    "Hash shuffle currently only supports fetching one partition")
 
   private val dep = handle.dependency
 
@@ -45,7 +41,7 @@ private[spark] class ShuffleReader[K, C](
       context,
       blockManager.shuffleClient,
       blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition),
+      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, partition),
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
 

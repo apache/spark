@@ -37,16 +37,13 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
   }
 
   /**
-   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
-   * Called on executors by reduce tasks.
+   * Get a reader for a reduce partition. Called on executors by reduce tasks.
    */
   override def getReader[K, C](
       handle: ShuffleHandle,
-      startPartition: Int,
-      endPartition: Int,
+      partition: Int,
       context: TaskContext): ShuffleReader[K, C] = {
-    new ShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
+    new ShuffleReader(handle.asInstanceOf[BaseShuffleHandle[K, _, C]], partition, context)
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
