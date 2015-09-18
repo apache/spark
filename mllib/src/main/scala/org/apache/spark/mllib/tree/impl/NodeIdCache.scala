@@ -131,7 +131,7 @@ private[spark] class NodeIdCache(
     rddUpdateCount += 1
 
     // Handle checkpointing if the directory is not None.
-    if (nodeIdsForInstances.sparkContext.getCheckpointDir.nonEmpty &&
+    if (nodeIdsForInstances.sparkContext.getCheckpointDir.nonEmpty && checkpointInterval != -1 &&
       (rddUpdateCount % checkpointInterval) == 0) {
       // Let's see if we can delete previous checkpoints.
       var canDelete = true
