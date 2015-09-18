@@ -1,5 +1,3 @@
-import MySQLdb
-import MySQLdb.cursors
 from vertica_python import connect
 
 from airflow.hooks.dbapi_hook import DbApiHook
@@ -7,10 +5,6 @@ from airflow.hooks.dbapi_hook import DbApiHook
 class VerticaHook(DbApiHook):
     '''
     Interact with Vertica.
-
-    You can specify charset in the extra field of your connection
-    as ``{"charset": "utf8"}``. Also you can choose cursor as
-    ``{"cursor": "SSCursor"}``. Refer to the MySQLdb.cursors for more details.
     '''
 
     conn_name_attr = 'vertica_conn_id'
