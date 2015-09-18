@@ -20,7 +20,9 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
-import scala.xml.{Node, Text, Unparsed}
+import scala.util.control.NonFatal
+import scala.xml._
+import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 import org.apache.spark.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
@@ -395,4 +397,43 @@ private[spark] object UIUtils extends Logging {
     </script>
   }
 
+  /**
+   * Convert a description string to HTML. It will try to parse the string as HTML and sanitize
+   * any links. If that fails, then whole string will treated as a simple text.
+   */
+  def makeDescription(desc: String, basePathUri: String): NodeSeq = {
+    import scala.language.postfixOps
+
+    // If the description can be parsed as HTML and has only relative links, then render
+    // as HTML, otherwise render as escaped string
+    try {
+      // Try to load the description as unescaped HTML
+      val xml = XML.loadString("<span class=\"description-input\" " +
+        s"title=${"\"" + Utility.escape(desc) + "\""}>$desc</span>")
+      val allLinks = xml \\ "_" flatMap { _.attributes } filter { _.key == "href" }
+      val areAllLinksRelative = allLinks.forall { _.value.toString.startsWith ("/") }
+
+      // If all the links are relative then, transform the links to absolute links
+      // with basePathUri
+      if (areAllLinksRelative) {
+        val rule = new RewriteRule() {
+          override def transform(n: Node): Seq[Node] = {
+            n match {
+              case e: Elem if e \ "@href" nonEmpty =>
+                val relativePath = e.attribute("href").get.toString
+                val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
+                e % Attribute(null, "href", fullUri, Null)
+              case _ => n
+            }
+          }
+        }
+        new RuleTransformer(rule).transform(xml)
+      } else {
+        <span class="description-input" title={desc}> {desc} </span>
+      }
+    } catch {
+      case NonFatal(e) =>
+        <span class="description-input" title={desc}> {desc} </span>
+    }
+  }
 }

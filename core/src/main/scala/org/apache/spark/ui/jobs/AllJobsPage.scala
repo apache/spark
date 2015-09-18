@@ -21,7 +21,6 @@ import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{HashMap, ListBuffer}
-import scala.util.control.NonFatal
 import scala.xml._
 
 import org.apache.spark.JobExecutionStatus
@@ -225,27 +224,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-      val jobDescription = {
-        val d = lastStageDescription
-        // If the description can be parsed as HTML and has only relative links, then render
-        // as HTML, otherwise render as escaped string
-        try {
-          // Try to load the description as unescaped HTML
-          val xml = XML.loadString("<span class=\"description-input\" " +
-            s"title=${"\"" + Utility.escape(d) + "\""}>$d</span>")
-          val allLinks = xml \\ "_" flatMap { _.attributes } filter { _.key == "href" }
-          val areAllLinksRelative = allLinks.forall { _.value.toString.startsWith ("/") }
-          if (areAllLinksRelative) {
-            xml
-          } else {
-            <span class="description-input" title={d}> {d} </span>
-          }
-        } catch {
-          case NonFatal(e) =>
-            <span class="description-input" title={d}> {d} </span>
-        }
-      }
-
+      val jobDescription = UIUtils.makeDescription(lastStageDescription, parent.basePath)
 
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)

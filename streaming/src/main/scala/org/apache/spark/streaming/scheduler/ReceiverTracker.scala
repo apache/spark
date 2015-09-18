@@ -555,7 +555,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         }
       receiverRDD.setName(s"Receiver $receiverId")
       ssc.sparkContext.setJobDescription(s"Streaming job running receiver $receiverId")
-      ssc.sparkContext.setCallSite(ssc.startSite.get)
+      ssc.sparkContext.setCallSite(ssc.getStartSite())
 
       val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](
         receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ())
