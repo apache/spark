@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.random;
 
-import java.util.Arrays;
 import java.io.Serializable;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.junit.Assert;
@@ -250,12 +250,15 @@ public class JavaRandomRDDsSuite {
 
 // This is just a test generator, it always returns a string of 42
 class StringGenerator implements RandomDataGenerator<String>, Serializable {
-  @Override public String nextValue() {
+  @Override
+  public String nextValue() {
     return "42";
   }
-  @Override public StringGenerator copy(){
+  @Override
+  public StringGenerator copy() {
     return new StringGenerator();
   }
-  @Override public void setSeed(long seed){
+  @Override
+  public void setSeed(long seed) {
   }
 }
