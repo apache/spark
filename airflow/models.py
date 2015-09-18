@@ -960,6 +960,15 @@ class TaskInstance(Base):
 
         session.commit()
 
+    def dry_run(self):
+        task = self.task
+        task_copy = copy.copy(task)
+        self.task = task_copy
+
+        self.render_templates()
+        task_copy.dry_run()
+
+
     def handle_failure(self, error, test_mode, context):
         logging.exception(error)
         task = self.task
@@ -1636,6 +1645,15 @@ class BaseOperator(object):
                 mark_success=mark_success,
                 ignore_dependencies=ignore_dependencies,
                 force=force,)
+
+    def dry_run(self):
+        logging.info('Dry run')
+        for attr in self.template_fields:
+            content = getattr(self, attr)
+            if content and isinstance(content, basestring):
+                logging.info('Rendering template for {0}'.format(attr))
+                logging.info(content)
+
 
     def get_direct_relatives(self, upstream=False):
         """
