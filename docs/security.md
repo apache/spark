@@ -30,6 +30,8 @@ Encryption is not yet supported for data stored by Spark in temporary local stor
 files, cached data, and other application files. If encrypting this data is desired, a workaround is
 to configure your cluster manager to store application data on encrypted disks.
 
+### SSL Configuration
+
 Connection encryption (SSL) configuration is organized hierarchically. The user can configure the default SSL settings which will be used for all the supported communication protocols unless they are overwritten by protocol-specific settings. This way the user can easily provide the common settings for all the protocols without disabling the ability to configure each one individually. The common SSL settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at `spark.ssl.akka` and HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`. The full breakdown can be found on the [configuration page](configuration.html).
 
 SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
