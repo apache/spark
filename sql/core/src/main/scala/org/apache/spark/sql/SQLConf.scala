@@ -381,6 +381,13 @@ private[spark] object SQLConf {
       doc = "The maximum number of concurent files to open before falling back on sorting when " +
             "writing out files using dynamic partitioning.")
 
+  val DATASOURCE_SCHEMA_AS_NULLABLE = booleanConf("spark.sql.sources.schemaAsNullable",
+    defaultValue = Some(true),
+    doc = "When true, we always set nullable/containsNull/valueContainsNull of data source " +
+          "schema to true. So, we will not face situations that we cannot append data because " +
+          "containsNull/valueContainsNull in an Array/Map column of the existing table has " +
+          "already been set to `false`.")
+
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   //
