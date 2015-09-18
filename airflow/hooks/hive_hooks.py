@@ -16,6 +16,7 @@ import pyhs2
 from airflow.utils import AirflowException
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils import TemporaryDirectory
+from airflow.configuration import conf
 
 
 class HiveCliHook(BaseHook):
@@ -323,10 +324,14 @@ class HiveServer2Hook(BaseHook):
 
     def get_conn(self):
         db = self.get_connection(self.hiveserver2_conn_id)
+        auth_mechanism = db.extra_dejson.get('authMechanism', 'NOSASL')
+        if conf.get('security','enabled'):
+            auth_mechanism = db.extra_dejson.get('authMechanism', 'KERBEROS')
+
         return pyhs2.connect(
             host=db.host,
             port=db.port,
-            authMechanism=db.extra_dejson.get('authMechanism', 'NOSASL'),
+            authMechanism=auth_mechanism,
             user=db.login,
             database=db.schema or 'default')
 
