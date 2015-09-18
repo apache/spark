@@ -346,7 +346,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.mesos.role</code></td>
-  <td>*</td>
+  <td><code>*</code></td>
   <td>
     Set the role of this Spark framework for Mesos. Roles are used in Mesos for reservations
     and resource weight sharing.
