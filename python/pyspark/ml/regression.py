@@ -158,7 +158,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> model = ir.fit(df)
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
-    0.5
+    0.0
     >>> model.boundaries
     DenseVector([0.0, 1.0])
     """
