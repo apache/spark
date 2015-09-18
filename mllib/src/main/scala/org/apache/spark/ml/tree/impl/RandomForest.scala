@@ -172,7 +172,7 @@ private[ml] object RandomForest extends Logging {
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {
       try {
-        nodeIdCache.get.cleanupCache()
+        nodeIdCache.get.deleteAllCheckpoints()
       } catch {
         case e: IOException =>
           logWarning(s"delete all checkpoints failed. Error reason: ${e.getMessage}")
