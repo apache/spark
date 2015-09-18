@@ -34,6 +34,7 @@ private[spark] class BinaryFileRDD[T](
 
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
+    val conf = getConf
     inputFormat match {
       case configurable: Configurable =>
         configurable.setConf(conf)
