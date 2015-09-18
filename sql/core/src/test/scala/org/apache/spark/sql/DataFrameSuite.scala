@@ -887,4 +887,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .select(struct($"b"))
       .collect()
   }
+
+  test("SPARK-10539: Project should not be pushed down through Intersect or Except") {
+    val df1 = (1 to 100).map(Tuple1.apply).toDF("i")
+    val df2 = (1 to 30).map(Tuple1.apply).toDF("i")
+    val intersect = df1.intersect(df2)
+    val except = df1.except(df2)
+    assert(intersect.count() === 30)
+    assert(except.count() === 70)
+  }
 }
