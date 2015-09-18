@@ -4,8 +4,6 @@ import unicodecsv as csv
 import logging
 from tempfile import NamedTemporaryFile
 
-from vertica_python import datatypes
-
 from airflow.hooks import HiveCliHook, VerticaHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
@@ -77,7 +75,7 @@ class VerticaToHiveTransfer(BaseOperator):
         d = {
             5: 'BOOLEAN',
             6: 'INT',
-            7: 'FLOAT'
+            7: 'FLOAT',
             8: 'STRING',
             9: 'STRING',
             16: 'FLOAT',
@@ -97,7 +95,6 @@ class VerticaToHiveTransfer(BaseOperator):
             field_dict = OrderedDict()
             col_count = 0
             for field in cursor.description:
-                logging.info(field)
                 col_count += 1
                 col_position = "Column{position}".format(position=col_count)
                 field_dict[col_position if field[0] == '' else field[0]] = self.type_map(field[1])
