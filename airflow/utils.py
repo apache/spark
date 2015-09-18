@@ -11,6 +11,7 @@ import errno
 from functools import wraps
 import imp
 import inspect
+import json
 import logging
 import os
 import re
@@ -614,3 +615,13 @@ def chain(*tasks):
     """
     for up_task, down_task in zip(tasks[:-1], tasks[1:]):
         up_task.set_downstream(down_task)
+
+
+class AirflowJsonEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.strftime('%Y-%m-%dT%H:%M:%SZ')
+        elif isinstance(obj, date):
+            return obj.strftime('%Y-%m-%d')
+        # Let the base class default method raise the TypeError
+        return json.JSONEncoder.default(self, obj)

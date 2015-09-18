@@ -406,9 +406,6 @@ class Airflow(BaseView):
                 "Data has been truncated to {0}"
                 " rows. Expect incomplete results.").format(CHART_LIMIT)
 
-        def date_handler(obj):
-            return obj.isoformat() if hasattr(obj, 'isoformat') else obj
-
         if not payload['error'] and len(df) == 0:
             payload['error'] += "Empty result set. "
         elif (
@@ -452,7 +449,7 @@ class Airflow(BaseView):
                 payload['state'] = 'SUCCESS'
                 return Response(
                     response=json.dumps(
-                        payload, indent=4, default=date_handler),
+                        payload, indent=4, cls=utils.AirflowJsonEncoder),
                     status=200,
                     mimetype="application/json")
 
@@ -619,7 +616,8 @@ class Airflow(BaseView):
             payload['request_dict'] = request_dict
 
         return Response(
-            response=json.dumps(payload, indent=4, default=date_handler),
+            response=json.dumps(
+                payload, indent=4, cls=utils.AirflowJsonEncoder),
             status=200,
             mimetype="application/json")
 
