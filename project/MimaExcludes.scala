@@ -70,6 +70,13 @@ object MimaExcludes {
           "org.apache.spark.scheduler.AskPermissionToCommitOutput.this"),
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
+      ) ++ Seq(
+        // SPARK-10704: Switched ShuffleManager from a trait to an abstract class.
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+          "org.apache.spark.shuffle.ShuffleManager"),
+        // Changed ShuffleReader from a trait to a concrete class.
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+          "org.apache.spark.shuffle.ShuffleReader")
       )
     case v if v.startsWith("1.5") =>
       Seq(
