@@ -1,8 +1,11 @@
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
 import os
 import sys
 import time
 import logging
-from Queue import Queue
+from queue import Queue
 
 import mesos.interface
 from mesos.interface import mesos_pb2
