@@ -2,7 +2,7 @@ from __future__ import print_function
 from builtins import str, input, object
 from past.builtins import basestring
 from copy import copy
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta  # for doctest
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -28,6 +28,8 @@ from contextlib import contextmanager
 
 from sqlalchemy import event, exc
 from sqlalchemy.pool import Pool
+
+import numpy
 
 from airflow import settings
 from airflow.configuration import conf
@@ -619,9 +621,19 @@ def chain(*tasks):
 
 class AirflowJsonEncoder(json.JSONEncoder):
     def default(self, obj):
+        # convert dates and numpy objects in a json serializable format
         if isinstance(obj, datetime):
             return obj.strftime('%Y-%m-%dT%H:%M:%SZ')
         elif isinstance(obj, date):
             return obj.strftime('%Y-%m-%d')
+        elif type(obj) in [numpy.int_, numpy.intc, numpy.intp, numpy.int8,
+         numpy.int16, numpy.int32, numpy.int64, numpy.uint8, numpy.uint16, numpy.uint32, numpy.uint64]:
+            return int(obj)
+        elif type(obj) in [numpy.bool_]:
+            return bool(obj)
+        elif type(obj) in [numpy.float_, numpy.float16, numpy.float32, numpy.float64,
+         numpy.complex_, numpy.complex64, numpy.complex128,:
+            return float(obj)
+
         # Let the base class default method raise the TypeError
         return json.JSONEncoder.default(self, obj)
