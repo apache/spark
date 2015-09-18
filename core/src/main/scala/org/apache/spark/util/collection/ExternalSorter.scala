@@ -152,6 +152,9 @@ private[spark] class ExternalSorter[K, V, C](
   private var _diskBytesSpilled = 0L
   def diskBytesSpilled: Long = _diskBytesSpilled
 
+  // Peak size of the in-memory data structure observed so far, in bytes
+  private var _peakMemoryUsedBytes: Long = 0L
+  def peakMemoryUsedBytes: Long = _peakMemoryUsedBytes
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the
@@ -184,6 +187,12 @@ private[spark] class ExternalSorter[K, V, C](
     elementsPerPartition: Array[Long])
 
   private val spills = new ArrayBuffer[SpilledFile]
+
+  /**
+   * Number of files this sorter has spilled so far.
+   * Exposed for testing.
+   */
+  private[spark] def numSpills: Int = spills.size
 
   override def insertAll(records: Iterator[Product2[K, V]]): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high
@@ -224,14 +233,21 @@ private[spark] class ExternalSorter[K, V, C](
       return
     }
 
+    var estimatedSize = 0L
     if (usingMap) {
-      if (maybeSpill(map, map.estimateSize())) {
+      estimatedSize = map.estimateSize()
+      if (maybeSpill(map, estimatedSize)) {
         map = new PartitionedAppendOnlyMap[K, C]
       }
     } else {
-      if (maybeSpill(buffer, buffer.estimateSize())) {
+      estimatedSize = buffer.estimateSize()
+      if (maybeSpill(buffer, estimatedSize)) {
         buffer = newBuffer()
       }
+    }
+
+    if (estimatedSize > _peakMemoryUsedBytes) {
+      _peakMemoryUsedBytes = estimatedSize
     }
   }
 
@@ -281,6 +297,8 @@ private[spark] class ExternalSorter[K, V, C](
       val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
       while (it.hasNext) {
         val partitionId = it.nextPartition()
+        require(partitionId >= 0 && partitionId < numPartitions,
+          s"partition Id: ${partitionId} should be in the range [0, ${numPartitions})")
         it.writeNext(writer)
         elementsPerPartition(partitionId) += 1
         objectsWritten += 1
@@ -684,8 +702,10 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
-    context.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
+    context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+    context.internalMetricsToAccumulators(
+      InternalAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemoryUsedBytes)
 
     lengths
   }

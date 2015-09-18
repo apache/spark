@@ -22,19 +22,15 @@ import java.io.File
 import scala.language.postfixOps
 import scala.util.Random
 
+import org.scalatest.Matchers._
+
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.json.JSONRelation
-import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SharedSQLContext}
 
-class DataFrameSuite extends QueryTest with SQLTestUtils {
-  import org.apache.spark.sql.TestData._
-
-  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
+class DataFrameSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("analysis error should be eagerly reported") {
     // Eager analysis.
@@ -132,6 +128,21 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
         .agg(countDistinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
+  }
+
+  test("SPARK-8930: explode should fail with a meaningful message if it takes a star") {
+    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
+    val e = intercept[AnalysisException] {
+      df.explode($"*") { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      }.queryExecution.assertAnalyzed()
+    }
+    assert(e.getMessage.contains(
+      "Cannot explode *, explode can only be applied on a specific column."))
+
+    df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+      csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+    }.queryExecution.assertAnalyzed()
   }
 
   test("explode alias and star") {
@@ -336,7 +347,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("replace column using withColumn") {
-    val df2 = sqlContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
     checkAnswer(
       df3.select("x"),
@@ -415,23 +426,6 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
-  test("randomSplit") {
-    val n = 600
-    val data = sqlContext.sparkContext.parallelize(1 to n, 2).toDF("id")
-    for (seed <- 1 to 5) {
-      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
-      assert(splits.length == 3, "wrong number of splits")
-
-      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
-        data.collect().toList, "incomplete or wrong split")
-
-      val s = splits.map(_.count())
-      assert(math.abs(s(0) - 100) < 50) // std =  9.13
-      assert(math.abs(s(1) - 200) < 50) // std = 11.55
-      assert(math.abs(s(2) - 300) < 50) // std = 12.25
-    }
-  }
-
   test("describe") {
     val describeTestData = Seq(
       ("Bob", 16, 176),
@@ -442,7 +436,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     val describeResult = Seq(
       Row("count", "4", "4"),
       Row("mean", "33.0", "178.0"),
-      Row("stddev", "16.583123951777", "10.0"),
+      Row("stddev", "19.148542155126762", "11.547005383792516"),
       Row("min", "16", "164"),
       Row("max", "60", "192"))
 
@@ -487,20 +481,23 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("inputFiles") {
-    val fakeRelation1 = new ParquetRelation(Array("/my/path", "/my/other/path"),
-      Some(testData.schema), None, Map.empty)(sqlContext)
-    val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
-    assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
+    withTempDir { dir =>
+      val df = Seq((1, 22)).toDF("a", "b")
 
-    val fakeRelation2 = new JSONRelation("/json/path", 1, Some(testData.schema), sqlContext)
-    val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
-    assert(df2.inputFiles.toSet == fakeRelation2.path.toSet)
+      val parquetDir = new File(dir, "parquet").getCanonicalPath
+      df.write.parquet(parquetDir)
+      val parquetDF = sqlContext.read.parquet(parquetDir)
+      assert(parquetDF.inputFiles.nonEmpty)
 
-    val unionDF = df1.unionAll(df2)
-    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      df.write.json(jsonDir)
+      val jsonDF = sqlContext.read.json(jsonDir)
+      assert(parquetDF.inputFiles.nonEmpty)
 
-    val filtered = df1.filter("false").unionAll(df2.intersect(df2))
-    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+      val unioned = jsonDF.unionAll(parquetDF).inputFiles.sorted
+      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).toSet.toArray.sorted
+      assert(unioned === allFiles)
+    }
   }
 
   ignore("show") {
@@ -511,7 +508,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
 
   test("showString: truncate = [true, false]") {
     val longString = Array.fill(21)("1").mkString
-    val df = sqlContext.sparkContext.parallelize(Seq("1", longString)).toDF()
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = """+---------------------+
                                    ||_1                   |
                                    |+---------------------+
@@ -601,7 +598,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
-    val rowRDD = sqlContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
+    val rowRDD = sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
     val df = sqlContext.createDataFrame(rowRDD, schema)
     df.rdd.collect()
@@ -624,14 +621,14 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    val df = sqlContext.read.json(sparkContext.makeRDD(
       """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df.select(df("`a.b`.c.`d..e`.`f`")),
       Row(1)
     )
 
-    val df2 = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    val df2 = sqlContext.read.json(sparkContext.makeRDD(
       """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df2.select(df2("`a  b`.c.d  e.f")),
@@ -651,7 +648,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-7324 dropDuplicates") {
-    val testData = sqlContext.sparkContext.parallelize(
+    val testData = sparkContext.parallelize(
       (2, 1, 2) :: (1, 1, 1) ::
       (1, 2, 1) :: (2, 1, 2) ::
       (2, 2, 2) :: (2, 2, 1) ::
@@ -683,18 +680,6 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     checkAnswer(
       testData.dropDuplicates(Seq("value2")),
       Seq(Row(2, 1, 2), Row(1, 1, 1)))
-  }
-
-  test("SPARK-7276: Project collapse for continuous select") {
-    var df = testData
-    for (i <- 1 to 5) {
-      df = df.select($"*")
-    }
-
-    import org.apache.spark.sql.catalyst.plans.logical.Project
-    // make sure df have at most two Projects
-    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
-    assert(!p.child.isInstanceOf[Project])
   }
 
   test("SPARK-7150 range api") {
@@ -883,5 +868,43 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     val expected = (1 to 100).map(_ -> random.nextDouble()).sortBy(_._2).map(_._1)
     val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
     assert(expected === actual)
+  }
+
+  test("SPARK-9323: DataFrame.orderBy should support nested column name") {
+    val df = sqlContext.read.json(sparkContext.makeRDD(
+      """{"a": {"b": 1}}""" :: Nil))
+    checkAnswer(df.orderBy("a.b"), Row(Row(1)))
+  }
+
+  test("SPARK-9950: correctly analyze grouping/aggregating on struct fields") {
+    val df = Seq(("x", (1, 1)), ("y", (2, 2))).toDF("a", "b")
+    checkAnswer(df.groupBy("b._1").agg(sum("b._2")), Row(1, 1) :: Row(2, 2) :: Nil)
+  }
+
+  test("SPARK-10093: Avoid transformations on executors") {
+    val df = Seq((1, 1)).toDF("a", "b")
+    df.where($"a" === 1)
+      .select($"a", $"b", struct($"b"))
+      .orderBy("a")
+      .select(struct($"b"))
+      .collect()
+  }
+
+  test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
+    val df = Seq(1 -> 2).toDF("i", "j")
+    val query = df.groupBy('i)
+      .agg(max('j).as("aggOrdering"))
+      .orderBy(sum('j))
+    checkAnswer(query, Row(1, 2))
+  }
+
+  test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
+    val input = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+      (1 to 10).map(i => s"""{"id": $i}""")))
+
+    val df = input.select($"id", rand(0).as('r))
+    df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
+      assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
+    }
   }
 }

@@ -44,7 +44,7 @@ sealed abstract class Node extends Serializable {
    * and probabilities.
    * For classification, the array of class counts must be normalized to a probability distribution.
    */
-  private[tree] def impurityStats: ImpurityCalculator
+  private[ml] def impurityStats: ImpurityCalculator
 
   /** Recursive prediction helper method */
   private[ml] def predictImpl(features: Vector): LeafNode
@@ -72,6 +72,12 @@ sealed abstract class Node extends Serializable {
    * @param id  Node ID using old format IDs
    */
   private[ml] def toOld(id: Int): OldNode
+
+  /**
+   * Trace down the tree, and return the largest feature index used in any split.
+   * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
+   */
+  private[ml] def maxSplitFeatureIndex(): Int
 }
 
 private[ml] object Node {
@@ -109,7 +115,7 @@ private[ml] object Node {
 final class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
-    override val impurityStats: ImpurityCalculator) extends Node {
+    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
 
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"
@@ -129,6 +135,8 @@ final class LeafNode private[ml] (
     new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)),
       impurity, isLeaf = true, None, None, None, None)
   }
+
+  override private[ml] def maxSplitFeatureIndex(): Int = -1
 }
 
 /**
@@ -150,7 +158,7 @@ final class InternalNode private[ml] (
     val leftChild: Node,
     val rightChild: Node,
     val split: Split,
-    override val impurityStats: ImpurityCalculator) extends Node {
+    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
 
   override def toString: String = {
     s"InternalNode(prediction = $prediction, impurity = $impurity, split = $split)"
@@ -189,6 +197,11 @@ final class InternalNode private[ml] (
       Some(new OldInformationGainStats(gain, impurity, leftChild.impurity, rightChild.impurity,
         new OldPredict(leftChild.prediction, prob = 0.0),
         new OldPredict(rightChild.prediction, prob = 0.0))))
+  }
+
+  override private[ml] def maxSplitFeatureIndex(): Int = {
+    math.max(split.featureIndex,
+      math.max(leftChild.maxSplitFeatureIndex(), rightChild.maxSplitFeatureIndex()))
   }
 }
 

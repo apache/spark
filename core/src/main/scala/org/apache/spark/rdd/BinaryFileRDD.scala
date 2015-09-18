@@ -28,7 +28,7 @@ private[spark] class BinaryFileRDD[T](
     inputFormatClass: Class[_ <: StreamFileInputFormat[T]],
     keyClass: Class[String],
     valueClass: Class[T],
-    @transient conf: Configuration,
+    conf: Configuration,
     minPartitions: Int)
   extends NewHadoopRDD[String, T](sc, inputFormatClass, keyClass, valueClass, conf) {
 
@@ -36,10 +36,10 @@ private[spark] class BinaryFileRDD[T](
     val inputFormat = inputFormatClass.newInstance
     inputFormat match {
       case configurable: Configurable =>
-        configurable.setConf(conf)
+        configurable.setConf(getConf)
       case _ =>
     }
-    val jobContext = newJobContext(conf, jobId)
+    val jobContext = newJobContext(getConf, jobId)
     inputFormat.setMinPartitions(jobContext, minPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)

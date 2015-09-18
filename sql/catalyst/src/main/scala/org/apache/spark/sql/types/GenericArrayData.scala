@@ -17,21 +17,32 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.ClassTag
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-import org.apache.spark.sql.catalyst.expressions.GenericSpecializedGetters
-
-class GenericArrayData(private[sql] val array: Array[Any])
-  extends ArrayData with GenericSpecializedGetters {
-
-  override def genericGet(ordinal: Int): Any = array(ordinal)
+class GenericArrayData(private[sql] val array: Array[Any]) extends ArrayData {
 
   override def copy(): ArrayData = new GenericArrayData(array.clone())
 
-  // todo: Array is invariant in scala, maybe use toSeq instead?
-  override def toArray[T: ClassTag](elementType: DataType): Array[T] = array.map(_.asInstanceOf[T])
-
   override def numElements(): Int = array.length
+
+  private def getAs[T](ordinal: Int) = array(ordinal).asInstanceOf[T]
+  override def isNullAt(ordinal: Int): Boolean = getAs[AnyRef](ordinal) eq null
+  override def get(ordinal: Int, elementType: DataType): AnyRef = getAs(ordinal)
+  override def getBoolean(ordinal: Int): Boolean = getAs(ordinal)
+  override def getByte(ordinal: Int): Byte = getAs(ordinal)
+  override def getShort(ordinal: Int): Short = getAs(ordinal)
+  override def getInt(ordinal: Int): Int = getAs(ordinal)
+  override def getLong(ordinal: Int): Long = getAs(ordinal)
+  override def getFloat(ordinal: Int): Float = getAs(ordinal)
+  override def getDouble(ordinal: Int): Double = getAs(ordinal)
+  override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
+  override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
+  override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
+  override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
+  override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
+  override def getMap(ordinal: Int): MapData = getAs(ordinal)
 
   override def toString(): String = array.mkString("[", ",", "]")
 
@@ -56,8 +67,8 @@ class GenericArrayData(private[sql] val array: Array[Any])
         return false
       }
       if (!isNullAt(i)) {
-        val o1 = genericGet(i)
-        val o2 = other.genericGet(i)
+        val o1 = array(i)
+        val o2 = other.array(i)
         o1 match {
           case b1: Array[Byte] =>
             if (!o2.isInstanceOf[Array[Byte]] ||
@@ -91,7 +102,7 @@ class GenericArrayData(private[sql] val array: Array[Any])
         if (isNullAt(i)) {
           0
         } else {
-          genericGet(i) match {
+          array(i) match {
             case b: Boolean => if (b) 0 else 1
             case b: Byte => b.toInt
             case s: Short => s.toInt

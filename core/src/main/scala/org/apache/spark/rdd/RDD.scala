@@ -149,21 +149,41 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Set this RDD's storage level to persist its values across operations after the first time
-   * it is computed. This can only be used to assign a new storage level if the RDD does not
-   * have a storage level set yet..
+   * Mark this RDD for persisting using the specified level.
+   *
+   * @param newLevel the target storage level
+   * @param allowOverride whether to override any existing level with the new one
    */
-  def persist(newLevel: StorageLevel): this.type = {
+  private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
     // TODO: Handle changes of StorageLevel
-    if (storageLevel != StorageLevel.NONE && newLevel != storageLevel) {
+    if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
       throw new UnsupportedOperationException(
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
-    sc.persistRDD(this)
-    // Register the RDD with the ContextCleaner for automatic GC-based cleanup
-    sc.cleaner.foreach(_.registerRDDForCleanup(this))
+    // If this is the first time this RDD is marked for persisting, register it
+    // with the SparkContext for cleanups and accounting. Do this only once.
+    if (storageLevel == StorageLevel.NONE) {
+      sc.cleaner.foreach(_.registerRDDForCleanup(this))
+      sc.persistRDD(this)
+    }
     storageLevel = newLevel
     this
+  }
+
+  /**
+   * Set this RDD's storage level to persist its values across operations after the first time
+   * it is computed. This can only be used to assign a new storage level if the RDD does not
+   * have a storage level set yet. Local checkpointing is an exception.
+   */
+  def persist(newLevel: StorageLevel): this.type = {
+    if (isLocallyCheckpointed) {
+      // This means the user previously called localCheckpoint(), which should have already
+      // marked this RDD for persisting. Here we should override the old storage level with
+      // one that is explicitly requested by the user (after adapting it to use disk).
+      persist(LocalRDDCheckpointData.transformStorageLevel(newLevel), allowOverride = true)
+    } else {
+      persist(newLevel, allowOverride = false)
+    }
   }
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
@@ -449,50 +469,44 @@ abstract class RDD[T: ClassTag](
    * @param seed seed for the random number generator
    * @return sample of specified size in an array
    */
-  // TODO: rewrite this without return statements so we can wrap it in a scope
   def takeSample(
       withReplacement: Boolean,
       num: Int,
-      seed: Long = Utils.random.nextLong): Array[T] = {
+      seed: Long = Utils.random.nextLong): Array[T] = withScope {
     val numStDev = 10.0
 
-    if (num < 0) {
-      throw new IllegalArgumentException("Negative number of elements requested")
-    } else if (num == 0) {
-      return new Array[T](0)
+    require(num >= 0, "Negative number of elements requested")
+    require(num <= (Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt),
+      "Cannot support a sample size > Int.MaxValue - " +
+      s"$numStDev * math.sqrt(Int.MaxValue)")
+
+    if (num == 0) {
+      new Array[T](0)
+    } else {
+      val initialCount = this.count()
+      if (initialCount == 0) {
+        new Array[T](0)
+      } else {
+        val rand = new Random(seed)
+        if (!withReplacement && num >= initialCount) {
+          Utils.randomizeInPlace(this.collect(), rand)
+        } else {
+          val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
+            withReplacement)
+          var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+
+          // If the first sample didn't turn out large enough, keep trying to take samples;
+          // this shouldn't happen often because we use a big multiplier for the initial size
+          var numIters = 0
+          while (samples.length < num) {
+            logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
+            samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+            numIters += 1
+          }
+          Utils.randomizeInPlace(samples, rand).take(num)
+        }
+      }
     }
-
-    val initialCount = this.count()
-    if (initialCount == 0) {
-      return new Array[T](0)
-    }
-
-    val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
-    if (num > maxSampleSize) {
-      throw new IllegalArgumentException("Cannot support a sample size > Int.MaxValue - " +
-        s"$numStDev * math.sqrt(Int.MaxValue)")
-    }
-
-    val rand = new Random(seed)
-    if (!withReplacement && num >= initialCount) {
-      return Utils.randomizeInPlace(this.collect(), rand)
-    }
-
-    val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
-      withReplacement)
-
-    var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
-
-    // If the first sample didn't turn out large enough, keep trying to take samples;
-    // this shouldn't happen often because we use a big multiplier for the initial size
-    var numIters = 0
-    while (samples.length < num) {
-      logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
-      samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
-      numIters += 1
-    }
-
-    Utils.randomizeInPlace(samples, rand).take(num)
   }
 
   /**
@@ -1448,33 +1462,99 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
-   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * directory set with `SparkContext#setCheckpointDir` and all references to its parent
    * RDDs will be removed. This function must be called before any job has been
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
-  def checkpoint(): Unit = {
+  def checkpoint(): Unit = RDDCheckpointData.synchronized {
+    // NOTE: we use a global lock here due to complexities downstream with ensuring
+    // children RDD partitions point to the correct parent partitions. In the future
+    // we should revisit this consideration.
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
-      // NOTE: we use a global lock here due to complexities downstream with ensuring
-      // children RDD partitions point to the correct parent partitions. In the future
-      // we should revisit this consideration.
-      RDDCheckpointData.synchronized {
-        checkpointData = Some(new RDDCheckpointData(this))
-      }
+      checkpointData = Some(new ReliableRDDCheckpointData(this))
     }
   }
 
   /**
-   * Return whether this RDD has been checkpointed or not
+   * Mark this RDD for local checkpointing using Spark's existing caching layer.
+   *
+   * This method is for users who wish to truncate RDD lineages while skipping the expensive
+   * step of replicating the materialized data in a reliable distributed file system. This is
+   * useful for RDDs with long lineages that need to be truncated periodically (e.g. GraphX).
+   *
+   * Local checkpointing sacrifices fault-tolerance for performance. In particular, checkpointed
+   * data is written to ephemeral local storage in the executors instead of to a reliable,
+   * fault-tolerant storage. The effect is that if an executor fails during the computation,
+   * the checkpointed data may no longer be accessible, causing an irrecoverable job failure.
+   *
+   * This is NOT safe to use with dynamic allocation, which removes executors along
+   * with their cached blocks. If you must use both features, you are advised to set
+   * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
+   *
+   * The checkpoint directory set through `SparkContext#setCheckpointDir` is not used.
+   */
+  def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false) &&
+        conf.contains("spark.dynamicAllocation.cachedExecutorIdleTimeout")) {
+      logWarning("Local checkpointing is NOT safe to use with dynamic allocation, " +
+        "which removes executors along with their cached blocks. If you must use both " +
+        "features, you are advised to set `spark.dynamicAllocation.cachedExecutorIdleTimeout` " +
+        "to a high value. E.g. If you plan to use the RDD for 1 hour, set the timeout to " +
+        "at least 1 hour.")
+    }
+
+    // Note: At this point we do not actually know whether the user will call persist() on
+    // this RDD later, so we must explicitly call it here ourselves to ensure the cached
+    // blocks are registered for cleanup later in the SparkContext.
+    //
+    // If, however, the user has already called persist() on this RDD, then we must adapt
+    // the storage level he/she specified to one that is appropriate for local checkpointing
+    // (i.e. uses disk) to guarantee correctness.
+
+    if (storageLevel == StorageLevel.NONE) {
+      persist(LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
+    } else {
+      persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
+    }
+
+    checkpointData match {
+      case Some(reliable: ReliableRDDCheckpointData[_]) => logWarning(
+        "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
+      case _ =>
+    }
+    checkpointData = Some(new LocalRDDCheckpointData(this))
+    this
+  }
+
+  /**
+   * Return whether this RDD is marked for checkpointing, either reliably or locally.
    */
   def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
   /**
-   * Gets the name of the file to which this RDD was checkpointed
+   * Return whether this RDD is marked for local checkpointing.
+   * Exposed for testing.
    */
-  def getCheckpointFile: Option[String] = checkpointData.flatMap(_.getCheckpointFile)
+  private[rdd] def isLocallyCheckpointed: Boolean = {
+    checkpointData match {
+      case Some(_: LocalRDDCheckpointData[T]) => true
+      case _ => false
+    }
+  }
+
+  /**
+   * Gets the name of the directory to which this RDD was checkpointed.
+   * This is not defined if the RDD is checkpointed locally.
+   */
+  def getCheckpointFile: Option[String] = {
+    checkpointData match {
+      case Some(reliable: ReliableRDDCheckpointData[T]) => reliable.getCheckpointDir
+      case _ => None
+    }
+  }
 
   // =======================================================================
   // Other internal methods and fields
@@ -1545,7 +1625,7 @@ abstract class RDD[T: ClassTag](
       if (!doCheckpointCalled) {
         doCheckpointCalled = true
         if (checkpointData.isDefined) {
-          checkpointData.get.doCheckpoint()
+          checkpointData.get.checkpoint()
         } else {
           dependencies.foreach(_.rdd.doCheckpoint())
         }
@@ -1557,7 +1637,7 @@ abstract class RDD[T: ClassTag](
    * Changes the dependencies of this RDD from its original parents to a new RDD (`newRDD`)
    * created from the checkpoint file, and forget its old dependencies and partitions.
    */
-  private[spark] def markCheckpointed(checkpointRDD: RDD[_]) {
+  private[spark] def markCheckpointed(): Unit = {
     clearDependencies()
     partitions_ = null
     deps = null    // Forget the constructor argument for dependencies too
@@ -1580,7 +1660,7 @@ abstract class RDD[T: ClassTag](
       import Utils.bytesToString
 
       val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
-      val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
+      val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
         "    CachedPartitions: %d; MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s".format(
           info.numCachedPartitions, bytesToString(info.memSize),
           bytesToString(info.externalBlockStoreSize), bytesToString(info.diskSize)))

@@ -24,7 +24,6 @@ import java.util.{UUID, Date}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
 import scala.util.Random
@@ -228,7 +227,7 @@ private[deploy] class Worker(
   /**
    * Re-register with the master because a network failure or a master failure has occurred.
    * If the re-registration attempt threshold is exceeded, the worker exits with error.
-   * Note that for thread-safety this should only be called from the actor.
+   * Note that for thread-safety this should only be called from the rpcEndpoint.
    */
   private def reregisterWithMaster(): Unit = {
     Utils.tryOrExit {
@@ -365,7 +364,8 @@ private[deploy] class Worker(
       if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
     case WorkDirCleanup =>
-      // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
+      // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
+      // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
       val appIds = executors.values.map(_.appId).toSet
       val cleanupFuture = concurrent.future {
@@ -427,7 +427,9 @@ private[deploy] class Worker(
           // application finishes.
           val appLocalDirs = appDirectories.get(appId).getOrElse {
             Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              Utils.createDirectory(dir, namePrefix = "executor").getAbsolutePath()
+              val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+              Utils.chmod700(appDir)
+              appDir.getAbsolutePath()
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs
@@ -684,7 +686,7 @@ private[deploy] object Worker extends Logging {
       workerNumber: Option[Int] = None,
       conf: SparkConf = new SparkConf): RpcEnv = {
 
-    // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
+    // The LocalSparkCluster runs multiple local sparkWorkerX RPC Environments
     val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)

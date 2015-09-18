@@ -339,6 +339,8 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
+
+  override def clone(v: UTF8String): UTF8String = v.clone()
 }
 
 private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {

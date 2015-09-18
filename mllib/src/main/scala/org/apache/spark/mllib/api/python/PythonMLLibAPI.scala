@@ -37,6 +37,7 @@ import org.apache.spark.mllib.evaluation.RankingMetrics
 import org.apache.spark.mllib.feature._
 import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
 import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
 import org.apache.spark.mllib.recommendation._
@@ -54,7 +55,7 @@ import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomFo
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -131,7 +132,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       regParam: Double,
       regType: String,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val lrAlg = new LinearRegressionWithSGD()
     lrAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -140,6 +142,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     lrAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       lrAlg,
@@ -158,7 +161,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       miniBatchFraction: Double,
       initialWeights: Vector,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val lassoAlg = new LassoWithSGD()
     lassoAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -167,6 +171,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     trainRegressionModel(
       lassoAlg,
       data,
@@ -184,7 +189,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       miniBatchFraction: Double,
       initialWeights: Vector,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val ridgeAlg = new RidgeRegressionWithSGD()
     ridgeAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -193,6 +199,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     trainRegressionModel(
       ridgeAlg,
       data,
@@ -211,7 +218,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector,
       regType: String,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val SVMAlg = new SVMWithSGD()
     SVMAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -220,6 +228,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     SVMAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       SVMAlg,
@@ -239,7 +248,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       regParam: Double,
       regType: String,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val LogRegAlg = new LogisticRegressionWithSGD()
     LogRegAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -248,6 +258,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     LogRegAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       LogRegAlg,
@@ -1096,6 +1107,81 @@ private[python] class PythonMLLibAPI extends Serializable {
     Statistics.kolmogorovSmirnovTest(data, distName, paramsSeq: _*)
   }
 
+  /**
+   * Wrapper around RowMatrix constructor.
+   */
+  def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
+    new RowMatrix(rows.rdd, numRows, numCols)
+  }
+
+  /**
+   * Wrapper around IndexedRowMatrix constructor.
+   */
+  def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
+    // We use DataFrames for serialization of IndexedRows from Python,
+    // so map each Row in the DataFrame back to an IndexedRow.
+    val indexedRows = rows.map {
+      case Row(index: Long, vector: Vector) => IndexedRow(index, vector)
+    }
+    new IndexedRowMatrix(indexedRows, numRows, numCols)
+  }
+
+  /**
+   * Wrapper around CoordinateMatrix constructor.
+   */
+  def createCoordinateMatrix(rows: DataFrame, numRows: Long, numCols: Long): CoordinateMatrix = {
+    // We use DataFrames for serialization of MatrixEntry entries from
+    // Python, so map each Row in the DataFrame back to a MatrixEntry.
+    val entries = rows.map {
+      case Row(i: Long, j: Long, value: Double) => MatrixEntry(i, j, value)
+    }
+    new CoordinateMatrix(entries, numRows, numCols)
+  }
+
+  /**
+   * Wrapper around BlockMatrix constructor.
+   */
+  def createBlockMatrix(blocks: DataFrame, rowsPerBlock: Int, colsPerBlock: Int,
+                        numRows: Long, numCols: Long): BlockMatrix = {
+    // We use DataFrames for serialization of sub-matrix blocks from
+    // Python, so map each Row in the DataFrame back to a
+    // ((blockRowIndex, blockColIndex), sub-matrix) tuple.
+    val blockTuples = blocks.map {
+      case Row(Row(blockRowIndex: Long, blockColIndex: Long), subMatrix: Matrix) =>
+        ((blockRowIndex.toInt, blockColIndex.toInt), subMatrix)
+    }
+    new BlockMatrix(blockTuples, rowsPerBlock, colsPerBlock, numRows, numCols)
+  }
+
+  /**
+   * Return the rows of an IndexedRowMatrix.
+   */
+  def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
+    // We use DataFrames for serialization of IndexedRows to Python,
+    // so return a DataFrame.
+    val sqlContext = new SQLContext(indexedRowMatrix.rows.sparkContext)
+    sqlContext.createDataFrame(indexedRowMatrix.rows)
+  }
+
+  /**
+   * Return the entries of a CoordinateMatrix.
+   */
+  def getMatrixEntries(coordinateMatrix: CoordinateMatrix): DataFrame = {
+    // We use DataFrames for serialization of MatrixEntry entries to
+    // Python, so return a DataFrame.
+    val sqlContext = new SQLContext(coordinateMatrix.entries.sparkContext)
+    sqlContext.createDataFrame(coordinateMatrix.entries)
+  }
+
+  /**
+   * Return the sub-matrix blocks of a BlockMatrix.
+   */
+  def getMatrixBlocks(blockMatrix: BlockMatrix): DataFrame = {
+    // We use DataFrames for serialization of sub-matrix blocks to
+    // Python, so return a DataFrame.
+    val sqlContext = new SQLContext(blockMatrix.blocks.sparkContext)
+    sqlContext.createDataFrame(blockMatrix.blocks)
+  }
 }
 
 /**

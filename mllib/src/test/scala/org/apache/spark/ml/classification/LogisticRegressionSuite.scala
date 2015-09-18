@@ -17,10 +17,14 @@
 
 package org.apache.spark.ml.classification
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
@@ -58,8 +62,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
       val testData = generateMultinomialLogisticInput(weights, xMean, xVariance, true, nPoints, 42)
 
-      sqlContext.createDataFrame(
-        generateMultinomialLogisticInput(weights, xMean, xVariance, true, nPoints, 42))
+      sqlContext.createDataFrame(sc.parallelize(testData, 4))
     }
   }
 
@@ -76,6 +79,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lr.getPredictionCol === "prediction")
     assert(lr.getRawPredictionCol === "rawPrediction")
     assert(lr.getProbabilityCol === "probability")
+    assert(lr.getWeightCol === "")
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
     val model = lr.fit(dataset)
@@ -91,11 +95,53 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.hasParent)
   }
 
+  test("setThreshold, getThreshold") {
+    val lr = new LogisticRegression
+    // default
+    assert(lr.getThreshold === 0.5, "LogisticRegression.threshold should default to 0.5")
+    withClue("LogisticRegression should not have thresholds set by default.") {
+      intercept[java.util.NoSuchElementException] { // Note: The exception type may change in future
+        lr.getThresholds
+      }
+    }
+    // Set via threshold.
+    // Intuition: Large threshold or large thresholds(1) makes class 0 more likely.
+    lr.setThreshold(1.0)
+    assert(lr.getThresholds === Array(0.0, 1.0))
+    lr.setThreshold(0.0)
+    assert(lr.getThresholds === Array(1.0, 0.0))
+    lr.setThreshold(0.5)
+    assert(lr.getThresholds === Array(0.5, 0.5))
+    // Set via thresholds
+    val lr2 = new LogisticRegression
+    lr2.setThresholds(Array(0.3, 0.7))
+    val expectedThreshold = 1.0 / (1.0 + 0.3 / 0.7)
+    assert(lr2.getThreshold ~== expectedThreshold relTol 1E-7)
+    // thresholds and threshold must be consistent
+    lr2.setThresholds(Array(0.1, 0.2, 0.3))
+    withClue("getThreshold should throw error if thresholds has length != 2.") {
+      intercept[IllegalArgumentException] {
+        lr2.getThreshold
+      }
+    }
+    // thresholds and threshold must be consistent: values
+    withClue("fit with ParamMap should throw error if threshold, thresholds do not match.") {
+      intercept[IllegalArgumentException] {
+        val lr2model = lr2.fit(dataset,
+          lr2.thresholds -> Array(0.3, 0.7), lr2.threshold -> (expectedThreshold / 2.0))
+        lr2model.getThreshold
+      }
+    }
+  }
+
   test("logistic regression doesn't fit intercept when fitIntercept is off") {
     val lr = new LogisticRegression
     lr.setFitIntercept(false)
     val model = lr.fit(dataset)
     assert(model.intercept === 0.0)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
   }
 
   test("logistic regression with setters") {
@@ -123,14 +169,16 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       s" ${predAllZero.count(_ === 0)} of ${dataset.count()} were 0.")
     // Call transform with params, and check that the params worked.
     val predNotAllZero =
-      model.transform(dataset, model.threshold -> 0.0, model.probabilityCol -> "myProb")
+      model.transform(dataset, model.threshold -> 0.0,
+        model.probabilityCol -> "myProb")
         .select("prediction", "myProb")
         .collect()
         .map { case Row(pred: Double, prob: Vector) => pred }
     assert(predNotAllZero.exists(_ !== 0.0))
 
     // Call fit() with new params, and check as many params as we can.
-    val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1, lr.threshold -> 0.4,
+    lr.setThresholds(Array(0.6, 0.4))
+    val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1,
       lr.probabilityCol -> "theProb")
     val parent2 = model2.parent.asInstanceOf[LogisticRegression]
     assert(parent2.getMaxIter === 5)
@@ -171,41 +219,63 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("MultiClassSummarizer") {
     val summarizer1 = (new MultiClassSummarizer)
       .add(0.0).add(3.0).add(4.0).add(3.0).add(6.0)
-    assert(summarizer1.histogram.zip(Array[Long](1, 0, 0, 2, 1, 0, 1)).forall(x => x._1 === x._2))
+    assert(summarizer1.histogram === Array[Double](1, 0, 0, 2, 1, 0, 1))
     assert(summarizer1.countInvalid === 0)
     assert(summarizer1.numClasses === 7)
 
     val summarizer2 = (new MultiClassSummarizer)
       .add(1.0).add(5.0).add(3.0).add(0.0).add(4.0).add(1.0)
-    assert(summarizer2.histogram.zip(Array[Long](1, 2, 0, 1, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizer2.histogram === Array[Double](1, 2, 0, 1, 1, 1))
     assert(summarizer2.countInvalid === 0)
     assert(summarizer2.numClasses === 6)
 
     val summarizer3 = (new MultiClassSummarizer)
       .add(0.0).add(1.3).add(5.2).add(2.5).add(2.0).add(4.0).add(4.0).add(4.0).add(1.0)
-    assert(summarizer3.histogram.zip(Array[Long](1, 1, 1, 0, 3)).forall(x => x._1 === x._2))
+    assert(summarizer3.histogram === Array[Double](1, 1, 1, 0, 3))
     assert(summarizer3.countInvalid === 3)
     assert(summarizer3.numClasses === 5)
 
     val summarizer4 = (new MultiClassSummarizer)
       .add(3.1).add(4.3).add(2.0).add(1.0).add(3.0)
-    assert(summarizer4.histogram.zip(Array[Long](0, 1, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizer4.histogram === Array[Double](0, 1, 1, 1))
     assert(summarizer4.countInvalid === 2)
     assert(summarizer4.numClasses === 4)
 
     // small map merges large one
     val summarizerA = summarizer1.merge(summarizer2)
     assert(summarizerA.hashCode() === summarizer2.hashCode())
-    assert(summarizerA.histogram.zip(Array[Long](2, 2, 0, 3, 2, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizerA.histogram === Array[Double](2, 2, 0, 3, 2, 1, 1))
     assert(summarizerA.countInvalid === 0)
     assert(summarizerA.numClasses === 7)
 
     // large map merges small one
     val summarizerB = summarizer3.merge(summarizer4)
     assert(summarizerB.hashCode() === summarizer3.hashCode())
-    assert(summarizerB.histogram.zip(Array[Long](1, 2, 2, 1, 3)).forall(x => x._1 === x._2))
+    assert(summarizerB.histogram === Array[Double](1, 2, 2, 1, 3))
     assert(summarizerB.countInvalid === 5)
     assert(summarizerB.numClasses === 5)
+  }
+
+  test("MultiClassSummarizer with weighted samples") {
+    val summarizer1 = (new MultiClassSummarizer)
+      .add(label = 0.0, weight = 0.2).add(3.0, 0.8).add(4.0, 3.2).add(3.0, 1.3).add(6.0, 3.1)
+    assert(Vectors.dense(summarizer1.histogram) ~==
+      Vectors.dense(Array(0.2, 0, 0, 2.1, 3.2, 0, 3.1)) absTol 1E-10)
+    assert(summarizer1.countInvalid === 0)
+    assert(summarizer1.numClasses === 7)
+
+    val summarizer2 = (new MultiClassSummarizer)
+      .add(1.0, 1.1).add(5.0, 2.3).add(3.0).add(0.0).add(4.0).add(1.0).add(2, 0.0)
+    assert(Vectors.dense(summarizer2.histogram) ~==
+      Vectors.dense(Array[Double](1.0, 2.1, 0.0, 1, 1, 2.3)) absTol 1E-10)
+    assert(summarizer2.countInvalid === 0)
+    assert(summarizer2.numClasses === 6)
+
+    val summarizer = summarizer1.merge(summarizer2)
+    assert(Vectors.dense(summarizer.histogram) ~==
+      Vectors.dense(Array(1.2, 2.1, 0.0, 3.1, 4.2, 2.3, 3.1)) absTol 1E-10)
+    assert(summarizer.countInvalid === 0)
+    assert(summarizer.numClasses === 7)
   }
 
   test("binary logistic regression with intercept without regularization") {
@@ -668,7 +738,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        b = \log{P(1) / P(0)} = \log{count_1 / count_0}
        }}}
      */
-    val interceptTheory = math.log(histogram(1).toDouble / histogram(0).toDouble)
+    val interceptTheory = math.log(histogram(1) / histogram(0))
     val weightsTheory = Vectors.dense(0.0, 0.0, 0.0, 0.0)
 
     assert(model1.intercept ~== interceptTheory relTol 1E-5)
@@ -699,6 +769,100 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val weightsR = Vectors.dense(0.0, 0.0, 0.0, 0.0)
 
     assert(model1.intercept ~== interceptR relTol 1E-5)
-    assert(model1.weights ~= weightsR absTol 1E-6)
+    assert(model1.weights ~== weightsR absTol 1E-6)
+  }
+
+  test("evaluate on test set") {
+    // Evaluate on test set should be same as that of the transformed training data.
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
+      .setThreshold(0.6)
+    val model = lr.fit(dataset)
+    val summary = model.summary.asInstanceOf[BinaryLogisticRegressionSummary]
+
+    val sameSummary = model.evaluate(dataset).asInstanceOf[BinaryLogisticRegressionSummary]
+    assert(summary.areaUnderROC === sameSummary.areaUnderROC)
+    assert(summary.roc.collect() === sameSummary.roc.collect())
+    assert(summary.pr.collect === sameSummary.pr.collect())
+    assert(
+      summary.fMeasureByThreshold.collect() === sameSummary.fMeasureByThreshold.collect())
+    assert(summary.recallByThreshold.collect() === sameSummary.recallByThreshold.collect())
+    assert(
+      summary.precisionByThreshold.collect() === sameSummary.precisionByThreshold.collect())
+  }
+
+  test("statistics on training data") {
+    // Test that loss is monotonically decreasing.
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
+      .setThreshold(0.6)
+    val model = lr.fit(dataset)
+    assert(
+      model.summary
+        .objectiveHistory
+        .sliding(2)
+        .forall(x => x(0) >= x(1)))
+
+  }
+
+  test("binary logistic regression with weighted samples") {
+    val (dataset, weightedDataset) = {
+      val nPoints = 1000
+      val weights = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
+      val xMean = Array(5.843, 3.057, 3.758, 1.199)
+      val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
+      val testData = generateMultinomialLogisticInput(weights, xMean, xVariance, true, nPoints, 42)
+
+      // Let's over-sample the positive samples twice.
+      val data1 = testData.flatMap { case labeledPoint: LabeledPoint =>
+        if (labeledPoint.label == 1.0) {
+          Iterator(labeledPoint, labeledPoint)
+        } else {
+          Iterator(labeledPoint)
+        }
+      }
+
+      val rnd = new Random(8392)
+      val data2 = testData.flatMap { case LabeledPoint(label: Double, features: Vector) =>
+        if (rnd.nextGaussian() > 0.0) {
+          if (label == 1.0) {
+            Iterator(
+              Instance(label, 1.2, features),
+              Instance(label, 0.8, features),
+              Instance(0.0, 0.0, features))
+          } else {
+            Iterator(
+              Instance(label, 0.3, features),
+              Instance(1.0, 0.0, features),
+              Instance(label, 0.1, features),
+              Instance(label, 0.6, features))
+          }
+        } else {
+          if (label == 1.0) {
+            Iterator(Instance(label, 2.0, features))
+          } else {
+            Iterator(Instance(label, 1.0, features))
+          }
+        }
+      }
+
+      (sqlContext.createDataFrame(sc.parallelize(data1, 4)),
+        sqlContext.createDataFrame(sc.parallelize(data2, 4)))
+    }
+
+    val trainer1a = (new LogisticRegression).setFitIntercept(true)
+      .setRegParam(0.0).setStandardization(true)
+    val trainer1b = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
+      .setRegParam(0.0).setStandardization(true)
+    val model1a0 = trainer1a.fit(dataset)
+    val model1a1 = trainer1a.fit(weightedDataset)
+    val model1b = trainer1b.fit(weightedDataset)
+    assert(model1a0.weights !~= model1a1.weights absTol 1E-3)
+    assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
+    assert(model1a0.weights ~== model1b.weights absTol 1E-3)
+    assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
+
   }
 }

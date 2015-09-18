@@ -51,6 +51,11 @@ public final class RpcResponse implements ResponseMessage {
   }
 
   @Override
+  public int hashCode() {
+    return Objects.hashCode(requestId, Arrays.hashCode(response));
+  }
+
+  @Override
   public boolean equals(Object other) {
     if (other instanceof RpcResponse) {
       RpcResponse o = (RpcResponse) other;

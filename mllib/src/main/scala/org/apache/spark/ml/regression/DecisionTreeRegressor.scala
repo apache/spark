@@ -107,18 +107,18 @@ final class DecisionTreeRegressionModel private[ml] (
    * Construct a decision tree regression model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  def this(rootNode: Node) = this(Identifiable.randomUID("dtr"), rootNode)
+  private[ml] def this(rootNode: Node) = this(Identifiable.randomUID("dtr"), rootNode)
 
   override protected def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
 
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
-    copyValues(new DecisionTreeRegressionModel(uid, rootNode), extra)
+    copyValues(new DecisionTreeRegressionModel(uid, rootNode), extra).setParent(parent)
   }
 
   override def toString: String = {
-    s"DecisionTreeRegressionModel of depth $depth with $numNodes nodes"
+    s"DecisionTreeRegressionModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
 
   /** Convert to a model in the old API */

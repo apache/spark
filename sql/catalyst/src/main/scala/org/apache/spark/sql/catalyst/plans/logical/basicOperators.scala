@@ -34,7 +34,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
       }.nonEmpty
     )
 
-    expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
+    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 }
 
@@ -68,7 +68,7 @@ case class Generate(
     generator.resolved &&
       childrenResolved &&
       generator.elementTypes.length == generatorOutput.length &&
-      generatorOutput.forall(_.resolved)
+      !generatorOutput.exists(!_.resolved)
   }
 
   // we don't want the gOutput to be taken as part of the expressions
@@ -86,52 +86,34 @@ case class Generate(
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
-  /**
-   * Indicates if `atLeastNNulls` is used to check if atLeastNNulls.children
-   * have at least one null value and atLeastNNulls.children are all attributes.
-   */
-  private def isAtLeastOneNullOutputAttributes(atLeastNNulls: AtLeastNNulls): Boolean = {
-    val expressions = atLeastNNulls.children
-    val n = atLeastNNulls.n
-    if (n != 1) {
-      // AtLeastNNulls is not used to check if atLeastNNulls.children have
-      // at least one null value.
-      false
-    } else {
-      // AtLeastNNulls is used to check if atLeastNNulls.children have
-      // at least one null value. We need to make sure all atLeastNNulls.children
-      // are attributes.
-      expressions.forall(_.isInstanceOf[Attribute])
-    }
-  }
-
-  override def output: Seq[Attribute] = condition match {
-    case Not(a: AtLeastNNulls) if isAtLeastOneNullOutputAttributes(a) =>
-      // The condition is used to make sure that there is no null value in
-      // a.children.
-      val nonNullableAttributes = AttributeSet(a.children.asInstanceOf[Seq[Attribute]])
-      child.output.map {
-        case attr if nonNullableAttributes.contains(attr) =>
-          attr.withNullability(false)
-        case attr => attr
-      }
-    case _ => child.output
-  }
+  override def output: Seq[Attribute] = child.output
 }
 
-case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   // TODO: These aren't really the same attributes as nullability etc might change.
-  override def output: Seq[Attribute] = left.output
+  final override def output: Seq[Attribute] = left.output
 
-  override lazy val resolved: Boolean =
+  final override lazy val resolved: Boolean =
     childrenResolved &&
-    left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+      left.output.length == right.output.length &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+}
+
+private[sql] object SetOperation {
+  def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
+}
+
+case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
     Statistics(sizeInBytes = sizeInBytes)
   }
 }
+
+case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
+
+case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
 
 case class Join(
   left: LogicalPlan,
@@ -172,15 +154,6 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-
-case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  override def output: Seq[Attribute] = left.output
-
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
-}
-
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
@@ -190,7 +163,7 @@ case class InsertIntoTable(
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = Seq.empty
 
   assert(overwrite || !ifNotExists)
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
@@ -218,7 +191,7 @@ case class WithWindowDefinition(
 }
 
 /**
- * @param order  The ordering expressions, should all be [[AttributeReference]]
+ * @param order  The ordering expressions
  * @param global True means global sorting apply for entire data set,
  *               False means sorting only apply within the partition.
  * @param child  Child logical plan
@@ -228,11 +201,6 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-
-  def hasNoEvaluation: Boolean = order.forall(_.child.isInstanceOf[AttributeReference])
-
-  override lazy val resolved: Boolean =
-    expressions.forall(_.resolved) && childrenResolved && hasNoEvaluation
 }
 
 case class Aggregate(
@@ -247,7 +215,7 @@ case class Aggregate(
       }.nonEmpty
     )
 
-    expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
+    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
   lazy val newAggregation: Option[Aggregate] = Utils.tryConvert(this)
@@ -263,7 +231,7 @@ case class Window(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] =
-    (projectList ++ windowExpressions).map(_.toAttribute)
+    projectList ++ windowExpressions.map(_.toAttribute)
 }
 
 /**
@@ -475,10 +443,3 @@ case object OneRowRelation extends LeafNode {
   override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  override def output: Seq[Attribute] = left.output
-
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
-}

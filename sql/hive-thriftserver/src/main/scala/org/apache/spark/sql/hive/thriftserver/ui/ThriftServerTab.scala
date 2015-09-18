@@ -27,9 +27,9 @@ import org.apache.spark.{SparkContext, Logging, SparkException}
  * This assumes the given SparkContext has enabled its SparkUI.
  */
 private[thriftserver] class ThriftServerTab(sparkContext: SparkContext)
-  extends SparkUITab(getSparkUI(sparkContext), "sql") with Logging {
+  extends SparkUITab(getSparkUI(sparkContext), "sqlserver") with Logging {
 
-  override val name = "SQL"
+  override val name = "JDBC/ODBC Server"
 
   val parent = getSparkUI(sparkContext)
   val listener = HiveThriftServer2.listener

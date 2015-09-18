@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -31,14 +31,8 @@ import org.apache.spark.sql.types._
 
 abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
-class DefaultOptimizer extends Optimizer {
-
-  /**
-   * Override to provide additional rules for the "Operator Optimizations" batch.
-   */
-  val extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
-
-  lazy val batches =
+object DefaultOptimizer extends Optimizer {
+  val batches =
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
@@ -47,27 +41,26 @@ class DefaultOptimizer extends Optimizer {
       RemoveLiteralFromGroupExpressions) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
-      SetOperationPushDown ::
-      SamplePushDown ::
-      PushPredicateThroughJoin ::
-      PushPredicateThroughProject ::
-      PushPredicateThroughGenerate ::
-      ColumnPruning ::
+      SetOperationPushDown,
+      SamplePushDown,
+      PushPredicateThroughJoin,
+      PushPredicateThroughProject,
+      PushPredicateThroughGenerate,
+      ColumnPruning,
       // Operator combine
-      ProjectCollapsing ::
-      CombineFilters ::
-      CombineLimits ::
+      ProjectCollapsing,
+      CombineFilters,
+      CombineLimits,
       // Constant folding
-      NullPropagation ::
-      OptimizeIn ::
-      ConstantFolding ::
-      LikeSimplification ::
-      BooleanSimplification ::
-      RemovePositive ::
-      SimplifyFilters ::
-      SimplifyCasts ::
-      SimplifyCaseConversionExpressions ::
-      extendedOperatorOptimizationRules.toList : _*) ::
+      NullPropagation,
+      OptimizeIn,
+      ConstantFolding,
+      LikeSimplification,
+      BooleanSimplification,
+      RemovePositive,
+      SimplifyFilters,
+      SimplifyCasts,
+      SimplifyCaseConversionExpressions) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -172,6 +165,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] {
  *
  *  - Inserting Projections beneath the following operators:
  *   - Aggregate
+ *   - Generate
  *   - Project <- Join
  *   - LeftSemiJoin
  */
@@ -184,6 +178,21 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
+
+    // Eliminate attributes that are not needed to calculate the Generate.
+    case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>
+      g.copy(child = Project(g.references.toSeq, g.child))
+
+    case p @ Project(_, g: Generate) if g.join && p.references.subsetOf(g.generatedSet) =>
+      p.copy(child = g.copy(join = false))
+
+    case p @ Project(projectList, g: Generate) if g.join =>
+      val neededChildOutput = p.references -- g.generatorOutput ++ g.references
+      if (neededChildOutput == g.child.outputSet) {
+        p
+      } else {
+        Project(projectList, g.copy(child = Project(neededChildOutput.toSeq, g.child)))
+      }
 
     case p @ Project(projectList, a @ Aggregate(groupingExpressions, aggregateExpressions, child))
         if (a.outputSet -- p.references).nonEmpty =>
@@ -219,28 +228,33 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case Project(projectList, Limit(exp, child)) =>
       Limit(exp, Project(projectList, child))
 
-    // Push down project if possible when the child is sort
-    case p @ Project(projectList, s @ Sort(_, _, grandChild))
-      if s.references.subsetOf(p.outputSet) =>
-      s.copy(child = Project(projectList, grandChild))
+    // Push down project if possible when the child is sort.
+    case p @ Project(projectList, s @ Sort(_, _, grandChild)) =>
+      if (s.references.subsetOf(p.outputSet)) {
+        s.copy(child = Project(projectList, grandChild))
+      } else {
+        val neededReferences = s.references ++ p.references
+        if (neededReferences == grandChild.outputSet) {
+          // No column we can prune, return the original plan.
+          p
+        } else {
+          // Do not use neededReferences.toSeq directly, should respect grandChild's output order.
+          val newProjectList = grandChild.output.filter(neededReferences.contains)
+          p.copy(child = s.copy(child = Project(newProjectList, grandChild)))
+        }
+      }
 
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
   }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) = {
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
     if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
-      // We need to preserve the nullability of c's output.
-      // So, we first create a outputMap and if a reference is from the output of
-      // c, we use that output attribute from c.
-      val outputMap = AttributeMap(c.output.map(attr => (attr, attr)))
-      val projectList = allReferences.filter(outputMap.contains).map(outputMap).toSeq
-      Project(projectList, c)
+      Project(allReferences.filter(c.outputSet.contains).toSeq, c)
     } else {
       c
     }
-  }
 }
 
 /**
@@ -273,8 +287,11 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
         val substitutedProjection = projectList1.map(_.transform {
           case a: Attribute => aliasMap.getOrElse(a, a)
         }).asInstanceOf[Seq[NamedExpression]]
-
-        Project(substitutedProjection, child)
+        // collapse 2 projects may introduce unnecessary Aliases, trim them here.
+        val cleanedProjection = substitutedProjection.map(p =>
+          CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+        )
+        Project(cleanedProjection, child)
       }
   }
 }
@@ -366,7 +383,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         case _ => e
       }
 
-      case e: StringComparison => e.children match {
+      case e: StringPredicate => e.children match {
         case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
@@ -389,12 +406,6 @@ object ConstantFolding extends Rule[LogicalPlan] {
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
-
-      // Fold "literal in (item1, item2, ..., literal, ...)" into true directly.
-      case In(Literal(v, _), list) if list.exists {
-          case Literal(candidate, _) if candidate == v => true
-          case _ => false
-        } => Literal.create(true, BooleanType)
     }
   }
 }
@@ -406,7 +417,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) && list.size > 10 =>
         val hSet = list.map(e => e.eval(EmptyRow))
         InSet(v, HashSet() ++ hSet)
     }
@@ -434,6 +445,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case (_, Literal(false, BooleanType)) => Literal(false)
         // a && a  =>  a
         case (l, r) if l fastEquals r => l
+        // a && (not(a) || b) => a && b
+        case (l, Or(l1, r)) if (Not(l) == l1) => And(l, r)
+        case (l, Or(r, l1)) if (Not(l) == l1) => And(l, r)
+        case (Or(l, l1), r) if (l1 == Not(r)) => And(l, r)
+        case (Or(l1, l), r) if (l1 == Not(r)) => And(l, r)
         // (a || b) && (a || c)  =>  a || (b && c)
         case _ =>
           // 1. Split left and right to get the disjunctive predicates,
@@ -512,6 +528,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case LessThan(l, r) => GreaterThanOrEqual(l, r)
         // not(l <= r)  =>  l > r
         case LessThanOrEqual(l, r) => GreaterThan(l, r)
+        // not(l || r) => not(l) && not(r)
+        case Or(l, r) => And(Not(l), Not(r))
+        // not(l && r) => not(l) or not(r)
+        case And(l, r) => Or(Not(l), Not(r))
         // not(not(e))  =>  e
         case Not(e) => e
         case _ => not
@@ -530,13 +550,6 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  */
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Filter(Not(AtLeastNNulls(1, e1)), Filter(Not(AtLeastNNulls(1, e2)), grandChild)) =>
-      // If we are combining two expressions Not(AtLeastNNulls(1, e1)) and
-      // Not(AtLeastNNulls(1, e2))
-      // (this is used to make sure there is no null in the result of e1 and e2 and
-      // they are added by FilterNullsInJoinKey optimziation rule), we can
-      // just create a Not(AtLeastNNulls(1, (e1 ++ e2).distinct)).
-      Filter(Not(AtLeastNNulls(1, (e1 ++ e2).distinct)), grandChild)
     case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
   }
 }

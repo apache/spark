@@ -23,25 +23,35 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryAllocator
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnsafeRowSuite extends SparkFunSuite {
+
+  test("bitset width calculation") {
+    assert(UnsafeRow.calculateBitSetWidthInBytes(0) === 0)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(1) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(32) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(64) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(65) === 16)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(128) === 16)
+  }
+
   test("writeToStream") {
     val row = InternalRow.apply(UTF8String.fromString("hello"), UTF8String.fromString("world"), 123)
     val arrayBackedUnsafeRow: UnsafeRow =
       UnsafeProjection.create(Array[DataType](StringType, StringType, IntegerType)).apply(row)
     assert(arrayBackedUnsafeRow.getBaseObject.isInstanceOf[Array[Byte]])
-    val bytesFromArrayBackedRow: Array[Byte] = {
+    val (bytesFromArrayBackedRow, field0StringFromArrayBackedRow): (Array[Byte], String) = {
       val baos = new ByteArrayOutputStream()
       arrayBackedUnsafeRow.writeToStream(baos, null)
-      baos.toByteArray
+      (baos.toByteArray, arrayBackedUnsafeRow.getString(0))
     }
-    val bytesFromOffheapRow: Array[Byte] = {
+    val (bytesFromOffheapRow, field0StringFromOffheapRow): (Array[Byte], String) = {
       val offheapRowPage = MemoryAllocator.UNSAFE.allocate(arrayBackedUnsafeRow.getSizeInBytes)
       try {
-        PlatformDependent.copyMemory(
+        Platform.copyMemory(
           arrayBackedUnsafeRow.getBaseObject,
           arrayBackedUnsafeRow.getBaseOffset,
           offheapRowPage.getBaseObject,
@@ -59,13 +69,14 @@ class UnsafeRowSuite extends SparkFunSuite {
         val baos = new ByteArrayOutputStream()
         val writeBuffer = new Array[Byte](1024)
         offheapUnsafeRow.writeToStream(baos, writeBuffer)
-        baos.toByteArray
+        (baos.toByteArray, offheapUnsafeRow.getString(0))
       } finally {
         MemoryAllocator.UNSAFE.free(offheapRowPage)
       }
     }
 
     assert(bytesFromArrayBackedRow === bytesFromOffheapRow)
+    assert(field0StringFromArrayBackedRow === field0StringFromOffheapRow)
   }
 
   test("calling getDouble() and getFloat() on null columns") {
