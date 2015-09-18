@@ -19,7 +19,7 @@ package org.apache.spark.streaming.dstream
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.rdd.{BlockRDD, RDD}
+import org.apache.spark.rdd.{ExternalStoreBlockRDD, BlockRDD, RDD}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
@@ -116,15 +116,25 @@ abstract class ReceiverInputDStream[T: ClassTag](ssc_ : StreamingContext)
             logWarning("Some blocks have Write Ahead Log information; this is unexpected")
           }
         }
-        val validBlockIds = blockIds.filter { id =>
-          ssc.sparkContext.env.blockManager.master.contains(id)
+
+        // Are All records are stored in External Block Store
+        val areExternalBlockStoreRecordPresent = blockInfos.forall {
+          _.externalBlockRecord.nonEmpty }
+
+        if (areExternalBlockStoreRecordPresent) {
+          logDebug("All Block are stored OFF_HEAP. Using ExternalStoreBlockRDD")
+          new ExternalStoreBlockRDD[T](ssc.sc, blockIds)
+        } else {
+          val validBlockIds = blockIds.filter { id =>
+            ssc.sparkContext.env.blockManager.master.contains(id)
+          }
+          if (validBlockIds.size != blockIds.size) {
+            logWarning("Some blocks could not be recovered as they were not found in memory. " +
+              "To prevent such data loss, enabled Write Ahead Log (see programming guide " +
+              "for more details.")
+          }
+          new BlockRDD[T](ssc.sc, validBlockIds)
         }
-        if (validBlockIds.size != blockIds.size) {
-          logWarning("Some blocks could not be recovered as they were not found in memory. " +
-            "To prevent such data loss, enabled Write Ahead Log (see programming guide " +
-            "for more details.")
-        }
-        new BlockRDD[T](ssc.sc, validBlockIds)
       }
     } else {
       // If no block is ready now, creating WriteAheadLogBackedBlockRDD or BlockRDD

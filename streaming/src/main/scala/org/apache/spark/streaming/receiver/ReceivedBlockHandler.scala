@@ -58,6 +58,14 @@ private[streaming] case class BlockManagerBasedStoreResult(
       blockId: StreamBlockId, numRecords: Option[Long])
   extends ReceivedBlockStoreResult
 
+/**
+ * Implementation of [[org.apache.spark.streaming.receiver.ReceivedBlockStoreResult]]
+ * that stores the metadata related to blocks having OFF_HEAP StorageLevel using
+ * [[org.apache.spark.streaming.receiver.BlockManagerBasedBlockHandler]]
+ */
+private[streaming] case class ExternalBlockStoreResult(
+    blockId: StreamBlockId, numRecords: Option[Long])
+  extends ReceivedBlockStoreResult
 
 /**
  * Implementation of a [[org.apache.spark.streaming.receiver.ReceivedBlockHandler]] which
@@ -92,7 +100,12 @@ private[streaming] class BlockManagerBasedBlockHandler(
       throw new SparkException(
         s"Could not store $blockId to block manager with storage level $storageLevel")
     }
-    BlockManagerBasedStoreResult(blockId, numRecords)
+    if(storageLevel == StorageLevel.OFF_HEAP) {
+      ExternalBlockStoreResult(blockId, numRecords)
+    } else {
+      BlockManagerBasedStoreResult(blockId, numRecords)
+    }
+
   }
 
   def cleanupOldBlocks(threshTime: Long) {
