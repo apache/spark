@@ -136,26 +136,12 @@ object SetOperationPushDown extends Rule[LogicalPlan] {
         Filter(condition, left),
         Filter(pushToRight(condition, rewrites), right))
 
-    // Push down projection into intersect
-    case Project(projectList, i @ Intersect(left, right)) =>
-      val rewrites = buildRewrites(i)
-      Intersect(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
-
     // Push down filter into except
     case Filter(condition, e @ Except(left, right)) =>
       val rewrites = buildRewrites(e)
       Except(
         Filter(condition, left),
         Filter(pushToRight(condition, rewrites), right))
-
-    // Push down projection into except
-    case Project(projectList, e @ Except(left, right)) =>
-      val rewrites = buildRewrites(e)
-      Except(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
   }
 }
 
