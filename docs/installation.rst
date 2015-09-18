@@ -42,6 +42,9 @@ Here's the list of the subpackages and what they enable:
 |  mssql      |  ``pip install airflow[mssql]``    | Microsoft SQL operators and hook,              |
 |             |                                    | support as an Airflow backend                  |
 +-------------+------------------------------------+------------------------------------------------+
+|  vertica    |  ``pip install airflow[vertica]``  | Vertica hook                                   |
+|             |                                    | support as an Airflow backend                  |
++-------------+------------------------------------+------------------------------------------------+
 |  slack      | ``pip install airflow[slack]``     | ``SlackAPIPostOperator``                       |
 +-------------+------------------------------------+------------------------------------------------+
 |  all        | ``pip install airflow[all]``       | All Airflow features known to man              |

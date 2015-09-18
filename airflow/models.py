@@ -390,6 +390,8 @@ class Connection(Base):
                 return hooks.MsSqlHook(mssql_conn_id=self.conn_id)
             elif self.conn_type == 'oracle':
                 return hooks.OracleHook(oracle_conn_id=self.conn_id)
+            elif self.conn_type == 'vertica':
+                return hooks.VerticaHook(vertica_conn_id=self.conn_id)
         except:
             return None
 

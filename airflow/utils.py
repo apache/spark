@@ -186,6 +186,14 @@ def initdb():
                 host='localhost', port=1433))
         session.commit()
 
+    conn = session.query(C).filter(C.conn_id == 'vertica_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='vertica_default', conn_type='vertica',
+                host='localhost', port=5433))
+        session.commit()
+
     # Known event types
     KET = models.KnownEventType
     if not session.query(KET).filter(KET.know_event_type == 'Holiday').first():
