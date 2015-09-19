@@ -4,7 +4,8 @@ import unicodecsv as csv
 import logging
 from tempfile import NamedTemporaryFile
 
-from airflow.hooks import HiveCliHook, VerticaHook
+from airflow.hooks import HiveCliHook
+from airflow.contrib.hooks import VerticaHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 
@@ -22,6 +23,7 @@ class VerticaToHiveTransfer(BaseOperator):
     queried considerably, you may want to use this operator only to
     stage the data into a temporary table before loading it into its
     final destination using a ``HiveOperator``.
+
     :param sql: SQL query to execute against the Vertia database
     :type sql: str
     :param hive_table: target Hive table, use dot notation to target a
