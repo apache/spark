@@ -157,15 +157,16 @@ For this to work, you need a running mesos cluster and perform following
 steps -
 
 1. Install airflow on a machine where webserver and scheduler will run,
-let's refer this as Airflow server.
+   let's refer this as Airflow server.
 2. On Airflow server, install mesos python eggs from `mesos downloads <http://open.mesosphere.com/downloads/mesos/>`_.
-3. On Airflow server, use a database which can be accessed from mesos
-slave machines, for example mysql, and configure in ``airflow.cfg``.
-4. Change your ``airflow.cfg`` to point executor parameter to
-MesosExecutor and provide related Mesos settings.
-5. On all mesos slaves, install airflow. Copy the ``airflow.cfg`` from
-Airflow server (so that it uses same sql alchemy connection).
+3. On Airflow server, use a database which can be accessed from mesos 
+   slave machines, for example mysql, and configure in ``airflow.cfg``.
+4. Change your ``airflow.cfg`` to point executor parameter to 
+   MesosExecutor and provide related Mesos settings.
+5. On all mesos slaves, install airflow. Copy the ``airflow.cfg`` from 
+   Airflow server (so that it uses same sql alchemy connection).
 6. On all mesos slaves, run 
+
 .. code-block:: bash
    
     airflow serve_logs
@@ -173,18 +174,18 @@ Airflow server (so that it uses same sql alchemy connection).
 for serving logs.
 
 7. On Airflow server, run 
+
 .. code-block:: bash
 
     airflow scheduler -p
 
-to start processing DAGs and scheduling them on mesos.
-We need -p parameter to pickle the DAGs.
+to start processing DAGs and scheduling them on mesos. We need -p parameter to pickle the DAGs.
 
 You can now see the airflow framework and corresponding tasks in mesos UI.
 The logs for airflow tasks can be seen in airflow UI as usual.
 
 For more information about mesos, refer `mesos documentation <http://mesos.apache.org/documentation/latest/>`_.
-For any queries/bugs on MesosExecutor, please contact `kapil-malik <https://github.com/kapil-malik>`_.
+For any queries/bugs on MesosExecutor, please contact `@kapil-malik <https://github.com/kapil-malik>`_.
  
 
 Web Authentication
