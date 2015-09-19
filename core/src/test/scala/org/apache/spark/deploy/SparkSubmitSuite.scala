@@ -412,7 +412,8 @@ class SparkSubmitSuite
 
     // Test files and archives (Yarn)
     val clArgs2 = Seq(
-      "--master", "yarn-client",
+      "--master", "yarn",
+      "--deploy-mode","client",
       "--class", "org.SomeClass",
       "--files", files,
       "--archives", archives,
@@ -470,7 +471,8 @@ class SparkSubmitSuite
     writer2.println("spark.yarn.dist.archives " + archives)
     writer2.close()
     val clArgs2 = Seq(
-      "--master", "yarn-client",
+      "--master", "yarn",
+      "--deploy-mode","client",
       "--class", "org.SomeClass",
       "--properties-file", f2.getPath,
       "thejar.jar"
