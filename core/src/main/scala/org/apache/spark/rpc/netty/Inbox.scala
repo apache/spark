@@ -137,7 +137,7 @@ private[netty] class Inbox(
             dispatcher.removeRpcEndpointRef(endpoint)
             endpoint.onStop()
             assert(isEmpty, "OnStop should be the last message")
-            workerCount -= 1
+            synchronized { workerCount -= 1 }
             return true
           case Associated(remoteAddress) =>
             endpoint.onConnected(remoteAddress)
@@ -164,7 +164,7 @@ private[netty] class Inbox(
       }
     }
     // We won't reach here. Just make the compiler happy.
-    return false
+    throw new IllegalStateException("ShouldNotReachHere")
   }
 
   def post(message: InboxMessage): Unit = {
@@ -197,13 +197,14 @@ private[netty] class Inbox(
     }
   }
 
+  // Visible for testing.
   protected def onDrop(message: Any): Unit = {
     logWarning(s"Drop ${message} because $endpointRef is stopped")
   }
 
-  def isEmpty: Boolean = messages.isEmpty
+  def isEmpty: Boolean = synchronized { messages.isEmpty }
 
-  protected def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
+  private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
     try {
       action
     } catch {
