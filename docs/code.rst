@@ -75,7 +75,8 @@ Community Contributed Operators
 .. automodule:: airflow.contrib.operators
     :show-inheritance:
     :members:
-        VerticaToHiveTransfer,
+        VerticaOperator,
+        VerticaToHiveTransfer
 
 .. _macros:
 
@@ -169,7 +170,7 @@ Community Contributed Hooks
     :show-inheritance:
     :members:
         VerticaHook,
-        FTPHook,
+        FTPHook
 
 Executors
 ---------

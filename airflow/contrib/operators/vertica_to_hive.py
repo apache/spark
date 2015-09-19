@@ -27,7 +27,7 @@ class VerticaToHiveTransfer(BaseOperator):
     :param sql: SQL query to execute against the Vertia database
     :type sql: str
     :param hive_table: target Hive table, use dot notation to target a
-    specific database
+        specific database
     :type hive_table: str
     :param create: whether to create the table if it doesn't exist
     :type create: bool
@@ -41,6 +41,7 @@ class VerticaToHiveTransfer(BaseOperator):
     :type vertica_conn_id: str
     :param hive_conn_id: destination hive connection
     :type hive_conn_id: str
+
     """
 
     template_fields = ('sql', 'partition', 'hive_table')
