@@ -49,7 +49,7 @@ $(function (){
         dt = dl.children('dt').eq(0);
         dd = dl.children('dd').eq(0);
         var id = dt.attr('id');
-        var desc = dt.find('> code.descname').text();
+        var desc = dt.find('> .descname').text();
         var adNoteDivs = getAdNoteDivs(dd);
 
         if (id) {
