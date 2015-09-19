@@ -63,7 +63,7 @@ You can also run the unit-tests for SparkR by running (you need to install the [
 The `./bin/spark-submit` and `./bin/sparkR` can also be used to submit jobs to YARN clusters. You will need to set YARN conf dir before doing so. For example on CDH you can run
 ```
 export YARN_CONF_DIR=/etc/hadoop/conf
-./bin/spark-submit --master yarn --deploy-mode cluster (or client) examples/src/main/r/dataframe.R
+./bin/spark-submit --master yarn --deploy-mode client examples/src/main/r/dataframe.R
 OR
 ./bin/spark-submit --master yarn examples/src/main/r/dataframe.R
 ```
