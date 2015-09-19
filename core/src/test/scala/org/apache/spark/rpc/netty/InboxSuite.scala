@@ -37,12 +37,14 @@ class InboxSuite extends SparkFunSuite {
     val inbox = new Inbox(endpointRef, endpoint)
     val message = ContentMessage(null, "hi", false, null)
     inbox.post(message)
-    assert(inbox.process(dispatcher) === false)
+    inbox.process(dispatcher)
+    assert(inbox.isEmpty)
 
     endpoint.verifySingleReceiveMessage("hi")
 
     inbox.stop()
-    assert(inbox.process(dispatcher) === true)
+    inbox.process(dispatcher)
+    assert(inbox.isEmpty)
     endpoint.verifyStarted()
     endpoint.verifyStopped()
   }
@@ -55,7 +57,8 @@ class InboxSuite extends SparkFunSuite {
     val inbox = new Inbox(endpointRef, endpoint)
     val message = ContentMessage(null, "hi", true, null)
     inbox.post(message)
-    assert(inbox.process(dispatcher) === false)
+    inbox.process(dispatcher)
+    assert(inbox.isEmpty)
 
     endpoint.verifySingleReceiveAndReplyMessage("hi")
   }
@@ -87,9 +90,11 @@ class InboxSuite extends SparkFunSuite {
         }
       }.start()
     }
-    assert(inbox.process(dispatcher) === false)
+    inbox.process(dispatcher)
+    assert(inbox.isEmpty)
     inbox.stop()
-    assert(inbox.process(dispatcher) === true)
+    inbox.process(dispatcher)
+    assert(inbox.isEmpty)
 
     exitLatch.await(30, TimeUnit.SECONDS)
 

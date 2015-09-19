@@ -80,20 +80,19 @@ private[netty] class Inbox(
   }
 
   /**
-   * Process stored messages. Return `true` if the `Inbox` is already stopped, and the caller will
-   * release all resources used by the `Inbox`.
+   * Process stored messages.
    */
-  def process(dispatcher: Dispatcher): Boolean = {
+  def process(dispatcher: Dispatcher): Unit = {
     var message: InboxMessage = null
     synchronized {
       if (!enableConcurrent && workerCount != 0) {
-        return false
+        return
       }
       message = messages.poll()
       if (message != null) {
         workerCount += 1
       } else {
-        return false
+        return
       }
     }
     while (true) {
@@ -134,11 +133,12 @@ private[netty] class Inbox(
           }
 
           case OnStop =>
+            assert(workerCount == 1)
             dispatcher.removeRpcEndpointRef(endpoint)
             endpoint.onStop()
             assert(isEmpty, "OnStop should be the last message")
             synchronized { workerCount -= 1 }
-            return true
+            return
           case Associated(remoteAddress) =>
             endpoint.onConnected(remoteAddress)
           case Disassociated(remoteAddress) =>
@@ -154,17 +154,15 @@ private[netty] class Inbox(
         if (!enableConcurrent && workerCount != 1) {
           // If we are not the only one worker, exit
           workerCount -= 1
-          return false
+          return
         }
         message = messages.poll()
         if (message == null) {
           workerCount -= 1
-          return false
+          return
         }
       }
     }
-    // We won't reach here. Just make the compiler happy.
-    throw new IllegalStateException("ShouldNotReachHere")
   }
 
   def post(message: InboxMessage): Unit = {
