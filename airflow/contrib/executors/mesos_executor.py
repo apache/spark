@@ -1,9 +1,6 @@
 from future import standard_library
 standard_library.install_aliases()
 from builtins import str
-import os
-import sys
-import time
 import logging
 from queue import Queue
 
@@ -15,6 +12,7 @@ from airflow.configuration import conf
 from airflow.executors.base_executor import BaseExecutor
 from airflow.utils import State
 from airflow.utils import AirflowException
+
 
 # AirflowMesosScheduler, implements Mesos Scheduler interface
 # To schedule airflow jobs on mesos
@@ -93,7 +91,7 @@ class AirflowMesosScheduler(mesos.interface.Scheduler):
                 task = mesos_pb2.TaskInfo()
                 task.task_id.value = str(tid)
                 task.slave_id.value = offer.slave_id.value
-                task.name = "AirflowTask %d" % tid                
+                task.name = "AirflowTask %d" % tid
 
                 cpus = task.resources.add()
                 cpus.name = "cpus"
@@ -118,9 +116,9 @@ class AirflowMesosScheduler(mesos.interface.Scheduler):
             driver.launchTasks(offer.id, tasks)
 
     def statusUpdate(self, driver, update):
-        logging.info("Task %s is in state %s, data %s", \
-            update.task_id.value, mesos_pb2.TaskState.Name(update.state), str(update.data))
-        
+        logging.info("Task %s is in state %s, data %s",
+                     update.task_id.value, mesos_pb2.TaskState.Name(update.state), str(update.data))
+
         key = self.task_key_map[update.task_id.value]
 
         if update.state == mesos_pb2.TASK_FINISHED:
@@ -133,15 +131,15 @@ class AirflowMesosScheduler(mesos.interface.Scheduler):
             self.result_queue.put((key, State.FAILED))
             self.task_queue.task_done()
 
+
 class MesosExecutor(BaseExecutor):
-    
     """
-    MesosExecutor allows distributing the execution of task 
+    MesosExecutor allows distributing the execution of task
     instances to multiple mesos workers.
 
-    Apache Mesos is a distributed systems kernel which abstracts 
-    CPU, memory, storage, and other compute resources away from 
-    machines (physical or virtual), enabling fault-tolerant and 
+    Apache Mesos is a distributed systems kernel which abstracts
+    CPU, memory, storage, and other compute resources away from
+    machines (physical or virtual), enabling fault-tolerant and
     elastic distributed systems to easily be built and run effectively.
     See http://mesos.apache.org/
     """
@@ -173,7 +171,7 @@ class MesosExecutor(BaseExecutor):
         else:
             task_memory = conf.getint('mesos', 'TASK_MEMORY')
 
-        if (conf.getboolean('mesos', 'CHECKPOINT')):
+        if conf.getboolean('mesos', 'CHECKPOINT'):
             framework.checkpoint = True
         else:
             framework.checkpoint = False
@@ -183,7 +181,7 @@ class MesosExecutor(BaseExecutor):
 
         implicit_acknowledgements = 1
 
-        if (conf.getboolean('mesos', 'AUTHENTICATE')):
+        if conf.getboolean('mesos', 'AUTHENTICATE'):
             if not conf.get('mesos', 'DEFAULT_PRINCIPAL'):
                 logging.error("Expecting authentication principal in the environment")
                 raise AirflowException("mesos.default_principal not provided in authenticated mode")
@@ -194,22 +192,22 @@ class MesosExecutor(BaseExecutor):
             credential = mesos_pb2.Credential()
             credential.principal = conf.get('mesos', 'DEFAULT_PRINCIPAL')
             credential.secret = conf.get('mesos', 'DEFAULT_SECRET')
-	
+
             framework.principal = credential.principal
 
             driver = mesos.native.MesosSchedulerDriver(
                 AirflowMesosScheduler(self.task_queue, self.result_queue, task_cpu, task_memory),
-            	  framework,
-            	  master,
-            	  implicit_acknowledgements,
-            	  credential)
+                framework,
+                master,
+                implicit_acknowledgements,
+                credential)
         else:
             framework.principal = 'Airflow'
             driver = mesos.native.MesosSchedulerDriver(
-	              AirflowMesosScheduler(self.task_queue, self.result_queue, task_cpu, task_memory),
-		            framework,
-		            master,
-		            implicit_acknowledgements)
+                AirflowMesosScheduler(self.task_queue, self.result_queue, task_cpu, task_memory),
+                framework,
+                master,
+                implicit_acknowledgements)
 
         self.mesos_driver = driver
         self.mesos_driver.start()
