@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  */
 object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
-  def parseExpression(input: String): Expression = {
+  def parseExpression(input: String): Expression = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(projection)(new lexical.Scanner(input)) match {
@@ -48,7 +48,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     }
   }
 
-  def parseTableIdentifier(input: String): TableIdentifier = {
+  def parseTableIdentifier(input: String): TableIdentifier = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(tableIdentifier)(new lexical.Scanner(input)) match {
