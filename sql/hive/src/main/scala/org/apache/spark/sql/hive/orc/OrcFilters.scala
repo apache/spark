@@ -31,11 +31,13 @@ import org.apache.spark.sql.sources._
  * and cannot be used anymore.
  */
 private[orc] object OrcFilters extends Logging {
-  def createFilter(expr: Array[Filter]): Option[SearchArgument] = {
-    expr.reduceOption(And).flatMap { conjunction =>
-      val builder = SearchArgumentFactory.newBuilder()
-      buildSearchArgument(conjunction, builder).map(_.build())
-    }
+  def createFilter(filters: Array[Filter]): Option[SearchArgument] = {
+    for {
+      // Combines all filters with `And`s to produce a single conjunction predicate
+      conjunction <- filters.reduceOption(And)
+      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
+      builder <- buildSearchArgument(conjunction, SearchArgumentFactory.newBuilder())
+    } yield builder.build()
   }
 
   private def buildSearchArgument(expression: Filter, builder: Builder): Option[Builder] = {
@@ -102,46 +104,32 @@ private[orc] object OrcFilters extends Logging {
           negate <- buildSearchArgument(child, builder.startNot())
         } yield negate.end()
 
-      case EqualTo(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.equals(attribute, _))
+      case EqualTo(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startAnd().equals(attribute, value).end())
 
-      case EqualNullSafe(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.nullSafeEquals(attribute, _))
+      case EqualNullSafe(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startAnd().nullSafeEquals(attribute, value).end())
 
-      case LessThan(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.lessThan(attribute, _))
+      case LessThan(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startAnd().lessThan(attribute, value).end())
 
-      case LessThanOrEqual(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.lessThanEquals(attribute, _))
+      case LessThanOrEqual(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startAnd().lessThanEquals(attribute, value).end())
 
-      case GreaterThan(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.startNot().lessThanEquals(attribute, _).end())
+      case GreaterThan(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startNot().lessThanEquals(attribute, value).end())
 
-      case GreaterThanOrEqual(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.startNot().lessThan(attribute, _).end())
+      case GreaterThanOrEqual(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startNot().lessThan(attribute, value).end())
 
       case IsNull(attribute) =>
-        Some(builder.isNull(attribute))
+        Some(builder.startAnd().isNull(attribute).end())
 
       case IsNotNull(attribute) =>
         Some(builder.startNot().isNull(attribute).end())
 
-      case In(attribute, values) =>
-        Option(values)
-          .filter(_.forall(isSearchableLiteral))
-          .map(builder.in(attribute, _))
+      case In(attribute, values) if values.forall(isSearchableLiteral) =>
+        Some(builder.startAnd().in(attribute, values.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
     }
