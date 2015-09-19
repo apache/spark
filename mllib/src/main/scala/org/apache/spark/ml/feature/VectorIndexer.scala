@@ -93,7 +93,8 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  */
 @Since("1.4.0")
 @Experimental
-class VectorIndexer @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Estimator[VectorIndexerModel]
+class VectorIndexer @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends
+  Estimator[VectorIndexerModel]
   with VectorIndexerParams {
 
   @Since("1.4.0")

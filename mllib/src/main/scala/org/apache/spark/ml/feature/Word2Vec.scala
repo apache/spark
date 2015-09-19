@@ -93,7 +93,8 @@ private[feature] trait Word2VecBase extends Params
  */
 @Since("1.4.0")
 @Experimental
-final class Word2Vec @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Estimator[Word2VecModel] with Word2VecBase {
+final class Word2Vec @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends
+  Estimator[Word2VecModel] with Word2VecBase {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("w2v"))

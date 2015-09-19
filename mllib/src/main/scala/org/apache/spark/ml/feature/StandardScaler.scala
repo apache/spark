@@ -57,7 +57,8 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  */
 @Since("1.2.0")
 @Experimental
-class StandardScaler @Since("1.2.0") (@Since("1.4.0") override val uid: String) extends Estimator[StandardScalerModel]
+class StandardScaler @Since("1.2.0") (@Since("1.4.0") override val uid: String) extends
+  Estimator[StandardScalerModel]
   with StandardScalerParams {
 
   @Since("1.4.0")
