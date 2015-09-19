@@ -24,6 +24,7 @@ _hooks = {
     'dbapi_hook': ['DbApiHook'],
     'mssql_hook': ['MsSqlHook'],
     'oracle_hook': ['OracleHook'],
+    'vertica_hook': ['VerticaHook'],
 }
 
 _import_module_attrs(globals(), _hooks)

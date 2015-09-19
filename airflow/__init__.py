@@ -41,6 +41,7 @@ from airflow import operators
 from airflow import hooks
 from airflow import executors
 from airflow import macros
+from airflow import contrib
 
 operators.integrate_plugins()
 hooks.integrate_plugins()

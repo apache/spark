@@ -100,6 +100,11 @@ class HivePrestoTest(unittest.TestCase):
             task_id='basic_hql', hql=self.hql, dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_hive_dryrun(self):
+        t = operators.HiveOperator(
+            task_id='basic_hql', hql=self.hql, dag=self.dag)
+        t.dry_run()
+
     def test_beeline(self):
         t = operators.HiveOperator(
             task_id='beeline_hql', hive_cli_conn_id='beeline_default',
@@ -277,6 +282,13 @@ class CoreTest(unittest.TestCase):
             bash_command="echo success",
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_dryrun(self):
+        t = operators.BashOperator(
+            task_id='time_sensor_check',
+            bash_command="echo success",
+            dag=self.dag)
+        t.dry_run()
 
     def test_sqlite(self):
         t = operators.SqliteOperator(

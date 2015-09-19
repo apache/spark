@@ -159,4 +159,4 @@ Executors are the mechanism by which task instances get run.
 
 .. automodule:: airflow.executors
     :show-inheritance:
-    :members: LocalExecutor, CeleryExecutor, SequentialExecutor
+    :members: LocalExecutor, CeleryExecutor, SequentialExecutor, MesosExecutor
