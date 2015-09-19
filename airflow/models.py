@@ -1148,9 +1148,9 @@ class TaskInstance(Base):
         whenever no matches are found.
 
         :param key: A key for the XCom. If provided, only XComs with matching
-            keys will be returned. The default key is 'return_value', also 
-            available as a constant XCOM_RETURN_KEY. This key is automatically 
-            given to XComs returned by tasks (as opposed to being pushed 
+            keys will be returned. The default key is 'return_value', also
+            available as a constant XCOM_RETURN_KEY. This key is automatically
+            given to XComs returned by tasks (as opposed to being pushed
             manually). To remove the filter, pass key=None.
         :type key: string
         :param task_ids: Only XComs from tasks with matching ids will be
@@ -1244,8 +1244,20 @@ class BaseOperator(object):
     :type retries: int
     :param retry_delay: delay between retries
     :type retry_delay: timedelta
-    :param start_date: start date for the task, the scheduler will start from
-        this point in time
+    :param start_date: The ``start_date`` for the task, determines
+        the ``execution_date`` for the first task instanec. The best practice
+        is to have the start_date rounded
+        to your DAG's ``schedule_interval``. Daily jobs have their start_date
+        some day at 00:00:00, hourly jobs have their start_date at 00:00
+        of a specific hour. Note that Airflow simply looks at the latest
+        ``execution_date`` and adds the ``schedule_interval`` to determine
+        the next ``execution_date``. It is also very important
+        to note that different tasks' dependencies
+        need to line up in time. If task A depends on task B and their
+        start_date are offset in a way that their execution_date don't line
+        up, A's dependencies will never be met. If you are looking to delay
+        a task, for example running a daily task at 2AM, look into the
+        ``TimeSensor`` and ``TimeDeltaSensor``.
     :type start_date: datetime
     :param end_date: if specified, the scheduler won't go beyond this date
     :type end_date: datetime
