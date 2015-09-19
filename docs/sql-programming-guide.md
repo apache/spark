@@ -1954,7 +1954,7 @@ without the need to write any code.
 ## Running the Thrift JDBC/ODBC server
 
 The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
-in Hive 0.13. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.13.
+in Hive 1.2.1 You can test the JDBC server with the beeline script that comes with either Spark or Hive 1.2.1.
 
 To start the JDBC/ODBC server, run the following in the Spark directory:
 
@@ -2260,8 +2260,10 @@ Several caching related features are not supported yet:
 
 ## Compatibility with Apache Hive
 
-Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.  Currently Spark
-SQL is based on Hive 0.12.0 and 0.13.1.
+Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
+Currently Hive SerDes and UDFs are based on Hive 1.2.1,
+and Spark SQL can be connected to different versions of Hive Metastore
+(from 0.12.0 to 1.2.1. Also see http://spark.apache.org/docs/latest/sql-programming-guide.html#interacting-with-different-versions-of-hive-metastore).
 
 #### Deploying in Existing Hive Warehouses
 
