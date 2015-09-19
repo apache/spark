@@ -10,8 +10,19 @@ import mesos.native
 
 from airflow.configuration import conf
 from airflow.executors.base_executor import BaseExecutor
+from airflow.settings import Session
 from airflow.utils import State
 from airflow.utils import AirflowException
+
+
+DEFAULT_FRAMEWORK_NAME = 'Airflow'
+FRAMEWORK_CONNID_PREFIX = 'mesos_framework_'
+
+
+def get_framework_name():
+    if not conf.get('mesos', 'FRAMEWORK_NAME'):
+        return DEFAULT_FRAMEWORK_NAME
+    return conf.get('mesos', 'FRAMEWORK_NAME')
 
 
 # AirflowMesosScheduler, implements Mesos Scheduler interface
@@ -39,6 +50,24 @@ class AirflowMesosScheduler(mesos.interface.Scheduler):
 
     def registered(self, driver, frameworkId, masterInfo):
         logging.info("AirflowScheduler registered to mesos with framework ID %s", frameworkId.value)
+
+        if conf.getboolean('mesos', 'CHECKPOINT') and conf.get('mesos', 'FAILOVER_TIMEOUT'):
+            # Import here to work around a circular import error
+            from airflow.models import Connection
+
+            # Update the Framework ID in the database.
+            session = Session()
+            conn_id = FRAMEWORK_CONNID_PREFIX + get_framework_name()
+            connection = Session.query(Connection).filter_by(conn_id=conn_id).first()
+            if connection is None:
+                connection = Connection(conn_id=conn_id, conn_type='mesos_framework-id',
+                                        extra=frameworkId.value)
+            else:
+                connection.extra = frameworkId.value
+
+            session.add(connection)
+            session.commit()
+            Session.remove()
 
     def reregistered(self, driver, masterInfo):
         logging.info("AirflowScheduler re-registered to mesos")
@@ -119,7 +148,13 @@ class AirflowMesosScheduler(mesos.interface.Scheduler):
         logging.info("Task %s is in state %s, data %s",
                      update.task_id.value, mesos_pb2.TaskState.Name(update.state), str(update.data))
 
-        key = self.task_key_map[update.task_id.value]
+        try:
+            key = self.task_key_map[update.task_id.value]
+        except KeyError:
+            # The map may not contain an item if the framework re-registered after a failover.
+            # Discard these tasks.
+            logging.warn("Unrecognised task key %s" % update.task_id.value)
+            return
 
         if update.state == mesos_pb2.TASK_FINISHED:
             self.result_queue.put((key, State.SUCCESS))
@@ -156,10 +191,7 @@ class MesosExecutor(BaseExecutor):
 
         master = conf.get('mesos', 'MASTER')
 
-        if not conf.get('mesos', 'FRAMEWORK_NAME'):
-            framework.name = 'Airflow'
-        else:
-            framework.name = conf.get('mesos', 'FRAMEWORK_NAME')
+        framework.name = get_framework_name()
 
         if not conf.get('mesos', 'TASK_CPU'):
             task_cpu = 1
@@ -173,6 +205,20 @@ class MesosExecutor(BaseExecutor):
 
         if conf.getboolean('mesos', 'CHECKPOINT'):
             framework.checkpoint = True
+
+            if conf.get('mesos', 'FAILOVER_TIMEOUT'):
+                # Import here to work around a circular import error
+                from airflow.models import Connection
+
+                # Query the database to get the ID of the Mesos Framework, if available.
+                conn_id = FRAMEWORK_CONNID_PREFIX + framework.name
+                session = Session()
+                connection = session.query(Connection).filter_by(conn_id=conn_id).first()
+                if connection is not None:
+                    # Set the Framework ID to let the scheduler reconnect with running tasks.
+                    framework.id.value = connection.extra
+
+                framework.failover_timeout = conf.getint('mesos', 'FAILOVER_TIMEOUT')
         else:
             framework.checkpoint = False
 
