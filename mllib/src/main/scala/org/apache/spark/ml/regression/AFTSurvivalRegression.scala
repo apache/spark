@@ -71,6 +71,20 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   @Since("1.6.0")
   def getQuantileProbabilities: Array[Double] = $(quantileProbabilities)
 
+  /**
+   * Param for quantiles column name.
+   * If quantileProbabilities is set, quantiles of corresponding probabilities
+   * will be outputed in this column.
+   * @group param
+   */
+  @Since("1.6.0")
+  final val quantilesCol: Param[String] = new Param(this, "quantilesCol", "quantiles column name")
+
+  /** @group getParam */
+  @Since("1.6.0")
+  def getQuantilesCol: String = $(quantilesCol)
+  setDefault(quantilesCol -> "quantiles")
+
   /** Checks whether the input has quantile probabilities array. */
   protected[regression] def hasQuantileProbabilities: Boolean = {
     isDefined(quantileProbabilities) && $(quantileProbabilities).size != 0
@@ -89,6 +103,9 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    }
+    if (hasQuantileProbabilities) {
+      SchemaUtils.appendColumn(schema, $(quantilesCol), new VectorUDT)
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
@@ -123,6 +140,14 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   /** @group setParam */
   @Since("1.6.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
   /**
    * Set if we should fit the intercept
@@ -243,6 +268,10 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("1.6.0")
   def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
 
+  /** @group setParam */
+  @Since("1.6.0")
+  def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
+
   @Since("1.6.0")
   def predictQuantiles(features: Vector): Vector = {
     require(hasQuantileProbabilities,
@@ -266,7 +295,13 @@ class AFTSurvivalRegressionModel private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
     val predictUDF = udf { features: Vector => predict(features) }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
+    if (hasQuantileProbabilities) {
+      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+        .withColumn($(quantilesCol), predictQuantilesUDF(col($(featuresCol))))
+    } else {
+      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    }
   }
 
   @Since("1.6.0")

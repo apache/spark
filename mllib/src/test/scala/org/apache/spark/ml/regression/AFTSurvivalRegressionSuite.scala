@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS
 import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -59,13 +59,13 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(aftr.getFitIntercept)
     assert(aftr.getMaxIter === 100)
     assert(aftr.getTol === 1E-6)
-    val model = aftr.fit(datasetUnivariate)
+    val model = aftr.fit(datasetUnivariate).setQuantileProbabilities(Array(0.1, 0.8))
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
 
     model.transform(datasetUnivariate)
-      .select("label", "prediction")
+      .select("label", "prediction", "quantiles")
       .collect()
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
@@ -167,10 +167,17 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
-    model.transform(datasetUnivariate).select("features", "prediction").collect().foreach {
-      case Row(features: DenseVector, prediction1: Double) =>
-        val prediction2 = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
+    model.transform(datasetUnivariate).select("features", "prediction", "quantiles")
+      .collect().foreach {
+      case Row(features: DenseVector, prediction1: Double, predictionQuantiles1: Vector) =>
+        val lambda = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
+        val k = 1 / model.scale
+        val prediction2 = lambda
+        val predictionQuantiles2 = Vectors.dense(model.getQuantileProbabilities.map {
+          q => lambda * math.exp(math.log(-math.log(1 - q)) / k)
+        })
         assert(prediction1 ~== prediction2 relTol 1E-5)
+        assert(predictionQuantiles1 ~== predictionQuantiles2 relTol 1E-5)
     }
   }
 
@@ -235,10 +242,17 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
-    model.transform(datasetMultivariate).select("features", "prediction").collect().foreach {
-      case Row(features: DenseVector, prediction1: Double) =>
-        val prediction2 = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
+    model.transform(datasetMultivariate).select("features", "prediction", "quantiles")
+      .collect().foreach {
+      case Row(features: DenseVector, prediction1: Double, predictionQuantiles1: Vector) =>
+        val lambda = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
+        val k = 1 / model.scale
+        val prediction2 = lambda
+        val predictionQuantiles2 = Vectors.dense(model.getQuantileProbabilities.map {
+          q => lambda * math.exp(math.log(-math.log(1 - q)) / k)
+        })
         assert(prediction1 ~== prediction2 relTol 1E-5)
+        assert(predictionQuantiles1 ~== predictionQuantiles2 relTol 1E-5)
     }
   }
 
@@ -302,10 +316,17 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
-    model.transform(datasetMultivariate).select("features", "prediction").collect().foreach {
-      case Row(features: DenseVector, prediction1: Double) =>
-        val prediction2 = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
+    model.transform(datasetMultivariate).select("features", "prediction", "quantiles")
+      .collect().foreach {
+      case Row(features: DenseVector, prediction1: Double, predictionQuantiles1: Vector) =>
+        val lambda = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
+        val k = 1 / model.scale
+        val prediction2 = lambda
+        val predictionQuantiles2 = Vectors.dense(model.getQuantileProbabilities.map {
+          q => lambda * math.exp(math.log(-math.log(1 - q)) / k)
+        })
         assert(prediction1 ~== prediction2 relTol 1E-5)
+        assert(predictionQuantiles1 ~== predictionQuantiles2 relTol 1E-5)
     }
   }
 }
