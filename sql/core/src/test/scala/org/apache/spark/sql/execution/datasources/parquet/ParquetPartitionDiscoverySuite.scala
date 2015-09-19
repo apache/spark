@@ -58,14 +58,46 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     check(defaultPartitionName, Literal.create(null, NullType))
   }
 
+  test("parse invalid partitioned directories") {
+    // Invalid
+    var paths = Seq(
+      "hdfs://host:9000/invalidPath",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/a=10.5/b=hello")
+
+    var exception = intercept[AssertionError] {
+      parsePartitions(paths.map(new Path(_)), defaultPartitionName, true)
+    }
+    assert(exception.getMessage().contains("Conflicting directory structures detected"))
+
+    // Valid
+    paths = Seq(
+      "hdfs://host:9000/path/_temporary",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/_temporary/path")
+
+    parsePartitions(paths.map(new Path(_)), defaultPartitionName, true)
+
+    // Invalid
+    paths = Seq(
+      "hdfs://host:9000/path/_temporary",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/path1")
+
+    exception = intercept[AssertionError] {
+      parsePartitions(paths.map(new Path(_)), defaultPartitionName, true)
+    }
+    assert(exception.getMessage().contains("Conflicting directory structures detected"))
+  }
+
   test("parse partition") {
     def check(path: String, expected: Option[PartitionValues]): Unit = {
-      assert(expected === parsePartition(new Path(path), defaultPartitionName, true))
+      assert(expected === parsePartition(new Path(path), defaultPartitionName, true)._1)
     }
 
     def checkThrows[T <: Throwable: Manifest](path: String, expected: String): Unit = {
       val message = intercept[T] {
-        parsePartition(new Path(path), defaultPartitionName, true).get
+        parsePartition(new Path(path), defaultPartitionName, true)
       }.getMessage
 
       assert(message.contains(expected))

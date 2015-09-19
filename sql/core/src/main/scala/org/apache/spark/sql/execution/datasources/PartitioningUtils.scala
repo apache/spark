@@ -77,8 +77,16 @@ private[sql] object PartitioningUtils {
       defaultPartitionName: String,
       typeInference: Boolean): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
-    val pathsWithPartitionValues = paths.flatMap { path =>
-      parsePartition(path, defaultPartitionName, typeInference).map(path -> _)
+    val partitionValuesWithBasePaths = paths.map { path =>
+      path -> parsePartition(path, defaultPartitionName, typeInference)
+    }
+
+    val pathsWithPartitionValues = partitionValuesWithBasePaths.flatMap { pathAndPart =>
+      pathAndPart._2._1.map(part => pathAndPart._1 -> part)
+    }
+
+    val basePaths = partitionValuesWithBasePaths.flatMap { pathAndPart =>
+      pathAndPart._2._2
     }
 
     if (pathsWithPartitionValues.isEmpty) {
@@ -87,7 +95,7 @@ private[sql] object PartitioningUtils {
     } else {
       // This dataset is partitioned. We need to check whether all partitions have the same
       // partition columns and resolve potential type conflicts.
-      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
+      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues, basePaths)
 
       // Creates the StructType which represents the partition columns.
       val fields = {
@@ -128,30 +136,32 @@ private[sql] object PartitioningUtils {
   private[sql] def parsePartition(
       path: Path,
       defaultPartitionName: String,
-      typeInference: Boolean): Option[PartitionValues] = {
+      typeInference: Boolean): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
     var chopped = path
+    var basePath = path
 
     while (!finished) {
       // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
       // uncleaned.  Here we simply ignore them.
       if (chopped.getName.toLowerCase == "_temporary") {
-        return None
+        return (None, None)
       }
 
       val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName, typeInference)
       maybeColumn.foreach(columns += _)
+      basePath = chopped
       chopped = chopped.getParent
-      finished = maybeColumn.isEmpty || chopped.getParent == null
+      finished = (maybeColumn.isEmpty && !columns.isEmpty) || chopped.getParent == null
     }
 
     if (columns.isEmpty) {
-      None
+      (None, Some(path))
     } else {
       val (columnNames, values) = columns.reverse.unzip
-      Some(PartitionValues(columnNames, values))
+      (Some(PartitionValues(columnNames, values)), Some(basePath))
     }
   }
 
@@ -184,7 +194,8 @@ private[sql] object PartitioningUtils {
    * }}}
    */
   private[sql] def resolvePartitions(
-      pathsWithPartitionValues: Seq[(Path, PartitionValues)]): Seq[PartitionValues] = {
+      pathsWithPartitionValues: Seq[(Path, PartitionValues)],
+      basePaths: Seq[Path]): Seq[PartitionValues] = {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
@@ -192,6 +203,10 @@ private[sql] object PartitioningUtils {
       assert(
         distinctPartColNames.size == 1,
         listConflictingPartitionColumns(pathsWithPartitionValues))
+
+      assert(
+        basePaths.distinct.size == 1,
+        throwErrorForInvalidPartition(basePaths))
 
       // Resolves possible type conflicts for each column
       val values = pathsWithPartitionValues.map(_._2)
@@ -205,6 +220,12 @@ private[sql] object PartitioningUtils {
         d.copy(literals = resolvedValues.map(_(index)))
       }
     }
+  }
+
+  private[sql] def throwErrorForInvalidPartition(
+      basePaths: Seq[Path]): String = {
+    "Conflicting directory structures detected. Suspicious paths:\b" +
+      basePaths.mkString("\n\t", "\n\t", "\n\n")
   }
 
   private[sql] def listConflictingPartitionColumns(
