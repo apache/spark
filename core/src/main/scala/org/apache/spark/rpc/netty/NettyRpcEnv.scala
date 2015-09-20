@@ -37,12 +37,16 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.rpc._
-import org.apache.spark.serializer.{JavaSerializer, Serializer}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[netty] class NettyRpcEnv(
-    val conf: SparkConf, serializer: Serializer, host: String, securityManager: SecurityManager)
+    val conf: SparkConf, serializer: JavaSerializer, host: String, securityManager: SecurityManager)
   extends RpcEnv(conf) with Logging {
+
+  // Use JavaSerializerInstance in multiple threads is safe. However, if we plan to support
+  // KryoSerializer in future, we have to use ThreadLocal to store SerializerInstance
+  private val javaSerializerInstance = serializer.newInstance()
 
   private val transportConf =
     SparkTransportConf.fromSparkConf(conf, conf.getInt("spark.rpc.io.threads", 0))
@@ -198,14 +202,14 @@ private[netty] class NettyRpcEnv(
   }
 
   private[netty] def serialize(content: Any): Array[Byte] = {
-    val buffer = serializer.newInstance().serialize(content)
+    val buffer = javaSerializerInstance.serialize(content)
     Arrays.copyOfRange(
       buffer.array(), buffer.arrayOffset + buffer.position, buffer.arrayOffset + buffer.limit)
   }
 
   private[netty] def deserialize[T: ClassTag](bytes: Array[Byte]): T = {
     deserialize { () =>
-      serializer.newInstance().deserialize[T](ByteBuffer.wrap(bytes))
+      javaSerializerInstance.deserialize[T](ByteBuffer.wrap(bytes))
     }
   }
 
