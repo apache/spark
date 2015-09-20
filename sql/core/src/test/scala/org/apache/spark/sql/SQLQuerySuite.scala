@@ -581,28 +581,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       mapData.collect().sortBy(_.data(1)).reverse.map(Row.fromTuple).toSeq)
   }
 
-  test("sorting") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false") {
-      sortTest()
-    }
-  }
-
   test("external sorting") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true") {
-      sortTest()
-    }
-  }
-
-  test("SPARK-6927 sorting with codegen on") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "true") {
-      sortTest()
-    }
+    sortTest()
   }
 
   test("SPARK-6927 external sorting with codegen on") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
       sortTest()
     }
   }
@@ -1731,10 +1715,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("external sorting updates peak execution memory") {
-    withSQLConf((SQLConf.EXTERNAL_SORT.key, "true")) {
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
-        sortTest()
-      }
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
+      sortTest()
     }
   }
 
