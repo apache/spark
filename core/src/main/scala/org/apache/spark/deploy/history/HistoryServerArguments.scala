@@ -89,3 +89,4 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
   }
 
 }
+
