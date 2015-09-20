@@ -875,7 +875,9 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     if (!path.isEmpty) {
       val file = new File(path)
       if (file.exists()) {
-        file.delete()
+        if (!file.delete()) {
+          logWarning("Error deleting " + file.getPath())
+        }
       }
     }
   }
