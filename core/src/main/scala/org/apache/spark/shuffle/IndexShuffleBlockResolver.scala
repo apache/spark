@@ -60,12 +60,16 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
   def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (file.exists()) {
-      file.delete()
+      if (!file.delete()) {
+        logWarning(s"Error deleting data ${file.getPath()}")
+      }
     }
 
     file = getIndexFile(shuffleId, mapId)
     if (file.exists()) {
-      file.delete()
+      if (!file.delete()) {
+        logWarning(s"Error deleting index ${file.getPath()}")
+      }
     }
   }
 

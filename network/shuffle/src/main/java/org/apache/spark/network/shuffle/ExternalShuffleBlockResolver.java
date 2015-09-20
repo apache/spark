@@ -120,7 +120,7 @@ public class ExternalShuffleBlockResolver {
             }
           }
           if (!registeredExecutorFile.delete()) {
-		        logger.error("error deleting " + registeredExecutorFile.getPath());
+            logger.error("error deleting " + registeredExecutorFile.getPath());
           }
           options.createIfMissing(true);
           try {
