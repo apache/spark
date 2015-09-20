@@ -823,7 +823,7 @@ object functions {
    *
    * @group normal_funcs
    */
-  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
+  def expr(expr: String): Column = Column(SqlParser.parseExpression(expr))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
