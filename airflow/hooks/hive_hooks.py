@@ -5,6 +5,7 @@ import csv
 import logging
 import re
 import subprocess
+import socket
 from tempfile import NamedTemporaryFile
 
 
@@ -65,11 +66,21 @@ class HiveCliHook(BaseHook):
                 cmd_extra = []
                 if self.use_beeline:
                     hive_bin = 'beeline'
-                    jdbc_url = (
-                        "jdbc:hive2://"
-                        "{0}:{1}/{2}"
-                        ";auth=noSasl"
-                    ).format(conn.host, conn.port, conn.schema)
+                    if conf.get('security','enabled'):
+                        template = conn.extra_dejson.get('principal',"hive/_HOST@EXAMPLE.COM")
+                        template = template.replace("_HOST", socket.getfqdn())
+                        jdbc_url = (
+                            "jdbc:hive2://"
+                            "{0}:{1}/{2}"
+                            ";principal={3}"
+                        ).format(conn.host, conn.port, conn.schema. template)
+                    else:
+                        jdbc_url = (
+                            "jdbc:hive2://"
+                            "{0}:{1}/{2}"
+                            ";auth=noSasl"
+                        ).format(conn.host, conn.port, conn.schema)
+
                     cmd_extra += ['-u', jdbc_url]
                     if conn.login:
                         cmd_extra += ['-n', conn.login]
