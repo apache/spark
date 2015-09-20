@@ -45,7 +45,7 @@ private[master] class FileSystemPersistenceEngine(
   }
 
   override def unpersist(name: String): Unit = {
-    File f = new File(dir + File.separator + name)
+    val f = new File(dir + File.separator + name)
     if (!f.delete()) {
       logWarning(s"Error deleting ${f.getPath()}")
     }

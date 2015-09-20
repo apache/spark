@@ -40,7 +40,7 @@ import IndexShuffleBlockResolver.NOOP_REDUCE_ID
  */
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
-private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver {
+private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver, Logging {
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
