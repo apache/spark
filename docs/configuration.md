@@ -69,7 +69,7 @@ val sc = new SparkContext(new SparkConf())
 
 Then, you can supply configuration values at runtime:
 {% highlight bash %}
-./bin/spark-submit --name "My app" --master local[4] --conf spark.shuffle.spill=false
+./bin/spark-submit --name "My app" --master local[4] --conf spark.eventLog.enabled=false
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar
 {% endhighlight %}
 
@@ -449,8 +449,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.memoryFraction</code></td>
   <td>0.2</td>
   <td>
-    Fraction of Java heap to use for aggregation and cogroups during shuffles, if
-    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
+    Fraction of Java heap to use for aggregation and cogroups during shuffles.
+    At any given time, the collective size of
     all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
     begin to spill to disk. If spills are often, consider increasing this value at the expense of
     <code>spark.storage.memoryFraction</code>.
@@ -481,14 +481,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
     map-side aggregation and there are at most this many reduce partitions.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.spill</code></td>
-  <td>true</td>
-  <td>
-    If set to "true", limits the amount of memory used during reduces by spilling data out to disk.
-    This spilling threshold is specified by <code>spark.shuffle.memoryFraction</code>.
   </td>
 </tr>
 <tr>
