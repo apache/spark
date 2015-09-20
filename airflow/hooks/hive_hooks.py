@@ -64,6 +64,7 @@ class HiveCliHook(BaseHook):
                 fname = f.name
                 hive_bin = 'hive'
                 cmd_extra = []
+
                 if self.use_beeline:
                     hive_bin = 'beeline'
                     if conf.get('security','enabled'):
@@ -86,8 +87,9 @@ class HiveCliHook(BaseHook):
                         cmd_extra += ['-n', conn.login]
                     if conn.password:
                         cmd_extra += ['-p', conn.password]
-                    cmd_extra += ['-p', conn.login]
+
                 hive_cmd = [hive_bin, '-f', fname] + cmd_extra
+
                 if self.hive_cli_params:
                     hive_params_list = self.hive_cli_params.split()
                     hive_cmd.extend(hive_params_list)
