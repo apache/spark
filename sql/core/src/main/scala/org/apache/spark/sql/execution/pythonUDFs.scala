@@ -352,7 +352,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
 
-    child.execute().mapPartitions { iter =>
+    inputRDD.mapPartitions { iter =>
       EvaluatePython.registerPicklers()  // register pickler for Row
 
       // The queue used to buffer input rows so we can drain it to
