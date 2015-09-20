@@ -83,26 +83,33 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
  * Note that since zero values will probably be transformed to non-zero values, output of the
  * transformer will be DenseVector even for sparse input.
  */
+@Since("1.5.0")
 @Experimental
 class MinMaxScaler(override val uid: String)
   extends Estimator[MinMaxScalerModel] with MinMaxScalerParams {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("minMaxScal"))
 
   setDefault(min -> 0.0, max -> 1.0)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMin(value: Double): this.type = set(min, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMax(value: Double): this.type = set(max, value)
 
+  @Since("1.5.0")
   override def fit(dataset: DataFrame): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
@@ -110,10 +117,12 @@ class MinMaxScaler(override val uid: String)
     copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MinMaxScaler = defaultCopy(extra)
 }
 

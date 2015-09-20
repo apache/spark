@@ -31,10 +31,12 @@ import org.apache.spark.sql.types.DataType
  * provided "weight" vector.  In other words, it scales each column of the dataset by a scalar
  * multiplier.
  */
+@Since("1.4.0")
 @Experimental
 class ElementwiseProduct(override val uid: String)
   extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("elemProd"))
 
   /**
@@ -44,16 +46,20 @@ class ElementwiseProduct(override val uid: String)
   val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setScalingVec(value: Vector): this.type = set(scalingVec, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getScalingVec: Vector = getOrDefault(scalingVec)
 
+  @Since("1.4.0")
   override protected def createTransformFunc: Vector => Vector = {
     require(params.contains(scalingVec), s"transformation requires a weight vector")
     val elemScaler = new feature.ElementwiseProduct($(scalingVec))
     elemScaler.transform
   }
 
+  @Since("1.4.0")
   override protected def outputDataType: DataType = new VectorUDT()
 }

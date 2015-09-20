@@ -48,23 +48,29 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
  * :: Experimental ::
  * PCA trains a model to project vectors to a low-dimensional space using PCA.
  */
+@Since("1.5.0")
 @Experimental
 class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("pca"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setK(value: Int): this.type = set(k, value)
 
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
    */
+  @Since("1.5.0")
   override def fit(dataset: DataFrame): PCAModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v}
@@ -73,6 +79,7 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams 
     copyValues(new PCAModel(uid, pcaModel).setParent(this))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
@@ -83,6 +90,7 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams 
     StructType(outputFields)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): PCA = defaultCopy(extra)
 }
 

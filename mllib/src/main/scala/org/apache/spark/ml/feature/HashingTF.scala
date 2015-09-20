@@ -32,15 +32,19 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  */
+@Since("1.2.0")
 @Experimental
 class HashingTF(override val uid: String) extends Transformer with HasInputCol with HasOutputCol {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("hashingTF"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
@@ -54,11 +58,14 @@ class HashingTF(override val uid: String) extends Transformer with HasInputCol w
   setDefault(numFeatures -> (1 << 18))
 
   /** @group getParam */
+  @Since("1.2.0")
   def getNumFeatures: Int = $(numFeatures)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setNumFeatures(value: Int): this.type = set(numFeatures, value)
 
+  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
     val hashingTF = new feature.HashingTF($(numFeatures))
@@ -67,6 +74,7 @@ class HashingTF(override val uid: String) extends Transformer with HasInputCol w
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
@@ -75,5 +83,6 @@ class HashingTF(override val uid: String) extends Transformer with HasInputCol w
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
 }

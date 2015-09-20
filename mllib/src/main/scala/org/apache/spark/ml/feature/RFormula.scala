@@ -46,9 +46,11 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
  * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
  * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
+@Since("1.5.0")
 @Experimental
 class RFormula(override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("rFormula"))
 
   /**
@@ -62,15 +64,19 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
    * @group setParam
    * @param value an R formula in string form (e.g. "y ~ x + z")
    */
+  @Since("1.5.0")
   def setFormula(value: String): this.type = set(formula, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getFormula: String = $(formula)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** Whether the formula specifies fitting an intercept. */
@@ -79,6 +85,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     RFormulaParser.parse($(formula)).hasIntercept
   }
 
+  @Since("1.5.0")
   override def fit(dataset: DataFrame): RFormulaModel = {
     require(isDefined(formula), "Formula must be defined first.")
     val parsedFormula = RFormulaParser.parse($(formula))
@@ -145,6 +152,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
   }
 
   // optimistic schema; does not contain any ML attributes
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
@@ -154,8 +162,10 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     }
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
+  @Since("1.5.0")
   override def toString: String = s"RFormula(${get(formula)}) (uid=$uid)"
 }
 

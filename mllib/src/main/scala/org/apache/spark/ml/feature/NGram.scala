@@ -34,10 +34,12 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * When the input array length is less than n (number of elements per n-gram), no n-grams are
  * returned.
  */
+@Since("1.5.0")
 @Experimental
 class NGram(override val uid: String)
   extends UnaryTransformer[Seq[String], Seq[String], NGram] {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("ngram"))
 
   /**
@@ -49,21 +51,26 @@ class NGram(override val uid: String)
     ParamValidators.gtEq(1))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setN(value: Int): this.type = set(n, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getN: Int = $(n)
 
   setDefault(n -> 2)
 
+  @Since("1.5.0")
   override protected def createTransformFunc: Seq[String] => Seq[String] = {
     _.iterator.sliding($(n)).withPartial(false).map(_.mkString(" ")).toSeq
   }
 
+  @Since("1.5.0")
   override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType.sameType(ArrayType(StringType)),
       s"Input type must be ArrayType(StringType) but got $inputType.")
   }
 
+  @Since("1.5.0")
   override protected def outputDataType: DataType = new ArrayType(StringType, false)
 }

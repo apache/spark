@@ -59,20 +59,26 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
  * :: Experimental ::
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
+@Since("1.4.0")
 @Experimental
 final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("idf"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
 
+  @Since("1.4.0")
   override def fit(dataset: DataFrame): IDFModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
@@ -80,10 +86,12 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
     copyValues(new IDFModel(uid, idf).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): IDF = defaultCopy(extra)
 }
 

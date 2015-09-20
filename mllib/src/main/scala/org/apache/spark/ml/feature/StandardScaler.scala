@@ -55,26 +55,33 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
  */
+@Since("1.2.0")
 @Experimental
 class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
   with StandardScalerParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("stdScal"))
 
   setDefault(withMean -> false, withStd -> true)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setWithMean(value: Boolean): this.type = set(withMean, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setWithStd(value: Boolean): this.type = set(withStd, value)
 
+  @Since("1.2.0")
   override def fit(dataset: DataFrame): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
@@ -83,6 +90,7 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
     copyValues(new StandardScalerModel(uid, scalerModel).setParent(this))
   }
 
+  @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
@@ -93,6 +101,7 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
     StructType(outputFields)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
 }
 

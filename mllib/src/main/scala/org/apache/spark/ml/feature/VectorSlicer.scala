@@ -40,10 +40,12 @@ import org.apache.spark.sql.types.StructType
  * The output vector will order features with the selected indices first (in the order given),
  * followed by the selected names (in the order given).
  */
+@Since("1.5.0")
 @Experimental
 final class VectorSlicer(override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("vectorSlicer"))
 
   /**
@@ -59,9 +61,11 @@ final class VectorSlicer(override val uid: String)
   setDefault(indices -> Array.empty[Int])
 
   /** @group getParam */
+  @Since("1.5.0")
   def getIndices: Array[Int] = $(indices)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setIndices(value: Array[Int]): this.type = set(indices, value)
 
   /**
@@ -78,22 +82,28 @@ final class VectorSlicer(override val uid: String)
   setDefault(names -> Array.empty[String])
 
   /** @group getParam */
+  @Since("1.5.0")
   def getNames: Array[String] = $(names)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setNames(value: Array[String]): this.type = set(names, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.5.0")
   override def validateParams(): Unit = {
     require($(indices).length > 0 || $(names).length > 0,
       s"VectorSlicer requires that at least one feature be selected.")
   }
 
+  @Since("1.5.0")
   override def transform(dataset: DataFrame): DataFrame = {
     // Validity checks
     transformSchema(dataset.schema)
@@ -138,6 +148,7 @@ final class VectorSlicer(override val uid: String)
     indFeatures ++ nameFeatures
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
 
@@ -150,6 +161,7 @@ final class VectorSlicer(override val uid: String)
     StructType(outputFields)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): VectorSlicer = defaultCopy(extra)
 }
 

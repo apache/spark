@@ -91,35 +91,46 @@ private[feature] trait Word2VecBase extends Params
  * Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
  * natural language processing or machine learning process.
  */
+@Since("1.4.0")
 @Experimental
 final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] with Word2VecBase {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("w2v"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setVectorSize(value: Int): this.type = set(vectorSize, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setNumPartitions(value: Int): this.type = set(numPartitions, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMinCount(value: Int): this.type = set(minCount, value)
 
+  @Since("1.4.0")
   override def fit(dataset: DataFrame): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
@@ -134,10 +145,12 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
     copyValues(new Word2VecModel(uid, wordVectors).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Word2Vec = defaultCopy(extra)
 }
 

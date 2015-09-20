@@ -34,10 +34,12 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  * :: Experimental ::
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
  */
+@Since("1.4.0")
 @Experimental
 final class Bucketizer(override val uid: String)
   extends Model[Bucketizer] with HasInputCol with HasOutputCol {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
 
   /**
@@ -57,17 +59,22 @@ final class Bucketizer(override val uid: String)
     Bucketizer.checkSplits)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getSplits: Array[Double] = $(splits)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setSplits(value: Array[Double]): this.type = set(splits, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
     val bucketizer = udf { feature: Double =>
@@ -85,11 +92,13 @@ final class Bucketizer(override val uid: String)
     attr.toStructField()
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Bucketizer = {
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
