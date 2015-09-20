@@ -18,15 +18,12 @@ docs
 docker.properties.*
 fairscheduler.xml.*
 spark-defaults.conf.*
-log4j.properties
 log4j.properties.*
-metrics.properties
 metrics.properties.*
 slaves
-slaves.*
-spark-env.sh
+slaves.template
 spark-env.cmd
-spark-env.sh.template
+spark-env.sh.*
 log4j-defaults.properties
 log4j-defaults-repl.properties
 bootstrap-tooltip.js
