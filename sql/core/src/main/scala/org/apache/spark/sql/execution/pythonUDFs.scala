@@ -348,7 +348,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
   override def canProcessSafeRows: Boolean = true
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val inputRDD = child.execute()
+    val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
 
