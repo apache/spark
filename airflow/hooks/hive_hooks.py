@@ -73,7 +73,7 @@ class HiveCliHook(BaseHook):
                             "jdbc:hive2://"
                             "{0}:{1}/{2}"
                             ";principal={3}"
-                        ).format(conn.host, conn.port, conn.schema. template)
+                        ).format(conn.host, conn.port, conn.schema, template)
                     else:
                         jdbc_url = (
                             "jdbc:hive2://"
