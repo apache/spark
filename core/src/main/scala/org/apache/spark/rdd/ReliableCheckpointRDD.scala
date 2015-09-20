@@ -145,7 +145,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         // Some other copy of this task must've finished before us and renamed it
         logInfo(s"Final output path $finalOutputPath already exists; not overwriting it")
         if (!fs.delete(tempOutputPath, false)) {
-          logWarning(s"Error deleting ${tempOutputPath.getPath()}")
+          logWarning(s"Error deleting ${tempOutputPath}")
         }
       }
     }
