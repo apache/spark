@@ -101,7 +101,9 @@ private[spark] object ReliableRDDCheckpointData {
     checkpointPath(sc, rddId).foreach { path =>
       val fs = path.getFileSystem(sc.hadoopConfiguration)
       if (fs.exists(path)) {
-        fs.delete(path, true)
+        if (!fs.delete(path, true)) {
+          logWarning("Error deleting ${path.getPath()}")
+        }
       }
     }
   }

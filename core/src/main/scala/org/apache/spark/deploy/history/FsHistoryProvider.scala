@@ -408,7 +408,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val path = new Path(logDir, attempt.logPath)
           if (fs.exists(path)) {
             if (!fs.delete(path, true)) {
-	            logWarning(s"Error deleting ${path.getPath()}")
+              logWarning(s"Error deleting ${path.getPath()}")
             }
           }
         } catch {
