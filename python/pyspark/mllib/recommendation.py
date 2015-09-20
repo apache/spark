@@ -170,13 +170,13 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     def recommendProductsForUsers(self, num):
         """
-        Recommends topK products for all users.
+        Recommends top "num" products for all users. The number returned may be less than this.
         """
         return self.call("wrappedRecommendProductsForUsers", num)
 
     def recommendUsersForProducts(self, num):
         """
-        Recommends topK users for all products.
+        Recommends top "num" users for all products. The number returned may be less than this.
         """
         return self.call("wrappedRecommendUsersForProducts", num)
 
