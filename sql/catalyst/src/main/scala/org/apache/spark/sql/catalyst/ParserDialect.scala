@@ -61,7 +61,7 @@ abstract class ParserDialect {
  */
 private[spark] class DefaultParserDialect extends ParserDialect {
   @transient
-  protected val sqlParser = new SqlParser
+  protected val sqlParser = SqlParser
 
   override def parse(sqlText: String): LogicalPlan = {
     sqlParser.parse(sqlText)
