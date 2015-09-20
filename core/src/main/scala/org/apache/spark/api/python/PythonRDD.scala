@@ -839,7 +839,8 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
  * write the data into disk after deserialization, then Python can read it from disks.
  */
 // scalastyle:off no.finalize
-private[spark] class PythonBroadcast(@transient var path: String) extends Serializable, Logging {
+private[spark] class PythonBroadcast(@transient var path: String) extends Serializable
+  with Logging {
 
   /**
    * Read data from disks, then copy it to `out`
