@@ -27,7 +27,7 @@ class NettyRpcEnvSuite extends RpcEnvSuite {
     new NettyRpcEnvFactory().create(config)
   }
 
-  test("nonexist-endpoint") {
+  test("non-existent endpoint") {
     val uri = env.uriOf("test", env.address, "nonexist-endpoint")
     val e = intercept[RpcEndpointNotFoundException] {
       env.setupEndpointRef("test", env.address, "nonexist-endpoint")

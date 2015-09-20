@@ -29,8 +29,6 @@ import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
 
-private class RpcEndpointPair(val endpoint: RpcEndpoint, val endpointRef: NettyRpcEndpointRef)
-
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
   private class EndpointData(

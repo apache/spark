@@ -21,6 +21,7 @@ import java.net.{InetSocketAddress, URI}
 import java.nio.ByteBuffer
 import java.util.Arrays
 import java.util.concurrent._
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -57,7 +58,7 @@ private[netty] class NettyRpcEnv(
         Seq(new SaslClientBootstrap(transportConf, "", securityManager,
           securityManager.isSaslEncryptionEnabled()))
       } else {
-        Seq.empty
+        Nil
       }
     transportContext.createClientFactory(bootstraps.asJava)
   }
@@ -75,7 +76,7 @@ private[netty] class NettyRpcEnv(
       if (securityManager.isAuthenticationEnabled()) {
         Seq(new SaslServerBootstrap(transportConf, securityManager))
       } else {
-        Seq.empty
+        Nil
       }
     server = transportContext.createServer(port, bootstraps.asJava)
     dispatcher.registerRpcEndpoint(IDVerifier.NAME, new IDVerifier(this, dispatcher))
@@ -95,13 +96,13 @@ private[netty] class NettyRpcEnv(
     val endpointRef = new NettyRpcEndpointRef(conf, addr, this)
     val idVerifierRef =
       new NettyRpcEndpointRef(conf, NettyRpcAddress(addr.host, addr.port, IDVerifier.NAME), this)
-    idVerifierRef.ask[Boolean](ID(endpointRef.name)).flatMap(find =>
+    idVerifierRef.ask[Boolean](ID(endpointRef.name)).flatMap { find =>
       if (find) {
         Future.successful(endpointRef)
       } else {
         Future.failed(new RpcEndpointNotFoundException(uri))
       }
-    )(ThreadUtils.sameThread)
+    }(ThreadUtils.sameThread)
   }
 
   override def stop(endpointRef: RpcEndpointRef): Unit = {
@@ -116,7 +117,7 @@ private[netty] class NettyRpcEnv(
       dispatcher.postMessage(message, promise)
       promise.future.onComplete {
         case Success(response) =>
-          val ack = response.asInstanceOf[SendAck]
+          val ack = response.asInstanceOf[Ack]
           logDebug(s"Receive ack from ${ack.sender}")
         case Failure(e) =>
           logError(s"Exception when sending $message", e)
@@ -135,7 +136,7 @@ private[netty] class NettyRpcEnv(
               }
 
               override def onSuccess(response: Array[Byte]): Unit = {
-                val ack = deserialize[SendAck](response)
+                val ack = deserialize[Ack](response)
                 logDebug(s"Receive ack from ${ack.sender}")
               }
             })
@@ -144,6 +145,7 @@ private[netty] class NettyRpcEnv(
       } catch {
         case e: RejectedExecutionException => {
           // `send` after shutting clientConnectionExecutor down, ignore it
+          logWarning(s"Cannot send ${message} because RpcEnv is stopped")
         }
       }
     }
@@ -158,7 +160,7 @@ private[netty] class NettyRpcEnv(
       p.future.onComplete {
         case Success(response) =>
           val reply = response.asInstanceOf[AskResponse]
-          if (reply.reply != null && reply.reply.isInstanceOf[RpcFailure]) {
+          if (reply.reply.isInstanceOf[RpcFailure]) {
             if (!promise.tryFailure(reply.reply.asInstanceOf[RpcFailure].e)) {
               logWarning(s"Ignore failure: ${reply.reply}")
             }
@@ -310,7 +312,6 @@ private[netty] class NettyRpcEndpointRef(@transient conf: SparkConf)
 
   override def name: String = _address.name
 
-
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     val promise = Promise[Any]()
     val timeoutCancelable = nettyEnv.timeoutScheduler.schedule(new Runnable {
@@ -319,12 +320,12 @@ private[netty] class NettyRpcEndpointRef(@transient conf: SparkConf)
       }
     }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
     val f = nettyEnv.ask(RequestMessage(nettyEnv.address, this, message, true))
-    f.onComplete(v => {
+    f.onComplete { v =>
       timeoutCancelable.cancel(true)
       if (!promise.tryComplete(v)) {
         logWarning(s"Ignore message $v")
       }
-    })(ThreadUtils.sameThread)
+    }(ThreadUtils.sameThread)
     promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
@@ -366,7 +367,7 @@ private[netty] case class AskResponse(sender: NettyRpcEndpointRef, reply: Any)
  * A message to send back to the receiver side. It's necessary because [[TransportClient]] only
  * clean the resources when it receives a reply.
  */
-private[netty] case class SendAck(sender: NettyRpcEndpointRef) extends ResponseMessage
+private[netty] case class Ack(sender: NettyRpcEndpointRef) extends ResponseMessage
 
 /**
  * A response that indicates some failure happens in the receiver side.
@@ -383,9 +384,15 @@ private[netty] class NettyRpcHandler(
   private type ClientAddress = RpcAddress
   private type RemoteEnvAddress = RpcAddress
 
-  // Store all client addresses and their NettyRpcEnv addresses. Protected by "this".
+  // Store all client addresses and their NettyRpcEnv addresses.
+  @GuardedBy("this")
   private val remoteAddresses = new mutable.HashMap[ClientAddress, RemoteEnvAddress]()
-  // Store the connections from other NettyRpcEnv addresses. Protected by "this".
+
+  // Store the connections from other NettyRpcEnv addresses. We need to keep track of the connection
+  // count because `TransportClientFactory.createClient` will create multiple connections
+  // (at most `spark.shuffle.io.numConnectionsPerPeer` connections) and randomly select a connection
+  // to send the message. See `TransportClientFactory.createClient` for more details.
+  @GuardedBy("this")
   private val remoteConnectionCount = new mutable.HashMap[RemoteEnvAddress, Int]()
 
   override def receive(

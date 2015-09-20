@@ -51,7 +51,7 @@ private[netty] abstract class NettyRpcCallContext(
 
   def finish(): Unit = {
     if (!needReply) {
-      send(SendAck(endpointRef))
+      send(Ack(endpointRef))
     }
   }
 }

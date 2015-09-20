@@ -133,16 +133,17 @@ private[netty] class Inbox(
           }
 
           case OnStop =>
-            assert(workerCount == 1)
+            assert(synchronized { workerCount } == 1)
             dispatcher.removeRpcEndpointRef(endpoint)
             endpoint.onStop()
             assert(isEmpty, "OnStop should be the last message")
-            synchronized { workerCount -= 1 }
-            return
+
           case Associated(remoteAddress) =>
             endpoint.onConnected(remoteAddress)
+
           case Disassociated(remoteAddress) =>
             endpoint.onDisconnected(remoteAddress)
+
           case AssociationError(cause, remoteAddress) =>
             endpoint.onNetworkError(cause, remoteAddress)
         }
