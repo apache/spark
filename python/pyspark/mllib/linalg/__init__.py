@@ -308,7 +308,7 @@ class DenseVector(Vector):
 
     def norm(self, p):
         """
-        Calculate the norm of a DenseVector.
+        Calculates the norm of a DenseVector.
 
         >>> a = DenseVector([0, -1, 2, -3])
         >>> a.norm(2)
@@ -401,14 +401,14 @@ class DenseVector(Vector):
 
     def toArray(self):
         """
-        Return an numpy.ndarray
+        Returns an numpy.ndarray
         """
         return self.array
 
     @property
     def values(self):
         """
-        Return list of values
+        Returns a list of values
         """
         return self.array
 
@@ -537,7 +537,7 @@ class SparseVector(Vector):
 
     def norm(self, p):
         """
-        Calculate the norm of a SparseVector.
+        Calculates the norm of a SparseVector.
 
         >>> a = SparseVector(4, [0, 1], [3., -4.])
         >>> a.norm(1)
