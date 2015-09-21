@@ -83,11 +83,15 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   /** @group getParam */
   @Since("1.6.0")
   def getQuantilesCol: String = $(quantilesCol)
-  setDefault(quantilesCol -> "quantiles")
 
   /** Checks whether the input has quantile probabilities array. */
   protected[regression] def hasQuantileProbabilities: Boolean = {
     isDefined(quantileProbabilities) && $(quantileProbabilities).size != 0
+  }
+
+  /** Checks whether the input has quantiles column name. */
+  protected[regression] def hasQuantilesCol: Boolean = {
+    isDefined(quantilesCol) && $(quantilesCol) != ""
   }
 
   /**
@@ -296,7 +300,7 @@ class AFTSurvivalRegressionModel private[ml] (
     transformSchema(dataset.schema)
     val predictUDF = udf { features: Vector => predict(features) }
     val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
-    if (hasQuantileProbabilities) {
+    if (hasQuantileProbabilities && hasQuantilesCol) {
       dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
         .withColumn($(quantilesCol), predictQuantilesUDF(col($(featuresCol))))
     } else {

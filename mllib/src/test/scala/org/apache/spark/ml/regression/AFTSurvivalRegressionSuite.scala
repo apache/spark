@@ -59,7 +59,9 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(aftr.getFitIntercept)
     assert(aftr.getMaxIter === 100)
     assert(aftr.getTol === 1E-6)
-    val model = aftr.fit(datasetUnivariate).setQuantileProbabilities(Array(0.1, 0.8))
+    val model = aftr.fit(datasetUnivariate)
+      .setQuantileProbabilities(Array(0.1, 0.8))
+      .setQuantilesCol("quantiles")
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
@@ -167,6 +169,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
+    model.setQuantilesCol("quantiles")
     model.transform(datasetUnivariate).select("features", "prediction", "quantiles")
       .collect().foreach {
       case Row(features: DenseVector, prediction1: Double, predictionQuantiles1: Vector) =>
@@ -242,6 +245,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
+    model.setQuantilesCol("quantiles")
     model.transform(datasetMultivariate).select("features", "prediction", "quantiles")
       .collect().foreach {
       case Row(features: DenseVector, prediction1: Double, predictionQuantiles1: Vector) =>
@@ -316,6 +320,7 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
     model.setQuantileProbabilities(quantileProbabilities)
     assert(model.predictQuantiles(features) ~== quantilePredictR relTol 1E-3)
 
+    model.setQuantilesCol("quantiles")
     model.transform(datasetMultivariate).select("features", "prediction", "quantiles")
       .collect().foreach {
       case Row(features: DenseVector, prediction1: Double, predictionQuantiles1: Vector) =>
