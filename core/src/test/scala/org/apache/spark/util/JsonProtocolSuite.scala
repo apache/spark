@@ -353,6 +353,17 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
   }
 
+  // `TaskCommitDenied` was added in 1.3.0 but JSON de/serialization logic was added in 1.5.1
+  test("TaskCommitDenied backward compatibility") {
+    val denied = TaskCommitDenied(1, 2, 3)
+    val oldDenied = JsonProtocol.taskEndReasonToJson(denied)
+      .removeField({ _._1 == "Job ID" })
+      .removeField({ _._1 == "Partition ID" })
+      .removeField({ _._1 == "Attempt Number" })
+    val expectedDenied = TaskCommitDenied(-1, -1, -1)
+    assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
+  }
+
   /** -------------------------- *
    | Helper test running methods |
    * --------------------------- */
