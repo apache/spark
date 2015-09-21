@@ -131,36 +131,6 @@ class Merger(object):
         raise NotImplementedError
 
 
-class InMemoryMerger(Merger):
-
-    """
-    In memory merger based on in-memory dict.
-    """
-
-    def __init__(self, aggregator):
-        Merger.__init__(self, aggregator)
-        self.data = {}
-
-    def mergeValues(self, iterator):
-        """ Combine the items by creator and combiner """
-        # speed up attributes lookup
-        d, creator = self.data, self.agg.createCombiner
-        comb = self.agg.mergeValue
-        for k, v in iterator:
-            d[k] = comb(d[k], v) if k in d else creator(v)
-
-    def mergeCombiners(self, iterator):
-        """ Merge the combined items by mergeCombiner """
-        # speed up attributes lookup
-        d, comb = self.data, self.agg.mergeCombiners
-        for k, v in iterator:
-            d[k] = comb(d[k], v) if k in d else v
-
-    def items(self):
-        """ Return the merged items ad iterator """
-        return iter(self.data.items())
-
-
 def _compressed_serializer(self, serializer=None):
     # always use PickleSerializer to simplify implementation
     ser = PickleSerializer()
@@ -486,7 +456,7 @@ class ExternalSorter(object):
         goes above the limit.
         """
         global MemoryBytesSpilled, DiskBytesSpilled
-        batch, limit = 100, self.memory_limit
+        batch, limit = 100, self._next_limit()
         chunks, current_chunk = [], []
         iterator = iter(iterator)
         while True:
@@ -512,9 +482,6 @@ class ExternalSorter(object):
                     f.close()
                 chunks.append(load(open(path, 'rb')))
                 current_chunk = []
-                gc.collect()
-                batch //= 2
-                limit = self._next_limit()
                 MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
                 DiskBytesSpilled += os.path.getsize(path)
                 os.unlink(path)  # data will be deleted after close
@@ -609,7 +576,7 @@ class ExternalList(object):
         if not os.path.exists(d):
             os.makedirs(d)
         p = os.path.join(d, str(id(self)))
-        self._file = open(p, "wb+", 65536)
+        self._file = open(p, "w+b", 65536)
         self._ser = BatchedSerializer(CompressedSerializer(PickleSerializer()), 1024)
         os.unlink(p)
 
@@ -841,4 +808,6 @@ class ExternalGroupBy(ExternalMerger):
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

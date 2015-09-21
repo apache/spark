@@ -17,41 +17,60 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
  * internal types.
  */
-abstract class InternalRow extends Row {
-  // A default implementation to change the return type
-  override def copy(): InternalRow = {this}
+abstract class InternalRow extends SpecializedGetters with Serializable {
+
+  def numFields: Int
+
+  // This is only use for test and will throw a null pointer exception if the position is null.
+  def getString(ordinal: Int): String = getUTF8String(ordinal).toString
+
+  /**
+   * Make a copy of the current [[InternalRow]] object.
+   */
+  def copy(): InternalRow
+
+  /** Returns true if there are any NULL values in this row. */
+  def anyNull: Boolean
+
+  /* ---------------------- utility methods for Scala ---------------------- */
+
+  /**
+   * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
+   */
+  def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
+    val len = numFields
+    assert(len == fieldTypes.length)
+
+    val values = new Array[Any](len)
+    var i = 0
+    while (i < len) {
+      values(i) = get(i, fieldTypes(i))
+      i += 1
+    }
+    values
+  }
+
+  def toSeq(schema: StructType): Seq[Any] = toSeq(schema.map(_.dataType))
 }
 
 object InternalRow {
-  def unapplySeq(row: InternalRow): Some[Seq[Any]] = Some(row.toSeq)
+  /**
+   * This method can be used to construct a [[InternalRow]] with the given values.
+   */
+  def apply(values: Any*): InternalRow = new GenericInternalRow(values.toArray)
 
   /**
-   * This method can be used to construct a [[Row]] with the given values.
+   * This method can be used to construct a [[InternalRow]] from a [[Seq]] of values.
    */
-  def apply(values: Any*): InternalRow = new GenericRow(values.toArray)
+  def fromSeq(values: Seq[Any]): InternalRow = new GenericInternalRow(values.toArray)
 
-  /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
-   */
-  def fromSeq(values: Seq[Any]): InternalRow = new GenericRow(values.toArray)
-
-  def fromTuple(tuple: Product): InternalRow = fromSeq(tuple.productIterator.toSeq)
-
-  /**
-   * Merge multiple rows into a single row, one after another.
-   */
-  def merge(rows: InternalRow*): InternalRow = {
-    // TODO: Improve the performance of this if used in performance critical part.
-    new GenericRow(rows.flatMap(_.toSeq).toArray)
-  }
-
-  /** Returns an empty row. */
+  /** Returns an empty [[InternalRow]]. */
   val empty = apply()
 }

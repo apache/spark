@@ -75,7 +75,7 @@ final class Bucketizer(override val uid: String)
     }
     val newCol = bucketizer(dataset($(inputCol)))
     val newField = prepOutputField(dataset.schema)
-    dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
+    dataset.withColumn($(outputCol), newCol, newField.metadata)
   }
 
   private def prepOutputField(schema: StructType): StructField = {
@@ -88,6 +88,10 @@ final class Bucketizer(override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
+  }
+
+  override def copy(extra: ParamMap): Bucketizer = {
+    defaultCopy[Bucketizer](extra).setParent(parent)
   }
 }
 

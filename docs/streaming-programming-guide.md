@@ -50,13 +50,7 @@ all of which are presented in this guide.
 You will find tabs throughout this guide that let you choose between code snippets of
 different languages.
 
-**Note:** Python API for Spark Streaming has been introduced in Spark 1.2. It has all the DStream
-transformations and almost all the output operations available in Scala and Java interfaces.
-However, it only has support for basic sources like text files and text data over sockets.
-APIs for additional sources, like Kafka and Flume, will be available in the future.
-Further information about available features in the Python API are mentioned throughout this
-document; look out for the tag
-<span class="badge" style="background-color: grey">Python API</span>.
+**Note:** There are a few APIs that are either different or not available in Python. Throughout this guide, you will find the tag <span class="badge" style="background-color: grey">Python API</span> highlighting these differences.
 
 ***************************************************************************************************
 
@@ -683,7 +677,7 @@ for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.strea
 {:.no_toc}
 
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
-out of these sources, *only* Kafka is available in the Python API. We will add more advanced sources in the Python API in future.
+out of these sources, Kafka, Kinesis, Flume and MQTT are available in the Python API.
 
 This category of sources require interfacing with external non-Spark libraries, some of them with
 complex dependencies (e.g., Kafka and Flume). Hence, to minimize issues related to version conflicts
@@ -725,9 +719,9 @@ Some of these advanced sources are as follows.
 
 - **Kafka:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka 0.8.2.1. See the [Kafka Integration Guide](streaming-kafka-integration.html) for more details.
 
-- **Flume:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Flume 1.4.0. See the [Flume Integration Guide](streaming-flume-integration.html) for more details.
+- **Flume:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Flume 1.6.0. See the [Flume Integration Guide](streaming-flume-integration.html) for more details.
 
-- **Kinesis:** See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
+- **Kinesis:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kinesis Client Library 1.2.1. See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
 
 - **Twitter:** Spark Streaming's TwitterUtils uses Twitter4j 3.0.3 to get the public stream of tweets using
   [Twitter's Streaming API](https://dev.twitter.com/docs/streaming-apis). Authentication information
@@ -853,6 +847,8 @@ it with new information. To use this, you will have to do two steps.
 1. Define the state - The state can be an arbitrary data type.
 1. Define the state update function - Specify with a function how to update the state using the
 previous state and the new values from an input stream.
+
+In every batch, Spark will apply the state  update function for all existing keys, regardless of whether they have new data in a batch or not. If the update function returns `None` then the key-value pair will be eliminated.
 
 Let's illustrate this with an example. Say you want to maintain a running count of each word
 seen in a text data stream. Here, the running count is the state and it is an integer. We
@@ -1139,7 +1135,7 @@ val joinedStream = stream1.join(stream2)
 {% highlight java %}
 JavaPairDStream<String, String> stream1 = ...
 JavaPairDStream<String, String> stream2 = ...
-JavaPairDStream<String, String> joinedStream = stream1.join(stream2);
+JavaPairDStream<String, Tuple2<String, String>> joinedStream = stream1.join(stream2);
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1164,7 +1160,7 @@ val joinedStream = windowedStream1.join(windowedStream2)
 {% highlight java %}
 JavaPairDStream<String, String> windowedStream1 = stream1.window(Durations.seconds(20));
 JavaPairDStream<String, String> windowedStream2 = stream2.window(Durations.minutes(1));
-JavaPairDStream<String, String> joinedStream = windowedStream1.join(windowedStream2);
+JavaPairDStream<String, Tuple2<String, String>> joinedStream = windowedStream1.join(windowedStream2);
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1523,7 +1519,7 @@ def getSqlContextInstance(sparkContext):
 words = ... # DStream of strings
 
 def process(time, rdd):
-    print "========= %s =========" % str(time)
+    print("========= %s =========" % str(time))
     try:
         # Get the singleton instance of SQLContext
         sqlContext = getSqlContextInstance(rdd.context)
@@ -1700,7 +1696,7 @@ context.awaitTermination();
 If the `checkpointDirectory` exists, then the context will be recreated from the checkpoint data.
 If the directory does not exist (i.e., running for the first time),
 then the function `contextFactory` will be called to create a new
-context and set up the DStreams. See the Scala example
+context and set up the DStreams. See the Java example
 [JavaRecoverableNetworkWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
 This example appends the word counts of network data into a file.
 
@@ -1811,7 +1807,7 @@ To run a Spark Streaming applications, you need to have the following.
     + *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this
       with Mesos.
 
-- *[Since Spark 1.2] Configuring write ahead logs* - Since Spark 1.2,
+- *Configuring write ahead logs* - Since Spark 1.2,
   we have introduced _write ahead logs_ for achieving strong
   fault-tolerance guarantees. If enabled,  all the data received from a receiver gets written into
   a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
@@ -1825,6 +1821,17 @@ To run a Spark Streaming applications, you need to have the following.
   received data within Spark be disabled when the write ahead log is enabled as the log is already
   stored in a replicated storage system. This can be done by setting the storage level for the
   input stream to `StorageLevel.MEMORY_AND_DISK_SER`.
+
+- *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
+  application to process data as fast as it is being received, the receivers can be rate limited
+  by setting a maximum rate limit in terms of records / sec.
+  See the [configuration parameters](configuration.html#spark-streaming)
+  `spark.streaming.receiver.maxRate` for receivers and `spark.streaming.kafka.maxRatePerPartition`
+  for Direct Kafka approach. In Spark 1.5, we have introduced a feature called *backpressure* that
+  eliminate the need to set this rate limit, as Spark Streaming automatically figures out the
+  rate limits and dynamically adjusts them if the processing conditions change. This backpressure
+  can be enabled by setting the [configuration parameter](configuration.html#spark-streaming)
+  `spark.streaming.backpressure.enabled` to `true`.
 
 ### Upgrading Application Code
 {:.no_toc}
@@ -1935,6 +1942,14 @@ for (int i = 0; i < numStreams; i++) {
 }
 JavaPairDStream<String, String> unifiedStream = streamingContext.union(kafkaStreams.get(0), kafkaStreams.subList(1, kafkaStreams.size()));
 unifiedStream.print();
+{% endhighlight %}
+</div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+numStreams = 5
+kafkaStreams = [KafkaUtils.createStream(...) for _ in range (numStreams)]
+unifiedStream = streamingContext.union(kafkaStreams)
+unifiedStream.print()
 {% endhighlight %}
 </div>
 </div>

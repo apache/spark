@@ -35,6 +35,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
 
   /**
    * The minimum of documents in which a term should appear.
+   * Default: 0
    * @group param
    */
   final val minDocFreq = new IntParam(
@@ -44,9 +45,6 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
 
   /** @group getParam */
   def getMinDocFreq: Int = $(minDocFreq)
-
-  /** @group setParam */
-  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
 
   /**
    * Validate and transform the input schema.
@@ -72,6 +70,9 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
+
   override def fit(dataset: DataFrame): IDFModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
@@ -82,6 +83,8 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): IDF = defaultCopy(extra)
 }
 
 /**
@@ -108,5 +111,10 @@ class IDFModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): IDFModel = {
+    val copied = new IDFModel(uid, idfModel)
+    copyValues(copied, extra).setParent(parent)
   }
 }

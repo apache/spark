@@ -38,10 +38,10 @@ import org.apache.spark.util.random.XORShiftRandom
  * TODO: This does not currently support (Double) weighted instances.  Once MLlib has weighted
  *       dataset support, update.  (We store subsampleWeights as Double for this future extension.)
  */
-private[tree] class BaggedPoint[Datum](val datum: Datum, val subsampleWeights: Array[Double])
+private[spark] class BaggedPoint[Datum](val datum: Datum, val subsampleWeights: Array[Double])
   extends Serializable
 
-private[tree] object BaggedPoint {
+private[spark] object BaggedPoint {
 
   /**
    * Convert an input dataset into its BaggedPoint representation,
@@ -60,7 +60,7 @@ private[tree] object BaggedPoint {
       subsamplingRate: Double,
       numSubsamples: Int,
       withReplacement: Boolean,
-      seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[Datum]] = {
+      seed: Long = Utils.random.nextLong()): RDD[BaggedPoint[Datum]] = {
     if (withReplacement) {
       convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
     } else {
@@ -76,7 +76,7 @@ private[tree] object BaggedPoint {
       input: RDD[Datum],
       subsamplingRate: Double,
       numSubsamples: Int,
-      seed: Int): RDD[BaggedPoint[Datum]] = {
+      seed: Long): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
       val rng = new XORShiftRandom
@@ -100,7 +100,7 @@ private[tree] object BaggedPoint {
       input: RDD[Datum],
       subsample: Double,
       numSubsamples: Int,
-      seed: Int): RDD[BaggedPoint[Datum]] = {
+      seed: Long): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
       val poisson = new PoissonDistribution(subsample)

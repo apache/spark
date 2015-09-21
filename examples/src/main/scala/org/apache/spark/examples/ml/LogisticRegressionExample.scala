@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -135,6 +136,7 @@ object LogisticRegressionExample {
       .setElasticNetParam(params.elasticNetParam)
       .setMaxIter(params.maxIter)
       .setTol(params.tol)
+      .setFitIntercept(params.fitIntercept)
 
     stages += lor
     val pipeline = new Pipeline().setStages(stages.toArray)
@@ -157,3 +159,4 @@ object LogisticRegressionExample {
     sc.stop()
   }
 }
+// scalastyle:on println

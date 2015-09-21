@@ -303,6 +303,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val numCompletedBatches = listener.retainedCompletedBatches.size
     val numActiveBatches = batchTimes.length - numCompletedBatches
+    val numReceivers = listener.numInactiveReceivers + listener.numActiveReceivers
     val table =
       // scalastyle:off
       <table id="stat-table" class="table table-bordered" style="width: auto">
@@ -310,7 +311,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <th style="width: 160px;"></th>
           <th style="width: 492px;">Timelines (Last {batchTimes.length} batches, {numActiveBatches} active, {numCompletedBatches} completed)</th>
-          <th style="width: 300px;">Histograms</th></tr>
+          <th style="width: 350px;">Histograms</th></tr>
       </thead>
       <tbody>
         <tr>
@@ -330,6 +331,11 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 }
               }
               </div>
+              {
+                if (numReceivers > 0) {
+                  <div>Receivers: {listener.numActiveReceivers} / {numReceivers} active</div>
+                }
+              }
               <div>Avg: {eventRateForAllStreams.formattedAvg} events/sec</div>
             </div>
           </td>
@@ -456,7 +462,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <td>{receiverActive}</td>
       <td>{receiverLocation}</td>
       <td>{receiverLastErrorTime}</td>
-      <td><div style="width: 292px;">{receiverLastError}</div></td>
+      <td><div style="width: 342px;">{receiverLastError}</div></td>
     </tr>
     <tr>
       <td colspan="3" class="timeline">

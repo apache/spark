@@ -21,13 +21,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
 
-class TestNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T, JvmType])
-  extends BasicColumnBuilder[T, JvmType](new NoopColumnStats, columnType)
+class TestNullableColumnBuilder[JvmType](columnType: ColumnType[JvmType])
+  extends BasicColumnBuilder[JvmType](new NoopColumnStats, columnType)
   with NullableColumnBuilder
 
 object TestNullableColumnBuilder {
-  def apply[T <: DataType, JvmType](columnType: ColumnType[T, JvmType], initialSize: Int = 0)
-    : TestNullableColumnBuilder[T, JvmType] = {
+  def apply[JvmType](columnType: ColumnType[JvmType], initialSize: Int = 0)
+    : TestNullableColumnBuilder[JvmType] = {
     val builder = new TestNullableColumnBuilder(columnType)
     builder.initialize(initialSize)
     builder
@@ -38,14 +38,14 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
   import ColumnarTestUtils._
 
   Seq(
-    INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, FIXED_DECIMAL(15, 10), BINARY, GENERIC,
-    DATE, TIMESTAMP
-  ).foreach {
+    BOOLEAN, BYTE, SHORT, INT, DATE, LONG, TIMESTAMP, FLOAT, DOUBLE,
+    STRING, BINARY, FIXED_DECIMAL(15, 10), GENERIC(ArrayType(StringType)))
+    .foreach {
     testNullableColumnBuilder(_)
   }
 
-  def testNullableColumnBuilder[T <: DataType, JvmType](
-      columnType: ColumnType[T, JvmType]): Unit = {
+  def testNullableColumnBuilder[JvmType](
+      columnType: ColumnType[JvmType]): Unit = {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
@@ -92,13 +92,14 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
 
       // For non-null values
       (0 until 4).foreach { _ =>
-        val actual = if (columnType == GENERIC) {
-          SparkSqlSerializer.deserialize[Any](GENERIC.extract(buffer))
+        val actual = if (columnType.isInstanceOf[GENERIC]) {
+          SparkSqlSerializer.deserialize[Any](columnType.extract(buffer).asInstanceOf[Array[Byte]])
         } else {
           columnType.extract(buffer)
         }
 
-        assert(actual === randomRow(0), "Extracted value didn't equal to the original one")
+        assert(actual === randomRow.get(0, columnType.dataType),
+          "Extracted value didn't equal to the original one")
       }
 
       assert(!buffer.hasRemaining)

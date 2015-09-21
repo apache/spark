@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.types.{DataType, NumericType}
 
 /**
@@ -36,7 +36,7 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame) extends Expression with WindowSpec {
+    frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
 
   def validate: Option[String] = frameSpecification match {
     case UnspecifiedFrame =>
@@ -68,12 +68,12 @@ case class WindowSpecDefinition(
   override def children: Seq[Expression] = partitionSpec ++ orderSpec
 
   override lazy val resolved: Boolean =
-    childrenResolved && frameSpecification.isInstanceOf[SpecifiedWindowFrame]
+    childrenResolved && checkInputDataTypes().isSuccess &&
+      frameSpecification.isInstanceOf[SpecifiedWindowFrame]
 
 
   override def toString: String = simpleString
 
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def nullable: Boolean = true
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
@@ -252,8 +252,6 @@ object SpecifiedWindowFrame {
  * to retrieve value corresponding with these n rows.
  */
 trait WindowFunction extends Expression {
-  self: Product =>
-
   def init(): Unit
 
   def reset(): Unit
@@ -274,64 +272,59 @@ trait WindowFunction extends Expression {
 case class UnresolvedWindowFunction(
     name: String,
     children: Seq[Expression])
-  extends Expression with WindowFunction {
+  extends Expression with WindowFunction with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
-  override def init(): Unit =
-    throw new UnresolvedException(this, "init")
-  override def reset(): Unit =
-    throw new UnresolvedException(this, "reset")
+  override def init(): Unit = throw new UnresolvedException(this, "init")
+  override def reset(): Unit = throw new UnresolvedException(this, "reset")
   override def prepareInputParameters(input: InternalRow): AnyRef =
     throw new UnresolvedException(this, "prepareInputParameters")
-  override def update(input: AnyRef): Unit =
-    throw new UnresolvedException(this, "update")
+  override def update(input: AnyRef): Unit = throw new UnresolvedException(this, "update")
   override def batchUpdate(inputs: Array[AnyRef]): Unit =
     throw new UnresolvedException(this, "batchUpdate")
-  override def evaluate(): Unit =
-    throw new UnresolvedException(this, "evaluate")
-  override def get(index: Int): Any =
-    throw new UnresolvedException(this, "get")
-  // Unresolved functions are transient at compile time and don't get evaluated during execution.
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+  override def evaluate(): Unit = throw new UnresolvedException(this, "evaluate")
+  override def get(index: Int): Any = throw new UnresolvedException(this, "get")
 
   override def toString: String = s"'$name(${children.mkString(",")})"
 
-  override def newInstance(): WindowFunction =
-    throw new UnresolvedException(this, "newInstance")
+  override def newInstance(): WindowFunction = throw new UnresolvedException(this, "newInstance")
 }
 
 case class UnresolvedWindowExpression(
     child: UnresolvedWindowFunction,
-    windowSpec: WindowSpecReference) extends UnaryExpression {
+    windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
-
-  // Unresolved functions are transient at compile time and don't get evaluated during execution.
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 case class WindowExpression(
     windowFunction: WindowFunction,
-    windowSpec: WindowSpecDefinition) extends Expression {
+    windowSpec: WindowSpecDefinition) extends Expression with Unevaluable {
 
-  override def children: Seq[Expression] =
-    windowFunction :: windowSpec :: Nil
-
-  override def eval(input: InternalRow): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+  override def children: Seq[Expression] = windowFunction :: windowSpec :: Nil
 
   override def dataType: DataType = windowFunction.dataType
   override def foldable: Boolean = windowFunction.foldable
   override def nullable: Boolean = windowFunction.nullable
 
   override def toString: String = s"$windowFunction $windowSpec"
+}
+
+/**
+ * Extractor for making working with frame boundaries easier.
+ */
+object FrameBoundaryExtractor {
+  def unapply(boundary: FrameBoundary): Option[Int] = boundary match {
+    case CurrentRow => Some(0)
+    case ValuePreceding(offset) => Some(-offset)
+    case ValueFollowing(offset) => Some(offset)
+    case _ => None
+  }
 }

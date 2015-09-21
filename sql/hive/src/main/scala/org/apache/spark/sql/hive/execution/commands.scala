@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.hadoop.hive.metastore.MetaStoreUtils
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{TableIdentifier, SqlParser}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.sources._
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -39,9 +41,9 @@ import org.apache.spark.util.Utils
 private[hive]
 case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     sqlContext.asInstanceOf[HiveContext].analyze(tableName)
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
@@ -53,7 +55,7 @@ case class DropTable(
     tableName: String,
     ifExists: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     try {
@@ -70,7 +72,7 @@ case class DropTable(
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(Seq(tableName))
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
@@ -83,52 +85,74 @@ case class AddJar(path: String) extends RunnableCommand {
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val currentClassLoader = Utils.getContextOrSparkClassLoader
 
     // Add jar to current context
-    val jarURL = new java.io.File(path).toURL
+    val jarURL = new java.io.File(path).toURI.toURL
     val newClassLoader = new java.net.URLClassLoader(Array(jarURL), currentClassLoader)
     Thread.currentThread.setContextClassLoader(newClassLoader)
-    org.apache.hadoop.hive.ql.metadata.Hive.get().getConf().setClassLoader(newClassLoader)
-
-    // Add jar to isolated hive classloader
+    // We need to explicitly set the class loader associated with the conf in executionHive's
+    // state because this class loader will be used as the context class loader of the current
+    // thread to execute any Hive command.
+    // We cannot use `org.apache.hadoop.hive.ql.metadata.Hive.get().getConf()` because Hive.get()
+    // returns the value of a thread local variable and its HiveConf may not be the HiveConf
+    // associated with `executionHive.state` (for example, HiveContext is created in one thread
+    // and then add jar is called from another thread).
+    hiveContext.executionHive.state.getConf.setClassLoader(newClassLoader)
+    // Add jar to isolated hive (metadataHive) class loader.
     hiveContext.runSqlHive(s"ADD JAR $path")
 
     // Add jar to executors
     hiveContext.sparkContext.addJar(path)
 
-    Seq(InternalRow(0))
+    Seq(Row(0))
   }
 }
 
 private[hive]
 case class AddFile(path: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD FILE $path")
     hiveContext.sparkContext.addFile(path)
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
+// TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
 private[hive]
 case class CreateMetastoreDataSource(
-    tableName: String,
+    tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Since we are saving metadata to metastore, we need to check if metastore supports
+    // the table name and database name we have for this query. MetaStoreUtils.validateName
+    // is the method used by Hive to check if a table name or a database name is valid for
+    // the metastore.
+    if (!MetaStoreUtils.validateName(tableIdent.table)) {
+      throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
+        s"metastore. Metastore only accepts table name containing characters, numbers and _.")
+    }
+    if (tableIdent.database.isDefined && !MetaStoreUtils.validateName(tableIdent.database.get)) {
+      throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
+        s"for metastore. Metastore only accepts database name containing " +
+        s"characters, numbers and _.")
+    }
+
+    val tableName = tableIdent.unquotedString
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
-    if (hiveContext.catalog.tableExists(tableName :: Nil)) {
+    if (hiveContext.catalog.tableExists(tableIdent.toSeq)) {
       if (allowExisting) {
-        return Seq.empty[InternalRow]
+        return Seq.empty[Row]
       } else {
         throw new AnalysisException(s"Table $tableName already exists.")
       }
@@ -138,46 +162,62 @@ case class CreateMetastoreDataSource(
     val optionsWithPath =
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
-        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableName))
+        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
 
     hiveContext.catalog.createDataSourceTable(
-      tableName,
+      tableIdent,
       userSpecifiedSchema,
       Array.empty[String],
       provider,
       optionsWithPath,
       isExternal)
 
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
+// TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
 private[hive]
 case class CreateMetastoreDataSourceAsSelect(
-    tableName: String,
+    tableIdent: TableIdentifier,
     provider: String,
     partitionColumns: Array[String],
     mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Since we are saving metadata to metastore, we need to check if metastore supports
+    // the table name and database name we have for this query. MetaStoreUtils.validateName
+    // is the method used by Hive to check if a table name or a database name is valid for
+    // the metastore.
+    if (!MetaStoreUtils.validateName(tableIdent.table)) {
+      throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
+        s"metastore. Metastore only accepts table name containing characters, numbers and _.")
+    }
+    if (tableIdent.database.isDefined && !MetaStoreUtils.validateName(tableIdent.database.get)) {
+      throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
+        s"for metastore. Metastore only accepts database name containing " +
+        s"characters, numbers and _.")
+    }
+
+    val tableName = tableIdent.unquotedString
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
       if (!options.contains("path")) {
         isExternal = false
-        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableName))
+        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
 
     var existingSchema = None: Option[StructType]
-    if (sqlContext.catalog.tableExists(Seq(tableName))) {
+    if (sqlContext.catalog.tableExists(tableIdent.toSeq)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -188,13 +228,13 @@ case class CreateMetastoreDataSourceAsSelect(
             s"Or, if you are using SQL CREATE TABLE, you need to drop $tableName first.")
         case SaveMode.Ignore =>
           // Since the table already exists and the save mode is Ignore, we will just return.
-          return Seq.empty[InternalRow]
+          return Seq.empty[Row]
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
           val resolved = ResolvedDataSource(
             sqlContext, Some(query.schema.asNullable), partitionColumns, provider, optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
-          EliminateSubQueries(sqlContext.table(tableName).logicalPlan) match {
+          EliminateSubQueries(sqlContext.catalog.lookupRelation(tableIdent.toSeq)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation) =>
               if (l.relation != createdRelation.relation) {
                 val errorDescription =
@@ -243,7 +283,7 @@ case class CreateMetastoreDataSourceAsSelect(
       // the schema of df). It is important since the nullability may be changed by the relation
       // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
       hiveContext.catalog.createDataSourceTable(
-        tableName,
+        tableIdent,
         Some(resolved.relation.schema),
         partitionColumns,
         provider,
@@ -252,7 +292,7 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     // Refresh the cache of the table in the catalog.
-    hiveContext.refreshTable(tableName)
-    Seq.empty[InternalRow]
+    hiveContext.catalog.refreshTable(tableIdent)
+    Seq.empty[Row]
   }
 }

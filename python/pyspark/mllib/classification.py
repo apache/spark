@@ -21,14 +21,18 @@ import numpy
 from numpy import array
 
 from pyspark import RDD
+from pyspark.streaming import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
 from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
-from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
+from pyspark.mllib.regression import (
+    LabeledPoint, LinearModel, _regression_train_wrapper,
+    StreamingLinearAlgorithm)
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
 __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
-           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
+           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes',
+           'StreamingLogisticRegressionWithSGD']
 
 
 class LinearClassificationModel(LinearModel):
@@ -135,8 +139,9 @@ class LogisticRegressionModel(LinearClassificationModel):
     1
     >>> sameModel.predict(SparseVector(2, {0: 1.0}))
     0
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     >>> multi_class_data = [
@@ -236,7 +241,7 @@ class LogisticRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.01, regType="l2", intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a logistic regression model on the given data.
 
@@ -269,11 +274,13 @@ class LogisticRegressionWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
-                                 bool(intercept), bool(validateData))
+                                 bool(intercept), bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
@@ -387,8 +394,9 @@ class SVMModel(LinearClassificationModel):
     1
     >>> sameModel.predict(SparseVector(2, {0: -1.0}))
     0
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     """
@@ -433,7 +441,7 @@ class SVMWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, regType="l2",
-              intercept=False, validateData=True):
+              intercept=False, validateData=True, convergenceTol=0.001):
         """
         Train a support vector machine on the given data.
 
@@ -466,11 +474,13 @@ class SVMWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, regType,
-                                 bool(intercept), bool(validateData))
+                                 bool(intercept), bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
@@ -515,8 +525,9 @@ class NaiveBayesModel(Saveable, Loader):
     >>> sameModel = NaiveBayesModel.load(sc, path)
     >>> sameModel.predict(SparseVector(2, {0: 1.0})) == model.predict(SparseVector(2, {0: 1.0}))
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...     os.removedirs(path)
+    ...     rmtree(path)
     ... except OSError:
     ...     pass
     """
@@ -576,8 +587,61 @@ class NaiveBayes(object):
         first = data.first()
         if not isinstance(first, LabeledPoint):
             raise ValueError("`data` should be an RDD of LabeledPoint")
-        labels, pi, theta = callMLlibFunc("trainNaiveBayes", data, lambda_)
+        labels, pi, theta = callMLlibFunc("trainNaiveBayesModel", data, lambda_)
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
+
+
+@inherit_doc
+class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
+    """
+    Run LogisticRegression with SGD on a batch of data.
+
+    The weights obtained at the end of training a stream are used as initial
+    weights for the next batch.
+
+    :param stepSize: Step size for each iteration of gradient descent.
+    :param numIterations: Number of iterations run for each batch of data.
+    :param miniBatchFraction: Fraction of data on which SGD is run for each
+                              iteration.
+    :param regParam: L2 Regularization parameter.
+    :param convergenceTol: A condition which decides iteration termination.
+    """
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, regParam=0.01,
+                 convergenceTol=0.001):
+        self.stepSize = stepSize
+        self.numIterations = numIterations
+        self.regParam = regParam
+        self.miniBatchFraction = miniBatchFraction
+        self.convergenceTol = convergenceTol
+        self._model = None
+        super(StreamingLogisticRegressionWithSGD, self).__init__(
+            model=self._model)
+
+    def setInitialWeights(self, initialWeights):
+        """
+        Set the initial value of weights.
+
+        This must be set before running trainOn and predictOn.
+        """
+        initialWeights = _convert_to_vector(initialWeights)
+
+        # LogisticRegressionWithSGD does only binary classification.
+        self._model = LogisticRegressionModel(
+            initialWeights, 0, initialWeights.size, 2)
+        return self
+
+    def trainOn(self, dstream):
+        """Train the model on the incoming dstream."""
+        self._validate(dstream)
+
+        def update(rdd):
+            # LogisticRegressionWithSGD.train raises an error for an empty RDD.
+            if not rdd.isEmpty():
+                self._model = LogisticRegressionWithSGD.train(
+                    rdd, self.numIterations, self.stepSize,
+                    self.miniBatchFraction, self._model.weights)
+
+        dstream.foreachRDD(update)
 
 
 def _test():

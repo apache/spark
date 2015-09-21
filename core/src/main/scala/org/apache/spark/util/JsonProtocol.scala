@@ -92,8 +92,10 @@ private[spark] object JsonProtocol {
         executorRemovedToJson(executorRemoved)
       case logStart: SparkListenerLogStart =>
         logStartToJson(logStart)
-      // These aren't used, but keeps compiler happy
-      case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
+      case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
+        executorMetricsUpdateToJson(metricsUpdate)
+      case blockUpdated: SparkListenerBlockUpdated =>
+        throw new MatchError(blockUpdated)  // TODO(ekl) implement this
     }
   }
 
@@ -224,6 +226,19 @@ private[spark] object JsonProtocol {
     ("Spark Version" -> SPARK_VERSION)
   }
 
+  def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
+    val execId = metricsUpdate.execId
+    val taskMetrics = metricsUpdate.taskMetrics
+    ("Event" -> Utils.getFormattedClassName(metricsUpdate)) ~
+    ("Executor ID" -> execId) ~
+    ("Metrics Updated" -> taskMetrics.map { case (taskId, stageId, stageAttemptId, metrics) =>
+      ("Task ID" -> taskId) ~
+      ("Stage ID" -> stageId) ~
+      ("Stage Attempt ID" -> stageAttemptId) ~
+      ("Task Metrics" -> taskMetricsToJson(metrics))
+    })
+  }
+
   /** ------------------------------------------------------------------- *
    * JSON serialization methods for classes SparkListenerEvents depend on |
    * -------------------------------------------------------------------- */
@@ -251,7 +266,7 @@ private[spark] object JsonProtocol {
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
     ("Task ID" -> taskInfo.taskId) ~
     ("Index" -> taskInfo.index) ~
-    ("Attempt" -> taskInfo.attempt) ~
+    ("Attempt" -> taskInfo.attemptNumber) ~
     ("Launch Time" -> taskInfo.launchTime) ~
     ("Executor ID" -> taskInfo.executorId) ~
     ("Host" -> taskInfo.host) ~
@@ -347,8 +362,9 @@ private[spark] object JsonProtocol {
         ("Stack Trace" -> stackTrace) ~
         ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
         ("Metrics" -> metrics)
-      case ExecutorLostFailure(executorId) =>
-        ("Executor ID" -> executorId)
+      case ExecutorLostFailure(executorId, isNormalExit) =>
+        ("Executor ID" -> executorId) ~
+        ("Normal Exit" -> isNormalExit)
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -463,6 +479,7 @@ private[spark] object JsonProtocol {
     val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
     val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
+    val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -481,6 +498,7 @@ private[spark] object JsonProtocol {
       case `executorAdded` => executorAddedFromJson(json)
       case `executorRemoved` => executorRemovedFromJson(json)
       case `logStart` => logStartFromJson(json)
+      case `metricsUpdate` => executorMetricsUpdateFromJson(json)
     }
   }
 
@@ -596,6 +614,18 @@ private[spark] object JsonProtocol {
   def logStartFromJson(json: JValue): SparkListenerLogStart = {
     val sparkVersion = (json \ "Spark Version").extract[String]
     SparkListenerLogStart(sparkVersion)
+  }
+
+  def executorMetricsUpdateFromJson(json: JValue): SparkListenerExecutorMetricsUpdate = {
+    val execInfo = (json \ "Executor ID").extract[String]
+    val taskMetrics = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
+      val taskId = (json \ "Task ID").extract[Long]
+      val stageId = (json \ "Stage ID").extract[Int]
+      val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
+      val metrics = taskMetricsFromJson(json \ "Task Metrics")
+      (taskId, stageId, stageAttemptId, metrics)
+    }
+    SparkListenerExecutorMetricsUpdate(execInfo, taskMetrics)
   }
 
   /** --------------------------------------------------------------------- *
@@ -761,12 +791,14 @@ private[spark] object JsonProtocol {
         val fullStackTrace = Utils.jsonOption(json \ "Full Stack Trace").
           map(_.extract[String]).orNull
         val metrics = Utils.jsonOption(json \ "Metrics").map(taskMetricsFromJson)
-        ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics)
+        ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics, None)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
       case `executorLostFailure` =>
+        val isNormalExit = Utils.jsonOption(json \ "Normal Exit").
+          map(_.extract[Boolean])
         val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
-        ExecutorLostFailure(executorId.getOrElse("Unknown"))
+        ExecutorLostFailure(executorId.getOrElse("Unknown"), isNormalExit.getOrElse(false))
       case `unknownReason` => UnknownReason
     }
   }

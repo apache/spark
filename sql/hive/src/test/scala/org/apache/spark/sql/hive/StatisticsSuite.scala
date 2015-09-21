@@ -17,24 +17,15 @@
 
 package org.apache.spark.sql.hive
 
-import org.scalatest.BeforeAndAfterAll
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{Row, SQLConf, QueryTest}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
-
-  private lazy val ctx: HiveContext = {
-    val ctx = org.apache.spark.sql.hive.test.TestHive
-    ctx.reset()
-    ctx.cacheTables = false
-    ctx
-  }
-
-  import ctx.sql
+class StatisticsSuite extends QueryTest with TestHiveSingleton {
+  import hiveContext.sql
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
@@ -77,7 +68,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
-      ctx.catalog.lookupRelation(Seq(tableName)).statistics.sizeInBytes
+      hiveContext.catalog.lookupRelation(Seq(tableName)).statistics.sizeInBytes
 
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
@@ -111,7 +102,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         |SELECT * FROM src
       """.stripMargin).collect()
 
-    assert(queryTotalSize("analyzeTable_part") === ctx.conf.defaultSizeInBytes)
+    assert(queryTotalSize("analyzeTable_part") === hiveContext.conf.defaultSizeInBytes)
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
@@ -122,9 +113,9 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     // Try to analyze a temp table
     sql("""SELECT * FROM src""").registerTempTable("tempTable")
     intercept[UnsupportedOperationException] {
-      ctx.analyze("tempTable")
+      hiveContext.analyze("tempTable")
     }
-    ctx.catalog.unregisterTable(Seq("tempTable"))
+    hiveContext.catalog.unregisterTable(Seq("tempTable"))
   }
 
   test("estimates the size of a test MetastoreRelation") {
@@ -152,8 +143,8 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       val sizes = df.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
-      assert(sizes.size === 2 && sizes(0) <= ctx.conf.autoBroadcastJoinThreshold
-        && sizes(1) <= ctx.conf.autoBroadcastJoinThreshold,
+      assert(sizes.size === 2 && sizes(0) <= hiveContext.conf.autoBroadcastJoinThreshold
+        && sizes(1) <= hiveContext.conf.autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
@@ -164,19 +155,19 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
       checkAnswer(df, expectedAnswer) // check correctness of output
 
-      ctx.conf.settings.synchronized {
-        val tmp = ctx.conf.autoBroadcastJoinThreshold
+      hiveContext.conf.settings.synchronized {
+        val tmp = hiveContext.conf.autoBroadcastJoinThreshold
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
         df = sql(query)
         bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
-        val shj = df.queryExecution.sparkPlan.collect { case j: ShuffledHashJoin => j }
+        val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoin => j }
         assert(shj.size === 1,
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
       }
 
       after()
@@ -208,8 +199,8 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         .isAssignableFrom(r.getClass) =>
         r.statistics.sizeInBytes
     }
-    assert(sizes.size === 2 && sizes(1) <= ctx.conf.autoBroadcastJoinThreshold
-      && sizes(0) <= ctx.conf.autoBroadcastJoinThreshold,
+    assert(sizes.size === 2 && sizes(1) <= hiveContext.conf.autoBroadcastJoinThreshold
+      && sizes(0) <= hiveContext.conf.autoBroadcastJoinThreshold,
       s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
     // Using `sparkPlan` because for relevant patterns in HashJoin to be
@@ -222,10 +213,10 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(df, answer) // check correctness of output
 
-    ctx.conf.settings.synchronized {
-      val tmp = ctx.conf.autoBroadcastJoinThreshold
+    hiveContext.conf.settings.synchronized {
+      val tmp = hiveContext.conf.autoBroadcastJoinThreshold
 
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1")
+      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
       df = sql(leftSemiJoinQuery)
       bhj = df.queryExecution.sparkPlan.collect {
         case j: BroadcastLeftSemiJoinHash => j
@@ -238,7 +229,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       assert(shj.size === 1,
         "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")
 
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp")
+      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
     }
 
   }
