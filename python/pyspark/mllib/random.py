@@ -21,6 +21,7 @@ Python package for random data generation.
 
 from functools import wraps
 
+from pyspark import since
 from pyspark.mllib.common import callMLlibFunc
 
 
@@ -39,9 +40,12 @@ class RandomRDDs(object):
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
+
+    .. versionadded:: 1.1.0
     """
 
     @staticmethod
+    @since("1.1.0")
     def uniformRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the
@@ -72,6 +76,7 @@ class RandomRDDs(object):
         return callMLlibFunc("uniformRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
+    @since("1.1.0")
     def normalRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the standard normal
@@ -100,6 +105,7 @@ class RandomRDDs(object):
         return callMLlibFunc("normalRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
+    @since("1.3.0")
     def logNormalRDD(sc, mean, std, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the log normal
@@ -132,6 +138,7 @@ class RandomRDDs(object):
                              size, numPartitions, seed)
 
     @staticmethod
+    @since("1.1.0")
     def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the Poisson
@@ -158,6 +165,7 @@ class RandomRDDs(object):
         return callMLlibFunc("poissonRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
+    @since("1.3.0")
     def exponentialRDD(sc, mean, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the Exponential
@@ -184,6 +192,7 @@ class RandomRDDs(object):
         return callMLlibFunc("exponentialRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
+    @since("1.3.0")
     def gammaRDD(sc, shape, scale, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the Gamma
@@ -216,6 +225,7 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.1.0")
     def uniformVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
@@ -241,6 +251,7 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.1.0")
     def normalVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
@@ -266,6 +277,7 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.3.0")
     def logNormalVectorRDD(sc, mean, std, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
@@ -300,6 +312,7 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.1.0")
     def poissonVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
@@ -330,6 +343,7 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.3.0")
     def exponentialVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
@@ -360,6 +374,7 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.3.0")
     def gammaVectorRDD(sc, shape, scale, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn

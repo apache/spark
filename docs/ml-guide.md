@@ -32,7 +32,21 @@ See the [algorithm guides](#algorithm-guides) section below for guides on sub-pa
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-# Main concepts
+# Algorithm guides
+
+We provide several algorithm guides specific to the Pipelines API.
+Several of these algorithms, such as certain feature transformers, are not in the `spark.mllib` API.
+Also, some algorithms have additional capabilities in the `spark.ml` API; e.g., random forests
+provide class probabilities, and linear models provide model summaries.
+
+* [Feature extraction, transformation, and selection](ml-features.html)
+* [Decision Trees for classification and regression](ml-decision-tree.html)
+* [Ensembles](ml-ensembles.html)
+* [Linear methods with elastic net regularization](ml-linear-methods.html)
+* [Multilayer perceptron classifier](ml-ann.html)
+
+
+# Main concepts in Pipelines
 
 Spark ML standardizes APIs for machine learning algorithms to make it easier to combine multiple
 algorithms into a single pipeline, or workflow.
@@ -166,6 +180,11 @@ compile-time type checking.
 `Pipeline`s and `PipelineModel`s instead do runtime checking before actually running the `Pipeline`.
 This type checking is done using the `DataFrame` *schema*, a description of the data types of columns in the `DataFrame`.
 
+*Unique Pipeline stages*: A `Pipeline`'s stages should be unique instances.  E.g., the same instance
+`myHashingTF` should not be inserted into the `Pipeline` twice since `Pipeline` stages must have
+unique IDs.  However, different instances `myHashingTF1` and `myHashingTF2` (both of type `HashingTF`)
+can be put into the same `Pipeline` since different instances will be created with different IDs.
+
 ## Parameters
 
 Spark ML `Estimator`s and `Transformer`s use a uniform API for specifying parameters.
@@ -183,16 +202,6 @@ There are two main ways to pass parameters to an algorithm:
 Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
-
-# Algorithm guides
-
-There are now several algorithms in the Pipelines API which are not in the `spark.mllib` API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
-
-* [Feature extraction, transformation, and selection](ml-features.html)
-* [Decision Trees for classification and regression](ml-decision-tree.html)
-* [Ensembles](ml-ensembles.html)
-* [Linear methods with elastic net regularization](ml-linear-methods.html)
-* [Multilayer perceptron classifier](ml-ann.html)
 
 # Code examples
 
@@ -610,13 +619,13 @@ for row in selected.collect():
 An important task in ML is *model selection*, or using data to find the best model or parameters for a given task.  This is also called *tuning*.
 `Pipeline`s facilitate model selection by making it easy to tune an entire `Pipeline` at once, rather than tuning each element in the `Pipeline` separately.
 
-Currently, `spark.ml` supports model selection using the [`CrossValidator`](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) class, which takes an `Estimator`, a set of `ParamMap`s, and an [`Evaluator`](api/scala/index.html#org.apache.spark.ml.Evaluator).
+Currently, `spark.ml` supports model selection using the [`CrossValidator`](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) class, which takes an `Estimator`, a set of `ParamMap`s, and an [`Evaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.Evaluator).
 `CrossValidator` begins by splitting the dataset into a set of *folds* which are used as separate training and test datasets; e.g., with `$k=3$` folds, `CrossValidator` will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data for training and 1/3 for testing.
 `CrossValidator` iterates through the set of `ParamMap`s. For each `ParamMap`, it trains the given `Estimator` and evaluates it using the given `Evaluator`.
 
-The `Evaluator` can be a [`RegressionEvaluator`](api/scala/index.html#org.apache.spark.ml.RegressionEvaluator)
-for regression problems, a [`BinaryClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.BinaryClassificationEvaluator)
-for binary data, or a [`MultiClassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.MultiClassClassificationEvaluator)
+The `Evaluator` can be a [`RegressionEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.RegressionEvaluator)
+for regression problems, a [`BinaryClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.BinaryClassificationEvaluator)
+for binary data, or a [`MultiClassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.MultiClassClassificationEvaluator)
 for multiclass problems. The default metric used to choose the best `ParamMap` can be overriden by the `setMetric`
 method in each of these evaluators.
 

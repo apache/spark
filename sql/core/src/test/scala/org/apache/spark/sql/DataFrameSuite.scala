@@ -436,7 +436,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val describeResult = Seq(
       Row("count", "4", "4"),
       Row("mean", "33.0", "178.0"),
-      Row("stddev", "16.583123951777", "10.0"),
+      Row("stddev", "19.148542155126762", "11.547005383792516"),
       Row("min", "16", "164"),
       Row("max", "60", "192"))
 
@@ -906,5 +906,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
       assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
     }
+  }
+
+  test("SPARK-10539: Project should not be pushed down through Intersect or Except") {
+    val df1 = (1 to 100).map(Tuple1.apply).toDF("i")
+    val df2 = (1 to 30).map(Tuple1.apply).toDF("i")
+    val intersect = df1.intersect(df2)
+    val except = df1.except(df2)
+    assert(intersect.count() === 30)
+    assert(except.count() === 70)
   }
 }
