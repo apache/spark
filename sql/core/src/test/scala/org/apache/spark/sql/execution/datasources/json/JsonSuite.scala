@@ -930,7 +930,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val df2 = df1.toDF
     val result = df2.toJSON.collect()
     // scalastyle:off
-    assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
+    assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"],\"f5\":null}")
     assert(result(3) === "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
     // scalastyle:on
 
@@ -966,6 +966,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         1.7976931348623157E308,
         10,
         21474836470L,
+        null,
         "this is a simple string.")
       )
 
@@ -1119,6 +1120,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         df2.write.mode("overwrite").parquet(path)
         checkAnswer(sqlContext.read.parquet(path), df2.collect())
       }
+    }
+  }
+
+  test("SPARK-10588 Saving a DataFrame containing only nulls to JSON") {
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val df = sqlContext.range(1).selectExpr("CAST(NULL AS DOUBLE) AS c0")
+      df.write.mode("overwrite").json(path)
+      checkAnswer(sqlContext.read.json(path), df.collect())
     }
   }
 
