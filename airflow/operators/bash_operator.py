@@ -67,6 +67,7 @@ class BashOperator(BaseOperator):
                 self.sp = sp
 
                 logging.info("Output:")
+                line = ''
                 for line in iter(sp.stdout.readline, b''):
                     logging.info(line.strip())
                 sp.wait()
