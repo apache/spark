@@ -90,7 +90,7 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
    * Maps given points to their distances to all clusters.
    */
   @Since("1.5.0")
-  def distanceToCenters(points: RDD[Vector]): RDD[(Vector, Iterable[(VectorWithNorm, Double)])] ={
+  def distanceToCenters(points: RDD[Vector]): RDD[(Vector, Iterable[(VectorWithNorm, Double)])] = {
     val centersWithNorm = clusterCentersWithNorm
     val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
     points.map(p =>
