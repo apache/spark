@@ -103,18 +103,20 @@ with PrivateMethodTester {
     // validate the mining schema is populated as expected
     assert(pmmlModelForDT.getMiningSchema != null)
     val miningSchema = pmmlModelForDT.getMiningSchema
-    assert(miningSchema.getMiningFields != null && miningSchema.getMiningFields.size() == 1)
+    assert(miningSchema.getMiningFields != null && miningSchema.getMiningFields.size() == 2)
     val miningFields = miningSchema.getMiningFields
-    assert(miningFields.get(0).getName.getValue === "field_100")
+    assert(miningFields.get(0).getName.getValue == "field_100")
+    assert(miningFields.get(1).getName.getValue == "target")
 
     // validate the data dictionay is populated as expected
     val dataDictionary = pmmlWrapperForDT.getDataDictionary
     assert(dataDictionary != null)
     val dataFields = dataDictionary.getDataFields
-    assert(dataFields != null && dataFields.size() == 1)
+    assert(dataFields != null && dataFields.size() == 2)
     assert(dataFields.get(0).getName.getValue == "field_100")
     assert(dataFields.get(0).getOpType == OpType.CONTINUOUS)
-
+    assert(dataFields.get(1).getName.getValue == "target")
+    assert(dataFields.get(1).getOpType == OpType.CONTINUOUS)
   }
 
   test("PMML export should work as expected for DecisionTree model with classifier") {
@@ -267,9 +269,9 @@ with PrivateMethodTester {
     assert(sortedDataFields(0).getOpType == OpType.CATEGORICAL)
     assert(sortedDataFields(0).getValues != null && sortedDataFields(0).getValues.size() == 3)
     val sortedValues1 = sortedDataFields(0).getValues.asScala.toList.sortBy(value => value.getValue)
-    assert(sortedValues1(0).getValue == "class_1")
-    assert(sortedValues1(1).getValue == "class_2")
-    assert(sortedValues1(2).getValue == "class_4")
+    assert(sortedValues1(0).getValue == "1.0")
+    assert(sortedValues1(1).getValue == "2.0")
+    assert(sortedValues1(2).getValue == "4.0")
 
     assert(sortedDataFields(1).getName.getValue == "field_100")
     assert(sortedDataFields(1).getOpType == OpType.CATEGORICAL)
@@ -321,19 +323,20 @@ with PrivateMethodTester {
     // validate mining schema is populated as expected
     assert(pmmlModelForDT.getMiningSchema != null)
     val miningSchema = pmmlModelForDT.getMiningSchema
-    assert(miningSchema.getMiningFields != null && miningSchema.getMiningFields.size() == 2)
+    assert(miningSchema.getMiningFields != null && miningSchema.getMiningFields.size() == 3)
 
     val miningFields = miningSchema.getMiningFields.asScala.toList
-      .sortBy(miningField => miningField.getName.getValue)
+     // .sortBy(miningField => miningField.getName.getValue)
     assert(miningFields(0).getName.getValue == "field_100")
     assert(miningFields(1).getName.getValue == "field_200")
+    assert(miningFields(2).getName.getValue == "target")
 
 
     // validate data dictionary is populated as expected
     val dataDictionary = pmmlWrapperForDT.getDataDictionary
     assert(dataDictionary != null)
     val dataFields = dataDictionary.getDataFields
-    assert(dataFields != null && dataFields.size() == 2)
+    assert(dataFields != null && dataFields.size() == 3)
     val sortedDataFields = dataFields.asScala.toList.sortBy(dataField => dataField.getName.getValue)
     assert(sortedDataFields(0).getName.getValue == "field_100")
     assert(sortedDataFields(0).getOpType == OpType.CONTINUOUS)
@@ -344,6 +347,10 @@ with PrivateMethodTester {
     assert(sortedDataFields(1).getValues != null && sortedDataFields(1).getValues.size() == 1)
     val sortedValues2 = sortedDataFields(1).getValues.asScala.toList.sortBy(value => value.getValue)
     assert(sortedValues2(0).getValue == "10.0")
+
+    assert(sortedDataFields(2).getName.getValue == "target")
+    assert(sortedDataFields(2).getOpType == OpType.CONTINUOUS)
+    assert(sortedDataFields(2).getValues.isEmpty)
   }
 
   test("TreeModelUtils getPredicate should return simple predicate for node with split with " +
@@ -352,7 +359,7 @@ with PrivateMethodTester {
     val field = Some(FieldName.create("field_100"))
     val node = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split), None, None, None)
     val proxy = PrivateMethod[Predicate]('getPredicate)
-    val predicateL = TreeModelUtils invokePrivate proxy(node, field, true)
+    val predicateL = PMMLTreeModelUtils invokePrivate proxy(node, field, true)
     assert(predicateL != null)
     assert(predicateL.isInstanceOf[SimplePredicate])
     assert(predicateL.asInstanceOf[SimplePredicate].getField.getValue == "field_100")
@@ -360,7 +367,7 @@ with PrivateMethodTester {
       .LESS_OR_EQUAL)
     assert(predicateL.asInstanceOf[SimplePredicate].getValue == "10.0")
 
-    val predicateR = TreeModelUtils invokePrivate proxy(node, field, false)
+    val predicateR = PMMLTreeModelUtils invokePrivate proxy(node, field, false)
     assert(predicateR != null)
     assert(predicateR.isInstanceOf[SimplePredicate])
     assert(predicateR.asInstanceOf[SimplePredicate].getField.getValue == "field_100")
@@ -376,7 +383,7 @@ with PrivateMethodTester {
     val proxy = PrivateMethod[Predicate]('getPredicate)
     val field = Some(FieldName.create("field_100"))
 
-    val predicateL1 = TreeModelUtils invokePrivate proxy(node1, field, true)
+    val predicateL1 = PMMLTreeModelUtils invokePrivate proxy(node1, field, true)
     assert(predicateL1 != null)
     assert(predicateL1.isInstanceOf[SimplePredicate])
     assert(predicateL1.asInstanceOf[SimplePredicate].getField.getValue == "field_100")
@@ -384,13 +391,13 @@ with PrivateMethodTester {
       .EQUAL)
     assert(predicateL1.asInstanceOf[SimplePredicate].getValue == "1.0")
 
-    val predicateR1 = TreeModelUtils invokePrivate proxy(node1, field, false)
+    val predicateR1 = PMMLTreeModelUtils invokePrivate proxy(node1, field, false)
     assert(predicateR1 != null)
     assert(predicateR1.isInstanceOf[True])
 
     val split2 = new Split(100, 10.0, FeatureType.Categorical, List(1, 2))
     val node2 = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split2), None, None, None)
-    val predicateL2 = TreeModelUtils invokePrivate proxy(node2, field, true)
+    val predicateL2 = PMMLTreeModelUtils invokePrivate proxy(node2, field, true)
     assert(predicateL2 != null && predicateL2.isInstanceOf[CompoundPredicate])
     val cPredicate2 = predicateL2.asInstanceOf[CompoundPredicate]
 
@@ -409,14 +416,14 @@ with PrivateMethodTester {
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
       .Operator.EQUAL)
 
-    val predicateR2 = TreeModelUtils invokePrivate proxy(node2, field, false)
+    val predicateR2 = PMMLTreeModelUtils invokePrivate proxy(node2, field, false)
     assert(predicateR2 != null && predicateR2.isInstanceOf[True])
   }
 
   test("TreeModelUtils getPredicate returns True Predicate if split not defined for node") {
     val treeNode1 = new Node(1, new Predict(0.5, 0.5), 0.2, true, None, None, None, None)
     val privateMethodProxy = PrivateMethod[Predicate]('getPredicate)
-    val predicate1 = TreeModelUtils invokePrivate privateMethodProxy(treeNode1, None, true)
+    val predicate1 = PMMLTreeModelUtils invokePrivate privateMethodProxy(treeNode1, None, true)
     assert(predicate1 != null)
     assert(predicate1.isInstanceOf[True])
   }

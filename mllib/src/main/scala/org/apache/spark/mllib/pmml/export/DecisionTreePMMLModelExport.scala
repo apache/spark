@@ -35,7 +35,7 @@ private[mllib] class DecisionTreePMMLModelExport(model: DecisionTreeModel) exten
     pmml.getHeader.setDescription("decision tree")
 
 
-    val (treeModel, dataFields) = TreeModelUtils.toPMMLTree(model, ModelName)
+    val (treeModel, dataFields) = PMMLTreeModelUtils.toPMMLTree(model, ModelName)
 
     val dataDictionary = new DataDictionary()
       .withDataFields(dataFields.asJava)

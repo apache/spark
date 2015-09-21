@@ -27,11 +27,9 @@ import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
 
-private[mllib] object TreeModelUtils {
+private[mllib] object PMMLTreeModelUtils {
 
   val FieldNamePrefix = "field_"
-  val ClassNamePrefix = "class_"
-
 
   def toPMMLTree(dtModel: DecisionTreeModel, modelName: String): (TreeModel, List[DataField]) = {
 
@@ -44,17 +42,32 @@ private[mllib] object TreeModelUtils {
 
     var (rootNode, miningFields, dataFields, classes) = buildStub(dtModel.topNode, dtModel.algo)
 
-    if (dtModel.algo == Algo.Classification) {
-      miningFields = miningFields :+ new MiningField()
-        .withName(FieldName.create("class"))
-        .withUsageType(FieldUsageType.PREDICTED)
+    // adding predicted classes for classification and target field for regression
+    // for completeness
+    dtModel.algo match{
 
-      val dataField = new DataField()
-        .withName(FieldName.create("class"))
-        .withOpType(OpType.CATEGORICAL).withValues(classes.asJava)
-        .withDataType(DataType.STRING)
+      case Algo.Classification => {
+        miningFields = miningFields :+ new MiningField()
+          .withName(FieldName.create("class"))
+          .withUsageType(FieldUsageType.PREDICTED)
 
-      dataFields = dataFields :+ dataField
+        val dataField = new DataField()
+          .withName(FieldName.create("class"))
+          .withOpType(OpType.CATEGORICAL)
+          .withValues(classes.asJava)
+          .withDataType(DataType.STRING)
+
+        dataFields = dataFields :+ dataField
+      }
+      case Algo.Regression => {
+        val targetField = FieldName.create("target")
+        val dataField = new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE)
+        dataFields = dataFields :+ dataField
+
+        miningFields = miningFields :+ new MiningField()
+        .withName(targetField)
+        .withUsageType(FieldUsageType.TARGET)
+      }
     }
 
     val miningSchema = new MiningSchema()
@@ -126,8 +139,7 @@ private[mllib] object TreeModelUtils {
 
     val pmmlTreeRootNode = buildStubInternal(rootDTNode, new True())
 
-    val pmmlValues = classes.toList.distinct.map(doubleVal => doubleVal.toInt)
-      .map(classInt => ClassNamePrefix + classInt.toString).map(strVal => new PMMLValue(strVal))
+    val pmmlValues = classes.toList.distinct.map(doubleVal => new PMMLValue(doubleVal.toString))
 
     val result = (pmmlTreeRootNode,
       sortMiningFields(miningFields.toList),
