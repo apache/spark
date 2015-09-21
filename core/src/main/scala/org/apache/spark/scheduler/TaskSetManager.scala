@@ -491,6 +491,7 @@ private[spark] class TaskSetManager(
               taskName, taskId, host, taskLocality, serializedTask.limit))
 
           sched.dagScheduler.taskStarted(task, info)
+          sched.sc.executorAllocationManager.foreach(_.setExecutorBusy(info))
           return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
             taskName, index, serializedTask))
         }
