@@ -592,6 +592,10 @@ class StreamingContext private[streaming] (
           StreamingContext.assertNoOtherContextIsActive()
           try {
             validate()
+
+            // Start the streaming scheduler in a new thread, so that thread local properties
+            // like call sites and job groups can be reset without affecting those of the
+            // current thread.
             ThreadUtils.runInNewThread("streaming-start") {
               sparkContext.setCallSite(startSite.get)
               sparkContext.clearJobGroup()
@@ -614,7 +618,7 @@ class StreamingContext private[streaming] (
         assert(env.metricsSystem != null)
         env.metricsSystem.registerSource(streamingSource)
         uiTab.foreach(_.attach())
-        this.logInfo("StreamingContext started")
+        logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
       case STOPPED =>
