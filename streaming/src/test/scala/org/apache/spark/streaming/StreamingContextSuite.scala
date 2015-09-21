@@ -180,7 +180,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(ssc.scheduler.isStarted === false)
   }
 
-  test("start should set job group correctly") {
+  test("start should set job group and description of streaming jobs correctly") {
     ssc = new StreamingContext(conf, batchDuration)
     ssc.sc.setJobGroup("non-streaming", "non-streaming", true)
     val sc = ssc.sc
@@ -198,7 +198,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
     ssc.start()
 
-    eventually(timeout(5 seconds), interval(10 milliseconds)) {
+    eventually(timeout(10 seconds), interval(10 milliseconds)) {
       assert(allFound === true)
     }
 

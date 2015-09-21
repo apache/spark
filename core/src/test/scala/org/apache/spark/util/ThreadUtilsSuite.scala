@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 
@@ -74,10 +75,11 @@ class ThreadUtilsSuite extends SparkFunSuite {
     assert(
       runInNewThread("thread-name", isDaemon = false) { Thread.currentThread().isDaemon } === false
     )
+    val uniqueExceptionMessage = "test" + Random.nextInt()
     val exception = intercept[IllegalArgumentException] {
-      runInNewThread("thread-name") { throw new IllegalArgumentException("test") }
+      runInNewThread("thread-name") { throw new IllegalArgumentException(uniqueExceptionMessage) }
     }
-    assert(exception.asInstanceOf[IllegalArgumentException].getMessage.contains("test"))
+    assert(exception.asInstanceOf[IllegalArgumentException].getMessage === uniqueExceptionMessage)
     assert(exception.getStackTrace.mkString("\n").contains(
       "... run in separate thread using org.apache.spark.util.ThreadUtils ...") === true,
       "stack trace does not contain expected place holder"
