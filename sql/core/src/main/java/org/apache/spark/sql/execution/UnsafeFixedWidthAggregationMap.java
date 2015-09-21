@@ -126,6 +126,13 @@ public final class UnsafeFixedWidthAggregationMap {
     return getAggregationBufferFromUnsafeRow(unsafeGroupingKeyRow);
   }
 
+  /**
+   * Return the count of the element in the Aggregation Map.
+   */
+  public int size() {
+    return map.numElements();
+  }
+
   public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow unsafeGroupingKeyRow) {
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
