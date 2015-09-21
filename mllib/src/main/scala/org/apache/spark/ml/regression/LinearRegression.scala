@@ -37,7 +37,6 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, udf, lit}
 import org.apache.spark.storage.StorageLevel
 
-
 /**
  * Params for linear regression.
  */
@@ -340,7 +339,8 @@ class LinearRegressionModel private[ml] (
 
 /**
  * :: Experimental ::
- * Linear regression training results.
+ * Linear regression training results. Currently, the training summary ignores the
+ * training weights except for the objective trace.
  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
@@ -515,7 +515,7 @@ private class LeastSquaresAggregator(
     featuresMean: Array[Double]) extends Serializable {
 
   private var totalCnt: Long = 0L
-  private var weightSum: Double = 0
+  private var weightSum: Double = 0.0
   private var lossSum = 0.0
 
   private val (effectiveCoefficientsArray: Array[Double], offset: Double, dim: Int) = {
@@ -544,13 +544,15 @@ private class LeastSquaresAggregator(
    * Add a new training data to this LeastSquaresAggregator, and update the loss and gradient
    * of the objective function.
    *
-   * @param data  The data point to be added.
+   * @param instance  The data point instance to be added.
    * @return This LeastSquaresAggregator object.
    */
-  def add(data: Instance): this.type = data match { case Instance(label, weight, features) =>
+  def add(instance: Instance): this.type = instance match { case Instance(label, weight, features) =>
     require(dim == features.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $dim but got ${features.size}.")
     require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+
+    if (weight == 0.0) return this
 
     val diff = dot(features, effectiveCoefficientsVector) - label / labelStd + offset
 
@@ -635,8 +637,7 @@ private class LeastSquaresCostFun(
     val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(coeff, labelStd,
       labelMean, fitIntercept, featuresStd, featuresMean))(
         seqOp = (aggregator, instance) => aggregator.add(instance),
-        combOp = (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
-        )
+        combOp = (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
 

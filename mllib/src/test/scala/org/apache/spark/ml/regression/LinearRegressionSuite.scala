@@ -520,33 +520,33 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
 
       val rnd = new Random(8392)
-      val signedData = activeData map { case p: LabeledPoint =>
+      val signedData = activeData.map { case p: LabeledPoint =>
         (rnd.nextGaussian() > 0.0, p)
       }
 
-      val data1 = signedData flatMap {
+      val data1 = signedData.flatMap {
         case (true, p) => Iterator(p, p)
         case (false, p) => Iterator(p)
       }
 
-      val weightedSignedData = signedData flatMap {
+      val weightedSignedData = signedData.flatMap {
         case (true, LabeledPoint(label, features)) =>
           Iterator(
-            Instance(label, 1.2, features),
-            Instance(label, 0.8, features)
+            Instance(label, weight = 1.2, features),
+            Instance(label, weight = 0.8, features)
           )
         case (false, LabeledPoint(label, features)) =>
           Iterator(
-            Instance(label, 0.3, features),
-            Instance(label, 0.1, features),
-            Instance(label, 0.6, features)
+            Instance(label, weight = 0.3, features),
+            Instance(label, weight = 0.1, features),
+            Instance(label, weight = 0.6, features)
           )
       }
 
       val noiseData = LinearDataGenerator.generateLinearInput(
         2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
-      val weightedNoiseData = noiseData map {
-        case LabeledPoint(label, features) => Instance(label, 0, features)
+      val weightedNoiseData = noiseData.map {
+        case LabeledPoint(label, features) => Instance(label, weight = 0, features)
       }
       val data2 = weightedSignedData ++ weightedNoiseData
 
@@ -597,6 +597,5 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model4b = trainer4b.fit(weightedData)
     assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
     assert(model4a0.weights ~== model4b.weights absTol 1E-3)
-
   }
 }
