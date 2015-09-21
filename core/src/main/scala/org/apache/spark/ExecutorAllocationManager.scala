@@ -249,7 +249,7 @@ private[spark] class ExecutorAllocationManager(
       if (!allocationManager.executorIds.contains(executorId)) {
         allocationManager.onExecutorAdded(executorId)
       }
-      
+
       // Mark the executor on which this task is scheduled as busy
       allocationManager.onExecutorBusy(executorId)
     }
