@@ -34,20 +34,20 @@ val conf = new SparkConf()
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-Note that we can have more than 1 thread in local mode, and in cases like Spark Streaming, we may 
+Note that we can have more than 1 thread in local mode, and in cases like Spark Streaming, we may
 actually require one to prevent any sort of starvation issues.
 
-Properties that specify some time duration should be configured with a unit of time. 
+Properties that specify some time duration should be configured with a unit of time.
 The following format is accepted:
- 
+
     25ms (milliseconds)
     5s (seconds)
     10m or 10min (minutes)
     3h (hours)
     5d (days)
     1y (years)
-    
-    
+
+
 Properties that specify a byte size should be configured with a unit of size.  
 The following format is accepted:
 
@@ -140,7 +140,7 @@ of the most common options to set are:
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>1g</code>, <code>2g</code>).
-    
+
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-memory</code> command line option
@@ -207,7 +207,7 @@ Apart from these, the following properties are also available, and may be useful
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-class-path</code> command line option or in 
+    Instead, please set this through the <code>--driver-class-path</code> command line option or in
     your default properties file.</td>
   </td>
 </tr>
@@ -216,10 +216,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
-    
+
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-java-options</code> command line option or in 
+    Instead, please set this through the <code>--driver-java-options</code> command line option or in
     your default properties file.</td>
   </td>
 </tr>
@@ -228,10 +228,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Set a special library path to use when launching the driver JVM.
-    
+
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-library-path</code> command line option or in 
+    Instead, please set this through the <code>--driver-library-path</code> command line option or in
     your default properties file.</td>
   </td>
 </tr>
@@ -242,7 +242,7 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
     classes in the the driver. This feature can be used to mitigate conflicts between Spark's
     dependencies and user dependencies. It is currently an experimental feature.
-    
+
     This is used in cluster mode only.
   </td>
 </tr>
@@ -250,8 +250,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.extraClassPath</code></td>
   <td>(none)</td>
   <td>
-    Extra classpath entries to prepend to the classpath of executors. This exists primarily for 
-    backwards-compatibility with older versions of Spark. Users typically should not need to set 
+    Extra classpath entries to prepend to the classpath of executors. This exists primarily for
+    backwards-compatibility with older versions of Spark. Users typically should not need to set
     this option.
   </td>
 </tr>
@@ -259,9 +259,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to executors. For instance, GC settings or other logging. 
-    Note that it is illegal to set Spark properties or heap size settings with this option. Spark 
-    properties should be set using a SparkConf object or the spark-defaults.conf file used with the 
+    A string of extra JVM options to pass to executors. For instance, GC settings or other logging.
+    Note that it is illegal to set Spark properties or heap size settings with this option. Spark
+    properties should be set using a SparkConf object or the spark-defaults.conf file used with the
     spark-submit script. Heap size settings can be set with spark.executor.memory.
   </td>
 </tr>
@@ -305,7 +305,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>daily</td>
   <td>
     Set the time interval by which the executor logs will be rolled over.
-    Rolling is disabled by default. Valid values are `daily`, `hourly`, `minutely` or
+    Rolling is disabled by default. Valid values are <code>daily</code>, <code>hourly<code>, <code>minutely<code> or
     any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
@@ -330,13 +330,13 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.python.profile</code></td>
   <td>false</td>
   <td>
-    Enable profiling in Python worker, the profile result will show up by `sc.show_profiles()`,
+    Enable profiling in Python worker, the profile result will show up by <code>sc.show_profiles()<code>,
     or it will be displayed before the driver exiting. It also can be dumped into disk by
-    `sc.dump_profiles(path)`. If some of the profile results had been displayed manually,
+    <code>sc.dump_profiles(path)<code>. If some of the profile results had been displayed manually,
     they will not be displayed automatically before driver exiting.
 
-    By default the `pyspark.profiler.BasicProfiler` will be used, but this can be overridden by
-    passing a profiler class in as a parameter to the `SparkContext` constructor.
+    By default the <code>pyspark.profiler.BasicProfiler<code> will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the <code>SparkContext<code> constructor.
   </td>
 </tr>
 <tr>
@@ -460,11 +460,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
-    Enables the external shuffle service. This service preserves the shuffle files written by 
-    executors so the executors can be safely removed. This must be enabled if 
+    Enables the external shuffle service. This service preserves the shuffle files written by
+    executors so the executors can be safely removed. This must be enabled if
     <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
     must be set up in order to enable it. See
-    <a href="job-scheduling.html#configuration-and-setup">dynamic allocation 
+    <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
     configuration and setup documentation</a> for more information.
   </td>
 </tr>
@@ -747,9 +747,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>
     The number of cores to use on each executor. For YARN and standalone mode only.
-    
-    In standalone mode, setting this parameter allows an application to run multiple executors on 
-    the same worker, provided that there are enough cores on that worker. Otherwise, only one 
+
+    In standalone mode, setting this parameter allows an application to run multiple executors on
+    the same worker, provided that there are enough cores on that worker. Otherwise, only one
     executor per application will run on each worker.
   </td>
 </tr>
@@ -893,14 +893,14 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.heartbeat.interval</code></td>
   <td>1000s</td>
   <td>
-    This is set to a larger value to disable the transport failure detector that comes built in to 
-    Akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger 
-    interval value reduces network overhead and a smaller value ( ~ 1 s) might be more 
-    informative for Akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` 
-    if you need to. A likely positive use case for using failure detector would be: a sensistive 
-    failure detector can help evict rogue executors quickly. However this is usually not the case 
-    as GC pauses and network lags are expected in a real Spark cluster. Apart from that enabling 
-    this leads to a lot of exchanges of heart beats between nodes leading to flooding the network 
+    This is set to a larger value to disable the transport failure detector that comes built in to
+    Akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger
+    interval value reduces network overhead and a smaller value ( ~ 1 s) might be more
+    informative for Akka's failure detector. Tune this in combination of <code>spark.akka.heartbeat.pauses</code>
+    if you need to. A likely positive use case for using failure detector would be: a sensistive
+    failure detector can help evict rogue executors quickly. However this is usually not the case
+    as GC pauses and network lags are expected in a real Spark cluster. Apart from that enabling
+    this leads to a lot of exchanges of heart beats between nodes leading to flooding the network
     with those.
   </td>
 </tr>
@@ -909,9 +909,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>6000s</td>
   <td>
      This is set to a larger value to disable the transport failure detector that comes built in to Akka.
-     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart 
+     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart
      beat pause for Akka. This can be used to control sensitivity to GC pauses. Tune
-     this along with `spark.akka.heartbeat.interval` if you need to.
+     this along with <code>spark.akka.heartbeat.interval</code> if you need to.
   </td>
 </tr>
 <tr>
@@ -978,7 +978,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.network.timeout</code></td>
   <td>120s</td>
   <td>
-    Default timeout for all network interactions. This config will be used in place of 
+    Default timeout for all network interactions. This config will be used in place of
     <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
@@ -991,8 +991,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Maximum number of retries when binding to a port before giving up.
     When a port is given a specific value (non 0), each subsequent retry will
-    increment the port used in the previous attempt by 1 before retrying. This 
-    essentially allows it to try a range of ports from the start port specified 
+    increment the port used in the previous attempt by 1 before retrying. This
+    essentially allows it to try a range of ports from the start port specified
     to port + maxRetries.
   </td>
 </tr>
@@ -1191,7 +1191,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
   <td>60s</td>
   <td>
-    If dynamic allocation is enabled and an executor has been idle for more than this duration, 
+    If dynamic allocation is enabled and an executor has been idle for more than this duration,
     the executor will be removed. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
@@ -1424,11 +1424,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Enables or disables Spark Streaming's internal backpressure mechanism (since 1.5).
-    This enables the Spark Streaming to control the receiving rate based on the 
+    This enables the Spark Streaming to control the receiving rate based on the
     current batch scheduling delays and processing times so that the system receives
-    only as fast as the system can process. Internally, this dynamically sets the 
+    only as fast as the system can process. Internally, this dynamically sets the
     maximum receiving rate of receivers. This rate is upper bounded by the values
-    `spark.streaming.receiver.maxRate` and `spark.streaming.kafka.maxRatePerPartition`
+    <code>spark.streaming.receiver.maxRate</code> and <code>spark.streaming.kafka.maxRatePerPartition</code>
     if they are set (see below).
   </td>
 </tr>
@@ -1542,15 +1542,15 @@ The following variables can be set in `spark-env.sh`:
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
     <td><code>JAVA_HOME</code></td>
-    <td>Location where Java is installed (if it's not on your default `PATH`).</td>
+    <td>Location where Java is installed (if it's not on your default <code>PATH</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is `python`).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in driver only (default is PYSPARK_PYTHON).</td>
+    <td>Python binary executable to use for PySpark in driver only (default is <code>PYSPARK_PYTHON</code>).</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>
@@ -1580,4 +1580,3 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 To specify a different configuration directory other than the default "SPARK_HOME/conf",
 you can set SPARK_CONF_DIR. Spark will use the the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
 from this directory.
-
