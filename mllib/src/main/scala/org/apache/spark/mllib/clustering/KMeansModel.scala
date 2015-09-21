@@ -77,12 +77,18 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
+  /**
+   * Returns the distances to all clusters for a given point.
+   */
   @Since("1.5.0")
   def distanceToCenters(point: Vector): Iterable[(VectorWithNorm, Double)] = {
     val pointWithNorm = new VectorWithNorm(point)
     clusterCentersWithNorm.map(c => (c, KMeans.fastSquaredDistance(c, pointWithNorm)))
   }
 
+  /**
+   * Maps given points to their distances to all clusters.
+   */
   @Since("1.5.0")
   def distanceToCenters(points: RDD[Vector]): RDD[(Vector, Iterable[(VectorWithNorm, Double)])] ={
     val centersWithNorm = clusterCentersWithNorm
