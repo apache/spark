@@ -19,11 +19,12 @@ package org.apache.spark.ml.regression
 
 import scala.collection.mutable
 
-import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
+import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -43,17 +44,6 @@ import org.apache.spark.storage.StorageLevel
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol
-
-/**
- * Class that represents an instance of weighted data point with label and features.
- *
- * TODO: Refactor this class to proper place.
- *
- * @param label Label for this data point.
- * @param weight The weight of this instance.
- * @param features The vector of features for this data point.
- */
-private[regression] case class Instance(label: Double, weight: Double, features: Vector)
 
 /**
  * :: Experimental ::
@@ -549,30 +539,32 @@ private class LeastSquaresAggregator(
    * @param instance  The data point instance to be added.
    * @return This LeastSquaresAggregator object.
    */
-  def add(instance: Instance): this.type =
-    instance match { case Instance(label, weight, features) =>
-      require(dim == features.size, s"Dimensions mismatch when adding new sample." +
-        s" Expecting $dim but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+  def add(instance: Instance): this.type = {
+    instance match {
+      case Instance(label, weight, features) =>
+        require(dim == features.size, s"Dimensions mismatch when adding new sample." +
+          s" Expecting $dim but got ${features.size}.")
+        require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
 
-      if (weight == 0.0) return this
+        if (weight == 0.0) return this
 
-      val diff = dot(features, effectiveCoefficientsVector) - label / labelStd + offset
+        val diff = dot(features, effectiveCoefficientsVector) - label / labelStd + offset
 
-      if (diff != 0) {
-        val localGradientSumArray = gradientSumArray
-        features.foreachActive { (index, value) =>
-          if (featuresStd(index) != 0.0 && value != 0.0) {
-            localGradientSumArray(index) += weight * diff * value / featuresStd(index)
+        if (diff != 0) {
+          val localGradientSumArray = gradientSumArray
+          features.foreachActive { (index, value) =>
+            if (featuresStd(index) != 0.0 && value != 0.0) {
+              localGradientSumArray(index) += weight * diff * value / featuresStd(index)
+            }
           }
+          lossSum += weight * diff * diff / 2.0
         }
-        lossSum += weight * diff * diff / 2.0
-      }
 
-      totalCnt += 1
-      weightSum += weight
-      this
+        totalCnt += 1
+        weightSum += weight
+        this
     }
+  }
 
   /**
    * Merge another LeastSquaresAggregator, and update the loss and gradient
