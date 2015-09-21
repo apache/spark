@@ -312,7 +312,7 @@ class LogisticRegression(override val uid: String)
 
     if ($(fitIntercept)) {
       /*
-         For binary logistic regression, when we initialize the weights as zeros,
+         For binary logistic regression, when we initialize the coefficients as zeros,
          it will converge faster if we initialize the intercept such that
          it follows the distribution of the labels.
 
@@ -747,62 +747,64 @@ private class LogisticAggregator(
   private val gradientSumArray = Array.ofDim[Double](coefficientsArray.length)
 
   /**
-   * Add a new training data to this LogisticAggregator, and update the loss and gradient
+   * Add a new training instance to this LogisticAggregator, and update the loss and gradient
    * of the objective function.
    *
-   * @param label The label for this data point.
-   * @param data The features for one data point in dense/sparse vector format to be added
-   *             into this aggregator.
-   * @param weight The weight for over-/undersamples each of training instance. Default is one.
+   * @param instance The instance of data point to be added.
    * @return This LogisticAggregator object.
    */
-  def add(label: Double, data: Vector, weight: Double = 1.0): this.type = {
-    require(dim == data.size, s"Dimensions mismatch when adding new instance." +
-      s" Expecting $dim but got ${data.size}.")
-    require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+  def add(instance: Instance): this.type = {
+    instance match {
+      case Instance(label, weight, features) =>
+        require(dim == features.size, s"Dimensions mismatch when adding new instance." +
+          s" Expecting $dim but got ${features.size}.")
+        require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
 
-    if (weight == 0.0) return this
+        if (weight == 0.0) return this
 
-    val localCoefficientsArray = coefficientsArray
-    val localGradientSumArray = gradientSumArray
+        val localCoefficientsArray = coefficientsArray
+        val localGradientSumArray = gradientSumArray
 
-    numClasses match {
-      case 2 =>
-        // For Binary Logistic Regression.
-        val margin = - {
-          var sum = 0.0
-          data.foreachActive { (index, value) =>
-            if (featuresStd(index) != 0.0 && value != 0.0) {
-              sum += localCoefficientsArray(index) * (value / featuresStd(index))
+        numClasses match {
+          case 2 =>
+            // For Binary Logistic Regression.
+            val margin = - {
+              var sum = 0.0
+              features.foreachActive { (index, value) =>
+                if (featuresStd(index) != 0.0 && value != 0.0) {
+                  sum += localCoefficientsArray(index) * (value / featuresStd(index))
+                }
+              }
+              sum + {
+                if (fitIntercept) localCoefficientsArray(dim) else 0.0
+              }
             }
-          }
-          sum + { if (fitIntercept) localCoefficientsArray(dim) else 0.0 }
-        }
 
-        val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
+            val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
 
-        data.foreachActive { (index, value) =>
-          if (featuresStd(index) != 0.0 && value != 0.0) {
-            localGradientSumArray(index) += multiplier * (value / featuresStd(index))
-          }
-        }
+            features.foreachActive { (index, value) =>
+              if (featuresStd(index) != 0.0 && value != 0.0) {
+                localGradientSumArray(index) += multiplier * (value / featuresStd(index))
+              }
+            }
 
-        if (fitIntercept) {
-          localGradientSumArray(dim) += multiplier
-        }
+            if (fitIntercept) {
+              localGradientSumArray(dim) += multiplier
+            }
 
-        if (label > 0) {
-          // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
-          lossSum += weight * MLUtils.log1pExp(margin)
-        } else {
-          lossSum += weight * (MLUtils.log1pExp(margin) - margin)
+            if (label > 0) {
+              // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
+              lossSum += weight * MLUtils.log1pExp(margin)
+            } else {
+              lossSum += weight * (MLUtils.log1pExp(margin) - margin)
+            }
+          case _ =>
+            new NotImplementedError("LogisticRegression with ElasticNet in ML package " +
+              "only supports binary classification for now.")
         }
-      case _ =>
-        new NotImplementedError("LogisticRegression with ElasticNet in ML package only supports " +
-          "binary classification for now.")
+        weightSum += weight
+        this
     }
-    weightSum += weight
-    this
   }
 
   /**
@@ -851,11 +853,11 @@ private class LogisticAggregator(
 /**
  * LogisticCostFun implements Breeze's DiffFunction[T] for a multinomial logistic loss function,
  * as used in multi-class classification (it is also used in binary logistic regression).
- * It returns the loss and gradient with L2 regularization at a particular point (weights).
+ * It returns the loss and gradient with L2 regularization at a particular point (coefficients).
  * It's used in Breeze's convex optimization routines.
  */
 private class LogisticCostFun(
-    data: RDD[Instance],
+    instances: RDD[Instance],
     numClasses: Int,
     fitIntercept: Boolean,
     standardization: Boolean,
@@ -865,15 +867,14 @@ private class LogisticCostFun(
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val numFeatures = featuresStd.length
-    val w = Vectors.fromBreeze(coefficients)
+    val coeffs = Vectors.fromBreeze(coefficients)
 
     val logisticAggregator = {
-      val seqOp = (c: LogisticAggregator, instance: Instance) =>
-        c.add(instance.label, instance.features, instance.weight)
+      val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
-      data.treeAggregate(
-        new LogisticAggregator(w, numClasses, fitIntercept, featuresStd, featuresMean)
+      instances.treeAggregate(
+        new LogisticAggregator(coeffs, numClasses, fitIntercept, featuresStd, featuresMean)
       )(seqOp, combOp)
     }
 
@@ -884,7 +885,7 @@ private class LogisticCostFun(
       0.0
     } else {
       var sum = 0.0
-      w.foreachActive { (index, value) =>
+      coeffs.foreachActive { (index, value) =>
         // If `fitIntercept` is true, the last term which is intercept doesn't
         // contribute to the regularization.
         if (index != numFeatures) {
