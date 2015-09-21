@@ -151,7 +151,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
-    testTaskEndReason(ExecutorLostFailure("100"))
+    testTaskEndReason(ExecutorLostFailure("100", true))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -295,10 +295,10 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("ExecutorLostFailure backward compatibility") {
     // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
-    val executorLostFailure = ExecutorLostFailure("100")
+    val executorLostFailure = ExecutorLostFailure("100", true)
     val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
       .removeField({ _._1 == "Executor ID" })
-    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown")
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", true)
     assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
@@ -499,7 +499,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   private def assertEquals(info1: TaskInfo, info2: TaskInfo) {
     assert(info1.taskId === info2.taskId)
     assert(info1.index === info2.index)
-    assert(info1.attempt === info2.attempt)
+    assert(info1.attemptNumber === info2.attemptNumber)
     assert(info1.launchTime === info2.launchTime)
     assert(info1.executorId === info2.executorId)
     assert(info1.host === info2.host)
@@ -577,8 +577,10 @@ class JsonProtocolSuite extends SparkFunSuite {
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
-      case (ExecutorLostFailure(execId1), ExecutorLostFailure(execId2)) =>
+      case (ExecutorLostFailure(execId1, isNormalExit1),
+          ExecutorLostFailure(execId2, isNormalExit2)) =>
         assert(execId1 === execId2)
+        assert(isNormalExit1 === isNormalExit2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }

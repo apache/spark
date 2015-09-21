@@ -198,7 +198,7 @@ class NaiveBayesModel private[ml] (
   }
 
   override def toString: String = {
-    s"NaiveBayesModel with ${pi.size} classes"
+    s"NaiveBayesModel (uid=$uid) with ${pi.size} classes"
   }
 
 }

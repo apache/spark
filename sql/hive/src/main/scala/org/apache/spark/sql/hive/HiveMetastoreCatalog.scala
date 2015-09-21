@@ -199,7 +199,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       options: Map[String, String],
       isExternal: Boolean): Unit = {
     createDataSourceTable(
-      new SqlParser().parseTableIdentifier(tableName),
+      SqlParser.parseTableIdentifier(tableName),
       userSpecifiedSchema,
       partitionColumns,
       provider,
@@ -375,7 +375,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
   }
 
   def hiveDefaultTableFilePath(tableName: String): String = {
-    hiveDefaultTableFilePath(new SqlParser().parseTableIdentifier(tableName))
+    hiveDefaultTableFilePath(SqlParser.parseTableIdentifier(tableName))
   }
 
   def hiveDefaultTableFilePath(tableIdent: TableIdentifier): String = {
@@ -767,7 +767,7 @@ private[hive] case class InsertIntoHiveTable(
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: HiveTable)
-    (@transient sqlContext: SQLContext)
+    (@transient private val sqlContext: SQLContext)
   extends LeafNode with MultiInstanceRelation with FileRelation {
 
   override def equals(other: Any): Boolean = other match {

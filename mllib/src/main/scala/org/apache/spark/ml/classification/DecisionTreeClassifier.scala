@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasCheckpointInterval
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
@@ -145,7 +146,7 @@ final class DecisionTreeClassificationModel private[ml] (
   }
 
   override def toString: String = {
-    s"DecisionTreeClassificationModel of depth $depth with $numNodes nodes"
+    s"DecisionTreeClassificationModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
 
   /** (private[ml]) Convert to a model in the old API */

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources, _}
@@ -121,7 +122,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       projections: Seq[NamedExpression],
       filters: Seq[Expression],
       partitionColumns: StructType,
-      partitions: Array[Partition]) = {
+      partitions: Array[Partition]): SparkPlan = {
     val relation = logicalRelation.relation.asInstanceOf[HadoopFsRelation]
 
     // Because we are creating one RDD per partition, we need to have a shared HadoopConf.
@@ -130,49 +131,51 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val confBroadcast =
       relation.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
 
-    // Builds RDD[Row]s for each selected partition.
-    val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
-      // The table scan operator (PhysicalRDD) which retrieves required columns from data files.
-      // Notice that the schema of data files, represented by `relation.dataSchema`, may contain
-      // some partition column(s).
-      val scan =
-        pruneFilterProject(
-          logicalRelation,
-          projections,
-          filters,
-          (columns: Seq[Attribute], filters) => {
-            val partitionColNames = partitionColumns.fieldNames
+    // Now, we create a scan builder, which will be used by pruneFilterProject. This scan builder
+    // will union all partitions and attach partition values if needed.
+    val scanBuilder = {
+      (columns: Seq[Attribute], filters: Array[Filter]) => {
+        // Builds RDD[Row]s for each selected partition.
+        val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
+          val partitionColNames = partitionColumns.fieldNames
 
-            // Don't scan any partition columns to save I/O.  Here we are being optimistic and
-            // assuming partition columns data stored in data files are always consistent with those
-            // partition values encoded in partition directory paths.
-            val needed = columns.filterNot(a => partitionColNames.contains(a.name))
-            val dataRows =
-              relation.buildScan(needed.map(_.name).toArray, filters, Array(dir), confBroadcast)
+          // Don't scan any partition columns to save I/O.  Here we are being optimistic and
+          // assuming partition columns data stored in data files are always consistent with those
+          // partition values encoded in partition directory paths.
+          val needed = columns.filterNot(a => partitionColNames.contains(a.name))
+          val dataRows =
+            relation.buildScan(needed.map(_.name).toArray, filters, Array(dir), confBroadcast)
 
-            // Merges data values with partition values.
-            mergeWithPartitionValues(
-              relation.schema,
-              columns.map(_.name).toArray,
-              partitionColNames,
-              partitionValues,
-              toCatalystRDD(logicalRelation, needed, dataRows))
-          })
+          // Merges data values with partition values.
+          mergeWithPartitionValues(
+            relation.schema,
+            columns.map(_.name).toArray,
+            partitionColNames,
+            partitionValues,
+            toCatalystRDD(logicalRelation, needed, dataRows))
+        }
 
-      scan.execute()
+        val unionedRows =
+          if (perPartitionRows.length == 0) {
+            relation.sqlContext.emptyResult
+          } else {
+            new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
+          }
+
+        unionedRows
+      }
     }
 
-    val unionedRows =
-      if (perPartitionRows.length == 0) {
-        relation.sqlContext.emptyResult
-      } else {
-        new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
-      }
+    // Create the scan operator. If needed, add Filter and/or Project on top of the scan.
+    // The added Filter/Project is on top of the unioned RDD. We do not want to create
+    // one Filter/Project for every partition.
+    val sparkPlan = pruneFilterProject(
+      logicalRelation,
+      projections,
+      filters,
+      scanBuilder)
 
-    execution.PhysicalRDD.createFromDataSource(
-      projections.map(_.toAttribute),
-      unionedRows,
-      logicalRelation.relation)
+    sparkPlan
   }
 
   // TODO: refactor this thing. It is very complicated because it does projection internally.

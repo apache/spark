@@ -22,9 +22,9 @@ if sys.version >= '3':
     basestring = str
     long = int
 
+from pyspark import since
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql import since
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "Column", "SchemaRDD", "DataFrameNaFunctions",
@@ -91,6 +91,17 @@ def _func_op(name, doc=''):
     return _
 
 
+def _bin_func_op(name, reverse=False, doc="binary function"):
+    def _(self, other):
+        sc = SparkContext._active_spark_context
+        fn = getattr(sc._jvm.functions, name)
+        jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
+        njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
+        return Column(njc)
+    _.__doc__ = doc
+    return _
+
+
 def _bin_op(name, doc="binary operator"):
     """ Create a method for given binary operator
     """
@@ -151,6 +162,8 @@ class Column(object):
     __rdiv__ = _reverse_op("divide")
     __rtruediv__ = _reverse_op("divide")
     __rmod__ = _reverse_op("mod")
+    __pow__ = _bin_func_op("pow")
+    __rpow__ = _bin_func_op("pow", reverse=True)
 
     # logistic operators
     __eq__ = _bin_op("equalTo")
@@ -225,6 +238,9 @@ class Column(object):
         if item.startswith("__"):
             raise AttributeError(item)
         return self.getField(item)
+
+    def __iter__(self):
+        raise TypeError("Column is not iterable")
 
     # string methods
     rlike = _bin_op("rlike")

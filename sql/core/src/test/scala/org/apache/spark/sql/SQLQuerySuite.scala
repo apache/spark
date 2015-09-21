@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
@@ -147,14 +147,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SQL Dialect Switching to a new SQL parser") {
-    val newContext = new SQLContext(sqlContext.sparkContext)
+    val newContext = new SQLContext(sparkContext)
     newContext.setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
     assert(newContext.getSQLDialect().getClass === classOf[MyDialect])
     assert(newContext.sql("SELECT 1").collect() === Array(Row(1)))
   }
 
   test("SQL Dialect Switch to an invalid parser with alias") {
-    val newContext = new SQLContext(sqlContext.sparkContext)
+    val newContext = new SQLContext(sparkContext)
     newContext.sql("SET spark.sql.dialect=MyTestClass")
     intercept[DialectException] {
       newContext.sql("SELECT 1")
@@ -196,7 +196,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("grouping on nested fields") {
-    sqlContext.read.json(sqlContext.sparkContext.parallelize(
+    sqlContext.read.json(sparkContext.parallelize(
       """{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
      .registerTempTable("rows")
 
@@ -215,7 +215,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-6201 IN type conversion") {
     sqlContext.read.json(
-      sqlContext.sparkContext.parallelize(
+      sparkContext.parallelize(
         Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}")))
       .registerTempTable("d")
 
@@ -328,6 +328,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       testCodeGen(
         "SELECT min(key) FROM testData3x",
         Row(1) :: Nil)
+      // STDDEV
+      testCodeGen(
+        "SELECT a, stddev(b), stddev_pop(b) FROM testData2 GROUP BY a",
+        (1 to 3).map(i => Row(i, math.sqrt(0.5), math.sqrt(0.25))))
+      testCodeGen(
+        "SELECT stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2",
+        Row(math.sqrt(1.5 / 5), math.sqrt(1.5 / 6), math.sqrt(1.5 / 5)) :: Nil)
       // Some combinations.
       testCodeGen(
         """
@@ -348,8 +355,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(100, 1, 50.5, 300, 100) :: Nil)
       // Aggregate with Code generation handling all null values
       testCodeGen(
-        "SELECT  sum('a'), avg('a'), count(null) FROM testData",
-        Row(null, null, 0) :: Nil)
+        "SELECT  sum('a'), avg('a'), stddev('a'), count(null) FROM testData",
+        Row(null, null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
@@ -515,8 +522,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("aggregates with nulls") {
     checkAnswer(
-      sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(1, 3, 2, 6, 3)
+      sql("SELECT MIN(a), MAX(a), AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
+      Row(1, 3, 2, 1, 6, 3)
     )
   }
 
@@ -574,28 +581,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       mapData.collect().sortBy(_.data(1)).reverse.map(Row.fromTuple).toSeq)
   }
 
-  test("sorting") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false") {
-      sortTest()
-    }
-  }
-
   test("external sorting") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true") {
-      sortTest()
-    }
-  }
-
-  test("SPARK-6927 sorting with codegen on") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "true") {
-      sortTest()
-    }
+    sortTest()
   }
 
   test("SPARK-6927 external sorting with codegen on") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
       sortTest()
     }
   }
@@ -720,6 +711,33 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("select count(a) from t"),
         Row(0))
     }
+  }
+
+  test("stddev") {
+    checkAnswer(
+      sql("SELECT STDDEV(a) FROM testData2"),
+      Row(math.sqrt(4/5.0))
+    )
+  }
+
+  test("stddev_pop") {
+    checkAnswer(
+      sql("SELECT STDDEV_POP(a) FROM testData2"),
+      Row(math.sqrt(4/6.0))
+    )
+  }
+
+  test("stddev_samp") {
+    checkAnswer(
+      sql("SELECT STDDEV_SAMP(a) FROM testData2"),
+      Row(math.sqrt(4/5.0))
+    )
+  }
+
+  test("stddev agg") {
+    checkAnswer(
+      sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
+      (1 to 3).map(i => Row(i, math.sqrt(1/2.0), math.sqrt(1/4.0), math.sqrt(1/2.0))))
   }
 
   test("inner join where, one match per row") {
@@ -991,21 +1009,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size == 0)
+    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
+    sql("SET").collect().foreach { row =>
+      val key = row.getString(0)
+      val value = row.getString(1)
+      assert(
+        TestSQLContext.overrideConfs.contains(key),
+        s"$key should exist in SQLConf.")
+      assert(
+        TestSQLContext.overrideConfs(key) === value,
+        s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
+    }
+    val overrideConfs = sql("SET").collect()
 
     // "set key=val"
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      Row(testKey, testVal)
+      overrideConfs ++ Seq(Row(testKey, testVal))
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
-      Seq(
-        Row(testKey, testVal),
-        Row(testKey + testKey, testVal + testVal))
+      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
     )
 
     // "set key"
@@ -1342,7 +1369,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-3483 Special chars in column names") {
-    val data = sqlContext.sparkContext.parallelize(
+    val data = sparkContext.parallelize(
       Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     sqlContext.read.json(data).registerTempTable("records")
     sql("SELECT `key?number1`, `key.number2` FROM records")
@@ -1385,13 +1412,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-4322 Grouping field with struct field as sub expression") {
-    sqlContext.read.json(sqlContext.sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil))
+    sqlContext.read.json(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil))
       .registerTempTable("data")
     checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), Row(1))
     sqlContext.dropTempTable("data")
 
     sqlContext.read.json(
-      sqlContext.sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
+      sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
     checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), Row(2))
     sqlContext.dropTempTable("data")
   }
@@ -1412,10 +1439,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Supporting relational operator '<=>' in Spark SQL") {
     val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd1 = sqlContext.sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
+    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
     rdd1.toDF().registerTempTable("nulldata1")
     val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd2 = sqlContext.sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
+    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
     rdd2.toDF().registerTempTable("nulldata2")
     checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
       "nulldata2 on nulldata1.value <=> nulldata2.value"),
@@ -1424,7 +1451,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Multi-column COUNT(DISTINCT ...)") {
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-    val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
@@ -1432,14 +1459,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-4699 case sensitivity SQL query") {
     sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-    val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("testTable1")
     checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
     sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
-    sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    sqlContext.read.json(sparkContext.makeRDD(
         """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil))
       .registerTempTable("nestedOrder")
 
@@ -1452,14 +1479,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-6145: special cases") {
-    sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    sqlContext.read.json(sparkContext.makeRDD(
       """{"a": {"b": [1]}, "b": [{"a": 1}], "_c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY _c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY _c0.a"), Row(1))
   }
 
   test("SPARK-6898: complete support for special chars in column names") {
-    sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    sqlContext.read.json(sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
       .registerTempTable("t")
 
@@ -1493,6 +1520,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql(
         """
+          |SELECT sum(b)
+          |FROM orderByData
+          |GROUP BY a
+          |ORDER BY sum(b), max(b)
+        """.stripMargin),
+      Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
           |SELECT a, sum(b)
           |FROM orderByData
           |GROUP BY a
@@ -1509,6 +1546,26 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
             |ORDER BY sum(b) + 1
           """.stripMargin),
       Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+            |SELECT count(*)
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY count(*)
+          """.stripMargin),
+      Row(2) :: Row(2) :: Row(2) :: Row(2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+            |SELECT a
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY a, count(*), sum(b)
+          """.stripMargin),
+      Row("1") :: Row("2") :: Row("3") :: Row("4") :: Nil)
   }
 
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
@@ -1533,7 +1590,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-7067: order by queries for complex ExtractValue chain") {
     withTempTable("t") {
-      sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+      sqlContext.read.json(sparkContext.makeRDD(
         """{"a": {"b": [{"c": 1}]}, "b": [{"d": 1}]}""" :: Nil)).registerTempTable("t")
       checkAnswer(sql("SELECT a.b FROM t ORDER BY b[0].d"), Row(Seq(Row(1))))
     }
@@ -1600,8 +1657,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("aggregation with codegen updates peak execution memory") {
     withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
-      val sc = sqlContext.sparkContext
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "aggregation with codegen") {
         testCodeGen(
           "SELECT key, count(value) FROM testData GROUP BY key",
           (1 to 100).map(i => Row(i, 1)))
@@ -1659,17 +1715,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("external sorting updates peak execution memory") {
-    withSQLConf((SQLConf.EXTERNAL_SORT.key, "true")) {
-      val sc = sqlContext.sparkContext
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sort") {
-        sortTest()
-      }
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
+      sortTest()
     }
   }
 
   test("SPARK-9511: error with table starting with number") {
     withTempTable("1one") {
-      sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+      sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
         .toDF("num", "str")
         .registerTempTable("1one")
       checkAnswer(sql("select count(num) from 1one"), Row(10))
@@ -1680,7 +1733,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df =
-        sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+        sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df
         .write
         .format("parquet")
@@ -1712,9 +1765,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10130 type coercion for IF should have children resolved first") {
-    val df = Seq((1, 1), (-1, 1)).toDF("key", "value")
-    df.registerTempTable("src")
-    checkAnswer(
-      sql("SELECT IF(a > 0, a, 0) FROM (SELECT key a FROM src) temp"), Seq(Row(1), Row(0)))
+    withTempTable("src") {
+      Seq((1, 1), (-1, 1)).toDF("key", "value").registerTempTable("src")
+      checkAnswer(
+        sql("SELECT IF(a > 0, a, 0) FROM (SELECT key a FROM src) temp"), Seq(Row(1), Row(0)))
+    }
+  }
+
+  test("SPARK-10389: order by non-attribute grouping expression on Aggregate") {
+    withTempTable("src") {
+      Seq((1, 1), (-1, 1)).toDF("key", "value").registerTempTable("src")
+      checkAnswer(sql("SELECT MAX(value) FROM src GROUP BY key + 1 ORDER BY key + 1"),
+        Seq(Row(1), Row(1)))
+      checkAnswer(sql("SELECT MAX(value) FROM src GROUP BY key + 1 ORDER BY (key + 1) * 2"),
+        Seq(Row(1), Row(1)))
+    }
   }
 }

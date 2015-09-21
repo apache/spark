@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
-  self: SQLContext#SparkPlanner =>
+  self: SparkPlanner =>
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -87,7 +87,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         left: LogicalPlan,
         right: LogicalPlan,
         condition: Option[Expression],
-        side: joins.BuildSide) = {
+        side: joins.BuildSide): Seq[SparkPlan] = {
       val broadcastHashJoin = execution.joins.BroadcastHashJoin(
         leftKeys, rightKeys, side, planLater(left), planLater(right))
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
@@ -123,24 +123,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- Outer joins --------------------------------------------------------------------------
 
       case ExtractEquiJoinKeys(
-             LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+          LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         joins.BroadcastHashOuterJoin(
           leftKeys, rightKeys, LeftOuter, condition, planLater(left), planLater(right)) :: Nil
 
       case ExtractEquiJoinKeys(
-             RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
+          RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
         joins.BroadcastHashOuterJoin(
           leftKeys, rightKeys, RightOuter, condition, planLater(left), planLater(right)) :: Nil
 
-      case ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, condition, left, right)
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if sqlContext.conf.sortMergeJoinEnabled && RowOrdering.isOrderable(leftKeys) =>
         joins.SortMergeOuterJoin(
-          leftKeys, rightKeys, LeftOuter, condition, planLater(left), planLater(right)) :: Nil
-
-      case ExtractEquiJoinKeys(RightOuter, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.conf.sortMergeJoinEnabled && RowOrdering.isOrderable(leftKeys) =>
-        joins.SortMergeOuterJoin(
-          leftKeys, rightKeys, RightOuter, condition, planLater(left), planLater(right)) :: Nil
+          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
         joins.ShuffledHashOuterJoin(
@@ -156,11 +151,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Aggregations that can be performed in two phases, before and after the shuffle.
       case PartialAggregation(
-             namedGroupingAttributes,
-             rewrittenAggregateExpressions,
-             groupingExpressions,
-             partialComputation,
-             child) if !canBeConvertedToNewAggregation(plan) =>
+          namedGroupingAttributes,
+          rewrittenAggregateExpressions,
+          groupingExpressions,
+          partialComputation,
+          child) if !canBeConvertedToNewAggregation(plan) =>
         execution.Aggregate(
           partial = false,
           namedGroupingAttributes,
@@ -317,8 +312,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       if (sqlContext.conf.unsafeEnabled && sqlContext.conf.codegenEnabled &&
         TungstenSort.supportsSchema(child.schema)) {
         execution.TungstenSort(sortExprs, global, child)
-      } else if (sqlContext.conf.externalSortEnabled) {
-        execution.ExternalSort(sortExprs, global, child)
       } else {
         execution.Sort(sortExprs, global, child)
       }
