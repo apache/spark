@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import edu.emory.mathcs.jtransforms.dct._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.util.Identifiable
