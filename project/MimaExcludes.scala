@@ -78,6 +78,28 @@ object MimaExcludes {
           "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.regression.LeastSquaresCostFun.this")
+      ) ++ Seq(
+        // SPARK-10708: Consolidate sort shuffle implementations
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.util.collection.OrderedInputStream"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.util.collection.ChainedBuffer"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.util.collection.PartitionedSerializedPairBuffer"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.util.collection.ChainedBufferOutputStream"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.util.collection.PartitionedSerializedPairBuffer$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.util.collection.SerializedSortDataFormat"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleHandle"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager$")
       )
     case v if v.startsWith("1.5") =>
       Seq(
