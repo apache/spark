@@ -452,7 +452,8 @@ def import_module_attrs(parent_module_globals, module_attrs_dict):
     imported_attrs = []
     for mod, attrs in list(module_attrs_dict.items()):
         try:
-            folder = os.path.dirname(parent_module_globals['__file__'])
+            path = os.path.realpath(parent_module_globals['__file__'])
+            folder = os.path.dirname(path)
             f, filename, description = imp.find_module(mod, [folder])
             module = imp.load_module(mod, f, filename, description)
             for attr in attrs:
