@@ -37,6 +37,7 @@ import org.apache.spark.sql.*;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -179,6 +180,15 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < d.length(); i++) {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
+  }
+
+  @Test
+  public void testCreateDataFromFromList() {
+    StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
+    List<Row> rows = Arrays.asList(RowFactory.create(0));
+    DataFrame df = context.createDataFrame(rows, schema);
+    Row[] result = df.collect();
+    Assert.assertEquals(1, result.length);
   }
 
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
