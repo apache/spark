@@ -304,6 +304,14 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.attemptFailuresValidityInterval</code></td>
+  <td>-1</td>
+  <td>
+  Ignore the failure number which happens out the validity interval (in millisecond).
+  Default value -1 means this validity interval is not enabled.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
