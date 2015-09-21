@@ -101,7 +101,7 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
     )))
 
     // The serialized shuffle path do not support shuffles with more than 16 million output
-    // partitions, due to a limitation in its sorter implementatino.
+    // partitions, due to a limitation in its sorter implementation.
     assert(!canUseSerializedShuffle(shuffleDep(
       partitioner = new HashPartitioner(
         SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1),
