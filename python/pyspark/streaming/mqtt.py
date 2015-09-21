@@ -31,6 +31,7 @@ class MQTTUtils(object):
                      storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
         """
         Create an input stream that pulls messages from a Mqtt Broker.
+
         :param ssc:  StreamingContext object
         :param brokerUrl:  Url of remote mqtt publisher
         :param topic:  topic name to subscribe to

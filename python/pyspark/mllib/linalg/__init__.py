@@ -240,6 +240,7 @@ class Vector(object):
     def toArray(self):
         """
         Convert the vector into an numpy.ndarray
+
         :return: numpy.ndarray
         """
         raise NotImplementedError
