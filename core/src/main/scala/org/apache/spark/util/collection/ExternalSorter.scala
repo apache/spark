@@ -69,8 +69,8 @@ import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
  * At a high level, this class works internally as follows:
  *
  * - We repeatedly fill up buffers of in-memory data, using either a PartitionedAppendOnlyMap if
- *   we want to combine by key, or a PartitionedSerializedPairBuffer or PartitionedPairBuffer if we
- *   don't. Inside these buffers, we sort elements by partition ID and then possibly also by key.
+ *   we want to combine by key, or a PartitionedPairBuffer if we don't.
+ *   Inside these buffers, we sort elements by partition ID and then possibly also by key.
  *   To avoid calling the partitioner multiple times with each key, we store the partition ID
  *   alongside each record.
  *
