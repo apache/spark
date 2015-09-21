@@ -49,7 +49,7 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
       val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
         .setSerializer(new KryoSerializer(myConf))
       val shuffleDep = shuffledRdd.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
-      assert(SortShuffleManager.canUseUnsafeShuffle(shuffleDep))
+      assert(SortShuffleManager.canUseSerializedShuffle(shuffleDep))
       def getAllFiles: Set[File] =
         FileUtils.listFiles(tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
       val filesBeforeShuffle = getAllFiles
@@ -80,7 +80,7 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
       val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
         .setSerializer(new JavaSerializer(myConf))
       val shuffleDep = shuffledRdd.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
-      assert(!SortShuffleManager.canUseUnsafeShuffle(shuffleDep))
+      assert(!SortShuffleManager.canUseSerializedShuffle(shuffleDep))
       def getAllFiles: Set[File] =
         FileUtils.listFiles(tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
       val filesBeforeShuffle = getAllFiles

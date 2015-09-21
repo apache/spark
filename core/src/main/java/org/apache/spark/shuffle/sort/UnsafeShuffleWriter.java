@@ -23,7 +23,7 @@ import java.nio.channels.FileChannel;
 import java.util.Iterator;
 
 import org.apache.spark.shuffle.sort.SortShuffleManager;
-import org.apache.spark.shuffle.sort.UnsafeShuffleHandle;
+import org.apache.spark.shuffle.sort.SerializedShuffleHandle;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -106,15 +106,15 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       IndexShuffleBlockResolver shuffleBlockResolver,
       TaskMemoryManager memoryManager,
       ShuffleMemoryManager shuffleMemoryManager,
-      UnsafeShuffleHandle<K, V> handle,
+      SerializedShuffleHandle<K, V> handle,
       int mapId,
       TaskContext taskContext,
       SparkConf sparkConf) throws IOException {
     final int numPartitions = handle.dependency().partitioner().numPartitions();
-    if (numPartitions > SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS()) {
+    if (numPartitions > SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE()) {
       throw new IllegalArgumentException(
         "UnsafeShuffleWriter can only be used for shuffles with at most " +
-          SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS() + " reduce partitions");
+          SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE() + " reduce partitions");
     }
     this.blockManager = blockManager;
     this.shuffleBlockResolver = shuffleBlockResolver;

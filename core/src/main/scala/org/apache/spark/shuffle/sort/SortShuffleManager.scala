@@ -24,9 +24,10 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle._
 
 /**
- * Subclass of [[BaseShuffleHandle]], used to identify when we've chosen to use the new shuffle.
+ * Subclass of [[BaseShuffleHandle]], used to identify when we've chosen to use the
+ * serialized shuffle.
  */
-private[spark] class UnsafeShuffleHandle[K, V](
+private[spark] class SerializedShuffleHandle[K, V](
     shuffleId: Int,
     numMaps: Int,
     dependency: ShuffleDependency[K, V, V])
@@ -36,30 +37,34 @@ private[spark] class UnsafeShuffleHandle[K, V](
 private[spark] object SortShuffleManager extends Logging {
 
   /**
-   * The maximum number of shuffle output partitions that UnsafeShuffleManager supports.
+   * The maximum number of shuffle output partitions that SortShuffleManager supports when
+   *
    */
-  val MAX_SHUFFLE_OUTPUT_PARTITIONS = PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
+  val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE =
+    PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
 
   /**
-   * Helper method for determining whether a shuffle should use the optimized unsafe shuffle
-   * path or whether it should fall back to the original sort-based shuffle.
+   * Helper method for determining whether a shuffle should use an optimized serialized shuffle
+   * path or whether it should fall back to the original path that operates on deserialized objects.
    */
-  def canUseUnsafeShuffle[K, V, C](dependency: ShuffleDependency[K, V, C]): Boolean = {
+  def canUseSerializedShuffle(dependency: ShuffleDependency[_, _, _]): Boolean = {
     val shufId = dependency.shuffleId
+    val numPartitions = dependency.partitioner.numPartitions
     val serializer = Serializer.getSerializer(dependency.serializer)
     if (!serializer.supportsRelocationOfSerializedObjects) {
-      log.debug(s"Can't use UnsafeShuffle for shuffle $shufId because the serializer, " +
+      log.debug(s"Can't use serialized shuffle for shuffle $shufId because the serializer, " +
         s"${serializer.getClass.getName}, does not support object relocation")
       false
     } else if (dependency.aggregator.isDefined) {
-      log.debug(s"Can't use UnsafeShuffle for shuffle $shufId because an aggregator is defined")
+      log.debug(
+        s"Can't use serialized shuffle for shuffle $shufId because an aggregator is defined")
       false
-    } else if (dependency.partitioner.numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS) {
-      log.debug(s"Can't use UnsafeShuffle for shuffle $shufId because it has more than " +
-        s"$MAX_SHUFFLE_OUTPUT_PARTITIONS partitions")
+    } else if (numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE) {
+      log.debug(s"Can't use serialized shuffle for shuffle $shufId because it has more than " +
+        s"$MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE partitions")
       false
     } else {
-      log.debug(s"Can use UnsafeShuffle for shuffle $shufId")
+      log.debug(s"Can use serialized shuffle for shuffle $shufId")
       true
     }
   }
@@ -128,8 +133,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       shuffleId: Int,
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    if (SortShuffleManager.canUseUnsafeShuffle(dependency)) {
-      new UnsafeShuffleHandle[K, V](
+    if (SortShuffleManager.canUseSerializedShuffle(dependency)) {
+      new SerializedShuffleHandle[K, V](
         shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else {
       new BaseShuffleHandle(shuffleId, numMaps, dependency)
@@ -145,7 +150,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       startPartition: Int,
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C] = {
-    // We currently use the same block store shuffle fetcher as the hash-based shuffle.
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
   }
@@ -158,7 +162,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     numMapsForShuffle.putIfAbsent(
       handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
     handle match {
-      case unsafeShuffleHandle: UnsafeShuffleHandle[K @unchecked, V @unchecked] =>
+      case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         val env = SparkEnv.get
         new UnsafeShuffleWriter(
           env.blockManager,

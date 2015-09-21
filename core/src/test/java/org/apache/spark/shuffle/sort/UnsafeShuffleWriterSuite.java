@@ -21,7 +21,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.apache.spark.shuffle.sort.UnsafeShuffleHandle;
+import org.apache.spark.shuffle.sort.SerializedShuffleHandle;
 import scala.*;
 import scala.collection.Iterator;
 import scala.runtime.AbstractFunction1;
@@ -205,7 +205,7 @@ public class UnsafeShuffleWriterSuite {
       shuffleBlockResolver,
       taskMemoryManager,
       shuffleMemoryManager,
-      new UnsafeShuffleHandle<Object, Object>(0, 1, shuffleDep),
+      new SerializedShuffleHandle<Object, Object>(0, 1, shuffleDep),
       0, // map id
       taskContext,
       conf
@@ -517,7 +517,7 @@ public class UnsafeShuffleWriterSuite {
         shuffleBlockResolver,
         taskMemoryManager,
         shuffleMemoryManager,
-        new UnsafeShuffleHandle<>(0, 1, shuffleDep),
+        new SerializedShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,
         conf);
