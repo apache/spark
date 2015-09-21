@@ -67,7 +67,7 @@ class ShuffledRowRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[Int, InternalRow, InternalRow]]
-    SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, context)
+    SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)
       .read()
       .asInstanceOf[Iterator[Product2[Int, InternalRow]]]
       .map(_._2)

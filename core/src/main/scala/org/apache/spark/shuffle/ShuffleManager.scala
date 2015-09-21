@@ -27,7 +27,7 @@ import org.apache.spark.{TaskContext, ShuffleDependency}
  * NOTE: this will be instantiated by SparkEnv so its constructor can take a SparkConf and
  * boolean isDriver as parameters.
  */
-private[spark] abstract class ShuffleManager {
+private[spark] trait ShuffleManager {
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
    */
@@ -40,14 +40,14 @@ private[spark] abstract class ShuffleManager {
   def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext): ShuffleWriter[K, V]
 
   /**
-   * Get a reader for a reduce partition. Called on executors by reduce tasks.
+   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
+   * Called on executors by reduce tasks.
    */
-  final def getReader[K, C](
+  def getReader[K, C](
       handle: ShuffleHandle,
-      partition: Int,
-      context: TaskContext): ShuffleReader[K, C] = {
-    new ShuffleReader(handle.asInstanceOf[BaseShuffleHandle[K, _, C]], partition, context)
-  }
+      startPartition: Int,
+      endPartition: Int,
+      context: TaskContext): ShuffleReader[K, C]
 
   /**
     * Remove a shuffle's metadata from the ShuffleManager.

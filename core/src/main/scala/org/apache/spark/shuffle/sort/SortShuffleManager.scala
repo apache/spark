@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.{SparkConf, TaskContext, ShuffleDependency}
 import org.apache.spark.shuffle._
+import org.apache.spark.shuffle.hash.HashShuffleReader
 
 private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager {
 
@@ -35,6 +36,20 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
     new BaseShuffleHandle(shuffleId, numMaps, dependency)
+  }
+
+  /**
+   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
+   * Called on executors by reduce tasks.
+   */
+  override def getReader[K, C](
+      handle: ShuffleHandle,
+      startPartition: Int,
+      endPartition: Int,
+      context: TaskContext): ShuffleReader[K, C] = {
+    // We currently use the same block store shuffle fetcher as the hash-based shuffle.
+    new HashShuffleReader(
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
