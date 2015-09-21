@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.hash
+package org.apache.spark.shuffle
 
 import java.io.{ByteArrayOutputStream, InputStream}
 import java.nio.ByteBuffer
@@ -28,7 +28,6 @@ import org.mockito.stubbing.Answer
 import org.apache.spark._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.shuffle.BaseShuffleHandle
 import org.apache.spark.storage.{BlockManager, BlockManagerId, ShuffleBlockId}
 
 /**
@@ -56,7 +55,7 @@ class RecordingManagedBuffer(underlyingBuffer: NioManagedBuffer) extends Managed
   }
 }
 
-class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
+class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
 
   /**
    * This test makes sure that, when data is read from a HashShuffleReader, the underlying
@@ -134,7 +133,7 @@ class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
       new BaseShuffleHandle(shuffleId, numMaps, dependency)
     }
 
-    val shuffleReader = new HashShuffleReader(
+    val shuffleReader = new BlockStoreShuffleReader(
       shuffleHandle,
       reduceId,
       reduceId + 1,
