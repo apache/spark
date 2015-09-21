@@ -487,7 +487,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    createDataFrame(sparkContext.parallelize(rows.asScala), schema)
+    DataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
   /**
