@@ -475,6 +475,8 @@ abstract class StatisticalMoments1(child: Expression) extends UnaryExpression wi
 
 case class Kurtosis(child: Expression) extends StatisticalMoments1(child) {
 
+  override def prettyName: String = "kurtosis"
+
   override def toString: String = s"KURTOSIS($child)"
 }
 

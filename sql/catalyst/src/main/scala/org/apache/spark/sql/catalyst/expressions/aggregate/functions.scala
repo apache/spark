@@ -199,21 +199,25 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
 }
 
 case class Skewness(child: Expression) extends StatisticalMoments(child) {
-  override def prettyName = "min"
+  override def prettyName = "skewness"
   // TODO: protect against neg sqrt
+  // skewness = sqrt(M_0) * M_3 / M_2^(3/2)
   override val evaluateExpression: Expression = {
     If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
       If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-        Cast(Sqrt(currentM0) * currentM3 / Sqrt(currentM2 * currentM2 * currentM2), resultType)))
+        If(EqualTo(currentM2, Cast(Literal(0), resultType)), Cast(Literal(0), resultType),
+          Cast(Sqrt(currentM0) * currentM3 / Sqrt(currentM2 * currentM2 * currentM2), resultType))))
   }
 }
 
 case class Kurtosis(child: Expression) extends StatisticalMoments(child) {
   override def prettyName = "kurtosis"
+  // kurtosis = M_0 * M_4 / M_2^2 - 3
   override val evaluateExpression = {
     If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
       If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-        Cast(currentM0 * currentM4 / (currentM2 * currentM2) - Cast(Literal(3), resultType), resultType)))
+        If(EqualTo(currentM2, Cast(Literal(0), resultType)), Cast(Literal(0), resultType),
+          Cast(currentM0 * currentM4 / (currentM2 * currentM2) - Cast(Literal(3), resultType), resultType))))
   }
 }
 
@@ -1103,6 +1107,8 @@ abstract class StableMoments(child: Expression) extends AlgebraicAggregate {
     /* currentM0 = */ Cast(Literal(0), resultType)
   )
 
+  // Kahan update implemented according to:
+  // http://researcher.watson.ibm.com/researcher/files/us-ytian/stability.pdf
   def kahan(s1: Expression, c1: Expression, s2: Expression, c2: Expression) = {
     val correctedS2 = s2 + (c1 + c2)
     val s = s1 + correctedS2
@@ -1195,23 +1201,25 @@ abstract class StableMoments(child: Expression) extends AlgebraicAggregate {
 }
 
 case class KahanSkewness(child: Expression) extends StableMoments(child) {
-  override def prettyName = "skewness"
+  override def prettyName = "kahanskewness"
   // TODO: protect against neg sqrt
   // TODO: skewness divides by zero if var is 0
   override val evaluateExpression: Expression = {
     If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
       If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-        Cast(Sqrt(currentM0) * currentM3 / Sqrt(currentM2 * currentM2 * currentM2), resultType)))
+        If(EqualTo(currentM2, Cast(Literal(0), resultType)), Cast(Literal(0), resultType),
+        Cast(Sqrt(currentM0) * currentM3 / Sqrt(currentM2 * currentM2 * currentM2), resultType))))
   }
 }
 
 case class KahanKurtosis(child: Expression) extends StableMoments(child) {
-  override def prettyName = "skewness"
+  override def prettyName = "kahankurtosis"
   // TODO: protect against neg sqrt
   // TODO: skewness divides by zero if var is 0
   override val evaluateExpression: Expression = {
     If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
       If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-        Cast(currentM0 * currentM4 / (currentM2 * currentM2) - Cast(Literal(3), resultType), resultType)))
+        If(EqualTo(currentM2, Cast(Literal(0), resultType)), Cast(Literal(0), resultType),
+        Cast(currentM0 * currentM4 / (currentM2 * currentM2) - Cast(Literal(3), resultType), resultType))))
   }
 }
