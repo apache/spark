@@ -28,7 +28,7 @@ _hooks = {
 }
 
 _import_module_attrs(globals(), _hooks)
-
+from airflow.hooks.base_hook import BaseHook
 
 def integrate_plugins():
     """Integrate plugins to the context"""
