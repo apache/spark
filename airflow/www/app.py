@@ -1,6 +1,7 @@
 from __future__ import print_function
 from __future__ import division
 from builtins import str
+from past.builtins import basestring
 from past.utils import old_div
 import copy
 from datetime import datetime, timedelta
@@ -139,7 +140,7 @@ def render(obj, lexer):
             out += "<div>List item #{}</div>".format(i)
             out += "<div>" + pygment_html_render(s, lexer) + "</div>"
     elif isinstance(obj, dict):
-        for k, v in obj.iteritems():
+        for k, v in obj.items():
             out += '<div>Dict item "{}"</div>'.format(k)
             out += "<div>" + pygment_html_render(v, lexer) + "</div>"
     return out
