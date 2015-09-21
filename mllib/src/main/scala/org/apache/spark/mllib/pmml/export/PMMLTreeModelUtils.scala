@@ -44,7 +44,7 @@ private[mllib] object PMMLTreeModelUtils {
 
     // adding predicted classes for classification and target field for regression
     // for completeness
-    dtModel.algo match{
+    dtModel.algo match {
 
       case Algo.Classification => {
         miningFields = miningFields :+ new MiningField()
@@ -65,8 +65,8 @@ private[mllib] object PMMLTreeModelUtils {
         dataFields = dataFields :+ dataField
 
         miningFields = miningFields :+ new MiningField()
-        .withName(targetField)
-        .withUsageType(FieldUsageType.TARGET)
+          .withName(targetField)
+          .withUsageType(FieldUsageType.TARGET)
       }
     }
 
