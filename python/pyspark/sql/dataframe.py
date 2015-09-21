@@ -300,7 +300,7 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        return self.limit(num).collect()
+        return self.coalesce(1).limit(num).collect()
 
     @ignore_unicode_prefix
     @since(1.3)
