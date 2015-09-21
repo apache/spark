@@ -55,7 +55,7 @@ private[mllib] object PMMLTreeModelUtils {
           .withName(FieldName.create("class"))
           .withOpType(OpType.CATEGORICAL)
           .withValues(classes.asJava)
-          .withDataType(DataType.STRING)
+          .withDataType(DataType.DOUBLE)
 
         dataFields = dataFields :+ dataField
       }
