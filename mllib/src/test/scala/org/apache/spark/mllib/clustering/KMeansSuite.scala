@@ -341,6 +341,7 @@ class KMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
       val model = KMeans.train(points, 2, 2, 1, initMode)
       val predictions = model.predict(points).collect()
       val cost = model.computeCost(points)
+      val dToCenters = model.distanceToCenters(points.first())
     }
   }
 }
