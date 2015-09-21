@@ -115,12 +115,12 @@ public class ExternalShuffleBlockResolver {
           if (registeredExecutorFile.isDirectory()) {
             for (File f : registeredExecutorFile.listFiles()) {
               if (!f.delete()) {
-                logger.error("error deleting " + f.getPath());
+                logger.warn("error deleting " + f.getPath());
               }
             }
           }
           if (!registeredExecutorFile.delete()) {
-            logger.error("error deleting " + registeredExecutorFile.getPath());
+            logger.warn("error deleting " + registeredExecutorFile.getPath());
           }
           options.createIfMissing(true);
           try {

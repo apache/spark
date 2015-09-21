@@ -77,7 +77,7 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
     if (numRecordsRemaining == 0) {
       in.close();
       if (!file.delete() && file.exists()) {
-        logger.error("Unable to delete spill file {}", file.getPath());
+        logger.warn("Unable to delete spill file {}", file.getPath());
       }
       in = null;
       din = null;
