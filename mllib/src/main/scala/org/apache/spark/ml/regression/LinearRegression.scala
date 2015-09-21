@@ -547,8 +547,8 @@ private class LeastSquaresAggregator(
    * @param instance  The data point instance to be added.
    * @return This LeastSquaresAggregator object.
    */
-  def add(instance: Instance): this.type = instance match {
-    case Instance(label, weight, features) =>
+  def add(instance: Instance): this.type =
+    instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new sample." +
         s" Expecting $dim but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
@@ -570,7 +570,7 @@ private class LeastSquaresAggregator(
       totalCnt += 1
       weightSum += weight
       this
-  }
+    }
 
   /**
    * Merge another LeastSquaresAggregator, and update the loss and gradient
