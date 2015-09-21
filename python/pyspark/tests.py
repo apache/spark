@@ -62,7 +62,7 @@ from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, 
     CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
     PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer, \
     FlattenedValuesSerializer
-from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
+from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
 
@@ -94,17 +94,6 @@ class MergerTests(unittest.TestCase):
         self.agg = Aggregator(lambda x: [x],
                               lambda x, y: x.append(y) or x,
                               lambda x, y: x.extend(y) or x)
-
-    def test_in_memory(self):
-        m = InMemoryMerger(self.agg)
-        m.mergeValues(self.data)
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
-
-        m = InMemoryMerger(self.agg)
-        m.mergeCombiners(map(lambda x_y: (x_y[0], [x_y[1]]), self.data))
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
 
     def test_small_dataset(self):
         m = ExternalMerger(self.agg, 1000)

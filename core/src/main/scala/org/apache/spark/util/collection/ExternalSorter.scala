@@ -116,8 +116,6 @@ private[spark] class ExternalSorter[K, V, C](
   private val ser = Serializer.getSerializer(serializer)
   private val serInstance = ser.newInstance()
 
-  private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
-
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
   private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
 
@@ -229,10 +227,6 @@ private[spark] class ExternalSorter[K, V, C](
    * @param usingMap whether we're using a map or buffer as our current in-memory collection
    */
   private def maybeSpillCollection(usingMap: Boolean): Unit = {
-    if (!spillingEnabled) {
-      return
-    }
-
     var estimatedSize = 0L
     if (usingMap) {
       estimatedSize = map.estimateSize()

@@ -48,7 +48,7 @@ from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
-from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
+from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
 
@@ -580,12 +580,11 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
-        spill = (self.ctx._conf.get("spark.shuffle.spill", 'True').lower() == "true")
         memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator):
-            sort = ExternalSorter(memory * 0.9, serializer).sorted if spill else sorted
+            sort = ExternalSorter(memory * 0.9, serializer).sorted
             return iter(sort(iterator, key=lambda k_v: keyfunc(k_v[0]), reverse=(not ascending)))
 
         return self.partitionBy(numPartitions, partitionFunc).mapPartitions(sortPartition, True)
@@ -610,12 +609,11 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
-        spill = self._can_spill()
         memory = self._memory_limit()
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator):
-            sort = ExternalSorter(memory * 0.9, serializer).sorted if spill else sorted
+            sort = ExternalSorter(memory * 0.9, serializer).sorted
             return iter(sort(iterator, key=lambda kv: keyfunc(kv[0]), reverse=(not ascending)))
 
         if numPartitions == 1:
@@ -1770,13 +1768,11 @@ class RDD(object):
             numPartitions = self._defaultReducePartitions()
 
         serializer = self.ctx.serializer
-        spill = self._can_spill()
         memory = self._memory_limit()
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combineLocally(iterator):
-            merger = ExternalMerger(agg, memory * 0.9, serializer) \
-                if spill else InMemoryMerger(agg)
+            merger = ExternalMerger(agg, memory * 0.9, serializer)
             merger.mergeValues(iterator)
             return merger.items()
 
@@ -1784,8 +1780,7 @@ class RDD(object):
         shuffled = locally_combined.partitionBy(numPartitions)
 
         def _mergeCombiners(iterator):
-            merger = ExternalMerger(agg, memory, serializer) \
-                if spill else InMemoryMerger(agg)
+            merger = ExternalMerger(agg, memory, serializer)
             merger.mergeCombiners(iterator)
             return merger.items()
 
@@ -1824,9 +1819,6 @@ class RDD(object):
 
         return self.combineByKey(lambda v: func(createZero(), v), func, func, numPartitions)
 
-    def _can_spill(self):
-        return self.ctx._conf.get("spark.shuffle.spill", "True").lower() == "true"
-
     def _memory_limit(self):
         return _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
 
@@ -1857,14 +1849,12 @@ class RDD(object):
             a.extend(b)
             return a
 
-        spill = self._can_spill()
         memory = self._memory_limit()
         serializer = self._jrdd_deserializer
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combine(iterator):
-            merger = ExternalMerger(agg, memory * 0.9, serializer) \
-                if spill else InMemoryMerger(agg)
+            merger = ExternalMerger(agg, memory * 0.9, serializer)
             merger.mergeValues(iterator)
             return merger.items()
 
@@ -1872,8 +1862,7 @@ class RDD(object):
         shuffled = locally_combined.partitionBy(numPartitions)
 
         def groupByKey(it):
-            merger = ExternalGroupBy(agg, memory, serializer)\
-                if spill else InMemoryMerger(agg)
+            merger = ExternalGroupBy(agg, memory, serializer)
             merger.mergeCombiners(it)
             return merger.items()
 
