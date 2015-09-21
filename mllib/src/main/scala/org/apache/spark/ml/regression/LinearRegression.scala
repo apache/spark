@@ -253,7 +253,11 @@ class LinearRegression(override val uid: String)
        converged. See the following discussion for detail.
        http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
      */
-    val intercept = if ($(fitIntercept)) yMean - dot(coefficients, Vectors.dense(featuresMean)) else 0.0
+    val intercept = if ($(fitIntercept)) {
+      yMean - dot(coefficients, Vectors.dense(featuresMean))
+    } else {
+      0.0
+    }
 
     if (handlePersistence) instances.unpersist()
 
@@ -630,10 +634,14 @@ private class LeastSquaresCostFun(
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
 
-    val leastSquaresAggregator = instances.treeAggregate(new LeastSquaresAggregator(coeffs, labelStd,
-      labelMean, fitIntercept, featuresStd, featuresMean))(
-        seqOp = (aggregator, instance) => aggregator.add(instance),
-        combOp = (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
+    val leastSquaresAggregator = {
+      val seqOp = (c: LeastSquaresAggregator, instance: Instance) => c.add(instance)
+      val combOp = (c1: LeastSquaresAggregator, c2: LeastSquaresAggregator) => c1.merge(c2)
+
+      instances.treeAggregate(
+        new LeastSquaresAggregator(coeffs, labelStd, labelMean, fitIntercept, featuresStd,
+          featuresMean))(seqOp, combOp)
+    }
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
 
