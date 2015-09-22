@@ -132,10 +132,10 @@ case class GetJsonObject(json: Expression, path: Expression)
     }
 
     if (parsed.isDefined) {
+      val parser = jsonFactory.createParser(jsonStr.getBytes)
+      val output = new ByteArrayOutputStream()
+      val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
       try {
-        val parser = jsonFactory.createParser(jsonStr.getBytes)
-        val output = new ByteArrayOutputStream()
-        val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
         parser.nextToken()
         val matched = evaluatePath(parser, generator, RawStyle, parsed.get)
         generator.close()
@@ -146,6 +146,10 @@ case class GetJsonObject(json: Expression, path: Expression)
         }
       } catch {
         case _: JsonProcessingException => null
+      } finally {
+        if (!generator.isClosed) {
+          generator.close()
+        }
       }
     } else {
       null
@@ -250,26 +254,31 @@ case class GetJsonObject(json: Expression, path: Expression)
         // modified slightly if there is only a single element written
         val buffer = new StringWriter()
         val flattenGenerator = jsonFactory.createGenerator(buffer)
-        flattenGenerator.writeStartArray()
+        try {
+          flattenGenerator.writeStartArray()
 
-        var dirty = 0
-        while (p.nextToken() != END_ARRAY) {
-          // track the number of array elements and only emit an outer array if
-          // we've written more than one element, this matches Hive's behavior
-          dirty += (if (evaluatePath(p, flattenGenerator, nextStyle, xs)) 1 else 0)
+          var dirty = 0
+          while (p.nextToken() != END_ARRAY) {
+            // track the number of array elements and only emit an outer array if
+            // we've written more than one element, this matches Hive's behavior
+            dirty += (if (evaluatePath(p, flattenGenerator, nextStyle, xs)) 1 else 0)
+          }
+          flattenGenerator.writeEndArray()
+
+          val buf = buffer.getBuffer
+          if (dirty > 1) {
+            g.writeRawValue(buf.toString)
+          } else if (dirty == 1) {
+            // remove outer array tokens
+            g.writeRawValue(buf.substring(1, buf.length()-1))
+          } // else do not write anything
+
+          dirty > 0
+        } finally {
+          if (!flattenGenerator.isClosed) {
+            flattenGenerator.close()
+          }
         }
-        flattenGenerator.writeEndArray()
-        flattenGenerator.close()
-
-        val buf = buffer.getBuffer
-        if (dirty > 1) {
-          g.writeRawValue(buf.toString)
-        } else if (dirty == 1) {
-          // remove outer array tokens
-          g.writeRawValue(buf.substring(1, buf.length()-1))
-        } // else do not write anything
-
-        dirty > 0
 
       case (START_ARRAY, Subscript :: Wildcard :: xs) =>
         var dirty = false
