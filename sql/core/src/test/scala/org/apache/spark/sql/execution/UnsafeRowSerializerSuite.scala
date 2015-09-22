@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{File, DataOutputStream, ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{File, ByteArrayInputStream, ByteArrayOutputStream}
 
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.rdd.RDD
@@ -88,11 +88,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("close empty input stream") {
-    val baos = new ByteArrayOutputStream()
-    val dout = new DataOutputStream(baos)
-    dout.writeInt(-1)  // EOF
-    dout.flush()
-    val input = new ClosableByteArrayInputStream(baos.toByteArray)
+    val input = new ClosableByteArrayInputStream(Array.empty)
     val serializer = new UnsafeRowSerializer(numFields = 2).newInstance()
     val deserializerIter = serializer.deserializeStream(input).asKeyValueIterator
     assert(!deserializerIter.hasNext)
