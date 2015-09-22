@@ -342,7 +342,11 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
   override def canProcessSafeRows: Boolean = true
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val childResults = child.execute().map(_.copy())
+    val buffer = new java.util.concurrent.ConcurrentLinkedQueue[InternalRow]()
+    val childResults = child.execute().map(_.copy()).map { row =>
+      buffer.add(row)
+      row
+    }
 
     val parent = childResults.mapPartitions { iter =>
       EvaluatePython.registerPicklers()  // register pickler for Row
@@ -358,7 +362,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       }
     }
 
-    val pyRDD = new PythonRDD(
+    new PythonRDD(
       parent,
       udf.command,
       udf.envVars,
@@ -376,17 +380,10 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       }
     }.mapPartitions { iter =>
       val row = new GenericMutableRow(1)
+      val joined = new JoinedRow
       iter.map { result =>
         row(0) = EvaluatePython.fromJava(result, udf.dataType)
-        row: InternalRow
-      }
-    }
-
-    childResults.zip(pyRDD).mapPartitions { iter =>
-      val joinedRow = new JoinedRow()
-      iter.map {
-        case (row, udfResult) =>
-          joinedRow(row, udfResult)
+        joined(buffer.poll(), row)
       }
     }
   }

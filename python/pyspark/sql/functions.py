@@ -26,7 +26,7 @@ if sys.version < "3":
 
 from pyspark import since, SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+from pyspark.serializers import PickleSerializer, BatchedSerializer
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
@@ -1423,7 +1423,7 @@ class UserDefinedFunction(object):
     def _create_judf(self, name):
         f, returnType = self.func, self.returnType  # put them in closure `func`
         func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
-        ser = AutoBatchedSerializer(PickleSerializer())
+        ser = BatchedSerializer(PickleSerializer(), 100)
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
