@@ -346,7 +346,7 @@ class SchedulerJob(BaseJob):
         TI = models.TaskInstance
         logging.info(
             "Getting latest instance "
-            "for all task in dag " + dag.dag_id)
+            "for all tasks in dag " + dag.dag_id)
         sq = (
             session
             .query(
