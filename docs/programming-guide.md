@@ -549,7 +549,7 @@ returning only its answer to the driver program.
 If we also wanted to use `lineLengths` again later, we could add:
 
 {% highlight java %}
-lineLengths.persist();
+lineLengths.persist(StorageLevel.MEMORY_ONLY());
 {% endhighlight %}
 
 before the `reduce`, which would cause `lineLengths` to be saved in memory after the first time it is computed.

@@ -40,7 +40,7 @@ private[sql] abstract class SQLImplicits {
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
   /**
-   * Creates a DataFrame from an RDD of case classes or tuples.
+   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    * @since 1.3.0
    */
   implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {

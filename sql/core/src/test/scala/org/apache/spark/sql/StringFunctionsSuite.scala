@@ -348,9 +348,9 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     // it will still use the interpretProjection if projection follows by a LocalRelation,
     // hence we add a filter operator.
     // See the optimizer rule `ConvertToLocalRelation`
-    val df2 = Seq((5L, 4), (4L, 3), (3L, 2)).toDF("a", "b")
+    val df2 = Seq((5L, 4), (4L, 3), (4L, 3), (4L, 3), (3L, 2)).toDF("a", "b")
     checkAnswer(
       df2.filter("b>0").selectExpr("format_number(a, b)"),
-      Row("5.0000") :: Row("4.000") :: Row("3.00") :: Nil)
+      Row("5.0000") :: Row("4.000") :: Row("4.000") :: Row("4.000") :: Row("3.00") :: Nil)
   }
 }

@@ -36,6 +36,13 @@ private[sql] trait SQLTestData { self =>
 
   // Note: all test data should be lazy because the SQLContext is not set up yet.
 
+  protected lazy val emptyTestData: DataFrame = {
+    val df = _sqlContext.sparkContext.parallelize(
+      Seq.empty[Int].map(i => TestData(i, i.toString))).toDF()
+    df.registerTempTable("emptyTestData")
+    df
+  }
+
   protected lazy val testData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       (1 to 100).map(i => TestData(i, i.toString))).toDF()
@@ -240,6 +247,7 @@ private[sql] trait SQLTestData { self =>
    */
   def loadTestData(): Unit = {
     assert(_sqlContext != null, "attempted to initialize test data before SQLContext.")
+    emptyTestData
     testData
     testData2
     testData3

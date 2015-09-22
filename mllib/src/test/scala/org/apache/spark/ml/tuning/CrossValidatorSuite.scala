@@ -143,6 +143,8 @@ object CrossValidatorSuite {
       throw new UnsupportedOperationException
     }
 
+    override def isLargerBetter: Boolean = true
+
     override val uid: String = "eval"
 
     override def copy(extra: ParamMap): MyEvaluator = defaultCopy(extra)

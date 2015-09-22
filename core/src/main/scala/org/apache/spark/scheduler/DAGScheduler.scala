@@ -152,17 +152,24 @@ class DAGScheduler(
   // may lead to more delay in scheduling if those locations are busy.
   private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
 
-  // Called by TaskScheduler to report task's starting.
+  /**
+   * Called by the TaskSetManager to report task's starting.
+   */
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     eventProcessLoop.post(BeginEvent(task, taskInfo))
   }
 
-  // Called to report that a task has completed and results are being fetched remotely.
+  /**
+   * Called by the TaskSetManager to report that a task has completed
+   * and results are being fetched remotely.
+   */
   def taskGettingResult(taskInfo: TaskInfo) {
     eventProcessLoop.post(GettingResultEvent(taskInfo))
   }
 
-  // Called by TaskScheduler to report task completions or failures.
+  /**
+   * Called by the TaskSetManager to report task completions or failures.
+   */
   def taskEnded(
       task: Task[_],
       reason: TaskEndReason,
@@ -188,18 +195,24 @@ class DAGScheduler(
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
   }
 
-  // Called by TaskScheduler when an executor fails.
+  /**
+   * Called by TaskScheduler implementation when an executor fails.
+   */
   def executorLost(execId: String): Unit = {
     eventProcessLoop.post(ExecutorLost(execId))
   }
 
-  // Called by TaskScheduler when a host is added
+  /**
+   * Called by TaskScheduler implementation when a host is added.
+   */
   def executorAdded(execId: String, host: String): Unit = {
     eventProcessLoop.post(ExecutorAdded(execId, host))
   }
 
-  // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
-  // cancellation of the job itself.
+  /**
+   * Called by the TaskSetManager to cancel an entire TaskSet due to either repeated failures or
+   * cancellation of the job itself.
+   */
   def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable]): Unit = {
     eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
@@ -237,11 +250,12 @@ class DAGScheduler(
       case Some(stage) => stage
       case None =>
         // We are going to register ancestor shuffle dependencies
-        registerShuffleDependencies(shuffleDep, firstJobId)
+        getAncestorShuffleDependencies(shuffleDep.rdd).foreach { dep =>
+          shuffleToMapStage(dep.shuffleId) = newOrUsedShuffleStage(dep, firstJobId)
+        }
         // Then register current shuffleDep
         val stage = newOrUsedShuffleStage(shuffleDep, firstJobId)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
-
         stage
     }
   }
@@ -352,16 +366,6 @@ class DAGScheduler(
     parents.toList
   }
 
-  /** Find ancestor missing shuffle dependencies and register into shuffleToMapStage */
-  private def registerShuffleDependencies(shuffleDep: ShuffleDependency[_, _, _], firstJobId: Int) {
-    val parentsWithNoMapStage = getAncestorShuffleDependencies(shuffleDep.rdd)
-    while (parentsWithNoMapStage.nonEmpty) {
-      val currentShufDep = parentsWithNoMapStage.pop()
-      val stage = newOrUsedShuffleStage(currentShufDep, firstJobId)
-      shuffleToMapStage(currentShufDep.shuffleId) = stage
-    }
-  }
-
   /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
   private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
     val parents = new Stack[ShuffleDependency[_, _, _]]
@@ -378,11 +382,9 @@ class DAGScheduler(
               if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
                 parents.push(shufDep)
               }
-
-              waitingForVisit.push(shufDep.rdd)
             case _ =>
-              waitingForVisit.push(dep.rdd)
           }
+          waitingForVisit.push(dep.rdd)
         }
       }
     }
@@ -1039,10 +1041,11 @@ class DAGScheduler(
               //       we registered these map outputs.
               mapOutputTracker.registerMapOutputs(
                 shuffleStage.shuffleDep.shuffleId,
-                shuffleStage.outputLocs.map(list => if (list.isEmpty) null else list.head),
+                shuffleStage.outputLocs.map(_.headOption.orNull),
                 changeEpoch = true)
 
               clearCacheLocs()
+
               if (shuffleStage.outputLocs.contains(Nil)) {
                 // Some tasks had failed; let's resubmit this shuffleStage
                 // TODO: Lower-level scheduler should also deal with this
@@ -1051,27 +1054,9 @@ class DAGScheduler(
                   shuffleStage.outputLocs.zipWithIndex.filter(_._1.isEmpty)
                       .map(_._2).mkString(", "))
                 submitStage(shuffleStage)
-              } else {
-                val newlyRunnable = new ArrayBuffer[Stage]
-                for (shuffleStage <- waitingStages) {
-                  logInfo("Missing parents for " + shuffleStage + ": " +
-                    getMissingParentStages(shuffleStage))
-                }
-                for (shuffleStage <- waitingStages if getMissingParentStages(shuffleStage).isEmpty)
-                {
-                  newlyRunnable += shuffleStage
-                }
-                waitingStages --= newlyRunnable
-                runningStages ++= newlyRunnable
-                for {
-                  shuffleStage <- newlyRunnable.sortBy(_.id)
-                  jobId <- activeJobForStage(shuffleStage)
-                } {
-                  logInfo("Submitting " + shuffleStage + " (" +
-                    shuffleStage.rdd + "), which is now runnable")
-                  submitMissingTasks(shuffleStage, jobId)
-                }
               }
+
+              // Note: newly runnable stages will be submitted below when we submit waiting stages
             }
           }
 
@@ -1088,7 +1073,6 @@ class DAGScheduler(
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ID ${failedStage.latestInfo.attemptId}) running")
         } else {
-
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
           // multiple tasks running concurrently on different executors). In that case, it is
           // possible the fetch failure has already been handled by the scheduler.
@@ -1104,6 +1088,11 @@ class DAGScheduler(
           if (disallowStageRetryForTest) {
             abortStage(failedStage, "Fetch failure will not retry stage due to testing config",
               None)
+          } else if (failedStage.failedOnFetchAndShouldAbort(task.stageAttemptId)) {
+            abortStage(failedStage, s"$failedStage (${failedStage.name}) " +
+              s"has failed the maximum allowable number of " +
+              s"times: ${Stage.MAX_CONSECUTIVE_FETCH_FAILURES}. " +
+              s"Most recent failure reason: ${failureMessage}", None)
           } else if (failedStages.isEmpty) {
             // Don't schedule an event to resubmit failed stages if failed isn't empty, because
             // in that case the event will already have been scheduled.
@@ -1169,7 +1158,7 @@ class DAGScheduler(
         // TODO: This will be really slow if we keep accumulating shuffle map stages
         for ((shuffleId, stage) <- shuffleToMapStage) {
           stage.removeOutputsOnExecutor(execId)
-          val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head)
+          val locs = stage.outputLocs.map(_.headOption.orNull)
           mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
         }
         if (shuffleToMapStage.isEmpty) {
@@ -1227,10 +1216,17 @@ class DAGScheduler(
     if (errorMessage.isEmpty) {
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stage.latestInfo.completionTime = Some(clock.getTimeMillis())
+
+      // Clear failure count for this stage, now that it's succeeded.
+      // We only limit consecutive failures of stage attempts,so that if a stage is
+      // re-used many times in a long-running job, unrelated failures don't eventually cause the
+      // stage to be aborted.
+      stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
       logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
     }
+
     outputCommitCoordinator.stageEnd(stage.id)
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage

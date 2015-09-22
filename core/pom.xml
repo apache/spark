@@ -274,6 +274,14 @@
         </exclusion>
         <exclusion>
           <groupId>org.apache.curator</groupId>
+          <artifactId>curator-client</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.curator</groupId>
+          <artifactId>curator-framework</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.curator</groupId>
           <artifactId>curator-recipes</artifactId>
         </exclusion>
         <exclusion>
