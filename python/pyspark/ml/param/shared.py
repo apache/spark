@@ -22,7 +22,7 @@ from pyspark.ml.param import Param, Params
 
 class HasMaxIter(Params):
     """
-    Mixin for param maxIter: max number of iterations (>= 0).
+    Mixin for param maxIter: max number of iterations (>= 0)
     """
 
     # a placeholder to make it appear in the generated doc
@@ -49,7 +49,7 @@ class HasMaxIter(Params):
 
 class HasRegParam(Params):
     """
-    Mixin for param regParam: regularization parameter (>= 0).
+    Mixin for param regParam: regularization parameter (>= 0)
     """
 
     # a placeholder to make it appear in the generated doc
@@ -76,7 +76,7 @@ class HasRegParam(Params):
 
 class HasFeaturesCol(Params):
     """
-    Mixin for param featuresCol: features column name.
+    Mixin for param featuresCol: features column name
     """
 
     # a placeholder to make it appear in the generated doc
@@ -104,7 +104,7 @@ class HasFeaturesCol(Params):
 
 class HasLabelCol(Params):
     """
-    Mixin for param labelCol: label column name.
+    Mixin for param labelCol: label column name
     """
 
     # a placeholder to make it appear in the generated doc
@@ -132,7 +132,7 @@ class HasLabelCol(Params):
 
 class HasPredictionCol(Params):
     """
-    Mixin for param predictionCol: prediction column name.
+    Mixin for param predictionCol: prediction column name
     """
 
     # a placeholder to make it appear in the generated doc
@@ -160,7 +160,7 @@ class HasPredictionCol(Params):
 
 class HasProbabilityCol(Params):
     """
-    Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
+    Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -188,7 +188,7 @@ class HasProbabilityCol(Params):
 
 class HasRawPredictionCol(Params):
     """
-    Mixin for param rawPredictionCol: raw prediction (a.k.a. confidence) column name.
+    Mixin for param rawPredictionCol: raw prediction (a.k.a. confidence) column name
     """
 
     # a placeholder to make it appear in the generated doc
@@ -216,7 +216,7 @@ class HasRawPredictionCol(Params):
 
 class HasInputCol(Params):
     """
-    Mixin for param inputCol: input column name.
+    Mixin for param inputCol: input column name
     """
 
     # a placeholder to make it appear in the generated doc
@@ -243,7 +243,7 @@ class HasInputCol(Params):
 
 class HasInputCols(Params):
     """
-    Mixin for param inputCols: input column names.
+    Mixin for param inputCols: input column names
     """
 
     # a placeholder to make it appear in the generated doc
@@ -270,7 +270,7 @@ class HasInputCols(Params):
 
 class HasOutputCol(Params):
     """
-    Mixin for param outputCol: output column name.
+    Mixin for param outputCol: output column name
     """
 
     # a placeholder to make it appear in the generated doc
@@ -298,7 +298,7 @@ class HasOutputCol(Params):
 
 class HasNumFeatures(Params):
     """
-    Mixin for param numFeatures: number of features.
+    Mixin for param numFeatures: number of features
     """
 
     # a placeholder to make it appear in the generated doc
@@ -325,7 +325,7 @@ class HasNumFeatures(Params):
 
 class HasCheckpointInterval(Params):
     """
-    Mixin for param checkpointInterval: checkpoint interval (>= 1).
+    Mixin for param checkpointInterval: checkpoint interval (>= 1)
     """
 
     # a placeholder to make it appear in the generated doc
@@ -352,7 +352,7 @@ class HasCheckpointInterval(Params):
 
 class HasSeed(Params):
     """
-    Mixin for param seed: random seed.
+    Mixin for param seed: random seed
     """
 
     # a placeholder to make it appear in the generated doc
@@ -380,7 +380,7 @@ class HasSeed(Params):
 
 class HasTol(Params):
     """
-    Mixin for param tol: the convergence tolerance for iterative algorithms.
+    Mixin for param tol: the convergence tolerance for iterative algorithms
     """
 
     # a placeholder to make it appear in the generated doc
@@ -407,7 +407,7 @@ class HasTol(Params):
 
 class HasStepSize(Params):
     """
-    Mixin for param stepSize: Step size to be used for each iteration of optimization..
+    Mixin for param stepSize: Step size to be used for each iteration of optimization.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -434,7 +434,7 @@ class HasStepSize(Params):
 
 class HasHandleInvalid(Params):
     """
-    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
+    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -461,7 +461,7 @@ class HasHandleInvalid(Params):
 
 class HasElasticNetParam(Params):
     """
-    Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
+    Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -489,7 +489,7 @@ class HasElasticNetParam(Params):
 
 class HasFitIntercept(Params):
     """
-    Mixin for param fitIntercept: whether to fit an intercept term..
+    Mixin for param fitIntercept: whether to fit an intercept term.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -517,7 +517,7 @@ class HasFitIntercept(Params):
 
 class HasStandardization(Params):
     """
-    Mixin for param standardization: whether to standardize the training features before fitting the model..
+    Mixin for param standardization: whether to standardize the training features before fitting the model.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -545,7 +545,7 @@ class HasStandardization(Params):
 
 class HasThresholds(Params):
     """
-    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold..
+    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -572,7 +572,7 @@ class HasThresholds(Params):
 
 class HasWeightCol(Params):
     """
-    Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+    Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0.
     """
 
     # a placeholder to make it appear in the generated doc

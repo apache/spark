@@ -47,7 +47,7 @@ def _gen_param_header(name, doc, defaultValueStr):
     """
     template = '''class Has$Name(Params):
     """
-    Mixin for param $name: $doc.
+    Mixin for param $name: $doc
     """
 
     # a placeholder to make it appear in the generated doc

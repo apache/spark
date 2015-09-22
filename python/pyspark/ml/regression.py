@@ -201,7 +201,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  weightCol=None, isotonic=True, featureIndex=0):
-        Set the params for IsotonicRegression
+        Set the params for IsotonicRegression.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
@@ -218,7 +218,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def getIsotonic(self):
         """
-        Gets the value of isotonic param or its default value.
+        Gets the value of isotonic or its default value.
         """
         return self.getOrDefault(self.isotonic)
 
@@ -231,7 +231,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def getFeatureIndex(self):
         """
-        Gets the value of featureIndex param or its default value.
+        Gets the value of featureIndex or its default value.
         """
         return self.getOrDefault(self.featureIndex)
 
