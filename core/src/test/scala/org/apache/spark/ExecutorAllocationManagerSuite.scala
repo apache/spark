@@ -880,7 +880,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _onExecutorBusy = PrivateMethod[Unit]('onExecutorBusy)
   private val _localityAwareTasks = PrivateMethod[Int]('localityAwareTasks)
   private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
-  private val _setExecutorBusy = PrivateMethod[Map[String,Int]]('setExecutorBusy)
+  private val _setExecutorBusy = PrivateMethod[Map[String, Int]]('setExecutorBusy)
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
@@ -960,7 +960,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _hostToLocalTaskCount()
   }
 
-  private def setExecutorBusy(manager: ExecutorAllocationManager, info: TaskInfo): Map[String, Int] = {
+  private def setExecutorBusy(manager: ExecutorAllocationManager,
+                             info: TaskInfo): Map[String, Int] = {
     manager invokePrivate _setExecutorBusy(info)
   }
 }
