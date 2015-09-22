@@ -593,8 +593,9 @@ class HiveContext private[hive](
     )
   }
 
-  private val matcher = Pattern.compile(
-    "^(create|drop)\\s+(temporary\\s+)?(function|macro).*").matcher("")
+  @transient
+  private lazy val matcher = Pattern.compile(
+    ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL).matcher("")
 
   protected[hive] def runSqlHive(sql: String): Seq[String] = {
     val command = sql.trim.toLowerCase
