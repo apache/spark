@@ -856,6 +856,48 @@ object RandomRDDs {
   }
 
   /**
+   * Java-friendly version of [[RandomRDDs#randomVectorRDD]].
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols, numPartitions, seed).toJavaRDD()
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaVectorRDD]] with the default seed.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols, numPartitions).toJavaRDD()
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaVectorRDD]] with the default number of partitions and the default seed.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols).toJavaRDD()
+  }
+
+  /**
    * Returns `numPartitions` if it is positive, or `sc.defaultParallelism` otherwise.
    */
   private def numPartitionsOrDefault(sc: SparkContext, numPartitions: Int): Int = {
