@@ -319,7 +319,7 @@ private[spark] class ExternalSorter[K, V, C](
         }
         if (file.exists()) {
           if (!file.delete()) {
-            logWarning("Error deleting ${file}")
+            logWarning(s"Error deleting ${file}")
           }
         }
       }
