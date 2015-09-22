@@ -477,6 +477,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: DeveloperApi ::
+   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * It is important to make sure that the structure of every [[Row]] of the provided List matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @group dataframes
+   * @since 1.6.0
+   */
+  @DeveloperApi
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+    DataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+  }
+
+  /**
    * Applies a schema to an RDD of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
@@ -590,7 +604,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -636,7 +650,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -732,7 +746,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(new SqlParser().parseTableIdentifier(tableName))
+    table(SqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
