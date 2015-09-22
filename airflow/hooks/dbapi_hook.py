@@ -49,7 +49,7 @@ class DbApiHook(BaseHook):
         '''
         import pandas.io.sql as psql
         conn = self.get_conn()
-        df = psql.read_sql(sql, con=conn)
+        df = psql.read_sql(sql, con=conn, params=parameters)
         conn.close()
         return df
 
@@ -59,7 +59,7 @@ class DbApiHook(BaseHook):
         '''
         conn = self.get_conn()
         cur = self.get_cursor()
-        cur.execute(sql)
+        cur.execute(sql, parameters)
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -71,7 +71,7 @@ class DbApiHook(BaseHook):
         '''
         conn = self.get_conn()
         cur = conn.cursor()
-        cur.execute(sql)
+        cur.execute(sql, parameters)
         rows = cur.fetchone()
         cur.close()
         conn.close()
@@ -96,7 +96,7 @@ class DbApiHook(BaseHook):
 
         cur = conn.cursor()
         for s in sql:
-            cur.execute(s)
+            cur.execute(s, parameters)
         conn.commit()
         cur.close()
         conn.close()
