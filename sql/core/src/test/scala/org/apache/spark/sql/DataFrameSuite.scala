@@ -916,4 +916,45 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(intersect.count() === 30)
     assert(except.count() === 70)
   }
+
+  test("SPARK-10740: handle nondeterministic expressions correctly for set operations") {
+    val df1 = (1 to 20).map(Tuple1.apply).toDF("i")
+    val df2 = (1 to 10).map(Tuple1.apply).toDF("i")
+
+    // When generating expected results at here, we need to follow the implementation of
+    // Rand expression.
+    def expected(df: DataFrame): Seq[Row] = {
+      df.rdd.collectPartitions().zipWithIndex.flatMap {
+        case (data, index) =>
+          val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
+          data.filter(_.getInt(0) < rng.nextDouble() * 10)
+      }
+    }
+
+    val union = df1.unionAll(df2)
+    checkAnswer(
+      union.filter('i < rand(7) * 10),
+      expected(union)
+    )
+    checkAnswer(
+      union.select(rand(7)),
+      union.rdd.collectPartitions().zipWithIndex.flatMap {
+        case (data, index) =>
+          val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
+          data.map(_ => rng.nextDouble()).map(i => Row(i))
+      }
+    )
+
+    val intersect = df1.intersect(df2)
+    checkAnswer(
+      intersect.filter('i < rand(7) * 10),
+      expected(intersect)
+    )
+
+    val except = df1.except(df2)
+    checkAnswer(
+      except.filter('i < rand(7) * 10),
+      expected(except)
+    )
+  }
 }
