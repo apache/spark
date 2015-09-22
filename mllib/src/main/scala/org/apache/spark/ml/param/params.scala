@@ -65,7 +65,12 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
    */
   private[param] def validate(value: T): Unit = {
     if (!isValid(value)) {
-      throw new IllegalArgumentException(s"$parent parameter $name given invalid value $value.")
+      val valueToString = value match {
+        case v: Array[_] => v.mkString("[", ",", "]")
+        case _ => value.toString
+      }
+      throw new IllegalArgumentException(
+        s"$parent parameter $name given invalid value $valueToString.")
     }
   }
 
