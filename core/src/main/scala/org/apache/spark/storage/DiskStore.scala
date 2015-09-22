@@ -158,7 +158,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val file = diskManager.getFile(blockId.name)
     if (file.exists()) {
       if (!file.delete()) {
-        logWarning("Error deleting ${file}")
+        logWarning("Error deleting ${file.getPath()}")
       }
     } else {
       false
