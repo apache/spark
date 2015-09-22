@@ -260,7 +260,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(predicts(3) === predicts(4))
       assert(predicts(3) === predicts(5))
       assert(predicts(0) != predicts(3))
-      
+
       assert(model.distanceToCenters(rdd).flatMap(_._2).count === points.size * k)
     }
   }
