@@ -398,8 +398,9 @@ private[spark] object UIUtils extends Logging {
   }
 
   /**
-   * Convert a description string to HTML. It will try to parse the string as HTML and sanitize
-   * any links. If that fails, then whole string will treated as a simple text.
+   * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
+   * and make sure that it only contains anchors with relative links. Otherwise, the whole string
+   * will rendered as a simple escaped text.
    */
   def makeDescription(desc: String, basePathUri: String): NodeSeq = {
     import scala.language.postfixOps
@@ -426,7 +427,7 @@ private[spark] object UIUtils extends Logging {
         xml \\ "a" flatMap { _.attributes } filter { _.key == "href" } map { _.value.toString }
       if (allLinks.exists { ! _.startsWith ("/") }) {
         throw new IllegalArgumentException(
-          "Links in job descriptions must be relative:\n" + allLinks.mkString("\n\t"))
+          "Links in job descriptions must be root-relative:\n" + allLinks.mkString("\n\t"))
       }
 
       // Prepend the relative links with basePathUri
