@@ -29,7 +29,7 @@ from contextlib import contextmanager
 from sqlalchemy import event, exc
 from sqlalchemy.pool import Pool
 
-import numpy
+import numpy as np
 
 from airflow import settings
 from airflow.configuration import conf
@@ -626,13 +626,14 @@ class AirflowJsonEncoder(json.JSONEncoder):
             return obj.strftime('%Y-%m-%dT%H:%M:%SZ')
         elif isinstance(obj, date):
             return obj.strftime('%Y-%m-%d')
-        elif type(obj) in [numpy.int_, numpy.intc, numpy.intp, numpy.int8,
-         numpy.int16, numpy.int32, numpy.int64, numpy.uint8, numpy.uint16, numpy.uint32, numpy.uint64]:
+        elif type(obj) in [np.int_, np.intc, np.intp, np.int8, np.int16,
+                           np.int32, np.int64, np.uint8, np.uint16,
+                           np.uint32, np.uint64]:
             return int(obj)
-        elif type(obj) in [numpy.bool_]:
+        elif type(obj) in [np.bool_]:
             return bool(obj)
-        elif type(obj) in [numpy.float_, numpy.float16, numpy.float32, numpy.float64,
-         numpy.complex_, numpy.complex64, numpy.complex128]:
+        elif type(obj) in [np.float_, np.float16, np.float32, np.float64,
+                           np.complex_, np.complex64, np.complex128]:
             return float(obj)
 
         # Let the base class default method raise the TypeError
