@@ -221,7 +221,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
 
             val aggregateOperator =
-              if (functionsWithDistinct.isEmpty) {
+              if (aggregateExpressions.map(_.aggregateFunction).exists(!_.supportPartial)) {
+                aggregate.Utils.planAggregateWithoutPartial(
+                  groupingExpressions,
+                  aggregateExpressions,
+                  aggregateFunctionMap,
+                  resultExpressions,
+                  planLater(child))
+              } else if (functionsWithDistinct.isEmpty) {
                 aggregate.Utils.planAggregateWithoutDistinct(
                   groupingExpressions,
                   aggregateExpressions,
