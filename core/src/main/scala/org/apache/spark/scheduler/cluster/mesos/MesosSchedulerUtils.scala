@@ -179,7 +179,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   def partitionResources(
       resources: JList[Resource],
       resourceName: String,
-      amountToUse: Double): (List[Resource], List[Resource]) = {
+      amountToUse: Double): (JList[Resource], JList[Resource]) = {
     var remain = amountToUse
     var requestedResources = new ArrayBuffer[Resource]
     val remainingResources = resources.asScala.map {
@@ -202,7 +202,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     val filteredResources =
       remainingResources.filter(r => r.getType != Value.Type.SCALAR || r.getScalar.getValue > 0.0)
 
-    (filteredResources.toList, requestedResources.toList)
+    (filteredResources.toList.asJava, requestedResources.toList.asJava)
   }
 
   /** Helper method to get the key,value-set pair for a Mesos Attribute protobuf */
