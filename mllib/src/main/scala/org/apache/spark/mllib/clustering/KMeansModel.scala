@@ -81,21 +81,23 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
    * Returns the distances to all clusters for a given point.
    */
   @Since("1.5.0")
-  def distanceToCenters(point: Vector): Iterable[(VectorWithNorm, Double)] = {
+  def distanceToCenters(point: Vector): Iterable[(Int, Double)] = {
     val pointWithNorm = new VectorWithNorm(point)
-    clusterCentersWithNorm.map(c => (c, KMeans.fastSquaredDistance(c, pointWithNorm)))
+    clusterCentersWithNorm.zipWithIndex.map { case (c, i) =>
+      (i, KMeans.fastSquaredDistance(c, pointWithNorm))
+    }
   }
 
   /**
    * Maps given points to their distances to all clusters.
    */
   @Since("1.5.0")
-  def distanceToCenters(points: RDD[Vector]): RDD[(Vector, Iterable[(VectorWithNorm, Double)])] = {
+  def distanceToCenters(points: RDD[Vector]): RDD[(Vector, Iterable[(Int, Double)])] = {
     val centersWithNorm = clusterCentersWithNorm
     val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
     points.map(p =>
-      (p, for (c <- bcCentersWithNorm.value) yield {
-        (c, KMeans.fastSquaredDistance(c, new VectorWithNorm(p)))
+      (p, for ((c,i) <- bcCentersWithNorm.value.zipWithIndex) yield {
+        (i, KMeans.fastSquaredDistance(c, new VectorWithNorm(p)))
       })
     )
   }
