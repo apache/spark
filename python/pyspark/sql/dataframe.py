@@ -567,7 +567,11 @@ class DataFrame(object):
         if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
         elif isinstance(on[0], basestring):
-            jdf = self._jdf.join(other._jdf, self._jseq(on))
+            if how is None:
+                jdf = self._jdf.join(other._jdf, self._jseq(on), "inner")
+            else:
+                assert isinstance(how, basestring), "how should be basestring"
+                jdf = self._jdf.join(other._jdf, self._jseq(on), how)
         else:
             assert isinstance(on[0], Column), "on should be Column or list of Column"
             if len(on) > 1:
