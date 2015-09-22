@@ -586,12 +586,12 @@ class ExecutorAllocationManagerSuite
     assert(removeTimes(manager).size === 5)
 
     // Starting a task cancel the remove timer for that executor
+    setExecutorBusy(manager, createTaskInfo(0, 0, "executor-1"))
+    setExecutorBusy(manager, createTaskInfo(1, 1, "executor-1"))
+    setExecutorBusy(manager, createTaskInfo(2, 2, "executor-2"))
 //    sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
 //    sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(1, 1, "executor-1")))
 //    sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(2, 2, "executor-2")))
-    setExecutorBusy(manager, createTaskInfo(0, 0, "executor-2"))
-    setExecutorBusy(manager, createTaskInfo(1, 1, "executor-2"))
-    setExecutorBusy(manager, createTaskInfo(2, 2, "executor-2"))
     assert(removeTimes(manager).size === 3)
     assert(!removeTimes(manager).contains("executor-1"))
     assert(!removeTimes(manager).contains("executor-2"))
