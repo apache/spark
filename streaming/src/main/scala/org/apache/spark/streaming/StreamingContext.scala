@@ -202,6 +202,12 @@ class StreamingContext private[streaming] (
 
   private var shutdownHookRef: AnyRef = _
 
+  // The streaming scheduler and other threads started by the StreamingContext
+  // should not inherit jobs group and job descriptions from the thread that
+  // start the context. This configuration allows jobs group and job description
+  // to be cleared in threads related to streaming. See SPARK-10649.
+  sparkContext.conf.set("spark.localProperties.clone", "true")
+
   conf.getOption("spark.streaming.checkpoint.directory").foreach(checkpoint)
 
   /**
