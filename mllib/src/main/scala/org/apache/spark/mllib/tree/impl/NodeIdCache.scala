@@ -166,6 +166,10 @@ private[spark] class NodeIdCache(
         fs.delete(new Path(old.getCheckpointFile.get), true)
       }
     }
+    if (prevNodeIdsForInstances != null) {
+      // Unpersist the previous one if one exists.
+      prevNodeIdsForInstances.unpersist()
+    }
   }
 }
 
