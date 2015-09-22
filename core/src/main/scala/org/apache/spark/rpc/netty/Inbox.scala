@@ -178,7 +178,7 @@ private[netty] class Inbox(
         }
       }
     if (dropped) {
-      onDrop()
+      onDrop(message)
     }
   }
 
@@ -197,7 +197,7 @@ private[netty] class Inbox(
   }
 
   // Visible for testing.
-  protected def onDrop(message: Any): Unit = {
+  protected def onDrop(message: InboxMessage): Unit = {
     logWarning(s"Drop ${message} because $endpointRef is stopped")
   }
 

@@ -116,7 +116,8 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * Invoked when [[RpcEndpoint]] is stopping.
+   * Invoked when [[RpcEndpoint]] is stopping. `self` will be `null` in this method and you cannot
+   * use it to send or ask messages.
    */
   def onStop(): Unit = {
     // By default, do nothing.
