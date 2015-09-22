@@ -59,9 +59,22 @@ update the connection details with, for example:
 Adjust the principal to your settings. The _HOST part will be replaced by the fully qualified domain name of
 the server.
 
-In case you would like to use a different user for connecting add user name to the login of the connection and update
-the extra field with:
+You can specify if you would like to use the dag owner as the user for the connection or the user specified in the login
+section of the connection. For the login user specify the following as extra:
 
 .. code-block:: bash
 
     { "use_beeline": true, "principal": "hive/_HOST@EXAMPLE.COM", "proxy_user": "login"}
+
+For the DAG owner use:
+
+.. code-block:: bash
+
+    { "use_beeline": true, "principal": "hive/_HOST@EXAMPLE.COM", "proxy_user": "owner"}
+
+and in your DAG, when initializing the HiveOperator, specify
+
+.. code-block:: bash
+
+    run_as_owner=True
+

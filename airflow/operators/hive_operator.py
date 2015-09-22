@@ -36,6 +36,7 @@ class HiveOperator(BaseOperator):
             schema='default',
             hiveconf_jinja_translate=False,
             script_begin_tag=None,
+            run_as_owner=False,
             *args, **kwargs):
 
         super(HiveOperator, self).__init__(*args, **kwargs)
@@ -44,9 +45,12 @@ class HiveOperator(BaseOperator):
         self.schema = schema
         self.hive_cli_conn_id = hive_cli_conn_id
         self.script_begin_tag = script_begin_tag
+        self.run_as = None
+        if run_as_owner:
+            self.run_as = self.dag.owner
 
     def get_hook(self):
-        return HiveCliHook(hive_cli_conn_id=self.hive_cli_conn_id)
+        return HiveCliHook(hive_cli_conn_id=self.hive_cli_conn_id, run_as=self.run_as)
 
     def prepare_template(self):
         if self.hiveconf_jinja_translate:

@@ -37,11 +37,13 @@ class HiveCliHook(BaseHook):
 
     def __init__(
             self,
-            hive_cli_conn_id="hive_cli_default"):
+            hive_cli_conn_id="hive_cli_default",
+            run_as=None):
         conn = self.get_connection(hive_cli_conn_id)
         self.hive_cli_params = conn.extra_dejson.get('hive_cli_params', '')
         self.use_beeline = conn.extra_dejson.get('use_beeline', False)
         self.conn = conn
+        self.run_as = run_as
 
     def run_cli(self, hql, schema=None, verbose=True):
         """
@@ -74,6 +76,8 @@ class HiveCliHook(BaseHook):
                         proxy_user = ""
                         if conn.extra_dejson.get('proxy_user') == "login" and conn.login:
                             proxy_user = "hive.server2.proxy.user={0}".format(conn.login)
+                        elif conn.extra_dejson.get('proxy_user') == "owner" and self.run_as:
+                            proxy_user = "hive.server2.proxy.user={0}".format(self.run_as)
 
                         jdbc_url = (
                             "jdbc:hive2://"
