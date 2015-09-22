@@ -76,7 +76,10 @@ private[spark] class ExecutorDelegationTokenUpdater(
         SparkHadoopUtil.get.getTimeFromNowToRenewal(
           sparkConf, 0.8, UserGroupInformation.getCurrentUser.getCredentials)
       if (timeFromNowToRenewal <= 0) {
-        executorUpdaterRunnable.run()
+        // If the `timeFromNowToRenewal` equals 0, it's better to wait 1 minutes to schedule for
+        // avoid cycle calling and cause StackOverflow Exception.
+        delegationTokenRenewer.schedule(
+          executorUpdaterRunnable, 1, TimeUnit.MINUTES)
       } else {
         logInfo(s"Scheduling token refresh from HDFS in $timeFromNowToRenewal millis.")
         delegationTokenRenewer.schedule(
