@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
@@ -909,7 +910,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                     (BaseSemanticAnalyzer.unescapeSQLString(name),
                       BaseSemanticAnalyzer.unescapeSQLString(value))
                 }
-                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), serdeProps, false)
+
+                // SPARK-10310: Special cases LazySimpleSerDe
+                // TODO Fully supports user-defined record reader/writer classes
+                val unescapedSerDeClass = BaseSemanticAnalyzer.unescapeSQLString(serdeClass)
+                val useDefaultRecordReaderWriter =
+                  unescapedSerDeClass == classOf[LazySimpleSerDe].getCanonicalName
+                (Nil, Some(unescapedSerDeClass), serdeProps, useDefaultRecordReaderWriter)
 
               case Nil =>
                 // Uses default TextRecordReader/TextRecordWriter, sets field delimiter here
