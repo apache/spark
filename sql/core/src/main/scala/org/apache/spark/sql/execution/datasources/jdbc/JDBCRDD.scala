@@ -66,9 +66,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.CLOB          => StringType
       case java.sql.Types.DATALINK      => null
       case java.sql.Types.DATE          => DateType
-      case java.sql.Types.DECIMAL
-        if precision > 0                => DecimalType.bounded(precision, scale)
-      case java.sql.Types.DECIMAL       => DecimalType.SYSTEM_DEFAULT
+      case java.sql.Types.DECIMAL       => DecimalType.bounded(precision, scale)
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
       case java.sql.Types.FLOAT         => FloatType
@@ -80,9 +78,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NCHAR         => StringType
       case java.sql.Types.NCLOB         => StringType
       case java.sql.Types.NULL          => null
-      case java.sql.Types.NUMERIC
-        if precision > 0                => DecimalType.bounded(precision, scale)
-      case java.sql.Types.NUMERIC       => DecimalType.SYSTEM_DEFAULT
+      case java.sql.Types.NUMERIC       => DecimalType.bounded(precision, scale)
       case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
       case java.sql.Types.REAL          => DoubleType

@@ -140,7 +140,12 @@ object DecimalType extends AbstractDataType {
   }
 
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
-    DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
+    if (precision <= 0)
+      DecimalType.SYSTEM_DEFAULT
+    else if (scale > precision)
+      DecimalType(min(precision, MAX_PRECISION), min(precision, MAX_SCALE))
+    else
+      DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
   }
 
   override private[sql] def defaultConcreteType: DataType = SYSTEM_DEFAULT
