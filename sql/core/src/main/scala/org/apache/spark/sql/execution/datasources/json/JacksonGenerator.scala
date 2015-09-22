@@ -73,6 +73,38 @@ private[sql] object JacksonGenerator {
             valWriter(field.dataType, v)
         }
         gen.writeEndObject()
+
+      // For UDT, udt.serialize will produce SQL types. So, we need the following three cases.
+      case (ArrayType(ty, _), v: ArrayData) =>
+        gen.writeStartArray()
+        v.foreach(ty, (_, value) => valWriter(ty, value))
+        gen.writeEndArray()
+
+      case (MapType(kt, vt, _), v: MapData) =>
+        gen.writeStartObject()
+        v.foreach(kt, vt, { (k, v) =>
+          gen.writeFieldName(k.toString)
+          valWriter(vt, v)
+        })
+        gen.writeEndObject()
+
+      case (StructType(ty), v: InternalRow) =>
+        gen.writeStartObject()
+        var i = 0
+        while (i < ty.length) {
+          val field = ty(i)
+          val value = v.get(i, field.dataType)
+          if (value != null) {
+            gen.writeFieldName(field.name)
+            valWriter(field.dataType, value)
+          }
+          i += 1
+        }
+        gen.writeEndObject()
+
+      case (dt, v) =>
+        sys.error(
+          s"Failed to convert value $v (class of ${v.getClass}}) with the type of $dt to JSON.")
     }
 
     valWriter(rowSchema, row)
@@ -133,6 +165,10 @@ private[sql] object JacksonGenerator {
           i += 1
         }
         gen.writeEndObject()
+
+      case (dt, v) =>
+        sys.error(
+          s"Failed to convert value $v (class of ${v.getClass}}) with the type of $dt to JSON.")
     }
 
     valWriter(rowSchema, row)
