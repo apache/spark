@@ -1123,8 +1123,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       """{"a.b": 10, "d": 11, "f": {"g": 12} }""" :: Nil))
     checkAnswer(df.select("f.g"), Row(12))
     checkAnswer(df.select("`a.b`"), Row(10))
-    checkAnswer(df.select("*"), Row(10, 11, Row(12)))
+    checkAnswer(df.select(df("*")), Row(10, 11, Row(12)))
     checkAnswer(df.withColumnRenamed("f", "h").select("h"), Row(Row(12)))
+    checkAnswer(df.withColumnRenamed("f", "f").select("f"), Row(Row(12)))
+    checkAnswer(df.withColumnRenamed("`a.b`", "s").select("s"), Row(10))
     checkAnswer(df.withColumnRenamed("f", "h").select("`a.b`"), Row(10))
   }
 
