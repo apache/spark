@@ -72,7 +72,7 @@ class RecurringTimerSuite extends SparkFunSuite {
     }
     clock.advance(200)
     // When RecurringTimer is awake from clock.waitTillTime, it will call `callback` once.
-    // Then it will find `stopped` is false and exit the loop, but it should call `callback` again
+    // Then it will find `stopped` is true and exit the loop, but it should call `callback` again
     // before exiting its internal thread.
     t.join()
     assert(results === Seq(0L, 100L, 200L))
