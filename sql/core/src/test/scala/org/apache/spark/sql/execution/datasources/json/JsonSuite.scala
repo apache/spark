@@ -1238,10 +1238,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val allJSON =
         existingJSONData ++
           df.toJSON.collect() ++
-          sparkContext.textFile(path.getCanonicalPath).collect()
+          sqlContext.sparkContext.textFile(path.getCanonicalPath).collect()
 
       Utils.deleteRecursively(path)
-      sparkContext.parallelize(allJSON, 1).saveAsTextFile(path.getCanonicalPath)
+      sqlContext.sparkContext.parallelize(allJSON, 1).saveAsTextFile(path.getCanonicalPath)
 
       // Read data back with the schema specified.
       val col0Values =
