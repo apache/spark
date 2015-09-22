@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 from __future__ import print_function
-from builtins import input
-import argparse
-import dateutil.parser
-from datetime import datetime
 import logging
 import os
 import subprocess
 import sys
+
+from builtins import input
+import argparse
+import dateutil.parser
 
 import airflow
 from airflow import jobs, settings, utils
@@ -15,7 +15,6 @@ from airflow.configuration import conf
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow.models import DagBag, TaskInstance, DagPickle
 from airflow.utils import AirflowException
-
 
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 
@@ -361,8 +360,8 @@ def flower(args):
 def kerberos(args):
     print(settings.HEADER)
     log_to_stdout()
-    import airflow.kt_renewer
-    airflow.kt_renewer.run()
+    import airflow.security.kerberos
+    airflow.security.kerberos.run()
 
 
 def get_parser():
