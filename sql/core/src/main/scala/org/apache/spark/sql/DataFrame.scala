@@ -1183,7 +1183,8 @@ class DataFrame private[sql](
     if (shouldRename) {
       val colNames = schema.map { field =>
         val name = field.name
-        if (resolver(name, resolvedExistingName)) Column(s"`$name`").as(newName) else Column(s"`$name`")
+        if (resolver(name, resolvedExistingName)) Column(s"`$name`").as(newName)
+        else Column(s"`$name`")
       }
       select(colNames : _*)
     } else {
