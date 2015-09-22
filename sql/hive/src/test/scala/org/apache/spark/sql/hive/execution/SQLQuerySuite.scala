@@ -761,6 +761,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         """.stripMargin), (2 to 6).map(i => Row(i)))
   }
 
+  test("test script transform script input and output format") {
+    val data = (1 to 5).map { i => (i, i) }
+    data.toDF("a", "b").registerTempTable("test")
+    checkAnswer(
+      sql("""FROM
+            |(FROM test SELECT TRANSFORM(a, b)
+            |USING 'python src/test/resources/data/scripts/test_transript.py'
+            |AS (thing1 string, thing2 string)) t
+            |SELECT thing1
+          """.stripMargin), (1 to 5).map(i => Row(i + "#")))
+  }
+
   test("window function: udaf with aggregate expressin") {
     val data = Seq(
       WindowData(1, "a", 5),
