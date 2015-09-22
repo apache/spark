@@ -41,7 +41,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[regression] trait AFTSurvivalRegressionParams extends Params
   with HasFeaturesCol with HasLabelCol with HasPredictionCol with HasMaxIter
-  with HasTol with HasFitIntercept {
+  with HasTol with HasFitIntercept with Logging {
 
   /**
    * Param for censor column name.
@@ -108,8 +108,11 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
       SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
     }
-    if (hasQuantileProbabilities) {
+    if (hasQuantileProbabilities && hasQuantilesCol) {
       SchemaUtils.appendColumn(schema, $(quantilesCol), new VectorUDT)
+    } else if (hasQuantileProbabilities || hasQuantilesCol) {
+      logWarning("The output will not include quantiles column. " +
+        "If you want to include, please set both quantileProbabilities and quantilesCol.")
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }

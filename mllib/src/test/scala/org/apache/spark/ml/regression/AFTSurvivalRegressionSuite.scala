@@ -334,4 +334,33 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
         assert(predictionQuantiles1 ~== predictionQuantiles2 relTol 1E-5)
     }
   }
+
+  test("aft survival regression w/o quantiles column") {
+    val trainer = new AFTSurvivalRegression
+
+    val features = Vectors.dense(6.559282795753792)
+    val quantileProbabilities = Array(0.1, 0.5, 0.9)
+    val quantilePredict = Vectors.dense(0.1879174, 2.6801195, 14.5779394)
+
+    val model = trainer.fit(datasetUnivariate)
+
+    intercept[IllegalArgumentException] {
+      model.predictQuantiles(features)
+    }
+
+    model.setQuantileProbabilities(quantileProbabilities)
+
+    assert(model.predictQuantiles(features) ~== quantilePredict relTol 1E-3)
+
+    val outputDf = model.transform(datasetUnivariate)
+
+    assert(outputDf.schema.fieldNames.contains("quantiles") === false)
+
+    outputDf.select("features", "prediction")
+      .collect().foreach {
+      case Row(features: DenseVector, prediction1: Double) =>
+        val prediction2 = math.exp(BLAS.dot(model.coefficients, features) + model.intercept)
+        assert(prediction1 ~== prediction2 relTol 1E-5)
+    }
+  }
 }
