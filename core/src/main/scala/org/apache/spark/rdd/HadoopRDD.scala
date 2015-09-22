@@ -182,8 +182,6 @@ class HadoopRDD[K, V](
   }
 
   protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
-    // Once a constructor of InputFormat for this RDD is created, cache it so that only one
-    // reflection call is done in each local process.
     val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
     if (newInputFormat.isInstanceOf[Configurable]) {
