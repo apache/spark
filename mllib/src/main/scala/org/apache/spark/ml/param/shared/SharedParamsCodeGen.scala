@@ -44,6 +44,8 @@ private[shared] object SharedParamsCodeGen {
         " probabilities. Note: Not all models output well-calibrated probability estimates!" +
         " These probabilities should be treated as confidences, not precise probabilities",
         Some("\"probability\"")),
+      ParamDesc[String]("varianceCol", "Column name for the variance of prediction",
+        Some("\"variance\"")),
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]", Some("0.5"),
         isValid = "ParamValidators.inRange(0, 1)", finalMethods = false),

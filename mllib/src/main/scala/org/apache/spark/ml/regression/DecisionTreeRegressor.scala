@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => O
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
 
 /**
  * :: Experimental ::
@@ -40,7 +41,7 @@ import org.apache.spark.sql.DataFrame
 @Experimental
 final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
-  with DecisionTreeParams with TreeRegressorParams {
+  with TreeRegressorParams {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtr"))
@@ -113,7 +114,7 @@ final class DecisionTreeRegressionModel private[ml] (
     override val rootNode: Node,
     override val numFeatures: Int)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
-  with DecisionTreeModel with Serializable {
+  with DecisionTreeModel with TreeRegressorParams with Serializable {
 
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
@@ -127,6 +128,17 @@ final class DecisionTreeRegressionModel private[ml] (
 
   override protected def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
+  }
+
+  def predictVariance(features: Vector): Double = {
+    rootNode.predictImpl(features).impurityStats.calculate()
+  }
+
+  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+    val predictUDF = udf { (features: Vector) => predict(features) }
+    val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+      .withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
   }
 
   @Since("1.4.0")
