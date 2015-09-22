@@ -48,7 +48,7 @@ class UIUtilsSuite extends SparkFunSuite {
       <span class="description-input">{"""test<a><img></img></a>"""}</span>,
       "Non-anchor elements should make the description be treated as a string instead of HTML"
     )
-    
+
     verify(
       """test <a href="/link"> text </a>""",
       <span class="description-input">test <a href="base/link"> text </a></span>,
@@ -59,7 +59,7 @@ class UIUtilsSuite extends SparkFunSuite {
 
   def verify(desc: String, expected: Elem, errorMsg: String = "", baseUrl: String = ""): Unit = {
     val generated = makeDescription(desc, baseUrl)
-    assert(generated.sameElements(expected), 
+    assert(generated.sameElements(expected),
       s"\n$errorMsg\n\nExpected:\n$expected\nGenerated:\n$generated")
   }
 }
