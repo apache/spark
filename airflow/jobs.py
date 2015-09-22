@@ -272,13 +272,29 @@ class SchedulerJob(BaseJob):
             .filter(SlaMiss.dag_id == dag.dag_id)
             .all()
         )
+
+        current_run_date = datetime.now() - dag.schedule_interval
+        blocking_tis = (
+            session
+            .query(TI)
+            .filter(TI.state != State.SUCCESS)
+            .filter(TI.execution_date == current_run_date)
+            .filter(TI.are_dependencies_met())
+            .all()
+        )
+
         task_list = "\n".join([
             sla.task_id + ' on ' + sla.execution_date.isoformat()
             for sla in slas])
+        blocking_task_list = "\n".join([
+            ti.task_id + ' on ' + ti.execution_date.isoformat()
+            for ti in blocking_tis])
         from airflow import ascii
         email_content = """\
         Here's a list of tasks thas missed their SLAs:
-        <pre><code>{task_list}\n{ascii.bug}<code></pre>
+        <pre><code>{task_list}\n<code></pre>
+        Blocking tasks:
+        <pre><code>{blocking_task_list}\n{ascii.bug}<code></pre>
         """.format(**locals())
         emails = []
         for t in dag.tasks:
