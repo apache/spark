@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * of the file format).
  */
 final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
-  private final static Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
+  private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
 
   private final File file;
   private InputStream in;
