@@ -21,6 +21,7 @@ Enabling security
 To enable kerberos you will need to generate a (service) key tab.
 
 .. code-block:: bash
+
     # in the kadmin.local or kadmin shell, create the airflow principal
     kadmin:  addprinc -randkey airflow/fully.qualified.domain.name@YOUR-REALM.COM
 
@@ -31,6 +32,7 @@ Now store this file in a location where the airflow user can read it (chmod 600)
 your airflow.cfg
 
 .. code-block:: bash
+
     [security]
     enabled = True
     keytab = /etc/airflow/airflow.keytab
@@ -51,7 +53,15 @@ The hive hook has been updated to take advantage of kerberos authentication. To 
 update the connection details with, for example:
 
 .. code-block:: bash
+
     { "use_beeline": true, "principal": "hive/_HOST@EXAMPLE.COM"}
 
 Adjust the principal to your settings. The _HOST part will be replaced by the fully qualified domain name of
 the server.
+
+In case you would like to use a different user for connecting add user name to the login of the connection and update
+the extra field with:
+
+.. code-block:: bash
+
+    { "use_beeline": true, "principal": "hive/_HOST@EXAMPLE.COM", "proxy_user": "login"}
