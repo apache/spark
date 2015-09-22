@@ -560,19 +560,20 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
 
-    val localEnv = createRpcEnv(conf, "ssl-local", 13345)
-    val remoteEnv = createRpcEnv(conf, "ssl-remote", 14345)
+    val localEnv = createRpcEnv(conf, "authentication-local", 13345)
+    val remoteEnv = createRpcEnv(conf, "authentication-remote", 14345)
 
     try {
       @volatile var message: String = null
-      localEnv.setupEndpoint("send-ssl", new RpcEndpoint {
+      localEnv.setupEndpoint("send-authentication", new RpcEndpoint {
         override val rpcEnv = localEnv
 
         override def receive: PartialFunction[Any, Unit] = {
           case msg: String => message = msg
         }
       })
-      val rpcEndpointRef = remoteEnv.setupEndpointRef("ssl-local", localEnv.address, "send-ssl")
+      val rpcEndpointRef =
+        remoteEnv.setupEndpointRef("authentication-local", localEnv.address, "send-authentication")
       rpcEndpointRef.send("hello")
       eventually(timeout(5 seconds), interval(10 millis)) {
         assert("hello" === message)
@@ -590,11 +591,11 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
 
-    val localEnv = createRpcEnv(conf, "ssl-local", 13345)
-    val remoteEnv = createRpcEnv(conf, "ssl-remote", 14345)
+    val localEnv = createRpcEnv(conf, "authentication-local", 13345)
+    val remoteEnv = createRpcEnv(conf, "authentication-remote", 14345)
 
     try {
-      localEnv.setupEndpoint("ask-ssl", new RpcEndpoint {
+      localEnv.setupEndpoint("ask-authentication", new RpcEndpoint {
         override val rpcEnv = localEnv
 
         override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -603,7 +604,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
           }
         }
       })
-      val rpcEndpointRef = remoteEnv.setupEndpointRef("ssl-local", localEnv.address, "ask-ssl")
+      val rpcEndpointRef =
+        remoteEnv.setupEndpointRef("authentication-local", localEnv.address, "ask-authentication")
       val reply = rpcEndpointRef.askWithRetry[String]("hello")
       assert("hello" === reply)
     } finally {
