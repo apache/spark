@@ -87,24 +87,32 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
     prevTime
   }
 
+  private def triggerActionForNextInterval(): Unit = {
+    clock.waitTillTime(nextTime)
+    callback(nextTime)
+    prevTime = nextTime
+    nextTime += period
+    logDebug("Callback for " + name + " called at time " + prevTime)
+  }
+
   /**
    * Repeatedly call the callback every interval.
    */
   private def loop() {
     try {
       while (!stopped) {
-        clock.waitTillTime(nextTime)
-        callback(nextTime)
-        prevTime = nextTime
-        nextTime += period
-        logDebug("Callback for " + name + " called at time " + prevTime)
+        triggerActionForNextInterval()
       }
-      clock.waitTillTime(nextTime)
-      callback(nextTime)
+      triggerActionForNextInterval()
     } catch {
       case e: InterruptedException =>
     }
   }
+
+  /*
+   * Return whether `stop` is called.
+   */
+  def isStopped: Boolean = stopped
 }
 
 private[streaming]
