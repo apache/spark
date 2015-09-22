@@ -89,13 +89,13 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> len(products_for_users)
     2
     >>> products_for_users[0]
-    (1, (Rating(user=., product=., rating=1.....),))
+    (1, (Rating(user=1, product=2, rating=...),))
 
     >>> users_for_products = model.recommendUsersForProducts(1).collect()
     >>> len(users_for_products)
     2
     >>> users_for_products[0]
-    (1, (Rating(user=., product=., rating=1.....),))
+    (1, (Rating(user=2, product=1, rating=...),))
 
     >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2, 2)
