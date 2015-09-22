@@ -70,11 +70,16 @@ class HiveCliHook(BaseHook):
                     if conf.get('security','enabled'):
                         template = conn.extra_dejson.get('principal',"hive/_HOST@EXAMPLE.COM")
                         template = template.replace("_HOST", socket.getfqdn())
+
+                        proxy_user = ""
+                        if conn.extra_dejson.get('proxy_user') == "login" and conn.login:
+                            proxy_user = "hive.server2.proxy.user={0}".format(conn.login)
+
                         jdbc_url = (
                             "jdbc:hive2://"
                             "{0}:{1}/{2}"
-                            ";principal={3}"
-                        ).format(conn.host, conn.port, conn.schema, template)
+                            ";principal={3}{4}"
+                        ).format(conn.host, conn.port, conn.schema, template, proxy_user)
                     else:
                         jdbc_url = (
                             "jdbc:hive2://"
