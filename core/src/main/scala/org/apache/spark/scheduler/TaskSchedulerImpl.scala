@@ -324,17 +324,50 @@ private[spark] class TaskSchedulerImpl(
     return tasks
   }
 
+  /**
+   * Disable an executor. "Disabled" is an intermediary state between "being alive" and "lost",
+   * where tasks that had been assigned to the executor are not yet marked as failed, but the
+   * executor is otherwise removed from the application. For example, blocks served by the executor
+   * will be marked as unavailable.
+   */
+  def disableExecutor(executorId: String): Unit = {
+    val wasActive = synchronized {
+      if (activeExecutorIds.remove(executorId)) {
+        val host = executorIdToHost(executorId)
+        executorsByHost.get(host).foreach { execs =>
+          execs -= executorId
+          if (execs.isEmpty) {
+            executorsByHost -= host
+            for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
+              hosts -= host
+              if (hosts.isEmpty) {
+                hostsByRack -= rack
+              }
+            }
+          }
+        }
+        rootPool.disableExecutor(executorId, host)
+        true
+      } else {
+        false
+      }
+    }
+    if (wasActive) {
+      dagScheduler.executorLost(executorId)
+      backend.reviveOffers()
+    }
+  }
+
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
-    var failedExecutor: Option[String] = None
+    var failedExecutor: Option[(String, ExecutorLossReason)] = None
     synchronized {
       try {
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)
           if (activeExecutorIds.contains(execId)) {
-            removeExecutor(execId,
+            failedExecutor = Some(execId ->
               SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
-            failedExecutor = Some(execId)
           }
         }
         taskIdToTaskSetManager.get(tid) match {
@@ -362,8 +395,8 @@ private[spark] class TaskSchedulerImpl(
     }
     // Update the DAGScheduler without holding a lock on this, since that can deadlock
     if (failedExecutor.isDefined) {
-      dagScheduler.executorLost(failedExecutor.get)
-      backend.reviveOffers()
+      val (execId, reason) = failedExecutor.get
+      removeExecutor(execId, reason)
     }
   }
 
@@ -459,46 +492,30 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
-    var failedExecutor: Option[String] = None
+    removeExecutor(executorId, reason)
+  }
 
+  /** Remove all information related to the executor. */
+  private def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
+    disableExecutor(executorId)
     synchronized {
-      if (activeExecutorIds.contains(executorId)) {
-        val hostPort = executorIdToHost(executorId)
-        logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
-        removeExecutor(executorId, reason)
-        failedExecutor = Some(executorId)
-      } else {
+      executorIdToHost.remove(executorId) match {
+        case Some(host) =>
+          val msg = s"Lost executor $executorId on $host: $reason"
+          reason match {
+            case ExecutorExited(_, isNormalExit, _) if isNormalExit => logInfo(msg)
+            case _ => logError(msg)
+          }
+          rootPool.executorLost(executorId, host, reason)
+
+        case None =>
          // We may get multiple executorLost() calls with different loss reasons. For example, one
          // may be triggered by a dropped connection from the slave while another may be a report
          // of executor termination from Mesos. We produce log messages for both so we eventually
          // report the termination reason.
-         logError("Lost an executor " + executorId + " (already removed): " + reason)
+         logInfo("Lost an executor " + executorId + " (already removed): " + reason)
       }
     }
-    // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
-    if (failedExecutor.isDefined) {
-      dagScheduler.executorLost(failedExecutor.get)
-      backend.reviveOffers()
-    }
-  }
-
-  /** Remove an executor from all our data structures and mark it as lost */
-  private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
-    activeExecutorIds -= executorId
-    val host = executorIdToHost(executorId)
-    val execs = executorsByHost.getOrElse(host, new HashSet)
-    execs -= executorId
-    if (execs.isEmpty) {
-      executorsByHost -= host
-      for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
-        hosts -= host
-        if (hosts.isEmpty) {
-          hostsByRack -= rack
-        }
-      }
-    }
-    executorIdToHost -= executorId
-    rootPool.executorLost(executorId, host, reason)
   }
 
   def executorAdded(execId: String, host: String) {

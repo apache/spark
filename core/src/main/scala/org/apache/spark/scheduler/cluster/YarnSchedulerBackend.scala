@@ -123,7 +123,9 @@ private[spark] abstract class YarnSchedulerBackend(
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach { executorId =>
-        yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+        if (disableExecutor(executorId)) {
+          yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+        }
       }
     }
   }

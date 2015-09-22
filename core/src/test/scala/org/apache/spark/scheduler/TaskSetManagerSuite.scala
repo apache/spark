@@ -776,6 +776,30 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.myLocalityLevels.sameElements(Array(ANY)))
   }
 
+  test("disabling executors does not reassign tasks") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+
+    // Ensure task is assigned to the existing executor
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
+
+    // Add a new executor
+    sched.addExecutor("exec2", "host2")
+    manager.executorAdded()
+
+    // Disable the first executor, make sure task still won't be reassigned.
+    manager.disableExecutor("exec1", "host1")
+    assert(manager.resourceOffer("exec2", "host2", ANY) === None)
+
+    // Now remove the first executor, and make sure the task is reassigned.
+    sched.removeExecutor("exec1")
+    manager.executorLost("exec1", "host1", SlaveLost())
+    assert(manager.resourceOffer("exec2", "host2", ANY).get.index === 0)
+  }
+
   def createTaskResult(id: Int): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()
     new DirectTaskResult[Int](valueSer.serialize(id), mutable.Map.empty, new TaskMetrics)
