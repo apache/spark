@@ -85,7 +85,7 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
     val pointWithNorm = new VectorWithNorm(point)
     clusterCentersWithNorm.zipWithIndex.map { case (c, i) =>
       (i, KMeans.fastSquaredDistance(c, pointWithNorm))
-    }
+    }.toList
   }
 
   /**
@@ -96,9 +96,9 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
     val centersWithNorm = clusterCentersWithNorm
     val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
     points.map(p =>
-      (p, for ((c,i) <- bcCentersWithNorm.value.zipWithIndex) yield {
+      (p, (for ((c,i) <- bcCentersWithNorm.value.zipWithIndex) yield {
         (i, KMeans.fastSquaredDistance(c, new VectorWithNorm(p)))
-      })
+      }).toList)
     )
   }
 
