@@ -194,7 +194,7 @@ private[netty] class NettyRpcEnv(
 
               override def onSuccess(response: Array[Byte]): Unit = {
                 val reply = deserialize[AskResponse](response)
-                if (reply.reply != null && reply.reply.isInstanceOf[RpcFailure]) {
+                if (reply.reply.isInstanceOf[RpcFailure]) {
                   if (!promise.tryFailure(reply.reply.asInstanceOf[RpcFailure].e)) {
                     logWarning(s"Ignore failure: ${reply.reply}")
                   }
