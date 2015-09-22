@@ -102,7 +102,7 @@ private[spark] object ReliableRDDCheckpointData extends Logging {
       val fs = path.getFileSystem(sc.hadoopConfiguration)
       if (fs.exists(path)) {
         if (!fs.delete(path, true)) {
-          logWarning("Error deleting ${path.getPath()}")
+          logWarning(s"Error deleting ${path.getPath()}")
         }
       }
     }
