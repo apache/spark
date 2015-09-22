@@ -23,6 +23,7 @@ Collate:
     'column.R'
     'group.R'
     'DataFrame.R'
+    'DataFrameStatFunctions.R'
     'SQLContext.R'
     'backend.R'
     'broadcast.R'
