@@ -171,6 +171,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
       @Override
       public Object apply(Object r) {
+        // GenerateProjection does not work with UnsafeRows.
+        assert(!(r instanceof ${classOf[UnsafeRow].getName}));
         return new SpecificRow((InternalRow) r);
       }
 

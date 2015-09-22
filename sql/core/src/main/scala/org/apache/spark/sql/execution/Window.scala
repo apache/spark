@@ -253,7 +253,11 @@ case class Window(
 
         // Get all relevant projections.
         val result = createResultProjection(unboundExpressions)
-        val grouping = newProjection(partitionSpec, child.output)
+        val grouping = if (child.outputsUnsafeRows) {
+          UnsafeProjection.create(partitionSpec, child.output)
+        } else {
+          newProjection(partitionSpec, child.output)
+        }
 
         // Manage the stream and the grouping.
         var nextRow: InternalRow = EmptyRow
@@ -277,7 +281,8 @@ case class Window(
         val numFrames = frames.length
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
-          val currentGroup = nextGroup
+          // Before we start to fetch new input rows, make a copy of nextGroup.
+          val currentGroup = nextGroup.copy()
           rows = new CompactBuffer
           while (nextRowAvailable && nextGroup == currentGroup) {
             rows += nextRow.copy()
