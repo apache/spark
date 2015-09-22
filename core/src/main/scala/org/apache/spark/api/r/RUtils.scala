@@ -44,7 +44,7 @@ private[spark] object RUtils {
         (sys.props("spark.master"), sys.props("spark.submit.deployMode"))
       } else {
         val sparkConf = SparkEnv.get.conf
-        (sparkConf.get("spark.master"), sparkConf.get("spark.submit.deployMode"))
+        (sparkConf.get("spark.master"), sparkConf.get("spark.submit.deployMode", "client"))
       }
 
     val isYarnCluster = master != null && master.contains("yarn") && deployMode == "cluster"
