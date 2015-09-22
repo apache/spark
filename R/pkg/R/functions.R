@@ -233,6 +233,36 @@ setMethod("ceil",
             column(jc)
           })
 
+#' col
+#'
+#' Returns a Column based on the given column name.
+#'
+#' @rdname col
+#' @name col
+#' @family normal_funcs
+#' @export
+#' @examples \dontrun{col(df)}
+setMethod("col",
+          signature(x = "character"),
+          function(x) {
+            column(callJStatic("org.apache.spark.sql.functions", "col", x))
+          })
+
+#' column
+#'
+#' Returns a Column based on the given column name. Alias of col.
+#'
+#' @rdname col
+#' @name column
+#' @family normal_funcs
+#' @export
+#' @examples \dontrun{column(df)}
+setMethod("column",
+          signature(x = "character"),
+          function(x) {
+            col(x)
+          })
+
 #' cos
 #'
 #' Computes the cosine of the given value.

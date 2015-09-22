@@ -946,15 +946,36 @@ setMethod("foreachPartition",
 
 ############################## SELECT ##################################
 
-getColumn <- function(x, c) {
-  column(callJMethod(x@sdf, "col", c))
-}
+#' Select a column
+#'
+#' Selects column based on the column name and return it as a Column.
+#' Note that the column name can also reference to a nested column like `a.b`.
+#'
+#' @param x A SparkSQL DataFrame
+#'
+#' @rdname select
+#' @name col
+#' @aliases col
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' df <- createDataFrame(sqlContext, list(50, 60, 70), "age")
+#' col(df, "age")
+#'}
+setMethod("col",
+          signature(x = "DataFrame"),
+          function(x, name) {
+            stopifnot(!missing(name) && is.character(name))
+            column(callJMethod(x@sdf, "col", name))
+          })
 
 #' @rdname select
 #' @name $
 setMethod("$", signature(x = "DataFrame"),
           function(x, name) {
-            getColumn(x, name)
+            col(x, name)
           })
 
 #' @rdname select
@@ -995,7 +1016,7 @@ setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
               cols <- columns(x)
               i <- cols[[i]]
             }
-            getColumn(x, i)
+            col(x, i)
           })
 
 #' @rdname subset

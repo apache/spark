@@ -635,6 +635,7 @@ test_that("sample on a DataFrame", {
 
 test_that("select operators", {
   df <- select(jsonFile(sqlContext, jsonPath), "name", "age")
+  expect_is(col(df, "name"), "Column")
   expect_is(df$name, "Column")
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
@@ -788,7 +789,7 @@ test_that("column operators", {
 })
 
 test_that("column functions", {
-  c <- SparkR:::col("a")
+  c <- col("a")
   c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
   c3 <- cosh(c) + count(c) + crc32(c) + exp(c)
