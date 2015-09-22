@@ -99,6 +99,8 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
         nextTime += period
         logDebug("Callback for " + name + " called at time " + prevTime)
       }
+      clock.waitTillTime(nextTime)
+      callback(nextTime)
     } catch {
       case e: InterruptedException =>
     }
