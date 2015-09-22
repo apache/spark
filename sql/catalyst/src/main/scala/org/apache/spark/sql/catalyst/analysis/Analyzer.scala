@@ -378,6 +378,22 @@ class Analyzer(
         val newOrdering = resolveSortOrders(ordering, child, throws = false)
         Sort(newOrdering, global, child)
 
+      // A special case for Generate, because the output of Generate should not be resolved by
+      // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
+      case g @ Generate(generator, join, outer, qualifier, output, child)
+        if child.resolved && !generator.resolved =>
+        val newG = generator transformUp {
+          case u @ UnresolvedAttribute(nameParts) =>
+            withPosition(u) { child.resolve(nameParts, resolver).getOrElse(u) }
+          case UnresolvedExtractValue(child, fieldExpr) =>
+            ExtractValue(child, fieldExpr, resolver)
+        }
+        if (newG.fastEquals(generator)) {
+          g
+        } else {
+          Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
+        }
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp  {
