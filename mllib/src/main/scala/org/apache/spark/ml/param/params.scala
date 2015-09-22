@@ -69,7 +69,8 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
         case v: Array[_] => v.mkString("[", ",", "]")
         case _ => value.toString
       }
-      throw new IllegalArgumentException(s"$parent parameter $name given invalid value $valueToString.")
+      throw new IllegalArgumentException(
+        s"$parent parameter $name given invalid value $valueToString.")
     }
   }
 
