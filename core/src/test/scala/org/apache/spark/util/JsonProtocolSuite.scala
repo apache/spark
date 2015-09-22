@@ -152,6 +152,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
     testTaskEndReason(ExecutorLostFailure("100"))
+    testTaskEndReason(TaskCommitDenied(2, 3, 4))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -350,6 +351,17 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldStageInfo = JsonProtocol.stageInfoToJson(stageInfo).removeField({ _._1 == "Parent IDs"})
     val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details")
     assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
+  }
+
+  // `TaskCommitDenied` was added in 1.3.0 but JSON de/serialization logic was added in 1.5.1
+  test("TaskCommitDenied backward compatibility") {
+    val denied = TaskCommitDenied(1, 2, 3)
+    val oldDenied = JsonProtocol.taskEndReasonToJson(denied)
+      .removeField({ _._1 == "Job ID" })
+      .removeField({ _._1 == "Partition ID" })
+      .removeField({ _._1 == "Attempt Number" })
+    val expectedDenied = TaskCommitDenied(-1, -1, -1)
+    assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
   }
 
   /** -------------------------- *
@@ -579,6 +591,11 @@ class JsonProtocolSuite extends SparkFunSuite {
       case (TaskKilled, TaskKilled) =>
       case (ExecutorLostFailure(execId1), ExecutorLostFailure(execId2)) =>
         assert(execId1 === execId2)
+      case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
+          TaskCommitDenied(jobId2, partitionId2, attemptNumber2)) =>
+        assert(jobId1 === jobId2)
+        assert(partitionId1 === partitionId2)
+        assert(attemptNumber1 === attemptNumber2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }
