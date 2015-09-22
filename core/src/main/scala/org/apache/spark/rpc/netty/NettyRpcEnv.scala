@@ -67,6 +67,9 @@ private[netty] class NettyRpcEnv(
 
   val timeoutScheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor("netty-rpc-env-timeout")
 
+  // Because TransportClientFactory.createClient is blocking, we need to run it in this thread pool
+  // to implement non-blocking send/ask.
+  // TODO: a non-blocking TransportClientFactory.createClient in future
   private val clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool(
     "netty-rpc-connection",
     conf.getInt("spark.rpc.connect.threads", 256))
@@ -175,26 +178,40 @@ private[netty] class NettyRpcEnv(
           }
       }(ThreadUtils.sameThread)
     } else {
-      val client = clientFactory.createClient(remoteAddr.host, remoteAddr.port)
-      client.sendRpc(serialize(message), new RpcResponseCallback {
+      try {
+        // `createClient` will block if it cannot find a known connection, so we should run it in
+        // clientConnectionExecutor
+        clientConnectionExecutor.execute(new Runnable {
+          override def run(): Unit = {
+            val client = clientFactory.createClient(remoteAddr.host, remoteAddr.port)
+            client.sendRpc(serialize(message), new RpcResponseCallback {
 
-        override def onFailure(e: Throwable): Unit = {
+              override def onFailure(e: Throwable): Unit = {
+                if (!promise.tryFailure(e)) {
+                  logWarning("Ignore Exception", e)
+                }
+              }
+
+              override def onSuccess(response: Array[Byte]): Unit = {
+                val reply = deserialize[AskResponse](response)
+                if (reply.reply != null && reply.reply.isInstanceOf[RpcFailure]) {
+                  if (!promise.tryFailure(reply.reply.asInstanceOf[RpcFailure].e)) {
+                    logWarning(s"Ignore failure: ${reply.reply}")
+                  }
+                } else if (!promise.trySuccess(reply.reply)) {
+                  logWarning(s"Ignore message: ${reply}")
+                }
+              }
+            })
+          }
+        })
+      } catch {
+        case e: RejectedExecutionException => {
           if (!promise.tryFailure(e)) {
-            logWarning("Ignore Exception", e)
+            logWarning(s"Ignore failure", e)
           }
         }
-
-        override def onSuccess(response: Array[Byte]): Unit = {
-          val reply = deserialize[AskResponse](response)
-          if (reply.reply != null && reply.reply.isInstanceOf[RpcFailure]) {
-            if (!promise.tryFailure(reply.reply.asInstanceOf[RpcFailure].e)) {
-              logWarning(s"Ignore failure: ${reply.reply}")
-            }
-          } else if (!promise.trySuccess(reply.reply)) {
-            logWarning(s"Ignore message: ${reply}")
-          }
-        }
-      })
+      }
     }
     promise.future
   }
