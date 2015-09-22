@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.OutputStream
-import java.util.{List => JList, Map => JMap}
+import java.io.{BufferedInputStream, DataInputStream, DataOutputStream, BufferedOutputStream, OutputStream}
+import java.net.Socket
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.{List => JList, Map => JMap, Collections}
+
+import org.apache.spark.api.python
 
 import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.python.{PythonBroadcast, PythonRDD, SerDeUtil}
+import org.apache.spark.api.python._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Accumulator, Logging => SparkLogging}
+import org.apache.spark.{Logging => SparkLogging, TaskContext, SparkEnv, Accumulator}
 
 /**
  * A serialized version of a Python lambda function.  Suitable for use in a [[PythonRDD]].
@@ -328,8 +332,8 @@ case class EvaluatePython(
 
 /**
  * :: DeveloperApi ::
- * Uses PythonRDD to evaluate a [[PythonUDF]], one partition of tuples at a time.
- * The input data is zipped with the result of the udf evaluation.
+ * Use a synchronous batched based system into order to calculate a [[PythonUDF]] without having to
+ * risk deadlock.
  */
 @DeveloperApi
 case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: SparkPlan)
@@ -344,50 +348,129 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
   protected override def doExecute(): RDD[InternalRow] = {
     val childResults = child.execute().map(_.copy())
 
-    val parent = childResults.mapPartitions { iter =>
-      EvaluatePython.registerPicklers()  // register pickler for Row
+    val bufferSize = childResults.context.conf.getInt("spark.buffer.size", 65536)
+    val reuseWorker = childResults.context.conf.getBoolean("spark.python.worker.reuse", true)
+
+    childResults.mapPartitionsWithIndex { case (partitionIndex, iter) =>
+      val startTime = System.currentTimeMillis
+      val env = SparkEnv.get
+
+      val envVars = udf.envVars
+      val localdir = env.blockManager.diskBlockManager.localDirs.map(
+        f => f.getPath()).mkString(",")
+      envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
+      if (reuseWorker) {
+        envVars.put("SPARK_REUSE_WORKER", "1")
+      }
+
+      val worker: Socket = env.createPythonWorker(udf.pythonExec, envVars.asScala.toMap)
+
+      var released = new AtomicBoolean(false)
+
+      TaskContext.get.addTaskCompletionListener { context =>
+        if (!reuseWorker || !released.get()) {
+          try {
+            worker.close()
+          } catch {
+            case e: Exception =>
+              logWarning("Failed to close worker socket", e)
+          }
+        }
+      }
+
+      val dataOut = new DataOutputStream(
+        new BufferedOutputStream(worker.getOutputStream, bufferSize))
+      val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
+
+      PythonRDD.writeHeaderToStream(
+        dataOut,
+        udf.pythonIncludes,
+        udf.broadcastVars,
+        worker,
+        udf.pythonVer,
+        partitionIndex, // partition number isn't used
+        udf.command)
+
+      // UDF mode
+      dataOut.writeInt(PySparkMode.UDF)
+
+      EvaluatePython.registerPicklers()
+
       val pickle = new Pickler
+      val unpickle = new Unpickler
+
       val currentRow = newMutableProjection(udf.children, child.output)()
       val fields = udf.children.map(_.dataType)
       val schema = new StructType(fields.map(t => new StructField("", t, true)).toArray)
-      iter.grouped(100).map { inputRows =>
-        val toBePickled = inputRows.map { row =>
-          EvaluatePython.toJava(currentRow(row), schema)
-        }.toArray
-        pickle.dumps(toBePickled)
-      }
-    }
 
-    val pyRDD = new PythonRDD(
-      parent,
-      udf.command,
-      udf.envVars,
-      udf.pythonIncludes,
-      false,
-      udf.pythonExec,
-      udf.pythonVer,
-      udf.broadcastVars,
-      udf.accumulator
-    ).mapPartitions { iter =>
-      val pickle = new Unpickler
-      iter.flatMap { pickedResult =>
-        val unpickledBatch = pickle.loads(pickedResult)
-        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
-      }
-    }.mapPartitions { iter =>
-      val row = new GenericMutableRow(1)
-      iter.map { result =>
-        row(0) = EvaluatePython.fromJava(result, udf.dataType)
-        row: InternalRow
-      }
-    }
+      val groupedIterator = iter.grouped(100)
 
-    childResults.zip(pyRDD).mapPartitions { iter =>
-      val joinedRow = new JoinedRow()
-      iter.map {
-        case (row, udfResult) =>
-          joinedRow(row, udfResult)
-      }
+      // Add a sentinel at the end so that we can know when to finish the pyspark protocol
+      val groupedIteratorWithEnd = groupedIterator ++ Seq(BatchPythonEvaluation.SentinelEnd)
+
+      groupedIteratorWithEnd.map { inputRows =>
+        if (inputRows == BatchPythonEvaluation.SentinelEnd) {
+          // Finish
+          dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+          dataOut.writeInt(SpecialLengths.END_OF_STREAM)
+          dataOut.flush()
+
+          // This should return null and complete the cleanup procedure
+          val shouldBeNull = PythonRDD.readPythonProcessSocket(
+            dataIn,
+            startTime,
+            reuseWorker,
+            udf.accumulator,
+            udf.envVars,
+            udf.pythonExec,
+            worker,
+            released)
+
+          if (shouldBeNull != null) {
+            throw new RuntimeException("Cleanup procedure failed")
+          }
+
+          // Return empty sequence, which will be flattened into nothing
+          Seq()
+        } else {
+          val toBePickled = inputRows.map { row =>
+            EvaluatePython.toJava(currentRow(row), schema)
+          }.toArray
+          val batchBytes = pickle.dumps(toBePickled)
+
+          dataOut.writeInt(batchBytes.length)
+          dataOut.write(batchBytes)
+          dataOut.flush()
+
+          val myObj = PythonRDD.readPythonProcessSocket(
+            dataIn,
+            startTime,
+            reuseWorker,
+            udf.accumulator,
+            udf.envVars,
+            udf.pythonExec,
+            worker,
+            released)
+
+          val unpickledBatch = unpickle.loads(myObj)
+          val unpickledBatchBuffer = unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+
+          // TODO optimize performance
+
+          val udfResults = unpickledBatchBuffer.map { result =>
+            InternalRow.apply(EvaluatePython.fromJava(result, udf.dataType))
+          }
+
+          inputRows.zip(udfResults).map {
+            case (row, udfResult) =>
+              new JoinedRow(row, udfResult)
+          }
+        }
+      }.flatten
     }
   }
+}
+
+private object BatchPythonEvaluation {
+  val SentinelEnd = Seq(InternalRow("END"))
 }
