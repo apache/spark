@@ -25,8 +25,8 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
 import org.apache.spark.shuffle.ShuffleMemoryManager
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
@@ -322,7 +322,7 @@ class UnsafeFixedWidthAggregationMapSuite
       // At here, we also test if copy is correct.
       iter.getKey.copy()
       iter.getValue.copy()
-      count += 1;
+      count += 1
     }
 
     // 1 record was from the map and 4096 records were explicitly inserted.

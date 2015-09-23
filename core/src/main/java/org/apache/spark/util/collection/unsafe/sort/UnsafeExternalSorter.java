@@ -163,8 +163,9 @@ public final class UnsafeExternalSorter {
     // Note: Do not track memory for the pointer array for now because of SPARK-10733.
     // In more detail, in TungstenAggregate we only reserve a page, but when we fall back to
     // sort-based aggregation we try to acquire a page AND a pointer array, which inevitably
-    // fails if all other memory is already used by other tasks. This is a temporary hack that
-    // we should address in 1.6.0.
+    // fails if all other memory is already used by other tasks. It should be safe to not track
+    // the array because its memory footprint is frequently much smaller than that of a page.
+    // This is a temporary hack that we should address in 1.6.0.
     // TODO: track the pointer array memory!
     this.writeMetrics = new ShuffleWriteMetrics();
     this.inMemSorter =
