@@ -33,7 +33,6 @@
 from __future__ import print_function
 
 import sys
-import urllib2
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
@@ -54,10 +53,8 @@ if __name__ == "__main__":
     ssc = StreamingContext(sc, 5)
 
     # Read in the word-sentiment list and create a static RDD from it
-    word_sentiments_uri = "http://raw.githubusercontent.com/fnielsen/afinn/master/afinn/data/" + \
-                          "AFINN-111.txt"
-    word_sentiments_lines = urllib2.urlopen(word_sentiments_uri).read().split("\n")
-    word_sentiments = ssc.sparkContext.parallelize(word_sentiments_lines) \
+    word_sentiments_file_path = "data/streaming/AFINN-111.txt"
+    word_sentiments = ssc.sparkContext.textFile(word_sentiments_file_path) \
         .map(lambda line: tuple(line.split("\t")))
 
     lines = ssc.socketTextStream(sys.argv[1], int(sys.argv[2]))

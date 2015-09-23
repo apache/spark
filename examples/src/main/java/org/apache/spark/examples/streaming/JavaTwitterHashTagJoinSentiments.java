@@ -85,11 +85,8 @@ public class JavaTwitterHashTagJoinSentiments {
     });
 
     // Read in the word-sentiment list and create a static RDD from it
-    String wordSentimentURI =
-      "https://raw.githubusercontent.com/fnielsen/afinn/master/afinn/data/AFINN-111.txt";
-    String[] wordSentimentLines = IOUtils.toString(URI.create(wordSentimentURI)).split("\n");
-    final JavaPairRDD<String, Double> wordSentiments = jssc.sparkContext().parallelize(
-      Arrays.asList(wordSentimentLines))
+    String wordSentimentFilePath = "data/streaming/AFINN-111.txt";
+    final JavaPairRDD<String, Double> wordSentiments = jssc.sparkContext().textFile(wordSentimentFilePath)
       .mapToPair(new PairFunction<String, String, Double>(){
         @Override
         public Tuple2<String, Double> call(String line) {

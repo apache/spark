@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.twitter.TwitterUtils
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
@@ -53,10 +53,8 @@ object TwitterHashTagJoinSentiments {
     val hashTags = stream.flatMap(status => status.getText.split(" ").filter(_.startsWith("#")))
 
     // Read in the word-sentiment list and create a static RDD from it
-    val wordSentimentURI =
-      "https://raw.githubusercontent.com/fnielsen/afinn/master/afinn/data/AFINN-111.txt"
-    val wordSentimentLines = scala.io.Source.fromURL(wordSentimentURI).mkString.split("\n")
-    val wordSentiments = ssc.sparkContext.parallelize(wordSentimentLines).map { line =>
+    val wordSentimentFilePath = "data/streaming/AFINN-111.txt"
+    val wordSentiments = ssc.sparkContext.textFile(wordSentimentFilePath).map { line =>
       val Array(word, happinessValue) = line.split("\t")
       (word, happinessValue)
     } cache()
