@@ -154,9 +154,6 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
 
   override def remove(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
-    // If consolidation mode is used With HashShuffleMananger, the physical filename for the block
-    // is different from blockId.name. So the file returns here will not be exist, thus we avoid to
-    // delete the whole consolidated file by mistake.
     if (file.exists()) {
       file.delete()
     } else {

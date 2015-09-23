@@ -362,6 +362,10 @@ private[spark] object JsonProtocol {
         ("Stack Trace" -> stackTrace) ~
         ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
         ("Metrics" -> metrics)
+      case taskCommitDenied: TaskCommitDenied =>
+        ("Job ID" -> taskCommitDenied.jobID) ~
+        ("Partition ID" -> taskCommitDenied.partitionID) ~
+        ("Attempt Number" -> taskCommitDenied.attemptNumber)
       case ExecutorLostFailure(executorId, isNormalExit) =>
         ("Executor ID" -> executorId) ~
         ("Normal Exit" -> isNormalExit)
@@ -770,6 +774,7 @@ private[spark] object JsonProtocol {
     val exceptionFailure = Utils.getFormattedClassName(ExceptionFailure)
     val taskResultLost = Utils.getFormattedClassName(TaskResultLost)
     val taskKilled = Utils.getFormattedClassName(TaskKilled)
+    val taskCommitDenied = Utils.getFormattedClassName(TaskCommitDenied)
     val executorLostFailure = Utils.getFormattedClassName(ExecutorLostFailure)
     val unknownReason = Utils.getFormattedClassName(UnknownReason)
 
@@ -794,6 +799,14 @@ private[spark] object JsonProtocol {
         ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics, None)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
+      case `taskCommitDenied` =>
+        // Unfortunately, the `TaskCommitDenied` message was introduced in 1.3.0 but the JSON
+        // de/serialization logic was not added until 1.5.1. To provide backward compatibility
+        // for reading those logs, we need to provide default values for all the fields.
+        val jobId = Utils.jsonOption(json \ "Job ID").map(_.extract[Int]).getOrElse(-1)
+        val partitionId = Utils.jsonOption(json \ "Partition ID").map(_.extract[Int]).getOrElse(-1)
+        val attemptNo = Utils.jsonOption(json \ "Attempt Number").map(_.extract[Int]).getOrElse(-1)
+        TaskCommitDenied(jobId, partitionId, attemptNo)
       case `executorLostFailure` =>
         val isNormalExit = Utils.jsonOption(json \ "Normal Exit").
           map(_.extract[Boolean])
