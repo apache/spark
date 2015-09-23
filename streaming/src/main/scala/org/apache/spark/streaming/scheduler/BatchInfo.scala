@@ -39,7 +39,7 @@ case class BatchInfo(
     submissionTime: Long,
     processingStartTime: Option[Long],
     processingEndTime: Option[Long],
-    failureReasons: Map[Int, String] = Map.empty) {
+    private[streaming] val failureReasons: Map[Int, String] = Map.empty) {
 
   @deprecated("Use streamIdToInputInfo instead", "1.5.0")
   def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
