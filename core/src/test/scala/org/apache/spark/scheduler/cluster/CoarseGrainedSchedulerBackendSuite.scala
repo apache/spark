@@ -80,7 +80,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(taskTracker.taskSet.values().asScala.toSet === Set("0", "1"))
     taskTracker.taskSet.clear()
 
-
     // Add executor "1" as a preempted executor
     preemptedExecutors.add("1")
     assert(preemptedExecutors === Set("1"))
