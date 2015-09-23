@@ -17,11 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -53,11 +54,14 @@ private[feature] trait ChiSqSelectorParams extends Params
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Compute the Chi-Square selector model given an `RDD` of `LabeledPoint` data.
  */
-@AlphaComponent
-final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams {
+@Experimental
+final class ChiSqSelector(override val uid: String)
+  extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams {
+
+  def this() = this(Identifiable.randomUID("chiSqSelector"))
 
   /** @group setParam */
   def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
@@ -78,7 +82,7 @@ final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelect
         LabeledPoint(label, features)
     }
     val chiSqSelector = new feature.ChiSqSelector($(numTopFeatures)).fit(input)
-    copyValues(new ChiSqSelectorModel(this, chiSqSelector))
+    copyValues(new ChiSqSelectorModel(uid, chiSqSelector).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -86,15 +90,17 @@ final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelect
     SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
+
+  override def copy(extra: ParamMap): ChiSqSelector = defaultCopy(extra)
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[ChiSqSelector]].
  */
-@AlphaComponent
+@Experimental
 final class ChiSqSelectorModel private[ml] (
-    override val parent: ChiSqSelector,
+    override val uid: String,
     private val chiSqSelector: feature.ChiSqSelectorModel)
   extends Model[ChiSqSelectorModel] with ChiSqSelectorParams {
 
@@ -107,9 +113,8 @@ final class ChiSqSelectorModel private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
-    val newCol =
-      callUDF(chiSqSelector.transform: Vector => Vector, new VectorUDT, dataset($(featuresCol)))
-    dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
+    val selector = udf { chiSqSelector.transform _ }
+    dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -132,5 +137,9 @@ final class ChiSqSelectorModel private[ml] (
     }
     val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
     newAttributeGroup.toStructField()
+  }
+
+  override def copy(extra: ParamMap): ChiSqSelectorModel = {
+    defaultCopy[ChiSqSelectorModel](extra).setParent(parent)
   }
 }
