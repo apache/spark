@@ -110,7 +110,7 @@ if __name__ == "__main__":
         ("featuresCol", "features column name", "'features'"),
         ("labelCol", "label column name", "'label'"),
         ("predictionCol", "prediction column name", "'prediction'"),
-        ("probabilityCol", "Column name for predicted class conditional probabilities." +
+        ("probabilityCol", "Column name for predicted class conditional probabilities. " +
          "Note: Not all models output well-calibrated probability estimates! These probabilities " +
          "should be treated as confidences, not precise probabilities.", "'probability'"),
         ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name", "'rawPrediction'"),
