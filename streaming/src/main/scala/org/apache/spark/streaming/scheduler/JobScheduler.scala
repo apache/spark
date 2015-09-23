@@ -120,7 +120,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
-      listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo()))
+      listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
       logInfo("Added jobs for time " + jobSet.time)
@@ -159,30 +159,27 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (isFirstJobOfJobSet) {
       // "StreamingListenerBatchStarted" should be posted after calling "handleJobStart" to get the
       // correct "jobSet.processingStartTime".
-      listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo()))
+      listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
     }
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
   private def handleJobCompletion(job: Job) {
+    val jobSet = jobSets.get(job.time)
+    jobSet.handleJobCompletion(job)
+    logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
+    if (jobSet.hasCompleted) {
+      jobSets.remove(jobSet.time)
+      jobGenerator.onBatchCompletion(jobSet.time)
+      logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
+        jobSet.totalDelay / 1000.0, jobSet.time.toString,
+        jobSet.processingDelay / 1000.0
+      ))
+      listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
+    }
     job.result match {
       case Success(_) =>
-        val jobSet = jobSets.get(job.time)
-        jobSet.handleJobCompletion(job)
-        logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
-        if (jobSet.hasCompleted) {
-          jobSets.remove(jobSet.time)
-          jobGenerator.onBatchCompletion(jobSet.time)
-          logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
-            jobSet.totalDelay / 1000.0, jobSet.time.toString,
-            jobSet.processingDelay / 1000.0
-          ))
-          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo()))
-        }
       case Failure(e) =>
-        val jobSet = jobSets.get(job.time)
-        val errorMessage = Some(Utils.exceptionString(e))
-        listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo(errorMessage)))
         reportError("Error running job " + job, e)
     }
   }

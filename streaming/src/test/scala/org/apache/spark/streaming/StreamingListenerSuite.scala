@@ -140,15 +140,15 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     }
   }
 
-  test("onBatchCompleted") {
+  test("onBatchCompleted with successful batch") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
 
-    @volatile var errorMessage: Option[String] = None
+    @volatile var failureReasons: Map[Int, String] = null
     ssc.addStreamingListener(new StreamingListener {
       override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
-        errorMessage = batchCompleted.batchInfo.errorMessage
+        failureReasons = batchCompleted.batchInfo.failureReasons
       }
     })
     val batchCounter = new BatchCounter(ssc)
@@ -156,20 +156,21 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     // Make sure running at least one batch
     batchCounter.waitUntilBatchesCompleted(expectedNumCompletedBatches = 1, timeout = 10000)
     ssc.stop()
-    assert(errorMessage.isEmpty, "A successful batch should not set errorMessage")
+    assert(failureReasons != null && failureReasons.isEmpty,
+      "A successful batch should not set errorMessage")
   }
 
-  test("onBatchCompleted: error") {
+  test("onBatchCompleted with failed batch and one failed job") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD { _ =>
-      throw new RuntimeException("This is an unsuccessful batch")
+      throw new RuntimeException("This is a failed job")
     }
 
-    @volatile var errorMessage: Option[String] = None
+    @volatile var failureReasons: Map[Int, String] = null
     ssc.addStreamingListener(new StreamingListener {
       override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
-        errorMessage = batchCompleted.batchInfo.errorMessage
+        failureReasons = batchCompleted.batchInfo.failureReasons
       }
     })
     val batchCounter = new BatchCounter(ssc)
@@ -179,10 +180,47 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     val e = intercept[RuntimeException] {
       ssc.awaitTerminationOrTimeout(10000)
     }
-    assert(e.getMessage === "This is an unsuccessful batch")
+    assert(e.getMessage === "This is a failed job")
     ssc.stop()
-    assert(errorMessage.nonEmpty && errorMessage.get.contains("This is an unsuccessful batch"),
-      "An unsuccessful batch should set errorMessage")
+    // Check if failureReasons contains the correct error message
+    assert(failureReasons != null)
+    assert(failureReasons.size === 1)
+    assert(failureReasons.contains(0))
+    assert(failureReasons(0).contains("This is a failed job"))
+  }
+
+  test("onBatchCompleted with failed batch and multiple failed jobs") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD { _ =>
+      throw new RuntimeException("This is a failed job")
+    }
+    inputStream.foreachRDD { _ =>
+      throw new RuntimeException("This is another failed job")
+    }
+
+    @volatile var failureReasons: Map[Int, String] = null
+    ssc.addStreamingListener(new StreamingListener {
+      override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
+        failureReasons = batchCompleted.batchInfo.failureReasons
+      }
+    })
+    val batchCounter = new BatchCounter(ssc)
+    ssc.start()
+    // Make sure running at least one batch
+    batchCounter.waitUntilBatchesCompleted(expectedNumCompletedBatches = 1, timeout = 10000)
+    val e = intercept[RuntimeException] {
+      ssc.awaitTerminationOrTimeout(10000)
+    }
+    assert(e.getMessage === "This is another failed job")
+    ssc.stop()
+    // Check if failureReasons contains the correct error messages
+    assert(failureReasons != null)
+    assert(failureReasons.size === 2)
+    assert(failureReasons.contains(0))
+    assert(failureReasons.contains(1))
+    assert(failureReasons(0).contains("This is a failed job"))
+    assert(failureReasons(1).contains("This is another failed job"))
   }
 
   /** Check if a sequence of numbers is in increasing order */

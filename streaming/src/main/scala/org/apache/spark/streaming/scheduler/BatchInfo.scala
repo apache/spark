@@ -29,6 +29,8 @@ import org.apache.spark.streaming.Time
  *                        the streaming scheduler queue
  * @param processingStartTime Clock time of when the first job of this batch started processing
  * @param processingEndTime Clock time of when the last job of this batch finished processing
+ * @param failureReasons The failure reasons if there are any jobs in this batch failed. The key is
+ *                       `outputOpId` and the value is the failure reason.
  */
 @DeveloperApi
 case class BatchInfo(
@@ -37,7 +39,7 @@ case class BatchInfo(
     submissionTime: Long,
     processingStartTime: Option[Long],
     processingEndTime: Option[Long],
-    errorMessage: Option[String] = None) {
+    failureReasons: Map[Int, String] = Map.empty) {
 
   @deprecated("Use streamIdToInputInfo instead", "1.5.0")
   def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
