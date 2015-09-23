@@ -171,7 +171,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Runs this query returning the result as an array.
    */
   def executeCollect(): Array[InternalRow] = {
-    execute().collect()
+    execute().map(_.copy()).collect()
   }
 
   /**
