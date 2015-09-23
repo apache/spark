@@ -302,17 +302,8 @@ public final class UnsafeExternalSorter {
   private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
-      logger.debug("Attempting to expand sort pointer array");
-      final long oldPointerArrayMemoryUsage = inMemSorter.getMemoryUsage();
-      final long memoryToGrowPointerArray = oldPointerArrayMemoryUsage * 2;
-      final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryToGrowPointerArray);
-      if (memoryAcquired < memoryToGrowPointerArray) {
-        shuffleMemoryManager.release(memoryAcquired);
-        spill();
-      } else {
-        inMemSorter.expandPointerArray();
-        shuffleMemoryManager.release(oldPointerArrayMemoryUsage);
-      }
+      // TODO: track the pointer array memory! (SPARK-10474)
+      inMemSorter.expandPointerArray();
     }
   }
 
