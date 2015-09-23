@@ -38,6 +38,6 @@ class TransformedDStream[U: ClassTag] (
 
   override def compute(validTime: Time): Option[RDD[U]] = {
     val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
-    Some(transformFunc(parentRDDs, validTime))
+    Option(transformFunc(parentRDDs, validTime))
   }
 }
