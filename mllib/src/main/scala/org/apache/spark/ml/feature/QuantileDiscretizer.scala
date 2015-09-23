@@ -129,7 +129,7 @@ private[feature] object QuantileDiscretizer {
     if (possibleSplits <= numSplits) {
       valueCounts.dropRight(1).map(_._1)
     } else {
-      val stride: Double = samples.length.toDouble / (numSplits + 1)
+      val stride: Double = math.ceil(samples.length.toDouble / (numSplits + 1))
       val splitsBuilder = mutable.ArrayBuilder.make[Double]
       var index = 1
       // currentCount: sum of counts of values that have been visited

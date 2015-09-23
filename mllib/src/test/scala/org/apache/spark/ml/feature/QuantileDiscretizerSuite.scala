@@ -17,49 +17,68 @@
 
 package org.apache.spark.ml.feature
 
-import scala.util.Random
-
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkContext
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SQLContext}
 
 class QuantileDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
+  import org.apache.spark.ml.feature.QuantileDiscretizerSuite._
 
   test("Test quantile discretizer") {
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    checkDiscretizedData(sc,
+      Array[Double](1, 2, 3, 3, 3, 3, 3, 3, 3),
+      10,
+      Array[Double](1, 2, 3, 3, 3, 3, 3, 3, 3),
+      Array("-Infinity, 1.0", "1.0, 2.0", "2.0, 3.0", "3.0, Infinity"))
 
-    val random = new Random(47)
-    val data = Array.fill[Double](10)(random.nextDouble())
-    val result = Array[Double](2, 2, 0, 1, 1, 1, 1, 0, 2, 2)
+    checkDiscretizedData(sc,
+      Array[Double](1, 2, 3, 3, 3, 3, 3, 3, 3),
+      4,
+      Array[Double](1, 2, 3, 3, 3, 3, 3, 3, 3),
+      Array("-Infinity, 1.0", "1.0, 2.0", "2.0, 3.0", "3.0, Infinity"))
 
-    val df = sc.parallelize(data.zip(result)).toDF("data", "expected")
+    checkDiscretizedData(sc,
+      Array[Double](1, 2, 3, 3, 3, 3, 3, 3, 3),
+      3,
+      Array[Double](0, 1, 2, 2, 2, 2, 2, 2, 2),
+      Array("-Infinity, 2.0", "2.0, 3.0", "3.0, Infinity"))
 
-    val discretizer = new QuantileDiscretizer()
-      .setInputCol("data")
-      .setOutputCol("result")
-      .setNumBuckets(3)
+    checkDiscretizedData(sc,
+      Array[Double](1, 2, 3, 3, 3, 3, 3, 3, 3),
+      2,
+      Array[Double](0, 1, 1, 1, 1, 1, 1, 1, 1),
+      Array("-Infinity, 2.0", "2.0, Infinity"))
 
-    val bucketizer = discretizer.fit(df)
-    val res = bucketizer.transform(df)
-
-    res.select("expected", "result").collect().foreach {
-      case Row(expected: Double, result: Double) => assert(expected == result)
-    }
-
-    val attr = Attribute.fromStructField(res.schema("result")).asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array(
-      "-Infinity, 0.18847866977771732",
-      "0.18847866977771732, 0.5309454508634242",
-      "0.5309454508634242, Infinity"))
   }
+}
 
-  test("Test find splits") {
-    val sample = Array[Double](1, 2, 3, 3, 3, 3, 3, 3, 3)
-    val numSplits = 2
-    val res = QuantileDiscretizer.findSplits(sample, numSplits)
-    println(res.mkString(", "))
+private object QuantileDiscretizerSuite extends FunSuite {
+
+  def checkDiscretizedData(
+      sc: SparkContext,
+      data: Array[Double],
+      numBucket: Int,
+      expectedResult: Array[Double],
+      expectedAttrs: Array[String]): Unit = {
+    val sqlCtx = new SQLContext(sc)
+    import sqlCtx.implicits._
+
+    val df = sc.parallelize(data.map(Tuple1.apply)).toDF("input")
+    val discretizer = new QuantileDiscretizer().setInputCol("input").setOutputCol("result")
+      .setNumBuckets(numBucket)
+    val result = discretizer.fit(df).transform(df)
+
+    val transformedFeatures = result.select("result").collect()
+      .map { case Row(transformedFeature: Double) => transformedFeature }
+    val transformedAttrs = Attribute.fromStructField(result.schema("result"))
+      .asInstanceOf[NominalAttribute].values.get
+
+    assert(transformedFeatures === expectedResult,
+      "Transformed features do not equal expected features.")
+    assert(transformedAttrs === expectedAttrs,
+      "Transformed attributes do not equal expected attributes.")
   }
 }
