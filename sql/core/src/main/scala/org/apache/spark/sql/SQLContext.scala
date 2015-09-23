@@ -541,9 +541,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
     val schema = getSchema(beanClass)
     val className = beanClass.getName
-    val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
+    val beanInfo = Introspector.getBeanInfo(beanClass)
     val extractors =
-      localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+      beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
     val methodsToConverts = extractors.zip(schema).map { case (e, attr) =>
       (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
     }
