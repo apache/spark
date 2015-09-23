@@ -26,7 +26,7 @@ class HasMaxIter(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    maxIter = Param(Params._dummy(), "maxIter", "max number of iterations (>= 0).")
+    maxIter = Param(Params._dummy(), "maxIter", "max number of iterations (>= 0)")
 
     def __init__(self):
         super(HasMaxIter, self).__init__()
@@ -53,7 +53,7 @@ class HasRegParam(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    regParam = Param(Params._dummy(), "regParam", "regularization parameter (>= 0).")
+    regParam = Param(Params._dummy(), "regParam", "regularization parameter (>= 0)")
 
     def __init__(self):
         super(HasRegParam, self).__init__()
@@ -80,7 +80,7 @@ class HasFeaturesCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.")
+    featuresCol = Param(Params._dummy(), "featuresCol", "features column name")
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
@@ -108,7 +108,7 @@ class HasLabelCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    labelCol = Param(Params._dummy(), "labelCol", "label column name.")
+    labelCol = Param(Params._dummy(), "labelCol", "label column name")
 
     def __init__(self):
         super(HasLabelCol, self).__init__()
@@ -136,7 +136,7 @@ class HasPredictionCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name.")
+    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name")
 
     def __init__(self):
         super(HasPredictionCol, self).__init__()
@@ -160,16 +160,16 @@ class HasPredictionCol(Params):
 
 class HasProbabilityCol(Params):
     """
-    Mixin for param probabilityCol: Column name for predicted class conditional probabilities Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
+    Mixin for param probabilityCol: Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
     """
 
     # a placeholder to make it appear in the generated doc
-    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
+    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
 
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
-        #: param for Column name for predicted class conditional probabilities Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities
-        self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities")
+        #: param for Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
+        self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
         self._setDefault(probabilityCol='probability')
 
     def setProbabilityCol(self, value):
@@ -192,7 +192,7 @@ class HasRawPredictionCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.")
+    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name")
 
     def __init__(self):
         super(HasRawPredictionCol, self).__init__()
@@ -220,7 +220,7 @@ class HasInputCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    inputCol = Param(Params._dummy(), "inputCol", "input column name.")
+    inputCol = Param(Params._dummy(), "inputCol", "input column name")
 
     def __init__(self):
         super(HasInputCol, self).__init__()
@@ -247,7 +247,7 @@ class HasInputCols(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    inputCols = Param(Params._dummy(), "inputCols", "input column names.")
+    inputCols = Param(Params._dummy(), "inputCols", "input column names")
 
     def __init__(self):
         super(HasInputCols, self).__init__()
@@ -274,7 +274,7 @@ class HasOutputCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    outputCol = Param(Params._dummy(), "outputCol", "output column name.")
+    outputCol = Param(Params._dummy(), "outputCol", "output column name")
 
     def __init__(self):
         super(HasOutputCol, self).__init__()
@@ -302,7 +302,7 @@ class HasNumFeatures(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    numFeatures = Param(Params._dummy(), "numFeatures", "number of features.")
+    numFeatures = Param(Params._dummy(), "numFeatures", "number of features")
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
@@ -329,7 +329,7 @@ class HasCheckpointInterval(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "checkpoint interval (>= 1).")
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "checkpoint interval (>= 1)")
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
@@ -356,7 +356,7 @@ class HasSeed(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    seed = Param(Params._dummy(), "seed", "random seed.")
+    seed = Param(Params._dummy(), "seed", "random seed")
 
     def __init__(self):
         super(HasSeed, self).__init__()
@@ -384,7 +384,7 @@ class HasTol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.")
+    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms")
 
     def __init__(self):
         super(HasTol, self).__init__()
@@ -407,7 +407,7 @@ class HasTol(Params):
 
 class HasStepSize(Params):
     """
-    Mixin for param stepSize: Step size to be used for each iteration of optimization.
+    Mixin for param stepSize: Step size to be used for each iteration of optimization..
     """
 
     # a placeholder to make it appear in the generated doc
@@ -415,8 +415,8 @@ class HasStepSize(Params):
 
     def __init__(self):
         super(HasStepSize, self).__init__()
-        #: param for Step size to be used for each iteration of optimization
-        self.stepSize = Param(self, "stepSize", "Step size to be used for each iteration of optimization")
+        #: param for Step size to be used for each iteration of optimization.
+        self.stepSize = Param(self, "stepSize", "Step size to be used for each iteration of optimization.")
 
     def setStepSize(self, value):
         """
@@ -434,7 +434,7 @@ class HasStepSize(Params):
 
 class HasHandleInvalid(Params):
     """
-    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
+    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
     """
 
     # a placeholder to make it appear in the generated doc
@@ -442,8 +442,8 @@ class HasHandleInvalid(Params):
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
-        #: param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later
-        self.handleInvalid = Param(self, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later")
+        #: param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
+        self.handleInvalid = Param(self, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.")
 
     def setHandleInvalid(self, value):
         """
@@ -465,7 +465,7 @@ class HasElasticNetParam(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty")
 
     def __init__(self):
         super(HasElasticNetParam, self).__init__()
@@ -489,7 +489,7 @@ class HasElasticNetParam(Params):
 
 class HasFitIntercept(Params):
     """
-    Mixin for param fitIntercept: whether to fit an intercept term.
+    Mixin for param fitIntercept: whether to fit an intercept term..
     """
 
     # a placeholder to make it appear in the generated doc
@@ -497,8 +497,8 @@ class HasFitIntercept(Params):
 
     def __init__(self):
         super(HasFitIntercept, self).__init__()
-        #: param for whether to fit an intercept term
-        self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term")
+        #: param for whether to fit an intercept term.
+        self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
         self._setDefault(fitIntercept=True)
 
     def setFitIntercept(self, value):
@@ -517,7 +517,7 @@ class HasFitIntercept(Params):
 
 class HasStandardization(Params):
     """
-    Mixin for param standardization: whether to standardize the training features before fitting the model.
+    Mixin for param standardization: whether to standardize the training features before fitting the model..
     """
 
     # a placeholder to make it appear in the generated doc
@@ -525,8 +525,8 @@ class HasStandardization(Params):
 
     def __init__(self):
         super(HasStandardization, self).__init__()
-        #: param for whether to standardize the training features before fitting the model
-        self.standardization = Param(self, "standardization", "whether to standardize the training features before fitting the model")
+        #: param for whether to standardize the training features before fitting the model.
+        self.standardization = Param(self, "standardization", "whether to standardize the training features before fitting the model.")
         self._setDefault(standardization=True)
 
     def setStandardization(self, value):
@@ -545,7 +545,7 @@ class HasStandardization(Params):
 
 class HasThresholds(Params):
     """
-    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
+    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold..
     """
 
     # a placeholder to make it appear in the generated doc
@@ -553,8 +553,8 @@ class HasThresholds(Params):
 
     def __init__(self):
         super(HasThresholds, self).__init__()
-        #: param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold
-        self.thresholds = Param(self, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold")
+        #: param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
+        self.thresholds = Param(self, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.")
 
     def setThresholds(self, value):
         """
@@ -572,7 +572,7 @@ class HasThresholds(Params):
 
 class HasWeightCol(Params):
     """
-    Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0.
+    Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0..
     """
 
     # a placeholder to make it appear in the generated doc
@@ -580,8 +580,8 @@ class HasWeightCol(Params):
 
     def __init__(self):
         super(HasWeightCol, self).__init__()
-        #: param for weight column name. If this is not set or empty, we treat all instance weights as 1.0
-        self.weightCol = Param(self, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0")
+        #: param for weight column name. If this is not set or empty, we treat all instance weights as 1.0.
+        self.weightCol = Param(self, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
 
     def setWeightCol(self, value):
         """
@@ -603,28 +603,28 @@ class DecisionTreeParams(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes")
-    maxBins = Param(Params._dummy(), "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature")
-    minInstancesPerNode = Param(Params._dummy(), "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1")
-    minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node")
-    maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation")
-    cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees")
+    maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.")
+    maxBins = Param(Params._dummy(), "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.")
+    minInstancesPerNode = Param(Params._dummy(), "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.")
+    minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
+    maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
+    cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
     
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
-        #: param for Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes
-        self.maxDepth = Param(self, "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes")
-        #: param for Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature
-        self.maxBins = Param(self, "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature")
-        #: param for Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1
-        self.minInstancesPerNode = Param(self, "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1")
-        #: param for Minimum information gain for a split to be considered at a tree node
-        self.minInfoGain = Param(self, "minInfoGain", "Minimum information gain for a split to be considered at a tree node")
-        #: param for Maximum memory in MB allocated to histogram aggregation
-        self.maxMemoryInMB = Param(self, "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation")
-        #: param for If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees
-        self.cacheNodeIds = Param(self, "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees")
+        #: param for Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+        self.maxDepth = Param(self, "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.")
+        #: param for Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.
+        self.maxBins = Param(self, "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.")
+        #: param for Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.
+        self.minInstancesPerNode = Param(self, "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.")
+        #: param for Minimum information gain for a split to be considered at a tree node.
+        self.minInfoGain = Param(self, "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
+        #: param for Maximum memory in MB allocated to histogram aggregation.
+        self.maxMemoryInMB = Param(self, "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
+        #: param for If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.
+        self.cacheNodeIds = Param(self, "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
         
     def setMaxDepth(self, value):
         """
