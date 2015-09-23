@@ -23,8 +23,9 @@ import com.fasterxml.jackson.annotation.{JsonIgnore, JsonInclude, JsonPropertyOr
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.google.common.base.Objects
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
 
 /**
  * A general, named code block representing an operation that instantiates RDDs.
@@ -43,9 +44,8 @@ import org.apache.spark.SparkContext
 @JsonPropertyOrder(Array("id", "name", "parent"))
 private[spark] class RDDOperationScope(
     val name: String,
-    val parent: Option[RDDOperationScope] = None) {
-
-  val id: Int = RDDOperationScope.nextScopeId()
+    val parent: Option[RDDOperationScope] = None,
+    val id: String = RDDOperationScope.nextScopeId().toString) {
 
   def toJson: String = {
     RDDOperationScope.jsonMapper.writeValueAsString(this)
@@ -68,6 +68,8 @@ private[spark] class RDDOperationScope(
     }
   }
 
+  override def hashCode(): Int = Objects.hashCode(id, name, parent)
+
   override def toString: String = toJson
 }
 
@@ -75,7 +77,7 @@ private[spark] class RDDOperationScope(
  * A collection of utility methods to construct a hierarchical representation of RDD scopes.
  * An RDD scope tracks the series of operations that created a given RDD.
  */
-private[spark] object RDDOperationScope {
+private[spark] object RDDOperationScope extends Logging {
   private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
   private val scopeCounter = new AtomicInteger(0)
 
@@ -88,14 +90,24 @@ private[spark] object RDDOperationScope {
 
   /**
    * Execute the given body such that all RDDs created in this body will have the same scope.
-   * The name of the scope will be the name of the method that immediately encloses this one.
+   * The name of the scope will be the first method name in the stack trace that is not the
+   * same as this method's.
    *
    * Note: Return statements are NOT allowed in body.
    */
   private[spark] def withScope[T](
       sc: SparkContext,
       allowNesting: Boolean = false)(body: => T): T = {
-    val callerMethodName = Thread.currentThread.getStackTrace()(3).getMethodName
+    val ourMethodName = "withScope"
+    val callerMethodName = Thread.currentThread.getStackTrace()
+      .dropWhile(_.getMethodName != ourMethodName)
+      .find(_.getMethodName != ourMethodName)
+      .map(_.getMethodName)
+      .getOrElse {
+        // Log a warning just in case, but this should almost certainly never happen
+        logWarning("No valid method name for this RDD operation scope!")
+        "N/A"
+      }
     withScope[T](sc, callerMethodName, allowNesting, ignoreParent = false)(body)
   }
 

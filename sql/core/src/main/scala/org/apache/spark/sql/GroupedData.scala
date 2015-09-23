@@ -17,15 +17,46 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
 
+/**
+ * Companion object for GroupedData
+ */
+private[sql] object GroupedData {
+  def apply(
+      df: DataFrame,
+      groupingExprs: Seq[Expression],
+      groupType: GroupType): GroupedData = {
+    new GroupedData(df, groupingExprs, groupType: GroupType)
+  }
+
+  /**
+   * The Grouping Type
+   */
+  private[sql] trait GroupType
+
+  /**
+   * To indicate it's the GroupBy
+   */
+  private[sql] object GroupByType extends GroupType
+
+  /**
+   * To indicate it's the CUBE
+   */
+  private[sql] object CubeType extends GroupType
+
+  /**
+   * To indicate it's the ROLLUP
+   */
+  private[sql] object RollupType extends GroupType
+}
 
 /**
  * :: Experimental ::
@@ -34,19 +65,41 @@ import org.apache.spark.sql.types.NumericType
  * @since 1.3.0
  */
 @Experimental
-class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) {
+class GroupedData protected[sql](
+    df: DataFrame,
+    groupingExprs: Seq[Expression],
+    private val groupType: GroupedData.GroupType) {
 
-  private[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
-    val namedGroupingExprs = groupingExprs.map {
+  private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
+    val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
+      groupingExprs ++ aggExprs
+    } else {
+      aggExprs
+    }
+
+    val aliasedAgg = aggregates.map {
+      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+      // make it a NamedExpression.
+      case u: UnresolvedAttribute => UnresolvedAlias(u)
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.prettyString)()
     }
-    DataFrame(
-      df.sqlContext, Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
+    groupType match {
+      case GroupedData.GroupByType =>
+        DataFrame(
+          df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
+      case GroupedData.RollupType =>
+        DataFrame(
+          df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aliasedAgg))
+      case GroupedData.CubeType =>
+        DataFrame(
+          df.sqlContext, Cube(groupingExprs, df.logicalPlan, aliasedAgg))
+    }
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => Expression)
-    : Seq[NamedExpression] = {
+    : DataFrame = {
 
     val columnExprs = if (colNames.isEmpty) {
       // No columns specified. Use all numeric columns.
@@ -63,10 +116,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
         namedExpr
       }
     }
-    columnExprs.map { c =>
-      val a = f(c)
-      Alias(a, a.prettyString)()
-    }
+    toDF(columnExprs.map(f))
   }
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
@@ -74,6 +124,9 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
       case "avg" | "average" | "mean" => Average
       case "max" => Max
       case "min" => Min
+      case "stddev" => Stddev
+      case "stddev_pop" => StddevPop
+      case "stddev_samp" => StddevSamp
       case "sum" => Sum
       case "count" | "size" =>
         // Turn count(*) into count(1)
@@ -119,10 +172,9 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    * @since 1.3.0
    */
   def agg(exprs: Map[String, String]): DataFrame = {
-    exprs.map { case (colName, expr) =>
-      val a = strToExpr(expr)(df(colName).expr)
-      Alias(a, a.prettyString)()
-    }.toSeq
+    toDF(exprs.map { case (colName, expr) =>
+      strToExpr(expr)(df(colName).expr)
+    }.toSeq)
   }
 
   /**
@@ -139,7 +191,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    * @since 1.3.0
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.toMap)
+    agg(exprs.asScala.toMap)
   }
 
   /**
@@ -175,19 +227,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
-    val aggExprs = (expr +: exprs).map(_.expr).map {
-      case expr: NamedExpression => expr
-      case expr: Expression => Alias(expr, expr.prettyString)()
-    }
-    if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
-      val retainedExprs = groupingExprs.map {
-        case expr: NamedExpression => expr
-        case expr: Expression => Alias(expr, expr.prettyString)()
-      }
-      DataFrame(df.sqlContext, Aggregate(groupingExprs, retainedExprs ++ aggExprs, df.logicalPlan))
-    } else {
-      DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
-    }
+    toDF((expr +: exprs).map(_.expr))
   }
 
   /**
@@ -196,7 +236,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    *
    * @since 1.3.0
    */
-  def count(): DataFrame = Seq(Alias(Count(Literal(1)), "count")())
+  def count(): DataFrame = toDF(Seq(Alias(Count(Literal(1)), "count")()))
 
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
@@ -207,9 +247,9 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Average)
+    aggregateNumericColumns(colNames : _*)(Average)
   }
- 
+
   /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
@@ -219,7 +259,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Max)
+    aggregateNumericColumns(colNames : _*)(Max)
   }
 
   /**
@@ -231,7 +271,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Average)
+    aggregateNumericColumns(colNames : _*)(Average)
   }
 
   /**
@@ -243,7 +283,43 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Min)
+    aggregateNumericColumns(colNames : _*)(Min)
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Stddev)
+  }
+
+  /**
+   * Compute the population standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev_pop(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(StddevPop)
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev_samp(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(StddevSamp)
   }
 
   /**
@@ -255,6 +331,6 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Sum)
-  }    
+    aggregateNumericColumns(colNames : _*)(Sum)
+  }
 }

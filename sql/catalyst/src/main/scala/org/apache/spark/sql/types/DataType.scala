@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{TypeTag, runtimeMirror}
+import scala.util.Try
 import scala.util.parsing.combinator.RegexParsers
 
-import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
+import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.util.Utils
 
@@ -35,11 +33,9 @@ import org.apache.spark.util.Utils
 /**
  * :: DeveloperApi ::
  * The base type of all Spark SQL data types.
- *
- * @group dataType
  */
 @DeveloperApi
-abstract class DataType {
+abstract class DataType extends AbstractDataType {
   /**
    * Enables matching against DataType for expressions:
    * {{{
@@ -55,7 +51,9 @@ abstract class DataType {
   def defaultSize: Int
 
   /** Name of the type used in JSON serialization. */
-  def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
+  def typeName: String = {
+    this.getClass.getSimpleName.stripSuffix("$").stripSuffix("Type").stripSuffix("UDT").toLowerCase
+  }
 
   private[sql] def jsonValue: JValue = typeName
 
@@ -80,91 +78,28 @@ abstract class DataType {
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def asNullable: DataType
-}
 
-
-/**
- * An internal type used to represent everything that is not null, UDTs, arrays, structs, and maps.
- */
-protected[sql] abstract class AtomicType extends DataType {
-  private[sql] type InternalType
-  @transient private[sql] val tag: TypeTag[InternalType]
-  private[sql] val ordering: Ordering[InternalType]
-
-  @transient private[sql] val classTag = ScalaReflectionLock.synchronized {
-    val mirror = runtimeMirror(Utils.getSparkClassLoader)
-    ClassTag[InternalType](mirror.runtimeClass(tag.tpe))
-  }
-}
-
-
-/**
- * :: DeveloperApi ::
- * Numeric data types.
- *
- * @group dataType
- */
-abstract class NumericType extends AtomicType {
-  // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
-  // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
-  // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
-  // desugared by the compiler into an argument to the objects constructor. This means there is no
-  // longer an no argument constructor and thus the JVM cannot serialize the object anymore.
-  private[sql] val numeric: Numeric[InternalType]
-}
-
-
-private[sql] object NumericType {
   /**
-   * Enables matching against NumericType for expressions:
-   * {{{
-   *   case Cast(child @ NumericType(), StringType) =>
-   *     ...
-   * }}}
+   * Returns true if any `DataType` of this DataType tree satisfies the given function `f`.
    */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
-}
+  private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
 
+  override private[sql] def defaultConcreteType: DataType = this
 
-private[sql] object IntegralType {
-  /**
-   * Enables matching against IntegralType for expressions:
-   * {{{
-   *   case Cast(child @ IntegralType(), StringType) =>
-   *     ...
-   * }}}
-   */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
-}
-
-
-private[sql] abstract class IntegralType extends NumericType {
-  private[sql] val integral: Integral[InternalType]
-}
-
-
-private[sql] object FractionalType {
-  /**
-   * Enables matching against FractionalType for expressions:
-   * {{{
-   *   case Cast(child @ FractionalType(), StringType) =>
-   *     ...
-   * }}}
-   */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
-}
-
-
-private[sql] abstract class FractionalType extends NumericType {
-  private[sql] val fractional: Fractional[InternalType]
-  private[sql] val asIntegral: Integral[InternalType]
+  override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 }
 
 
 object DataType {
+  private[sql] def fromString(raw: String): DataType = {
+    Try(DataType.fromJson(raw)).getOrElse(DataType.fromCaseClassString(raw))
+  }
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
+  /**
+   * @deprecated As of 1.2.0, replaced by `DataType.fromJson()`
+   */
   @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
@@ -178,7 +113,7 @@ object DataType {
   private def nameToType(name: String): DataType = {
     val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
     name match {
-      case "decimal" => DecimalType.Unlimited
+      case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case other => nonDecimalNameToType(other)
     }
@@ -214,12 +149,21 @@ object DataType {
     ("type", JString("struct"))) =>
       StructType(fields.map(parseStructField))
 
+    // Scala/Java UDT
     case JSortedObject(
     ("class", JString(udtClass)),
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
-      Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+      Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+
+    // Python UDT
+    case JSortedObject(
+    ("pyClass", JString(pyClass)),
+    ("serializedClass", JString(serialized)),
+    ("sqlType", v: JValue),
+    ("type", JString("udt"))) =>
+        new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -249,7 +193,7 @@ object DataType {
         | "BinaryType" ^^^ BinaryType
         | "BooleanType" ^^^ BooleanType
         | "DateType" ^^^ DateType
-        | "DecimalType()" ^^^ DecimalType.Unlimited
+        | "DecimalType()" ^^^ DecimalType.USER_DEFAULT
         | fixedDecimalType
         | "TimestampType" ^^^ TimestampType
         )
@@ -271,7 +215,7 @@ object DataType {
 
     protected lazy val structField: Parser[StructField] =
       ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
-        case name ~ tpe ~ nullable  =>
+        case name ~ tpe ~ nullable =>
           StructField(name, tpe, nullable = nullable)
       }
 

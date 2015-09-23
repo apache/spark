@@ -19,10 +19,10 @@ package org.apache.spark.util.io
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
 
-class ByteArrayChunkOutputStreamSuite extends FunSuite {
+class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
 
   test("empty output") {
     val o = new ByteArrayChunkOutputStream(1024)

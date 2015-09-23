@@ -32,14 +32,12 @@ class HasMaxIter(Params):
         super(HasMaxIter, self).__init__()
         #: param for max number of iterations (>= 0)
         self.maxIter = Param(self, "maxIter", "max number of iterations (>= 0)")
-        if None is not None:
-            self._setDefault(maxIter=None)
 
     def setMaxIter(self, value):
         """
         Sets the value of :py:attr:`maxIter`.
         """
-        self.paramMap[self.maxIter] = value
+        self._paramMap[self.maxIter] = value
         return self
 
     def getMaxIter(self):
@@ -61,14 +59,12 @@ class HasRegParam(Params):
         super(HasRegParam, self).__init__()
         #: param for regularization parameter (>= 0)
         self.regParam = Param(self, "regParam", "regularization parameter (>= 0)")
-        if None is not None:
-            self._setDefault(regParam=None)
 
     def setRegParam(self, value):
         """
         Sets the value of :py:attr:`regParam`.
         """
-        self.paramMap[self.regParam] = value
+        self._paramMap[self.regParam] = value
         return self
 
     def getRegParam(self):
@@ -90,14 +86,13 @@ class HasFeaturesCol(Params):
         super(HasFeaturesCol, self).__init__()
         #: param for features column name
         self.featuresCol = Param(self, "featuresCol", "features column name")
-        if 'features' is not None:
-            self._setDefault(featuresCol='features')
+        self._setDefault(featuresCol='features')
 
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
         """
-        self.paramMap[self.featuresCol] = value
+        self._paramMap[self.featuresCol] = value
         return self
 
     def getFeaturesCol(self):
@@ -119,14 +114,13 @@ class HasLabelCol(Params):
         super(HasLabelCol, self).__init__()
         #: param for label column name
         self.labelCol = Param(self, "labelCol", "label column name")
-        if 'label' is not None:
-            self._setDefault(labelCol='label')
+        self._setDefault(labelCol='label')
 
     def setLabelCol(self, value):
         """
         Sets the value of :py:attr:`labelCol`.
         """
-        self.paramMap[self.labelCol] = value
+        self._paramMap[self.labelCol] = value
         return self
 
     def getLabelCol(self):
@@ -148,14 +142,13 @@ class HasPredictionCol(Params):
         super(HasPredictionCol, self).__init__()
         #: param for prediction column name
         self.predictionCol = Param(self, "predictionCol", "prediction column name")
-        if 'prediction' is not None:
-            self._setDefault(predictionCol='prediction')
+        self._setDefault(predictionCol='prediction')
 
     def setPredictionCol(self, value):
         """
         Sets the value of :py:attr:`predictionCol`.
         """
-        self.paramMap[self.predictionCol] = value
+        self._paramMap[self.predictionCol] = value
         return self
 
     def getPredictionCol(self):
@@ -177,14 +170,13 @@ class HasProbabilityCol(Params):
         super(HasProbabilityCol, self).__init__()
         #: param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
         self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
-        if 'probability' is not None:
-            self._setDefault(probabilityCol='probability')
+        self._setDefault(probabilityCol='probability')
 
     def setProbabilityCol(self, value):
         """
         Sets the value of :py:attr:`probabilityCol`.
         """
-        self.paramMap[self.probabilityCol] = value
+        self._paramMap[self.probabilityCol] = value
         return self
 
     def getProbabilityCol(self):
@@ -206,14 +198,13 @@ class HasRawPredictionCol(Params):
         super(HasRawPredictionCol, self).__init__()
         #: param for raw prediction (a.k.a. confidence) column name
         self.rawPredictionCol = Param(self, "rawPredictionCol", "raw prediction (a.k.a. confidence) column name")
-        if 'rawPrediction' is not None:
-            self._setDefault(rawPredictionCol='rawPrediction')
+        self._setDefault(rawPredictionCol='rawPrediction')
 
     def setRawPredictionCol(self, value):
         """
         Sets the value of :py:attr:`rawPredictionCol`.
         """
-        self.paramMap[self.rawPredictionCol] = value
+        self._paramMap[self.rawPredictionCol] = value
         return self
 
     def getRawPredictionCol(self):
@@ -235,14 +226,12 @@ class HasInputCol(Params):
         super(HasInputCol, self).__init__()
         #: param for input column name
         self.inputCol = Param(self, "inputCol", "input column name")
-        if None is not None:
-            self._setDefault(inputCol=None)
 
     def setInputCol(self, value):
         """
         Sets the value of :py:attr:`inputCol`.
         """
-        self.paramMap[self.inputCol] = value
+        self._paramMap[self.inputCol] = value
         return self
 
     def getInputCol(self):
@@ -264,14 +253,12 @@ class HasInputCols(Params):
         super(HasInputCols, self).__init__()
         #: param for input column names
         self.inputCols = Param(self, "inputCols", "input column names")
-        if None is not None:
-            self._setDefault(inputCols=None)
 
     def setInputCols(self, value):
         """
         Sets the value of :py:attr:`inputCols`.
         """
-        self.paramMap[self.inputCols] = value
+        self._paramMap[self.inputCols] = value
         return self
 
     def getInputCols(self):
@@ -293,14 +280,13 @@ class HasOutputCol(Params):
         super(HasOutputCol, self).__init__()
         #: param for output column name
         self.outputCol = Param(self, "outputCol", "output column name")
-        if None is not None:
-            self._setDefault(outputCol=None)
+        self._setDefault(outputCol=self.uid + '__output')
 
     def setOutputCol(self, value):
         """
         Sets the value of :py:attr:`outputCol`.
         """
-        self.paramMap[self.outputCol] = value
+        self._paramMap[self.outputCol] = value
         return self
 
     def getOutputCol(self):
@@ -322,14 +308,12 @@ class HasNumFeatures(Params):
         super(HasNumFeatures, self).__init__()
         #: param for number of features
         self.numFeatures = Param(self, "numFeatures", "number of features")
-        if None is not None:
-            self._setDefault(numFeatures=None)
 
     def setNumFeatures(self, value):
         """
         Sets the value of :py:attr:`numFeatures`.
         """
-        self.paramMap[self.numFeatures] = value
+        self._paramMap[self.numFeatures] = value
         return self
 
     def getNumFeatures(self):
@@ -351,14 +335,12 @@ class HasCheckpointInterval(Params):
         super(HasCheckpointInterval, self).__init__()
         #: param for checkpoint interval (>= 1)
         self.checkpointInterval = Param(self, "checkpointInterval", "checkpoint interval (>= 1)")
-        if None is not None:
-            self._setDefault(checkpointInterval=None)
 
     def setCheckpointInterval(self, value):
         """
         Sets the value of :py:attr:`checkpointInterval`.
         """
-        self.paramMap[self.checkpointInterval] = value
+        self._paramMap[self.checkpointInterval] = value
         return self
 
     def getCheckpointInterval(self):
@@ -380,14 +362,13 @@ class HasSeed(Params):
         super(HasSeed, self).__init__()
         #: param for random seed
         self.seed = Param(self, "seed", "random seed")
-        if None is not None:
-            self._setDefault(seed=None)
+        self._setDefault(seed=hash(type(self).__name__))
 
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
         """
-        self.paramMap[self.seed] = value
+        self._paramMap[self.seed] = value
         return self
 
     def getSeed(self):
@@ -409,14 +390,12 @@ class HasTol(Params):
         super(HasTol, self).__init__()
         #: param for the convergence tolerance for iterative algorithms
         self.tol = Param(self, "tol", "the convergence tolerance for iterative algorithms")
-        if None is not None:
-            self._setDefault(tol=None)
 
     def setTol(self, value):
         """
         Sets the value of :py:attr:`tol`.
         """
-        self.paramMap[self.tol] = value
+        self._paramMap[self.tol] = value
         return self
 
     def getTol(self):
@@ -438,14 +417,12 @@ class HasStepSize(Params):
         super(HasStepSize, self).__init__()
         #: param for Step size to be used for each iteration of optimization.
         self.stepSize = Param(self, "stepSize", "Step size to be used for each iteration of optimization.")
-        if None is not None:
-            self._setDefault(stepSize=None)
 
     def setStepSize(self, value):
         """
         Sets the value of :py:attr:`stepSize`.
         """
-        self.paramMap[self.stepSize] = value
+        self._paramMap[self.stepSize] = value
         return self
 
     def getStepSize(self):
@@ -453,6 +430,144 @@ class HasStepSize(Params):
         Gets the value of stepSize or its default value.
         """
         return self.getOrDefault(self.stepSize)
+
+
+class HasHandleInvalid(Params):
+    """
+    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.")
+
+    def __init__(self):
+        super(HasHandleInvalid, self).__init__()
+        #: param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
+        self.handleInvalid = Param(self, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.")
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        self._paramMap[self.handleInvalid] = value
+        return self
+
+    def getHandleInvalid(self):
+        """
+        Gets the value of handleInvalid or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
+
+
+class HasElasticNetParam(Params):
+    """
+    Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+
+    def __init__(self):
+        super(HasElasticNetParam, self).__init__()
+        #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
+        self.elasticNetParam = Param(self, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+        self._setDefault(elasticNetParam=0.0)
+
+    def setElasticNetParam(self, value):
+        """
+        Sets the value of :py:attr:`elasticNetParam`.
+        """
+        self._paramMap[self.elasticNetParam] = value
+        return self
+
+    def getElasticNetParam(self):
+        """
+        Gets the value of elasticNetParam or its default value.
+        """
+        return self.getOrDefault(self.elasticNetParam)
+
+
+class HasFitIntercept(Params):
+    """
+    Mixin for param fitIntercept: whether to fit an intercept term..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.")
+
+    def __init__(self):
+        super(HasFitIntercept, self).__init__()
+        #: param for whether to fit an intercept term.
+        self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
+        self._setDefault(fitIntercept=True)
+
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        self._paramMap[self.fitIntercept] = value
+        return self
+
+    def getFitIntercept(self):
+        """
+        Gets the value of fitIntercept or its default value.
+        """
+        return self.getOrDefault(self.fitIntercept)
+
+
+class HasStandardization(Params):
+    """
+    Mixin for param standardization: whether to standardize the training features before fitting the model..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    standardization = Param(Params._dummy(), "standardization", "whether to standardize the training features before fitting the model.")
+
+    def __init__(self):
+        super(HasStandardization, self).__init__()
+        #: param for whether to standardize the training features before fitting the model.
+        self.standardization = Param(self, "standardization", "whether to standardize the training features before fitting the model.")
+        self._setDefault(standardization=True)
+
+    def setStandardization(self, value):
+        """
+        Sets the value of :py:attr:`standardization`.
+        """
+        self._paramMap[self.standardization] = value
+        return self
+
+    def getStandardization(self):
+        """
+        Gets the value of standardization or its default value.
+        """
+        return self.getOrDefault(self.standardization)
+
+
+class HasThresholds(Params):
+    """
+    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.")
+
+    def __init__(self):
+        super(HasThresholds, self).__init__()
+        #: param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
+        self.thresholds = Param(self, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.")
+
+    def setThresholds(self, value):
+        """
+        Sets the value of :py:attr:`thresholds`.
+        """
+        self._paramMap[self.thresholds] = value
+        return self
+
+    def getThresholds(self):
+        """
+        Gets the value of thresholds or its default value.
+        """
+        return self.getOrDefault(self.thresholds)
 
 
 class DecisionTreeParams(Params):
@@ -467,6 +582,7 @@ class DecisionTreeParams(Params):
     minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
     maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
     cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
+    
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
@@ -482,12 +598,12 @@ class DecisionTreeParams(Params):
         self.maxMemoryInMB = Param(self, "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
         #: param for If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.
         self.cacheNodeIds = Param(self, "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
-
+        
     def setMaxDepth(self, value):
         """
         Sets the value of :py:attr:`maxDepth`.
         """
-        self.paramMap[self.maxDepth] = value
+        self._paramMap[self.maxDepth] = value
         return self
 
     def getMaxDepth(self):
@@ -500,7 +616,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`maxBins`.
         """
-        self.paramMap[self.maxBins] = value
+        self._paramMap[self.maxBins] = value
         return self
 
     def getMaxBins(self):
@@ -513,7 +629,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`minInstancesPerNode`.
         """
-        self.paramMap[self.minInstancesPerNode] = value
+        self._paramMap[self.minInstancesPerNode] = value
         return self
 
     def getMinInstancesPerNode(self):
@@ -526,7 +642,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`minInfoGain`.
         """
-        self.paramMap[self.minInfoGain] = value
+        self._paramMap[self.minInfoGain] = value
         return self
 
     def getMinInfoGain(self):
@@ -539,7 +655,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`maxMemoryInMB`.
         """
-        self.paramMap[self.maxMemoryInMB] = value
+        self._paramMap[self.maxMemoryInMB] = value
         return self
 
     def getMaxMemoryInMB(self):
@@ -552,7 +668,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`cacheNodeIds`.
         """
-        self.paramMap[self.cacheNodeIds] = value
+        self._paramMap[self.cacheNodeIds] = value
         return self
 
     def getCacheNodeIds(self):

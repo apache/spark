@@ -27,9 +27,9 @@ import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.RidgeRegressionModel
 
 private[mllib] object PMMLModelExportFactory {
-  
+
   /**
-   * Factory object to help creating the necessary PMMLModelExport implementation 
+   * Factory object to help creating the necessary PMMLModelExport implementation
    * taking as input the machine learning model (for example KMeansModel).
    */
   def createPMMLModelExport(model: Any): PMMLModelExport = {
@@ -44,7 +44,7 @@ private[mllib] object PMMLModelExportFactory {
         new GeneralizedLinearPMMLModelExport(lasso, "lasso regression")
       case svm: SVMModel =>
         new BinaryClassificationPMMLModelExport(
-          svm, "linear SVM", RegressionNormalizationMethodType.NONE, 
+          svm, "linear SVM", RegressionNormalizationMethodType.NONE,
           svm.getThreshold.getOrElse(0.0))
       case logistic: LogisticRegressionModel =>
         if (logistic.numClasses == 2) {
@@ -60,5 +60,5 @@ private[mllib] object PMMLModelExportFactory {
           "PMML Export not supported for model: " + model.getClass.getName)
     }
   }
-  
+
 }

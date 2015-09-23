@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.util
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class IdentifiableSuite extends FunSuite {
+class IdentifiableSuite extends SparkFunSuite {
 
   import IdentifiableSuite.Test
 

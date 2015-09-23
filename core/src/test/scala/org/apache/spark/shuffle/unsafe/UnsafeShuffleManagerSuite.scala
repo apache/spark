@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.unsafe
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
 import org.apache.spark._
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
@@ -29,7 +29,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
  * Tests for the fallback logic in UnsafeShuffleManager. Actual tests of shuffling data are
  * performed in other suites.
  */
-class UnsafeShuffleManagerSuite extends FunSuite with Matchers {
+class UnsafeShuffleManagerSuite extends SparkFunSuite with Matchers {
 
   import UnsafeShuffleManager.canUseUnsafeShuffle
 
@@ -76,6 +76,15 @@ class UnsafeShuffleManagerSuite extends FunSuite with Matchers {
       mapSideCombine = false
     )))
 
+    // Shuffles with key orderings are supported as long as no aggregator is specified
+    assert(canUseUnsafeShuffle(shuffleDep(
+      partitioner = new HashPartitioner(2),
+      serializer = kryo,
+      keyOrdering = Some(mock(classOf[Ordering[Any]])),
+      aggregator = None,
+      mapSideCombine = false
+    )))
+
   }
 
   test("unsupported shuffle dependencies") {
@@ -100,14 +109,7 @@ class UnsafeShuffleManagerSuite extends FunSuite with Matchers {
       mapSideCombine = false
     )))
 
-    // We do not support shuffles that perform any kind of aggregation or sorting of keys
-    assert(!canUseUnsafeShuffle(shuffleDep(
-      partitioner = new HashPartitioner(2),
-      serializer = kryo,
-      keyOrdering = Some(mock(classOf[Ordering[Any]])),
-      aggregator = None,
-      mapSideCombine = false
-    )))
+    // We do not support shuffles that perform aggregation
     assert(!canUseUnsafeShuffle(shuffleDep(
       partitioner = new HashPartitioner(2),
       serializer = kryo,
@@ -115,7 +117,6 @@ class UnsafeShuffleManagerSuite extends FunSuite with Matchers {
       aggregator = Some(mock(classOf[Aggregator[Any, Any, Any]])),
       mapSideCombine = false
     )))
-    // We do not support shuffles that perform any kind of aggregation or sorting of keys
     assert(!canUseUnsafeShuffle(shuffleDep(
       partitioner = new HashPartitioner(2),
       serializer = kryo,

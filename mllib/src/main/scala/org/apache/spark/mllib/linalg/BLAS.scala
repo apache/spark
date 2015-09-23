@@ -92,6 +92,13 @@ private[spark] object BLAS extends Serializable with Logging {
     }
   }
 
+  /** Y += a * x */
+  private[spark] def axpy(a: Double, X: DenseMatrix, Y: DenseMatrix): Unit = {
+    require(X.numRows == Y.numRows && X.numCols == Y.numCols, "Dimension mismatch: " +
+      s"size(X) = ${(X.numRows, X.numCols)} but size(Y) = ${(Y.numRows, Y.numCols)}.")
+    f2jBLAS.daxpy(X.numRows * X.numCols, a, X.values, 1, Y.values, 1)
+  }
+
   /**
    * dot(x, y)
    */
@@ -213,9 +220,9 @@ private[spark] object BLAS extends Serializable with Logging {
   def scal(a: Double, x: Vector): Unit = {
     x match {
       case sx: SparseVector =>
-        f2jBLAS.dscal(sx.values.size, a, sx.values, 1)
+        f2jBLAS.dscal(sx.values.length, a, sx.values, 1)
       case dx: DenseVector =>
-        f2jBLAS.dscal(dx.values.size, a, dx.values, 1)
+        f2jBLAS.dscal(dx.values.length, a, dx.values, 1)
       case _ =>
         throw new IllegalArgumentException(s"scal doesn't support vector type ${x.getClass}.")
     }
@@ -228,7 +235,51 @@ private[spark] object BLAS extends Serializable with Logging {
     }
     _nativeBLAS
   }
- 
+
+  /**
+   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   *
+   * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
+   */
+  def spr(alpha: Double, v: Vector, U: DenseVector): Unit = {
+    spr(alpha, v, U.values)
+  }
+
+  /**
+   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   *
+   * @param U the upper triangular part of the matrix packed in an array (column major)
+   */
+  def spr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
+    val n = v.size
+    v match {
+      case DenseVector(values) =>
+        NativeBLAS.dspr("U", n, alpha, values, 1, U)
+      case SparseVector(size, indices, values) =>
+        val nnz = indices.length
+        var colStartIdx = 0
+        var prevCol = 0
+        var col = 0
+        var j = 0
+        var i = 0
+        var av = 0.0
+        while (j < nnz) {
+          col = indices(j)
+          // Skip empty columns.
+          colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
+          col = indices(j)
+          av = alpha * values(j)
+          i = 0
+          while (i <= j) {
+            U(colStartIdx + indices(i)) += av * values(i)
+            i += 1
+          }
+          j += 1
+          prevCol = col
+        }
+    }
+  }
+
   /**
    * A := alpha * x * x^T^ + A
    * @param alpha a real scalar that will be multiplied to x * x^T^.
@@ -264,7 +315,7 @@ private[spark] object BLAS extends Serializable with Logging {
         j += 1
       }
       i += 1
-    }    
+    }
   }
 
   private def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
@@ -303,8 +354,10 @@ private[spark] object BLAS extends Serializable with Logging {
       C: DenseMatrix): Unit = {
     require(!C.isTransposed,
       "The matrix C cannot be the product of a transpose() call. C.isTransposed must be false.")
-    if (alpha == 0.0) {
-      logDebug("gemm: alpha is equal to 0. Returning C.")
+    if (alpha == 0.0 && beta == 1.0) {
+      logDebug("gemm: alpha is equal to 0 and beta is equal to 1. Returning C.")
+    } else if (alpha == 0.0) {
+      f2jBLAS.dscal(C.values.length, beta, C.values, 1)
     } else {
       A match {
         case sparse: SparseMatrix => gemm(alpha, sparse, B, beta, C)
@@ -408,8 +461,8 @@ private[spark] object BLAS extends Serializable with Logging {
         }
       }
     } else {
-      // Scale matrix first if `beta` is not equal to 0.0
-      if (beta != 0.0) {
+      // Scale matrix first if `beta` is not equal to 1.0
+      if (beta != 1.0) {
         f2jBLAS.dscal(C.values.length, beta, C.values, 1)
       }
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
@@ -463,37 +516,44 @@ private[spark] object BLAS extends Serializable with Logging {
   def gemv(
       alpha: Double,
       A: Matrix,
-      x: DenseVector,
+      x: Vector,
       beta: Double,
       y: DenseVector): Unit = {
     require(A.numCols == x.size,
       s"The columns of A don't match the number of elements of x. A: ${A.numCols}, x: ${x.size}")
     require(A.numRows == y.size,
-      s"The rows of A don't match the number of elements of y. A: ${A.numRows}, y:${y.size}}")
-    if (alpha == 0.0) {
-      logDebug("gemv: alpha is equal to 0. Returning y.")
+      s"The rows of A don't match the number of elements of y. A: ${A.numRows}, y:${y.size}")
+    if (alpha == 0.0 && beta == 1.0) {
+      logDebug("gemv: alpha is equal to 0 and beta is equal to 1. Returning y.")
+    } else if (alpha == 0.0) {
+      scal(beta, y)
     } else {
-      A match {
-        case sparse: SparseMatrix =>
-          gemv(alpha, sparse, x, beta, y)
-        case dense: DenseMatrix =>
-          gemv(alpha, dense, x, beta, y)
+      (A, x) match {
+        case (smA: SparseMatrix, dvx: DenseVector) =>
+          gemv(alpha, smA, dvx, beta, y)
+        case (smA: SparseMatrix, svx: SparseVector) =>
+          gemv(alpha, smA, svx, beta, y)
+        case (dmA: DenseMatrix, dvx: DenseVector) =>
+          gemv(alpha, dmA, dvx, beta, y)
+        case (dmA: DenseMatrix, svx: SparseVector) =>
+          gemv(alpha, dmA, svx, beta, y)
         case _ =>
-          throw new IllegalArgumentException(s"gemv doesn't support matrix type ${A.getClass}.")
+          throw new IllegalArgumentException(s"gemv doesn't support running on matrix type " +
+            s"${A.getClass} and vector type ${x.getClass}.")
       }
     }
   }
 
   /**
    * y := alpha * A * x + beta * y
-   * For `DenseMatrix` A.
+   * For `DenseMatrix` A and `DenseVector` x.
    */
   private def gemv(
       alpha: Double,
       A: DenseMatrix,
       x: DenseVector,
       beta: Double,
-      y: DenseVector): Unit =  {
+      y: DenseVector): Unit = {
     val tStrA = if (A.isTransposed) "T" else "N"
     val mA = if (!A.isTransposed) A.numRows else A.numCols
     val nA = if (!A.isTransposed) A.numCols else A.numRows
@@ -503,14 +563,124 @@ private[spark] object BLAS extends Serializable with Logging {
 
   /**
    * y := alpha * A * x + beta * y
-   * For `SparseMatrix` A.
+   * For `DenseMatrix` A and `SparseVector` x.
+   */
+  private def gemv(
+      alpha: Double,
+      A: DenseMatrix,
+      x: SparseVector,
+      beta: Double,
+      y: DenseVector): Unit = {
+    val mA: Int = A.numRows
+    val nA: Int = A.numCols
+
+    val Avals = A.values
+
+    val xIndices = x.indices
+    val xNnz = xIndices.length
+    val xValues = x.values
+    val yValues = y.values
+
+    if (A.isTransposed) {
+      var rowCounterForA = 0
+      while (rowCounterForA < mA) {
+        var sum = 0.0
+        var k = 0
+        while (k < xNnz) {
+          sum += xValues(k) * Avals(xIndices(k) + rowCounterForA * nA)
+          k += 1
+        }
+        yValues(rowCounterForA) = sum * alpha + beta * yValues(rowCounterForA)
+        rowCounterForA += 1
+      }
+    } else {
+      var rowCounterForA = 0
+      while (rowCounterForA < mA) {
+        var sum = 0.0
+        var k = 0
+        while (k < xNnz) {
+          sum += xValues(k) * Avals(xIndices(k) * mA + rowCounterForA)
+          k += 1
+        }
+        yValues(rowCounterForA) = sum * alpha + beta * yValues(rowCounterForA)
+        rowCounterForA += 1
+      }
+    }
+  }
+
+  /**
+   * y := alpha * A * x + beta * y
+   * For `SparseMatrix` A and `SparseVector` x.
+   */
+  private def gemv(
+      alpha: Double,
+      A: SparseMatrix,
+      x: SparseVector,
+      beta: Double,
+      y: DenseVector): Unit = {
+    val xValues = x.values
+    val xIndices = x.indices
+    val xNnz = xIndices.length
+
+    val yValues = y.values
+
+    val mA: Int = A.numRows
+    val nA: Int = A.numCols
+
+    val Avals = A.values
+    val Arows = if (!A.isTransposed) A.rowIndices else A.colPtrs
+    val Acols = if (!A.isTransposed) A.colPtrs else A.rowIndices
+
+    if (A.isTransposed) {
+      var rowCounter = 0
+      while (rowCounter < mA) {
+        var i = Arows(rowCounter)
+        val indEnd = Arows(rowCounter + 1)
+        var sum = 0.0
+        var k = 0
+        while (k < xNnz && i < indEnd) {
+          if (xIndices(k) == Acols(i)) {
+            sum += Avals(i) * xValues(k)
+            i += 1
+          }
+          k += 1
+        }
+        yValues(rowCounter) = sum * alpha + beta * yValues(rowCounter)
+        rowCounter += 1
+      }
+    } else {
+      if (beta != 1.0) scal(beta, y)
+
+      var colCounterForA = 0
+      var k = 0
+      while (colCounterForA < nA && k < xNnz) {
+        if (xIndices(k) == colCounterForA) {
+          var i = Acols(colCounterForA)
+          val indEnd = Acols(colCounterForA + 1)
+
+          val xTemp = xValues(k) * alpha
+          while (i < indEnd) {
+            val rowIndex = Arows(i)
+            yValues(Arows(i)) += Avals(i) * xTemp
+            i += 1
+          }
+          k += 1
+        }
+        colCounterForA += 1
+      }
+    }
+  }
+
+  /**
+   * y := alpha * A * x + beta * y
+   * For `SparseMatrix` A and `DenseVector` x.
    */
   private def gemv(
       alpha: Double,
       A: SparseMatrix,
       x: DenseVector,
       beta: Double,
-      y: DenseVector): Unit =  {
+      y: DenseVector): Unit = {
     val xValues = x.values
     val yValues = y.values
     val mA: Int = A.numRows
@@ -534,10 +704,7 @@ private[spark] object BLAS extends Serializable with Logging {
         rowCounter += 1
       }
     } else {
-      // Scale vector first if `beta` is not equal to 0.0
-      if (beta != 0.0) {
-        scal(beta, y)
-      }
+      if (beta != 1.0) scal(beta, y)
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
       while (colCounterForA < nA) {

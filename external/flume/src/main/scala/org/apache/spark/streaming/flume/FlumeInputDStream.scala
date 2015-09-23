@@ -22,7 +22,7 @@ import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.flume.source.avro.AvroSourceProtocol
@@ -43,7 +43,7 @@ import org.jboss.netty.handler.codec.compression._
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
-  @transient ssc_ : StreamingContext,
+  ssc_ : StreamingContext,
   host: String,
   port: Int,
   storageLevel: StorageLevel,
@@ -99,7 +99,7 @@ class SparkFlumeEvent() extends Externalizable {
 
     val numHeaders = event.getHeaders.size()
     out.writeInt(numHeaders)
-    for ((k, v) <- event.getHeaders) {
+    for ((k, v) <- event.getHeaders.asScala) {
       val keyBuff = Utils.serialize(k.toString)
       out.writeInt(keyBuff.length)
       out.write(keyBuff)
@@ -127,8 +127,7 @@ class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
   }
 
   override def appendBatch(events : java.util.List[AvroFlumeEvent]) : Status = {
-    events.foreach (event =>
-      receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event)))
+    events.asScala.foreach(event => receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event)))
     Status.OK
   }
 }
@@ -152,9 +151,9 @@ class FlumeReceiver(
       val channelFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
                                                              Executors.newCachedThreadPool())
       val channelPipelineFactory = new CompressionChannelPipelineFactory()
-      
+
       new NettyServer(
-        responder, 
+        responder,
         new InetSocketAddress(host, port),
         channelFactory,
         channelPipelineFactory,
@@ -188,12 +187,12 @@ class FlumeReceiver(
 
   override def preferredLocation: Option[String] = Option(host)
 
-  /** A Netty Pipeline factory that will decompress incoming data from 
+  /** A Netty Pipeline factory that will decompress incoming data from
     * and the Netty client and compress data going back to the client.
     *
     * The compression on the return is required because Flume requires
-    * a successful response to indicate it can remove the event/batch 
-    * from the configured channel 
+    * a successful response to indicate it can remove the event/batch
+    * from the configured channel
     */
   private[streaming]
   class CompressionChannelPipelineFactory extends ChannelPipelineFactory {

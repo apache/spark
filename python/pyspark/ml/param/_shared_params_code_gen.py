@@ -56,9 +56,10 @@ def _gen_param_header(name, doc, defaultValueStr):
     def __init__(self):
         super(Has$Name, self).__init__()
         #: param for $doc
-        self.$name = Param(self, "$name", "$doc")
-        if $defaultValueStr is not None:
-            self._setDefault($name=$defaultValueStr)'''
+        self.$name = Param(self, "$name", "$doc")'''
+    if defaultValueStr is not None:
+        template += '''
+        self._setDefault($name=$defaultValueStr)'''
 
     Name = name[0].upper() + name[1:]
     return template \
@@ -83,7 +84,7 @@ def _gen_param_code(name, doc, defaultValueStr):
         """
         Sets the value of :py:attr:`$name`.
         """
-        self.paramMap[self.$name] = value
+        self._paramMap[self.$name] = value
         return self
 
     def get$Name(self):
@@ -115,12 +116,24 @@ if __name__ == "__main__":
         ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name", "'rawPrediction'"),
         ("inputCol", "input column name", None),
         ("inputCols", "input column names", None),
-        ("outputCol", "output column name", None),
+        ("outputCol", "output column name", "self.uid + '__output'"),
         ("numFeatures", "number of features", None),
         ("checkpointInterval", "checkpoint interval (>= 1)", None),
-        ("seed", "random seed", None),
+        ("seed", "random seed", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms", None),
-        ("stepSize", "Step size to be used for each iteration of optimization.", None)]
+        ("stepSize", "Step size to be used for each iteration of optimization.", None),
+        ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
+         "out rows with bad values), or error (which will throw an errror). More options may be " +
+         "added later.", None),
+        ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
+         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0"),
+        ("fitIntercept", "whether to fit an intercept term.", "True"),
+        ("standardization", "whether to standardize the training features before fitting the " +
+         "model.", "True"),
+        ("thresholds", "Thresholds in multi-class classification to adjust the probability of " +
+         "predicting each class. Array must have length equal to the number of classes, with " +
+         "values >= 0. The class with largest value p/t is predicted, where p is the original " +
+         "probability of that class and t is the class' threshold.", None)]
     code = []
     for name, doc, defaultValueStr in shared:
         param_code = _gen_param_header(name, doc, defaultValueStr)

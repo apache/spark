@@ -40,7 +40,7 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
   self =>
 
   private var sparkContext: SparkContext = null
-  
+
   /* Cap the capacity of the event queue so we get an explicit error (rather than
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
   private val EVENT_QUEUE_CAPACITY = 10000
@@ -120,21 +120,22 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
 
   /**
    * For testing only. Wait until there are no more events in the queue, or until the specified
-   * time has elapsed. Return true if the queue has emptied and false is the specified time
-   * elapsed before the queue emptied.
+   * time has elapsed. Throw `TimeoutException` if the specified time elapsed before the queue
+   * emptied.
    */
   @VisibleForTesting
-  def waitUntilEmpty(timeoutMillis: Int): Boolean = {
+  @throws(classOf[TimeoutException])
+  def waitUntilEmpty(timeoutMillis: Long): Unit = {
     val finishTime = System.currentTimeMillis + timeoutMillis
     while (!queueIsEmpty) {
       if (System.currentTimeMillis > finishTime) {
-        return false
+        throw new TimeoutException(
+          s"The event queue is not empty after $timeoutMillis milliseconds")
       }
       /* Sleep rather than using wait/notify, because this is used only for testing and
        * wait/notify add overhead in the general case. */
       Thread.sleep(10)
     }
-    true
   }
 
   /**

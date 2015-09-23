@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 /**
  * :: DeveloperApi ::
  * The data type representing `Long` values. Please use the singleton [[DataTypes.LongType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class LongType private() extends IntegralType {

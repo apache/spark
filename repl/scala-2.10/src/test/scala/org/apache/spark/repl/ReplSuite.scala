@@ -22,13 +22,12 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.util.Utils
 
 
-class ReplSuite extends FunSuite {
+class ReplSuite extends SparkFunSuite {
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
@@ -212,7 +211,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("local-cluster mode") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |var v = 7
         |def getV() = v
@@ -234,7 +233,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |case class Sum(exp: String, exp2: String)
         |val a = Sum("A", "B")
@@ -257,7 +256,7 @@ class ReplSuite extends FunSuite {
 
   test("SPARK-2576 importing SQLContext.implicits._") {
     // We need to use local-cluster to test this case.
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
         |import sqlContext.implicits._
@@ -266,6 +265,17 @@ class ReplSuite extends FunSuite {
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
+  }
+
+  test("SPARK-8461 SQL with codegen") {
+    val output = runInterpreter("local",
+    """
+      |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+      |sqlContext.setConf("spark.sql.codegen", "true")
+      |sqlContext.range(0, 100).filter('id > 50).count()
+    """.stripMargin)
+    assertContains("Long = 49", output)
+    assertDoesNotContain("java.lang.ClassNotFoundException", output)
   }
 
   test("SPARK-2632 importing a method from non serializable class and not using it.") {
@@ -315,9 +325,9 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
-  
+
   test("collecting objects of class defined in repl - shuffling") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |case class Foo(i: Int)
         |val list = List((1, Foo(1)), (1, Foo(2)))

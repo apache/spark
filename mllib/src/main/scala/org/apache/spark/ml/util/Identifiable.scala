@@ -19,18 +19,32 @@ package org.apache.spark.ml.util
 
 import java.util.UUID
 
+import org.apache.spark.annotation.DeveloperApi
+
 
 /**
+ * :: DeveloperApi ::
+ *
  * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
+ *
+ * WARNING: There have not yet been final discussions on this API, so it may be broken in future
+ *          releases.
  */
+@DeveloperApi
 trait Identifiable {
 
   /**
    * An immutable unique ID for the object and its derivatives.
    */
   val uid: String
+
+  override def toString: String = uid
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 object Identifiable {
 
   /**

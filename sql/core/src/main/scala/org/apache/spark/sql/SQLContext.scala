@@ -19,36 +19,35 @@ package org.apache.spark.sql
 
 import java.beans.Introspector
 import java.util.Properties
+import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.immutable
-import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import com.google.common.reflect.TypeToken
-import org.apache.hadoop.fs.Path
-
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.ParserDialect
+import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution.{Filter, _}
-import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.json._
-import org.apache.spark.sql.parquet.FSBasedParquetRelation
+import org.apache.spark.sql.{execution => sparkexecution}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-import org.apache.spark.{Partition, SparkContext}
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark.  Allows the
@@ -78,6 +77,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   protected[sql] def conf = currentSession().conf
 
+  // `listener` should be only used in the driver
+  @transient private[sql] val listener = new SQLListener(this)
+  sparkContext.addSparkListener(listener)
+  sparkContext.ui.foreach(new SQLTab(this, _))
+
   /**
    * Set Spark SQL configuration properties.
    *
@@ -86,13 +90,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def setConf(props: Properties): Unit = conf.setConf(props)
 
+  /** Set the given Spark SQL configuration property. */
+  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value)
+
   /**
    * Set the given Spark SQL configuration property.
    *
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = conf.setConf(key, value)
+  def setConf(key: String, value: String): Unit = conf.setConfString(key, value)
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -100,7 +107,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String): String = conf.getConf(key)
+  def getConf(key: String): String = conf.getConfString(key)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue` in [[SQLConfEntry]].
+   */
+  private[sql] def getConf[T](entry: SQLConfEntry[T]): T = conf.getConf(entry)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
+   * desired one.
+   */
+  private[sql] def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
+    conf.getConf(entry, defaultValue)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -109,7 +131,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String, defaultValue: String): String = conf.getConf(key, defaultValue)
+  def getConf(key: String, defaultValue: String): String = conf.getConfString(key, defaultValue)
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
@@ -126,18 +148,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
+  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
-        ExtractPythonUdfs ::
-        sources.PreInsertCastAndRename ::
+        ExtractPythonUDFs ::
+        PreInsertCastAndRename ::
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog)
+        datasources.PreWriteCheck(catalog)
       )
     }
 
@@ -170,9 +192,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
-  protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String):
+    org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
+  protected[sql] def executePlan(plan: LogicalPlan) =
+    new sparkexecution.QueryExecution(this, plan)
 
   @transient
   protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
@@ -188,9 +212,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.dialect
   }
 
-  sparkContext.getConf.getAll.foreach {
-    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
-    case _ =>
+  {
+    // We extract spark sql settings from SparkContext's conf and put them to
+    // Spark SQL's conf.
+    // First, we populate the SQLConf (conf). So, we can make sure that other values using
+    // those settings in their construction can get the correct settings.
+    // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
+    // and spark.sql.hive.metastore.jars to get correctly constructed.
+    val properties = new Properties
+    sparkContext.getConf.getAll.foreach {
+      case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
+      case _ =>
+    }
+    // We directly put those settings to conf to avoid of calling setConf, which may have
+    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
+    // get constructed. If we call setConf directly, the constructed metadataHive may have
+    // wrong settings, or the construction may fail.
+    conf.setConf(properties)
+    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
+    // (e.g. hiveconf in HiveContext).
+    properties.asScala.foreach {
+      case (key, value) => setConf(key, value)
+    }
   }
 
   @transient
@@ -224,7 +267,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * The following example registers a Scala closure as UDF:
    * {{{
-   *   sqlContext.udf.register("myUdf", (arg1: Int, arg2: String) => arg2 + arg1)
+   *   sqlContext.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
    * }}}
    *
    * The following example registers a UDF in Java:
@@ -241,7 +284,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Or, to use Java 8 lambda syntax:
    * {{{
    *   sqlContext.udf().register("myUDF",
-   *       (Integer arg1, String arg2) -> arg2 + arg1),
+   *       (Integer arg1, String arg2) -> arg2 + arg1,
    *       DataTypes.StringType);
    * }}}
    *
@@ -295,98 +338,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   @Experimental
-  object implicits extends Serializable {
-    // scalastyle:on
+  object implicits extends SQLImplicits with Serializable {
+    protected override def _sqlContext: SQLContext = self
 
     /**
      * Converts $"col name" into an [[Column]].
      * @since 1.3.0
      */
+    // This must live here to preserve binary compatibility with Spark < 1.5.
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args :_*))
+        new ColumnName(sc.s(args: _*))
       }
-    }
-
-    /**
-     * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
-     * @since 1.3.0
-     */
-    implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
-
-    /**
-     * Creates a DataFrame from an RDD of case classes or tuples.
-     * @since 1.3.0
-     */
-    implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
-      DataFrameHolder(self.createDataFrame(rdd))
-    }
-
-    /**
-     * Creates a DataFrame from a local Seq of Product.
-     * @since 1.3.0
-     */
-    implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
-    {
-      DataFrameHolder(self.createDataFrame(data))
-    }
-
-    // Do NOT add more implicit conversions. They are likely to break source compatibility by
-    // making existing implicit conversions ambiguous. In particular, RDD[Double] is dangerous
-    // because of [[DoubleRDDFunctions]].
-
-    /**
-     * Creates a single column DataFrame from an RDD[Int].
-     * @since 1.3.0
-     */
-    implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrameHolder = {
-      val dataType = IntegerType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.setInt(0, v)
-          row: Row
-        }
-      }
-      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-    }
-
-    /**
-     * Creates a single column DataFrame from an RDD[Long].
-     * @since 1.3.0
-     */
-    implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrameHolder = {
-      val dataType = LongType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.setLong(0, v)
-          row: Row
-        }
-      }
-      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-    }
-
-    /**
-     * Creates a single column DataFrame from an RDD[String].
-     * @since 1.3.0
-     */
-    implicit def stringRddToDataFrameHolder(data: RDD[String]): DataFrameHolder = {
-      val dataType = StringType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.setString(0, v)
-          row: Row
-        }
-      }
-      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
   }
+  // scalastyle:on
 
   /**
    * :: Experimental ::
-   * Creates a DataFrame from an RDD of case classes.
+   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    *
    * @group dataframes
    * @since 1.3.0
@@ -396,7 +366,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     SparkPlan.currentContext.set(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
     DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
@@ -472,10 +442,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
       val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      rowRDD.map(converter(_).asInstanceOf[Row])
+      rowRDD.map(converter(_).asInstanceOf[InternalRow])
     } else {
-      rowRDD
+      rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    DataFrame(this, logicalPlan)
+  }
+
+  /**
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
+   */
+  private[sql]
+  def internalCreateDataFrame(catalystRows: RDD[InternalRow], schema: StructType) = {
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
+    // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
     DataFrame(this, logicalPlan)
   }
@@ -495,6 +477,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: DeveloperApi ::
+   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * It is important to make sure that the structure of every [[Row]] of the provided List matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @group dataframes
+   * @since 1.6.0
+   */
+  @DeveloperApi
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+    DataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+  }
+
+  /**
    * Applies a schema to an RDD of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
@@ -507,17 +503,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(
-        Class.forName(className, true, Utils.getContextOrSparkClassLoader))
+      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       val extractors =
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-
+      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
+        (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+      }
       iter.map { row =>
-        new GenericRow(
-          extractors.zip(attributeSeq).map { case (e, attr) =>
-            CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
-          }.toArray[Any]
-        ) : Row
+        new GenericInternalRow(
+          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
+        ): InternalRow
       }
     }
     DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
@@ -536,328 +531,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[RDD]] containing [[Row]]s by applying a schema to this RDD.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   * Example:
+   * :: Experimental ::
+   * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
    * {{{
-   *  import org.apache.spark.sql._
-   *  import org.apache.spark.sql.types._
-   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-   *
-   *  val schema =
-   *    StructType(
-   *      StructField("name", StringType, false) ::
-   *      StructField("age", IntegerType, true) :: Nil)
-   *
-   *  val people =
-   *    sc.textFile("examples/src/main/resources/people.txt").map(
-   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
-   *  val dataFrame = sqlContext. applySchema(people, schema)
-   *  dataFrame.printSchema
-   *  // root
-   *  // |-- name: string (nullable = false)
-   *  // |-- age: integer (nullable = true)
-   *
-   *  dataFrame.registerTempTable("people")
-   *  sqlContext.sql("select name from people").collect.foreach(println)
+   *   sqlContext.read.parquet("/path/to/file.parquet")
+   *   sqlContext.read.schema(schema).json("/path/to/file.json")
    * }}}
-   */
-  @deprecated("use createDataFrame", "1.3.0")
-  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD, schema)
-  }
-
-  @deprecated("use createDataFrame", "1.3.0")
-  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD, schema)
-  }
-
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   *          SELECT * queries will return the columns in an undefined order.
-   */
-  @deprecated("use createDataFrame", "1.3.0")
-  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
-    createDataFrame(rdd, beanClass)
-  }
-
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   *          SELECT * queries will return the columns in an undefined order.
-   */
-  @deprecated("use createDataFrame", "1.3.0")
-  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
-    createDataFrame(rdd, beanClass)
-  }
-
-  /**
-   * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
-   * [[DataFrame]] if no paths are passed in.
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @scala.annotation.varargs
-  def parquetFile(paths: String*): DataFrame = {
-    if (paths.isEmpty) {
-      emptyDataFrame
-    } else if (conf.parquetUseDataSourceApi) {
-      val globbedPaths = paths.map(new Path(_)).flatMap(SparkHadoopUtil.get.globPath).toArray
-      baseRelationToDataFrame(
-        new FSBasedParquetRelation(
-          globbedPaths.map(_.toString), None, None, Map.empty[String, String])(this))
-    } else {
-      DataFrame(this, parquet.ParquetRelation(
-        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
-    }
-  }
-
-  /**
-   * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  def jsonFile(path: String): DataFrame = jsonFile(path, 1.0)
-
-  /**
-   * :: Experimental ::
-   * Loads a JSON file (one object per line) and applies the given schema,
-   * returning the result as a [[DataFrame]].
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jsonFile(path: String, schema: StructType): DataFrame =
-    load("json", schema, Map("path" -> path))
-
-  /**
-   * :: Experimental ::
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jsonFile(path: String, samplingRatio: Double): DataFrame =
-    load("json", Map("path" -> path, "samplingRatio" -> samplingRatio.toString))
-
-  /**
-   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[DataFrame]].
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0)
-
-
-  /**
-   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[DataFrame]].
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  def jsonRDD(json: JavaRDD[String]): DataFrame = jsonRDD(json.rdd, 1.0)
-
-  /**
-   * :: Experimental ::
-   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
-   * returning the result as a [[DataFrame]].
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
-    if (conf.useJacksonStreamingAPI) {
-      baseRelationToDataFrame(new JSONRelation(() => json, None, 1.0, Some(schema))(this))
-    } else {
-      val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-      val appliedSchema =
-        Option(schema).getOrElse(
-          JsonRDD.nullTypeToStringType(
-            JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
-      val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-      createDataFrame(rowRDD, appliedSchema, needsConversion = false)
-    }
-  }
-
-  /**
-   * :: Experimental ::
-   * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
-   * schema, returning the result as a [[DataFrame]].
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
-    jsonRDD(json.rdd, schema)
-  }
-
-  /**
-   * :: Experimental ::
-   * Loads an RDD[String] storing JSON objects (one object per record) inferring the
-   * schema, returning the result as a [[DataFrame]].
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
-    if (conf.useJacksonStreamingAPI) {
-      baseRelationToDataFrame(new JSONRelation(() => json, None, samplingRatio, None)(this))
-    } else {
-      val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-      val appliedSchema =
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
-      val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-      createDataFrame(rowRDD, appliedSchema, needsConversion = false)
-    }
-  }
-
-  /**
-   * :: Experimental ::
-   * Loads a JavaRDD[String] storing JSON objects (one object per record) inferring the
-   * schema, returning the result as a [[DataFrame]].
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
-    jsonRDD(json.rdd, samplingRatio);
-  }
-
-  /**
-   * :: Experimental ::
-   * Returns the dataset stored at path as a DataFrame,
-   * using the default data source configured by spark.sql.sources.default.
    *
    * @group genericdata
-   * @since 1.3.0
+   * @since 1.4.0
    */
   @Experimental
-  def load(path: String): DataFrame = {
-    val dataSourceName = conf.defaultDataSourceName
-    load(path, dataSourceName)
-  }
-
-  /**
-   * :: Experimental ::
-   * Returns the dataset stored at path as a DataFrame, using the given data source.
-   *
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(path: String, source: String): DataFrame = {
-    load(source, Map("path" -> path))
-  }
-
-  /**
-   * :: Experimental ::
-   * (Java-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame.
-   *
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(source: String, options: java.util.Map[String, String]): DataFrame = {
-    load(source, options.toMap)
-  }
-
-  /**
-   * :: Experimental ::
-   * (Scala-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame.
-   *
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(source: String, options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, None, Array.empty[String], source, options)
-    DataFrame(this, LogicalRelation(resolved.relation))
-  }
-
-  /**
-   * :: Experimental ::
-   * (Java-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
-   *
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    load(source, schema, options.toMap)
-  }
-
-  /**
-   * :: Experimental ::
-   * (Java-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
-   *
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(
-      source: String,
-      schema: StructType,
-      partitionColumns: Array[String],
-      options: java.util.Map[String, String]): DataFrame = {
-    load(source, schema, partitionColumns, options.toMap)
-  }
-
-  /**
-   * :: Experimental ::
-   * (Scala-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(
-      source: String,
-      schema: StructType,
-      options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, Some(schema), Array.empty[String], source, options)
-    DataFrame(this, LogicalRelation(resolved.relation))
-  }
-
-  /**
-   * :: Experimental ::
-   * (Scala-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(
-      source: String,
-      schema: StructType,
-      partitionColumns: Array[String],
-      options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, Some(schema), partitionColumns, source, options)
-    DataFrame(this, LogicalRelation(resolved.relation))
-  }
+  def read: DataFrameReader = new DataFrameReader(this)
 
   /**
    * :: Experimental ::
@@ -902,7 +587,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, options.toMap)
+    createExternalTable(tableName, source, options.asScala.toMap)
   }
 
   /**
@@ -919,9 +604,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
-        tableName,
+        tableIdent,
         userSpecifiedSchema = None,
         source,
         temporary = false,
@@ -929,7 +615,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         allowExisting = false,
         managedIfNoPath = false)
     executePlan(cmd).toRdd
-    table(tableName)
+    table(tableIdent)
   }
 
   /**
@@ -946,7 +632,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, schema, options.toMap)
+    createExternalTable(tableName, source, schema, options.asScala.toMap)
   }
 
   /**
@@ -964,9 +650,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
-        tableName,
+        tableIdent,
         userSpecifiedSchema = Some(schema),
         source,
         temporary = false,
@@ -974,133 +661,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         allowExisting = false,
         managedIfNoPath = false)
     executePlan(cmd).toRdd
-    table(tableName)
-  }
-
-  /**
-   * :: Experimental ::
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table.
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jdbc(url: String, table: String): DataFrame = {
-    jdbc(url, table, JDBCRelation.columnPartition(null), new Properties())
-  }
-  
-  /**
-   * :: Experimental ::
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table and connection properties.
-   *
-   * @group specificdata
-   * @since 1.4.0
-   */
-  @Experimental
-  def jdbc(url: String, table: String, properties: Properties): DataFrame = {
-    jdbc(url, table, JDBCRelation.columnPartition(null), properties)
-  }
-  
-  /**
-   * :: Experimental ::
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
-   * passed to this function.
-   *
-   * @param columnName the name of a column of integral type that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` used to decide partition stride
-   * @param upperBound the maximum value of `columnName` used to decide partition stride
-   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
-   *                      evenly into this many partitions
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jdbc(
-      url: String,
-      table: String,  
-      columnName: String,
-      lowerBound: Long,
-      upperBound: Long,
-      numPartitions: Int): DataFrame = {
-    jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties())
-  }
-
-  /**
-   * :: Experimental ::
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
-   * passed to this function.
-   *
-   * @param columnName the name of a column of integral type that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` used to decide partition stride
-   * @param upperBound the maximum value of `columnName` used to decide partition stride
-   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
-   *                      evenly into this many partitions
-   * @param properties connection properties
-   * @group specificdata
-   * @since 1.4.0
-   */
-  @Experimental
-  def jdbc(
-      url: String,
-      table: String,
-      columnName: String,
-      lowerBound: Long,
-      upperBound: Long,
-      numPartitions: Int,
-      properties: Properties): DataFrame = {
-    val partitioning = JDBCPartitioningInfo(columnName, lowerBound, upperBound, numPartitions)
-    val parts = JDBCRelation.columnPartition(partitioning)
-    jdbc(url, table, parts, properties)
-  }
-  
-  /**
-   * :: Experimental ::
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table. The theParts parameter gives a list expressions
-   * suitable for inclusion in WHERE clauses; each one defines one partition
-   * of the [[DataFrame]].
-   *
-   * @group specificdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
-    jdbc(url, table, theParts, new Properties())
-  }
-
-  /**
-   * :: Experimental ::
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table using connection properties. The theParts parameter gives a list expressions
-   * suitable for inclusion in WHERE clauses; each one defines one partition
-   * of the [[DataFrame]].
-   *
-   * @group specificdata
-   * @since 1.4.0
-   */
-  @Experimental
-  def jdbc(
-      url: String,
-      table: String,
-      theParts: Array[String],
-      properties: Properties): DataFrame = {
-    val parts: Array[Partition] = theParts.zipWithIndex.map { case (part, i) =>
-      JDBCPartition(part, i) : Partition
-    }
-    jdbc(url, table, parts, properties)
-  }
-  
-  private def jdbc(
-      url: String,
-      table: String,
-      parts: Array[Partition],
-      properties: Properties): DataFrame = {
-    val relation = JDBCRelation(url, table, parts, properties)(this)
-    baseRelationToDataFrame(relation)
+    table(tableIdent)
   }
 
   /**
@@ -1126,6 +687,48 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from 0 to `end` (exclusive) with step value 1.
+   *
+   * @since 1.4.1
+   * @group dataframe
+   */
+  @Experimental
+  def range(end: Long): DataFrame = range(0, end)
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with step value 1.
+   *
+   * @since 1.4.0
+   * @group dataframe
+   */
+  @Experimental
+  def range(start: Long, end: Long): DataFrame = {
+    createDataFrame(
+      sparkContext.range(start, end).map(Row(_)),
+      StructType(StructField("id", LongType, nullable = false) :: Nil))
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with an step value, with partition number
+   * specified.
+   *
+   * @since 1.4.0
+   * @group dataframe
+   */
+  @Experimental
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
+    createDataFrame(
+      sparkContext.range(start, end, step, numPartitions).map(Row(_)),
+      StructType(StructField("id", LongType, nullable = false) :: Nil))
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a [[DataFrame]]. The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
@@ -1142,8 +745,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group ddl_ops
    * @since 1.3.0
    */
-  def table(tableName: String): DataFrame =
-    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+  def table(tableName: String): DataFrame = {
+    table(SqlParser.parseTableIdentifier(tableName))
+  }
+
+  private def table(tableIdent: TableIdentifier): DataFrame = {
+    DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
+  }
 
   /**
    * Returns a [[DataFrame]] containing names of existing tables in the current database.
@@ -1193,88 +801,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }.toArray
   }
 
-  protected[sql] class SparkPlanner extends SparkStrategies {
-    val sparkContext: SparkContext = self.sparkContext
-
-    val sqlContext: SQLContext = self
-
-    def codegenEnabled: Boolean = self.conf.codegenEnabled
-
-    def unsafeEnabled: Boolean = self.conf.unsafeEnabled
-
-    def numPartitions: Int = self.conf.numShufflePartitions
-
-    def strategies: Seq[Strategy] =
-      experimental.extraStrategies ++ (
-      DataSourceStrategy ::
-      DDLStrategy ::
-      TakeOrdered ::
-      HashAggregation ::
-      LeftSemiJoin ::
-      HashJoin ::
-      InMemoryScans ::
-      ParquetOperations ::
-      BasicOperators ::
-      CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil)
-
-    /**
-     * Used to build table scan operators where complex projection and filtering are done using
-     * separate physical operators.  This function returns the given scan operator with Project and
-     * Filter nodes added only when needed.  For example, a Project operator is only used when the
-     * final desired output requires complex expressions to be evaluated or when columns can be
-     * further eliminated out after filtering has been done.
-     *
-     * The `prunePushedDownFilters` parameter is used to remove those filters that can be optimized
-     * away by the filter pushdown optimization.
-     *
-     * The required attributes for both filtering and expression evaluation are passed to the
-     * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
-     */
-    def pruneFilterProject(
-        projectList: Seq[NamedExpression],
-        filterPredicates: Seq[Expression],
-        prunePushedDownFilters: Seq[Expression] => Seq[Expression],
-        scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
-
-      val projectSet = AttributeSet(projectList.flatMap(_.references))
-      val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-      val filterCondition =
-        prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
-
-      // Right now we still use a projection even if the only evaluation is applying an alias
-      // to a column.  Since this is a no-op, it could be avoided. However, using this
-      // optimization with the current implementation would change the output schema.
-      // TODO: Decouple final output schema from expression evaluation so this copy can be
-      // avoided safely.
-
-      if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
-          filterSet.subsetOf(projectSet)) {
-        // When it is possible to just use column pruning to get the right projection and
-        // when the columns of this projection are enough to evaluate all filter conditions,
-        // just do a scan followed by a filter, with no extra project.
-        val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
-        filterCondition.map(Filter(_, scan)).getOrElse(scan)
-      } else {
-        val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-        Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
-      }
-    }
-  }
+  @deprecated("use org.apache.spark.sql.SparkPlanner", "1.6.0")
+  protected[sql] class SparkPlanner extends sparkexecution.SparkPlanner(this)
 
   @transient
-  protected[sql] val planner = new SparkPlanner
+  protected[sql] val planner: sparkexecution.SparkPlanner = new sparkexecution.SparkPlanner(this)
 
   @transient
-  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
+  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
 
   /**
-   * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
+   * Prepares a planned SparkPlan for execution by inserting shuffle operations and internal
+   * row format conversions as needed.
    */
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches =
-      Batch("Add exchange", Once, EnsureRequirements(self)) :: Nil
+    val batches = Seq(
+      Batch("Add exchange", Once, EnsureRequirements(self)),
+      Batch("Add row converters", Once, EnsureRowFormats)
+    )
   }
 
   protected[sql] def openSession(): SQLSession = {
@@ -1297,68 +842,19 @@ class SQLContext(@transient val sparkContext: SparkContext)
     tlSession.remove()
   }
 
+  protected[sql] def setSession(session: SQLSession): Unit = {
+    detachSession()
+    tlSession.set(session)
+  }
+
   protected[sql] class SQLSession {
     // Note that this is a lazy val so we can override the default value in subclasses.
     protected[sql] lazy val conf: SQLConf = new SQLConf
   }
 
-  /**
-   * :: DeveloperApi ::
-   * The primary workflow for executing relational queries using Spark.  Designed to allow easy
-   * access to the intermediate phases of query execution for developers.
-   */
-  @DeveloperApi
-  protected[sql] class QueryExecution(val logical: LogicalPlan) {
-    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
-
-    lazy val analyzed: LogicalPlan = analyzer.execute(logical)
-    lazy val withCachedData: LogicalPlan = {
-      assertAnalyzed()
-      cacheManager.useCachedData(analyzed)
-    }
-    lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
-
-    // TODO: Don't just pick the first one...
-    lazy val sparkPlan: SparkPlan = {
-      SparkPlan.currentContext.set(self)
-      planner.plan(optimizedPlan).next()
-    }
-    // executedPlan should not be used to initialize any SparkPlan. It should be
-    // only used for execution.
-    lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
-
-    /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[Row] = executedPlan.execute()
-
-    protected def stringOrError[A](f: => A): String =
-      try f.toString catch { case e: Throwable => e.toString }
-
-    def simpleString: String =
-      s"""== Physical Plan ==
-         |${stringOrError(executedPlan)}
-      """.stripMargin.trim
-
-    override def toString: String = {
-      def output =
-        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
-
-      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
-      // however, the `toRdd` will cause the real execution, which is not what we want.
-      // We need to think about how to avoid the side effect.
-      s"""== Parsed Logical Plan ==
-         |${stringOrError(logical)}
-         |== Analyzed Logical Plan ==
-         |${stringOrError(output)}
-         |${stringOrError(analyzed)}
-         |== Optimized Logical Plan ==
-         |${stringOrError(optimizedPlan)}
-         |== Physical Plan ==
-         |${stringOrError(executedPlan)}
-         |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
-         |== RDD ==
-      """.stripMargin.trim
-    }
-  }
+  @deprecated("use org.apache.spark.sql.QueryExecution", "1.6.0")
+  protected[sql] class QueryExecution(logical: LogicalPlan)
+    extends sparkexecution.QueryExecution(this, logical)
 
   /**
    * Parses the data type in our internal string representation. The data type string should
@@ -1386,33 +882,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
 
-    def needsConversion(dataType: DataType): Boolean = dataType match {
-      case ByteType => true
-      case ShortType => true
-      case LongType => true
-      case FloatType => true
-      case DateType => true
-      case TimestampType => true
-      case StringType => true
-      case ArrayType(_, _) => true
-      case MapType(_, _, _) => true
-      case StructType(_) => true
-      case udt: UserDefinedType[_] => needsConversion(udt.sqlType)
-      case other => false
-    }
-
-    val convertedRdd = if (schema.fields.exists(f => needsConversion(f.dataType))) {
-      rdd.map(m => m.zip(schema.fields).map {
-        case (value, field) => EvaluatePython.fromJava(value, field.dataType)
-      })
-    } else {
-      rdd
-    }
-
-    val rowRdd = convertedRdd.mapPartitions { iter =>
-      iter.map { m => new GenericRow(m): Row}
-    }
-
+    val rowRdd = rdd.map(r => EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
@@ -1420,12 +890,343 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = JavaTypeInference.inferDataType(TypeToken.of(beanClass))
+    val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
     }
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // Deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
+   * [[DataFrame]] if no paths are passed in.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().parquet()`.
+   */
+  @deprecated("Use read.parquet()", "1.4.0")
+  @scala.annotation.varargs
+  def parquetFile(paths: String*): DataFrame = {
+    if (paths.isEmpty) {
+      emptyDataFrame
+    } else {
+      read.parquet(paths : _*)
+    }
+  }
+
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String): DataFrame = {
+    read.json(path)
+  }
+
+  /**
+   * Loads a JSON file (one object per line) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String, schema: StructType): DataFrame = {
+    read.schema(schema).json(path)
+  }
+
+  /**
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(path)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
+    read.schema(schema).json(json)
+  }
+
+  /**
+   * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
+    read.schema(schema).json(json)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) inferring the
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(json)
+  }
+
+  /**
+   * Loads a JavaRDD[String] storing JSON objects (one object per record) inferring the
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(json)
+  }
+
+  /**
+   * Returns the dataset stored at path as a DataFrame,
+   * using the default data source configured by spark.sql.sources.default.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().load(path)`.
+   */
+  @deprecated("Use read.load(path)", "1.4.0")
+  def load(path: String): DataFrame = {
+    read.load(path)
+  }
+
+  /**
+   * Returns the dataset stored at path as a DataFrame, using the given data source.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
+   */
+  @deprecated("Use read.format(source).load(path)", "1.4.0")
+  def load(path: String, source: String): DataFrame = {
+    read.format(source).load(path)
+  }
+
+  /**
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).options(options).load()", "1.4.0")
+  def load(source: String, options: java.util.Map[String, String]): DataFrame = {
+    read.options(options).format(source).load()
+  }
+
+  /**
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).options(options).load()", "1.4.0")
+  def load(source: String, options: Map[String, String]): DataFrame = {
+    read.options(options).format(source).load()
+  }
+
+  /**
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
+  def load(source: String, schema: StructType, options: java.util.Map[String, String]): DataFrame =
+  {
+    read.format(source).schema(schema).options(options).load()
+  }
+
+  /**
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
+  def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
+    read.format(source).schema(schema).options(options).load()
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("use read.jdbc()", "1.4.0")
+  def jdbc(url: String, table: String): DataFrame = {
+    read.jdbc(url, table, new Properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
+   * passed to this function.
+   *
+   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
+   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
+   *                      evenly into this many partitions
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("use read.jdbc()", "1.4.0")
+  def jdbc(
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): DataFrame = {
+    read.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table. The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("use read.jdbc()", "1.4.0")
+  def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
+    read.jdbc(url, table, theParts, new Properties)
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // End of deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
+
+  // Register a succesfully instantiatd context to the singleton. This should be at the end of
+  // the class definition so that the singleton is updated only if there is no exception in the
+  // construction of the instance.
+  SQLContext.setLastInstantiatedContext(self)
 }
 
+/**
+ * This SQLContext object contains utility functions to create a singleton SQLContext instance,
+ * or to get the last created SQLContext instance.
+ */
+object SQLContext {
 
+  private val INSTANTIATION_LOCK = new Object()
+
+  /**
+   * Reference to the last created SQLContext.
+   */
+  @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
+
+  /**
+   * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
+   * This function can be used to create a singleton SQLContext object that can be shared across
+   * the JVM.
+   */
+  def getOrCreate(sparkContext: SparkContext): SQLContext = {
+    INSTANTIATION_LOCK.synchronized {
+      if (lastInstantiatedContext.get() == null) {
+        new SQLContext(sparkContext)
+      }
+    }
+    lastInstantiatedContext.get()
+  }
+
+  private[sql] def clearLastInstantiatedContext(): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(null)
+    }
+  }
+
+  private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(sqlContext)
+    }
+  }
+}

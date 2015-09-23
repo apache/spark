@@ -44,8 +44,9 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
     val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
     val processingTime = batch.processingDelay
     val formattedProcessingTime = processingTime.map(SparkUIUtils.formatDuration).getOrElse("-")
+    val batchTimeId = s"batch-$batchTime"
 
-    <td sorttable_customkey={batchTime.toString}>
+    <td id={batchTimeId} sorttable_customkey={batchTime.toString}>
       <a href={s"batch?id=$batchTime"}>
         {formattedBatchTime}
       </a>

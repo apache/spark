@@ -75,7 +75,7 @@ private[tree] case class NodeIndexUpdater(
  *                           (how often should the cache be checkpointed.).
  */
 @DeveloperApi
-private[tree] class NodeIdCache(
+private[spark] class NodeIdCache(
   var nodeIdsForInstances: RDD[Array[Int]],
   val checkpointInterval: Int) {
 
@@ -166,11 +166,15 @@ private[tree] class NodeIdCache(
         fs.delete(new Path(old.getCheckpointFile.get), true)
       }
     }
+    if (prevNodeIdsForInstances != null) {
+      // Unpersist the previous one if one exists.
+      prevNodeIdsForInstances.unpersist()
+    }
   }
 }
 
 @DeveloperApi
-private[tree] object NodeIdCache {
+private[spark] object NodeIdCache {
   /**
    * Initialize the node Id cache with initial node Id values.
    * @param data The RDD of training rows.
