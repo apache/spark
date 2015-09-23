@@ -263,14 +263,7 @@ public final class UnsafeExternalSorter {
       shuffleMemoryManager.release(block.size());
       memoryFreed += block.size();
     }
-    if (inMemSorter != null) {
-      if (!isInMemSorterExternal) {
-        long sorterMemoryUsage = inMemSorter.getMemoryUsage();
-        memoryFreed += sorterMemoryUsage;
-        shuffleMemoryManager.release(sorterMemoryUsage);
-      }
-      inMemSorter = null;
-    }
+    // TODO: track in-memory sorter memory usage (SPARK-10733)
     allocatedPages.clear();
     currentPage = null;
     currentPagePosition = -1;

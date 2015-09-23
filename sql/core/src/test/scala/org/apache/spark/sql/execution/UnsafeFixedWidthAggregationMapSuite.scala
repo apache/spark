@@ -23,8 +23,9 @@ import scala.util.{Try, Random}
 
 import org.scalatest.Matchers
 
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
+import org.apache.spark.shuffle.ShuffleMemoryManager
+import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -199,9 +200,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
-      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
-        initialMemoryConsumption + 4096 * 16)
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.
@@ -304,9 +303,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
-      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
-        initialMemoryConsumption + 4096 * 16)
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.
