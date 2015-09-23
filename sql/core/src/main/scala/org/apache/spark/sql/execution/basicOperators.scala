@@ -21,17 +21,12 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.errors._
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
+import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
-import org.apache.spark.util.{CompletionIterator, MutablePair}
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
 /**
@@ -207,20 +202,27 @@ case class Limit(limit: Int, child: SparkPlan)
   override def executeCollect(): Array[Row] = child.executeTake(limit)
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val rdd: RDD[_ <: Product2[Boolean, InternalRow]] = if (sortBasedShuffleOn) {
-      child.execute().mapPartitions { iter =>
-        iter.take(limit).map(row => (false, row.copy()))
-      }
-    } else {
-      child.execute().mapPartitions { iter =>
-        val mutablePair = new MutablePair[Boolean, InternalRow]()
-        iter.take(limit).map(row => mutablePair.update(false, row))
-      }
+    val limited = child.execute().mapPartitions { iter =>
+      iter.take(limit)
     }
-    val part = new HashPartitioner(1)
-    val shuffled = new ShuffledRDD[Boolean, InternalRow, InternalRow](rdd, part)
-    shuffled.setSerializer(new SparkSqlSerializer(child.sqlContext.sparkContext.getConf))
-    shuffled.mapPartitions(_.take(limit).map(_._2))
+    if (limited.partitions.length <= 1) {
+      limited
+    } else {
+      val rdd: RDD[_ <: Product2[Boolean, InternalRow]] = if (sortBasedShuffleOn) {
+        limited.mapPartitions { iter =>
+          iter.map(row => (false, row.copy()))
+        }
+      } else {
+        limited.mapPartitions { iter =>
+          val mutablePair = new MutablePair[Boolean, InternalRow]()
+          iter.map(row => mutablePair.update(false, row))
+        }
+      }
+      val part = new HashPartitioner(1)
+      val shuffled = new ShuffledRDD[Boolean, InternalRow, InternalRow](rdd, part)
+      shuffled.setSerializer(new SparkSqlSerializer(child.sqlContext.sparkContext.getConf))
+      shuffled.mapPartitions(_.take(limit).map(_._2))
+    }
   }
 }
 
