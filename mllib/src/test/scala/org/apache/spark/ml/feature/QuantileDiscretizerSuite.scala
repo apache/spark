@@ -17,14 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkContext
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.{SparkContext, SparkFunSuite}
 
-class QuantileDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
+class QuantileDiscretizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.QuantileDiscretizerSuite._
 
   test("Test quantile discretizer") {
@@ -55,7 +53,7 @@ class QuantileDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-private object QuantileDiscretizerSuite extends FunSuite {
+private object QuantileDiscretizerSuite extends SparkFunSuite {
 
   def checkDiscretizedData(
       sc: SparkContext,
