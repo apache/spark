@@ -34,9 +34,16 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                      weak hypotheses used in the final model.
  * @param learningRate Learning rate for shrinking the contribution of each estimator. The
  *                     learning rate should be between in the interval (0, 1]
- * @param validationTol Useful when runWithValidation is used. If the error rate on the
- *                      validation input between two iterations is less than the validationTol
- *                      then stop.  Ignored when
+ * @param validationTol validationTol is a condition which decides iteration termination when
+ *                      runWithValidation is used.
+ *                      The end of iteration is decided based on below logic:
+ *                      If the current loss on the training set is > 0.01, the diff
+ *                      of validation error is compared to relative tolerance which is
+ *                      validationTol * (current loss on the training set).
+ *                      If the current loss on the training set is <= 0.01, the diff
+ *                      of validation error is compared to absolute tolerance which is
+ *                      validationTol * 0.01.
+ *                      Ignored when
  *                      [[org.apache.spark.mllib.tree.GradientBoostedTrees.run()]] is used.
  */
 @Since("1.2.0")
