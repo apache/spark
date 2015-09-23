@@ -22,8 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
-import org.apache.spark.mllib.linalg.BLAS
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -71,6 +70,8 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
       .collect()
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
+    assert(model.getQuantileProbabilities === Array(0.1, 0.8))
+    assert(model.getQuantilesCol === "quantiles")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
   }
@@ -242,9 +243,9 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
 
     model.transform(datasetMultivariate).select("features", "prediction", "quantiles")
       .collect().foreach {
-      case Row(features: Vector, prediction: Double, quantiles: Vector) =>
-        assert(prediction ~== model.predict(features) relTol 1E-5)
-        assert(quantiles ~== model.predictQuantiles(features) relTol 1E-5)
+        case Row(features: Vector, prediction: Double, quantiles: Vector) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+          assert(quantiles ~== model.predictQuantiles(features) relTol 1E-5)
     }
   }
 
@@ -312,9 +313,9 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
 
     model.transform(datasetMultivariate).select("features", "prediction", "quantiles")
       .collect().foreach {
-      case Row(features: Vector, prediction: Double, quantiles: Vector) =>
-        assert(prediction ~== model.predict(features) relTol 1E-5)
-        assert(quantiles ~== model.predictQuantiles(features) relTol 1E-5)
+        case Row(features: Vector, prediction: Double, quantiles: Vector) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+          assert(quantiles ~== model.predictQuantiles(features) relTol 1E-5)
     }
   }
 
