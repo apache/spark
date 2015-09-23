@@ -759,12 +759,12 @@ class TaskInstance(Base):
             )
             successes, skipped, failed, upstream_failed, done = qry.first()
             if flag_upstream_failed:
-                if skipped:
+                if skipped >= len(task._upstream_list):
                     self.state = State.SKIPPED
                     self.start_date = datetime.now()
                     self.end_date = datetime.now()
                     session.merge(self)
-                elif successes < done >= len(task._upstream_list):
+                elif failed + upstream_failed >= len(task._upstream_list):
                     self.state = State.UPSTREAM_FAILED
                     self.start_date = datetime.now()
                     self.end_date = datetime.now()
