@@ -216,7 +216,9 @@ class BasicOperationsSuite extends TestSuiteBase {
     testOperation(
       input,
       (r: DStream[Int]) => r.transform(rdd => {if (rdd != null && !rdd.isEmpty()) rdd.map(_.toString) else null}),   // RDD.map in transform
-      input.filter(!_.isEmpty).map(_.map(_.toString))
+      input.filter(!_.isEmpty).map(_.map(_.toString)),
+      4, 
+      false
     )
   }
 
