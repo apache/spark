@@ -39,7 +39,20 @@ case class BatchInfo(
     submissionTime: Long,
     processingStartTime: Option[Long],
     processingEndTime: Option[Long],
-    private[streaming] val failureReasons: Map[Int, String] = Map.empty) {
+    private[streaming] val failureReasons: Map[Int, String]) {
+
+  /**
+   * Create `BatchInfo`. This is for binary compatibility.
+   */
+  def this(
+      batchTime: Time,
+      streamIdToInputInfo: Map[Int, StreamInputInfo],
+      submissionTime: Long,
+      processingStartTime: Option[Long],
+      processingEndTime: Option[Long]) {
+    this(batchTime, streamIdToInputInfo, submissionTime, processingStartTime, processingEndTime,
+      Map.empty)
+  }
 
   @deprecated("Use streamIdToInputInfo instead", "1.5.0")
   def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
@@ -69,4 +82,21 @@ case class BatchInfo(
    * The number of recorders received by the receivers in this batch.
    */
   def numRecords: Long = streamIdToInputInfo.values.map(_.numRecords).sum
+}
+
+@DeveloperApi
+object BatchInfo {
+
+  /**
+   * Create `BatchInfo`. This is for binary compatibility.
+   */
+  def apply(
+      batchTime: Time,
+      streamIdToInputInfo: Map[Int, StreamInputInfo],
+      submissionTime: Long,
+      processingStartTime: Option[Long],
+      processingEndTime: Option[Long]): BatchInfo = {
+    BatchInfo(batchTime, streamIdToInputInfo, submissionTime, processingStartTime,
+      processingEndTime, Map.empty)
+  }
 }

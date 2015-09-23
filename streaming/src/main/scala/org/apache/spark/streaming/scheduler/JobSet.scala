@@ -73,7 +73,7 @@ case class JobSet(
         Map.empty
       }
     }
-    new BatchInfo(
+    BatchInfo(
       time,
       streamIdToInputInfo,
       submissionTime,
