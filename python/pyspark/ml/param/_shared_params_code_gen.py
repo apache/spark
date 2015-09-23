@@ -126,7 +126,7 @@ if __name__ == "__main__":
          "out rows with bad values), or error (which will throw an errror). More options may be " +
          "added later.", None),
         ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty", "0.0"),
+         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0"),
         ("fitIntercept", "whether to fit an intercept term.", "True"),
         ("standardization", "whether to standardize the training features before fitting the " +
          "model.", "True"),
