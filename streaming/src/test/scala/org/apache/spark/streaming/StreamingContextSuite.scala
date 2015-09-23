@@ -204,7 +204,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     // Verify streaming jobs have expected thread-local properties
     assert(jobGroupFound === null)
-    assert(jobDescFound === null)
+    assert(jobDescFound.contains("Streaming job from"))
     assert(jobInterruptFound === "false")
 
     // Verify current thread's thread-local properties have not changed

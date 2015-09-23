@@ -19,14 +19,14 @@ package org.apache.spark.streaming.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{NodeSeq, Node, Text, Unparsed}
+import scala.xml._
 
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
-import org.apache.spark.streaming.ui.StreamingJobProgressListener.{SparkJobId, OutputOpId}
+import org.apache.spark.streaming.ui.StreamingJobProgressListener.{OutputOpId, SparkJobId}
 import org.apache.spark.ui.jobs.UIData.JobUIData
+import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
 private[ui] case class SparkJobIdWithUIData(sparkJobId: SparkJobId, jobUIData: Option[JobUIData])
 
@@ -207,16 +207,25 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             sparkListener.stageIdToInfo.get(sparkJob.stageIds.max)
           }
         }
-    val lastStageData = lastStageInfo.flatMap { s =>
-      sparkListener.stageIdToData.get((s.stageId, s.attemptId))
+    lastStageInfo match {
+      case Some(stageInfo) =>
+        val details = if (stageInfo.details.nonEmpty) {
+          <span
+            onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+            class="expand-details">
+              +details
+          </span> ++
+          <div class="stage-details collapsed">
+            <pre>{stageInfo.details}</pre>
+          </div>
+        } else {
+          NodeSeq.Empty
+        }
+
+        <div> {stageInfo.name} {details} </div>
+      case None =>
+        Text("(Unknown)")
     }
-
-    val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
-    val lastStageDescription = lastStageData.flatMap(_.description).getOrElse("")
-
-    <span class="description-input" title={lastStageDescription}>
-      {lastStageDescription}
-    </span> ++ Text(lastStageName)
   }
 
   private def failureReasonCell(failureReason: String): Seq[Node] = {
