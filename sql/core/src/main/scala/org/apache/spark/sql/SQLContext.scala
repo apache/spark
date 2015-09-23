@@ -550,9 +550,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val rows = data.asScala.map{ element =>
         new GenericInternalRow(
           methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
-        ): Row
+        ): InternalRow
     }
-    DataFrame(self, LocalRelation.fromExternalRows(schema, rows.toSeq))
+    DataFrame(self, LocalRelation(schema, rows.toSeq))
   }
 
 
