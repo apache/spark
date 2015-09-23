@@ -293,6 +293,8 @@ class LinearRegressionModel private[ml] (
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
+  override val numFeatures: Int = weights.size
+
   /**
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
    * thrown if `trainingSummary == None`.

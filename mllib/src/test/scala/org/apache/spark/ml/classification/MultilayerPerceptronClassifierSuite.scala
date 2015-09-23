@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
@@ -73,6 +73,8 @@ class MultilayerPerceptronClassifierSuite extends SparkFunSuite with MLlibTestSp
       .setSeed(11L)
       .setMaxIter(numIterations)
     val model = trainer.fit(dataFrame)
+    val numFeatures = dataFrame.select("features").first().getAs[Vector](0).size
+    assert(model.numFeatures === numFeatures)
     val mlpPredictionAndLabels = model.transform(dataFrame).select("prediction", "label")
       .map { case Row(p: Double, l: Double) => (p, l) }
     // train multinomial logistic regression

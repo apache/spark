@@ -426,6 +426,8 @@ class LogisticRegressionModel private[ml] (
     1.0 / (1.0 + math.exp(-m))
   }
 
+  override val numFeatures: Int = weights.size
+
   override val numClasses: Int = 2
 
   private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None

@@ -137,6 +137,8 @@ class NaiveBayesModel private[ml] (
       throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
 
+  override val numFeatures: Int = theta.numCols
+
   override val numClasses: Int = pi.size
 
   private def multinomialCalculation(features: Vector) = {
