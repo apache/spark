@@ -82,8 +82,7 @@ public class JavaNaiveBayesSuite implements Serializable {
       RowFactory.create(1.0, Vectors.dense(0.0, 1.0, 0.0)),
       RowFactory.create(1.0, Vectors.dense(0.0, 2.0, 0.0)),
       RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 1.0)),
-      RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 2.0))
-                                   );
+      RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 2.0)));
 
     StructType schema = new StructType(new StructField[]{
       new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
