@@ -43,8 +43,6 @@ import java.util.List;
  * the AFINN word list (http://neuro.imm.dtu.dk/wiki/AFINN)
  */
 public class JavaTwitterTagSentiments {
-    private JavaTwitterTagSentiments() {
-    }
 
     public static void main(String[] args) throws IOException {
         if (args.length < 4) {
