@@ -55,6 +55,8 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
       case values: util.ArrayList[_] =>
         val xy = values.asInstanceOf[util.ArrayList[Double]].asScala
         new ExamplePoint(xy(0), xy(1))
+      case values: ArrayData =>
+        new ExamplePoint(values.getDouble(0), values.getDouble(1))
     }
   }
 
