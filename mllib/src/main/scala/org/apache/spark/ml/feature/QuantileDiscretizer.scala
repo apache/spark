@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -56,7 +56,7 @@ private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol w
  * covering all real values. This attempts to find numBuckets partitions based on a sample of data,
  * but it may find fewer depending on the data sample values.
  */
-@AlphaComponent
+@Experimental
 final class QuantileDiscretizer(override val uid: String)
   extends Estimator[Bucketizer] with QuantileDiscretizerBase {
 
