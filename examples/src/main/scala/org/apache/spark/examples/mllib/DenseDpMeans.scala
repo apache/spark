@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -24,28 +24,29 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
- * An example DP means app. Run with
+ * An example DP-means app. Run with
  * {{{
- * ./bin/run-example mllib.DenseDpMeans <--lambda> [<--convergenceTol> <--maxIterations>] <input>
+ * ./bin/run-example mllib.DenseDpMeans <--lambdaValue> [<--convergenceTol>
+ *  <--maxIterations>] <input>
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object DenseDpMeans {
   case class Params(
-        input: String = null,
-        lambda: Double = 0.0,
-        convergenceTol: Double = 0.01,
-        maxIterations: Int = 20) extends AbstractParams[Params]
+      input: String = null,
+      lambdaValue: Double = 0.0,
+      convergenceTol: Double = 0.01,
+      maxIterations: Int = 20) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("DenseDpMeans") {
-      head("DenseDpMeans: Dp means example application.")
-      opt[Double]("lambda")
+      head("DenseDpMeans: DP-means example application.")
+      opt[Double]("lambdaValue")
         .required()
-        .text("distance threshold, required")
-        .action((x, c) => c.copy(lambda = x))
+        .text("lambda value, required")
+        .action((x, c) => c.copy(lambdaValue = x))
       opt[Double]("convergenceTol")
         .abbr("ct")
         .text(s"convergence threshold, default: ${defaultParams.convergenceTol}")
@@ -68,7 +69,7 @@ object DenseDpMeans {
   }
 
   private def run(params: Params) {
-    val conf = new SparkConf().setAppName("DP means example")
+    val conf = new SparkConf().setAppName("DP-means example")
     val sc = new SparkContext(conf)
 
     val data = sc.textFile(params.input).map { line =>
@@ -76,7 +77,7 @@ object DenseDpMeans {
     }.cache()
 
     val clusters = new DpMeans()
-      .setLambda(params.lambda)
+      .setLambdaValue(params.lambdaValue)
       .setConvergenceTol(params.convergenceTol)
       .setMaxIterations(params.maxIterations)
       .run(data)
@@ -87,8 +88,8 @@ object DenseDpMeans {
 
     println("Clusters centers ::")
     for (i <- 0 until clusters.k) {
-              println(clusters.clusterCenters(i))
-          }
+      println(clusters.clusterCenters(i))
+    }
     println()
 
     println("Cluster labels (first <= 20):")
@@ -97,6 +98,9 @@ object DenseDpMeans {
       print(" " + x)
     }
     println()
+
+    val labels = clusterLabels.collect().groupBy(x => x) map { case (k, v) => k-> v.length }
+    println(s"Cluster Count:: $labels")
 
     val cost = clusters.computeCost(data)
     println(s"Total Cost = $cost.")

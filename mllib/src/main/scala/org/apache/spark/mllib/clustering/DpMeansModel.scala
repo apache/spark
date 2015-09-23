@@ -24,13 +24,17 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 /**
- * A clustering model for DP means. Each point belongs to the cluster with the closest center.
+ * A clustering model for DP-means. Each point belongs to the cluster with the closest center.
+ * @param clusterCenters An array of cluster centers
+ * @param lambdaValue lambda value used to find the clusters
  */
-class DpMeansModel
-    (val clusterCenters: Array[Vector]) extends Serializable {
+class DpMeansModel(
+    val clusterCenters: Array[Vector],
+    val lambdaValue: Double) extends Serializable {
 
   /** A Java-friendly constructor that takes an Iterable of Vectors. */
-  def this(centers: java.lang.Iterable[Vector]) = this(centers.asScala.toArray)
+  def this(centers: java.lang.Iterable[Vector], lambdaValue: Double) =
+    this(centers.asScala.toArray, lambdaValue)
 
   /** Total number of clusters obtained. */
   def k: Int = clusterCenters.length
@@ -45,8 +49,11 @@ class DpMeansModel
   def predict(points: RDD[Vector]): RDD[Int] = {
     val centersWithNorm = clusterCentersWithNorm
     val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
-    points.map(p => DpMeans.assignCluster(bcCentersWithNorm.value.to[mutable.ArrayBuffer],
-         new VectorWithNorm(p))._1)
+    points.map { p =>
+      DpMeans.assignCluster(
+        bcCentersWithNorm.value.to[mutable.ArrayBuffer], new VectorWithNorm(p)
+      )._1
+    }
   }
 
   /**
@@ -64,4 +71,3 @@ class DpMeansModel
     clusterCenters.map(new VectorWithNorm(_))
 
 }
-
