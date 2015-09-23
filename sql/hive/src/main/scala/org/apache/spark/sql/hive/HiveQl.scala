@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
@@ -884,16 +885,22 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   AttributeReference("value", StringType)()), true)
             }
 
-            def matchSerDe(clause: Seq[ASTNode])
-              : (Seq[(String, String)], Option[String], Seq[(String, String)]) = clause match {
+            type SerDeInfo = (
+              Seq[(String, String)],  // Input row format information
+              Option[String],         // Optional input SerDe class
+              Seq[(String, String)],  // Input SerDe properties
+              Boolean                 // Whether to use default record reader/writer
+            )
+
+            def matchSerDe(clause: Seq[ASTNode]): SerDeInfo = clause match {
               case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
                 val rowFormat = propsClause.map {
                   case Token(name, Token(value, Nil) :: Nil) => (name, value)
                 }
-                (rowFormat, None, Nil)
+                (rowFormat, None, Nil, false)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) :: Nil) :: Nil =>
-                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), Nil)
+                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), Nil, false)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) ::
                 Token("TOK_TABLEPROPERTIES",
@@ -903,20 +910,47 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                     (BaseSemanticAnalyzer.unescapeSQLString(name),
                       BaseSemanticAnalyzer.unescapeSQLString(value))
                 }
-                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), serdeProps)
 
-              case Nil => (Nil, Option(hiveConf.getVar(ConfVars.HIVESCRIPTSERDE)), Nil)
+                // SPARK-10310: Special cases LazySimpleSerDe
+                // TODO Fully supports user-defined record reader/writer classes
+                val unescapedSerDeClass = BaseSemanticAnalyzer.unescapeSQLString(serdeClass)
+                val useDefaultRecordReaderWriter =
+                  unescapedSerDeClass == classOf[LazySimpleSerDe].getCanonicalName
+                (Nil, Some(unescapedSerDeClass), serdeProps, useDefaultRecordReaderWriter)
+
+              case Nil =>
+                // Uses default TextRecordReader/TextRecordWriter, sets field delimiter here
+                val serdeProps = Seq(serdeConstants.FIELD_DELIM -> "\t")
+                (Nil, Option(hiveConf.getVar(ConfVars.HIVESCRIPTSERDE)), serdeProps, true)
             }
 
-            val (inRowFormat, inSerdeClass, inSerdeProps) = matchSerDe(inputSerdeClause)
-            val (outRowFormat, outSerdeClass, outSerdeProps) = matchSerDe(outputSerdeClause)
+            val (inRowFormat, inSerdeClass, inSerdeProps, useDefaultRecordReader) =
+              matchSerDe(inputSerdeClause)
+
+            val (outRowFormat, outSerdeClass, outSerdeProps, useDefaultRecordWriter) =
+              matchSerDe(outputSerdeClause)
 
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
+
+            // TODO Adds support for user-defined record reader/writer classes
+            val recordReaderClass = if (useDefaultRecordReader) {
+              Option(hiveConf.getVar(ConfVars.HIVESCRIPTRECORDREADER))
+            } else {
+              None
+            }
+
+            val recordWriterClass = if (useDefaultRecordWriter) {
+              Option(hiveConf.getVar(ConfVars.HIVESCRIPTRECORDWRITER))
+            } else {
+              None
+            }
 
             val schema = HiveScriptIOSchema(
               inRowFormat, outRowFormat,
               inSerdeClass, outSerdeClass,
-              inSerdeProps, outSerdeProps, schemaLess)
+              inSerdeProps, outSerdeProps,
+              recordReaderClass, recordWriterClass,
+              schemaLess)
 
             Some(
               logical.ScriptTransformation(

@@ -200,6 +200,8 @@ class StreamingContext private[streaming] (
 
   private val startSite = new AtomicReference[CallSite](null)
 
+  private[streaming] def getStartSite(): CallSite = startSite.get()
+
   private var shutdownHookRef: AnyRef = _
 
   conf.getOption("spark.streaming.checkpoint.directory").foreach(checkpoint)
@@ -744,7 +746,7 @@ object StreamingContext extends Logging {
         throw new IllegalStateException(
           "Only one StreamingContext may be started in this JVM. " +
             "Currently running StreamingContext was started at" +
-            activeContext.get.startSite.get.longForm)
+            activeContext.get.getStartSite().longForm)
       }
     }
   }
