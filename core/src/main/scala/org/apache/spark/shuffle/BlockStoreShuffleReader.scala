@@ -23,6 +23,10 @@ import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
+/**
+ * Fetches and reads the partitions in range [startPartition, endPartition) from a shuffle by
+ * requesting them from other nodes' block stores.
+ */
 private[spark] class BlockStoreShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
