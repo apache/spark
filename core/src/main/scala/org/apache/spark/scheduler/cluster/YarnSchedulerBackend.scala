@@ -51,10 +51,6 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
-  // Executor IDs which will be preempted by cluster manager, this variable reflects cluster
-  // manager's preference at that time, will be changed time to time.
-  private val preemptedExecutorIDs = new HashSet[String]
-
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
    * This includes executors already pending or running.
@@ -73,14 +69,6 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
-  }
-
-  /**
-   * Executor IDs which will possibly be preempted by cluster manager.
-   * @return A set of executor IDs
-   */
-  override def preemptedExecutors: Set[String] = synchronized {
-    preemptedExecutorIDs.toSet
   }
 
   /**

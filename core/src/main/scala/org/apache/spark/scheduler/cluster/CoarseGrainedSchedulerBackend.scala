@@ -73,6 +73,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The number of pending tasks which is locality required
   protected var localityAwareTasks = 0
 
+  // Executor IDs which will be preempted by cluster manager, this variable reflects cluster
+  // manager's preference at that time, will be changed time to time.
+  protected val preemptedExecutorIDs = new HashSet[String]
+
+
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -457,7 +462,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Executor ids which will possibly be preempted by cluster manager.
    * @return A set of executor IDs
    */
-  protected def preemptedExecutors: Set[String] = Set.empty
+  protected def preemptedExecutors: Set[String] = synchronized {
+    preemptedExecutorIDs.toSet
+  }
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
