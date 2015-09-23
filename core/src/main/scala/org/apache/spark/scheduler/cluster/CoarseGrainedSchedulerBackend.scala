@@ -180,7 +180,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def makeOffers() {
       // Filter out executors under killing
       val activeExecutors = executorDataMap.filterKeys { id =>
-        !executorsPendingToRemove.contains(id) && !preemptionExecutors(id)
+        !executorsPendingToRemove.contains(id) && !preemptedExecutors.contains(id)
       }
 
       val workOffers = activeExecutors.map { case (id, executorData) =>
@@ -198,7 +198,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
       // Filter out executors under killing
-      if (!executorsPendingToRemove.contains(executorId) && !preemptionExecutors(executorId)) {
+      if (!executorsPendingToRemove.contains(executorId) &&
+        !preemptedExecutors.contains(executorId)) {
         val executorData = executorDataMap(executorId)
         val workOffers = Seq(
           new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
@@ -456,7 +457,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Executor ids which will possibly be preempted by cluster manager.
    * @return A set of executor IDs
    */
-  protected def preemptionExecutors: Set[String] = Set.empty
+  protected def preemptedExecutors: Set[String] = Set.empty
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

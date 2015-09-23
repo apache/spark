@@ -53,7 +53,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
   // Executor IDs which will be preempted by cluster manager, this variable reflects cluster
   // manager's preference at that time, will be changed time to time.
-  private val preemptionExecutorIDs = new HashSet[String]
+  private val preemptedExecutorIDs = new HashSet[String]
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
@@ -79,8 +79,8 @@ private[spark] abstract class YarnSchedulerBackend(
    * Executor IDs which will possibly be preempted by cluster manager.
    * @return A set of executor IDs
    */
-  override def preemptionExecutors: Set[String] = synchronized {
-    preemptionExecutorIDs.toSet
+  override def preemptedExecutors: Set[String] = synchronized {
+    preemptedExecutorIDs.toSet
   }
 
   /**
@@ -189,14 +189,14 @@ private[spark] abstract class YarnSchedulerBackend(
       case RemoveExecutor(executorId, reason) =>
         removeExecutor(executorId, reason)
 
-      case PreemptionExecutors(executorIds) =>
+      case PreemptExecutors(executorIds) =>
         if (!executorIds.isEmpty) {
           logInfo(s"Executor ID: ${executorIds.mkString(" ")} will possibly be preempted")
         }
 
         synchronized {
-          preemptionExecutorIDs.clear()
-          preemptionExecutorIDs ++= executorIds
+          preemptedExecutorIDs.clear()
+          preemptedExecutorIDs ++= executorIds
         }
     }
 

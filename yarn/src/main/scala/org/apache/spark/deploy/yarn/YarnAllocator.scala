@@ -108,9 +108,6 @@ private[yarn] class YarnAllocator(
   private var numUnexpectedContainerRelease = 0L
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
 
-  // A set to store all the executor ids which will possibly be preempted
-  private val preemptionExecutors = new HashSet[String]()
-
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
   // Additional memory overhead.
@@ -169,11 +166,6 @@ private[yarn] class YarnAllocator(
    */
   def getNumPendingAllocate: Int = getNumPendingAtLocation(ANY_HOST)
 
-  /** A set of preemption executors */
-  def getPreemptionExecutors: Set[String] = synchronized {
-    preemptionExecutors.toSet
-  }
-
   /**
    * Number of container requests at the given location that have not yet been fulfilled.
    */
@@ -220,7 +212,12 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  def updateResources(): Unit = synchronized {
+  /**
+   * Update the current container resources. By sending the container requests to RM and get
+   * response from RM to update the current allocated containers and get preempted containers.
+   * @return A set of executor id which will possibly be preempted.
+   */
+    def updateResources(): Set[String] = synchronized {
     // Update the container requests
     updateResourceRequests()
 
@@ -268,30 +265,26 @@ private[yarn] class YarnAllocator(
   }
 
   /** Get a list of preemption containers through AM-RM heartbeat. */
-  private def preemptResources(allocateResponse: AllocateResponse): Unit = {
+  private def preemptResources(allocateResponse: AllocateResponse): Set[String] = {
     val preemptMessageOpt = Option(allocateResponse.getPreemptionMessage)
-    val strictContractOpt = preemptMessageOpt.map(p => Option(p.getStrictContract)).flatten
-    val contractOpt = preemptMessageOpt.map(p => Option(p.getContract)).flatten
+    val strictContractOpt = preemptMessageOpt.flatMap(p => Option(p.getStrictContract))
+    val contractOpt = preemptMessageOpt.flatMap(p => Option(p.getContract))
 
-    // We need to forget all the already preempted executors at this time,
-    // because preemption information will be changed time to time.
-    preemptionExecutors.clear()
-
-    contractOpt.foreach { c =>
-      val preemptContainers = c.getContainers
-      preemptContainers.foreach { c =>
+    val preemptedContainers = contractOpt.map { contract =>
+      contract.getContainers.asScala.flatMap { c =>
         logInfo(s"Container id: ${c.getId} will potentially be preempted")
-        containerIdToExecutorId.get(c.getId).foreach(e => preemptionExecutors += e)
-      }
-    }
+        containerIdToExecutorId.get(c.getId)
+      }.toSet
+    }.getOrElse(Set[String]())
 
-    strictContractOpt.foreach { sc =>
-      val strictPreemptedContainers = sc.getContainers
-      strictPreemptedContainers.foreach { c =>
+    val strictPreemptedContainers = strictContractOpt.map { strictContract =>
+      strictContract.getContainers.asScala.flatMap { c =>
         logInfo(s"Container id: ${c.getId} will potentially be strictly preempted")
-        containerIdToExecutorId.get(c.getId).foreach(e => preemptionExecutors += e)
-      }
-    }
+        containerIdToExecutorId.get(c.getId)
+      }.toSet
+    }.getOrElse(Set[String]())
+
+    preemptedContainers ++ strictPreemptedContainers
   }
 
   /**

@@ -340,7 +340,7 @@ private[spark] class ApplicationMaster(
     val t = new Thread {
       override def run() {
         var failureCount = 0
-        var lastPreemptionExecutors: Set[String] = Set.empty
+        var lastPreemptedExecutors: Set[String] = Set.empty
         while (!finished) {
           try {
             if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
@@ -349,15 +349,14 @@ private[spark] class ApplicationMaster(
                 "Max number of executor failures reached")
             } else {
               logDebug("Sending progress")
-              allocator.updateResources()
+              val preemptedExecutors = allocator.updateResources()
 
               // Get the preemption executors from YarnAllocator, if preemption executor list is
               // changed compared to last time, notify scheduler backend this preemption executor
               // list.
-              val preemptionExecutors = allocator.getPreemptionExecutors
-              if (preemptionExecutors != lastPreemptionExecutors) {
-                amEndpoint.send(PreemptionExecutors(preemptionExecutors))
-                lastPreemptionExecutors = preemptionExecutors
+              if (preemptedExecutors != lastPreemptedExecutors) {
+                amEndpoint.send(PreemptExecutors(preemptedExecutors))
+                lastPreemptedExecutors = preemptedExecutors
               }
             }
             failureCount = 0
@@ -576,8 +575,8 @@ private[spark] class ApplicationMaster(
         logInfo(s"Add WebUI Filter. $x")
         driver.send(x)
 
-      case x: PreemptionExecutors =>
-        logDebug(s"Send preemption executor list to driver: $x")
+      case x: PreemptExecutors =>
+        logDebug(s"Send preempted executor list to driver: $x")
         driver.send(x)
     }
 

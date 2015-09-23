@@ -100,5 +100,5 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 
-  case class PreemptionExecutors(executorIds: Set[String]) extends CoarseGrainedClusterMessage
+  case class PreemptExecutors(executorId: Set[String]) extends CoarseGrainedClusterMessage
 }
