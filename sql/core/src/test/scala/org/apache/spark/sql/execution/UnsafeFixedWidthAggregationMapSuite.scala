@@ -333,4 +333,48 @@ class UnsafeFixedWidthAggregationMapSuite
 
     map.free()
   }
+
+  testWithMemoryLeakDetection("convert to external sorter under memory pressure (SPARK-10474)") {
+    val smm = ShuffleMemoryManager.createForTesting(65536)
+    val pageSize = 4096
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      taskMemoryManager,
+      smm,
+      128, // initial capacity
+      pageSize,
+      false // disable perf metrics
+    )
+
+    // Insert into the map until we've run out of space
+    val rand = new Random(42)
+    var hasSpace = true
+    while (hasSpace) {
+      val str = rand.nextString(1024)
+      val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+      if (buf == null) {
+        hasSpace = false
+      } else {
+        buf.setInt(0, str.length)
+      }
+    }
+
+    // Ensure we're actually maxed out by asserting that we can't acquire even just 1 byte
+    assert(smm.tryToAcquire(1) === 0)
+
+    // Convert the map into a sorter. This used to fail before the fix for SPARK-10474
+    // because we would try to acquire space for the in-memory sorter pointer array before
+    // actually releasing the pages despite having spilled all of them.
+    var sorter: UnsafeKVExternalSorter = null
+    try {
+      sorter = map.destructAndCreateExternalSorter()
+    } finally {
+      if (sorter != null) {
+        sorter.cleanupResources()
+      }
+    }
+  }
+
 }
