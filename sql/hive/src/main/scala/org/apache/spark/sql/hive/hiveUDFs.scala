@@ -522,6 +522,10 @@ private[hive] case class HiveGenericUDTF(
   }
 }
 
+/**
+ * Currently we don't support partial aggregation for queries using Hive UDAF, which may hurt
+ * performance a lot.
+ */
 private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
@@ -590,7 +594,9 @@ private[hive] case class HiveUDAFFunction(
 
   override def bufferAttributes: Seq[AttributeReference] = Nil
 
-  override def inputTypes: Seq[AbstractDataType] = Nil
+  // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
+  // catalyst type checking framework.
+  override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
   override def nullable: Boolean = true
 
