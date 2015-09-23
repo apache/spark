@@ -160,7 +160,7 @@ public final class UnsafeExternalSorter {
    * Allocates new sort data structures. Called when creating the sorter and after each spill.
    */
   private void initializeForWriting() throws IOException {
-    // Note: Do not track memory for the pointer array for now because of SPARK-10733.
+    // Note: Do not track memory for the pointer array for now because of SPARK-10474.
     // In more detail, in TungstenAggregate we only reserve a page, but when we fall back to
     // sort-based aggregation we try to acquire a page AND a pointer array, which inevitably
     // fails if all other memory is already used by other tasks. It should be safe to not track
@@ -264,7 +264,7 @@ public final class UnsafeExternalSorter {
       shuffleMemoryManager.release(block.size());
       memoryFreed += block.size();
     }
-    // TODO: track in-memory sorter memory usage (SPARK-10733)
+    // TODO: track in-memory sorter memory usage (SPARK-10474)
     allocatedPages.clear();
     currentPage = null;
     currentPagePosition = -1;
