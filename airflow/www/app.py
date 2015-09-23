@@ -1085,7 +1085,7 @@ class Airflow(BaseView):
         # expand/collapse functionality. After 5,000 nodes we stop and fall
         # back on a quick DFS search for performance. See PR #320.
         node_count = [0]
-        node_limit = 5000 / len(dag.roots)
+        node_limit = 5000 / max(1, len(dag.roots))
 
         def recurse_nodes(task, visited):
             visited.add(task)
