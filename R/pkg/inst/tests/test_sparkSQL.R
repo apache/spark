@@ -1334,7 +1334,7 @@ test_that("cov() and corr() on a DataFrame", {
   df <- createDataFrame(sqlContext, l, c("singles", "doubles"))
   result <- cov(df, "singles", "doubles")
   expect_true(abs(result - 55.0 / 3) < 1e-12)
-  
+
   result <- corr(df, "singles", "doubles")
   expect_true(abs(result - 1.0) < 1e-12)
   result <- corr(df, "singles", "doubles", "pearson")
