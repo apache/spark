@@ -86,7 +86,9 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     } catch {
       case e: Throwable =>
         if (file.exists()) {
-          file.delete()
+          if (!file.delete()) {
+            logWarning(s"Error deleting ${file}")
+          }
         }
         throw e
     }
@@ -155,7 +157,11 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   override def remove(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     if (file.exists()) {
-      file.delete()
+      val ret = file.delete()
+      if (!ret) {
+        logWarning(s"Error deleting ${file.getPath()}")
+      }
+      ret
     } else {
       false
     }

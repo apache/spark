@@ -242,7 +242,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logError("Exception encountered when attempting to update last scan time", e)
         lastScanTime
     } finally {
-      fs.delete(path)
+      if (!fs.delete(path)) {
+        logWarning(s"Error deleting ${path}")
+      }
     }
   }
 
@@ -405,7 +407,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         try {
           val path = new Path(logDir, attempt.logPath)
           if (fs.exists(path)) {
-            fs.delete(path, true)
+            if (!fs.delete(path, true)) {
+              logWarning(s"Error deleting ${path}")
+            }
           }
         } catch {
           case e: AccessControlException =>

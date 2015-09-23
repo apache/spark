@@ -89,7 +89,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
 
 }
 
-private[spark] object ReliableRDDCheckpointData {
+private[spark] object ReliableRDDCheckpointData extends Logging {
 
   /** Return the path of the directory to which this RDD's checkpoint data is written. */
   def checkpointPath(sc: SparkContext, rddId: Int): Option[Path] = {
@@ -101,7 +101,9 @@ private[spark] object ReliableRDDCheckpointData {
     checkpointPath(sc, rddId).foreach { path =>
       val fs = path.getFileSystem(sc.hadoopConfiguration)
       if (fs.exists(path)) {
-        fs.delete(path, true)
+        if (!fs.delete(path, true)) {
+          logWarning(s"Error deleting ${path.toString()}")
+        }
       }
     }
   }

@@ -24,12 +24,15 @@ import com.google.common.io.ByteStreams;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description
  * of the file format).
  */
 final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
+  private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
 
   private final File file;
   private InputStream in;
@@ -73,7 +76,9 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
       in.close();
-      file.delete();
+      if (!file.delete() && file.exists()) {
+        logger.warn("Unable to delete spill file {}", file.getPath());
+      }
       in = null;
       din = null;
     }
