@@ -20,12 +20,13 @@ package org.apache.spark.streaming.util
 import scala.collection.mutable
 import scala.concurrent.duration._
 
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.ManualClock
 
-class RecurringTimerSuite extends SparkFunSuite {
+class RecurringTimerSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("basic") {
     val clock = new ManualClock()
@@ -60,21 +61,22 @@ class RecurringTimerSuite extends SparkFunSuite {
     }
     @volatile var lastTime = -1L
     // Now RecurringTimer is waiting for the next interval
-    val t = new Thread {
+    val thread = new Thread {
       override def run(): Unit = {
         lastTime = timer.stop(interruptTimer = false)
       }
     }
-    t.start()
+    thread.start()
+    val stopped = PrivateMethod[RecurringTimer]('stopped)
     // Make sure the `stopped` field has been changed
     eventually(timeout(10.seconds), interval(10.millis)) {
-      assert(timer.isStopped)
+      assert(timer.invokePrivate(stopped()) === true)
     }
     clock.advance(200)
     // When RecurringTimer is awake from clock.waitTillTime, it will call `callback` once.
     // Then it will find `stopped` is true and exit the loop, but it should call `callback` again
     // before exiting its internal thread.
-    t.join()
+    thread.join()
     assert(results === Seq(0L, 100L, 200L))
     assert(lastTime === 200L)
   }

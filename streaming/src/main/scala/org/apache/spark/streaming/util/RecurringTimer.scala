@@ -72,8 +72,10 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 
   /**
    * Stop the timer, and return the last time the callback was made.
-   * interruptTimer = true will interrupt the callback
+   * - interruptTimer = true will interrupt the callback
    * if it is in progress (not guaranteed to give correct time in this case).
+   * - interruptTimer = false guarantees that there will be at least one callback after `stop` has
+   * been called.
    */
   def stop(interruptTimer: Boolean): Long = synchronized {
     if (!stopped) {
@@ -108,11 +110,6 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
       case e: InterruptedException =>
     }
   }
-
-  /*
-   * Return whether `stop` is called.
-   */
-  def isStopped: Boolean = stopped
 }
 
 private[streaming]
