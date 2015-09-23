@@ -140,7 +140,11 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
 @Experimental
 class CrossValidatorModel private[ml] (
     override val uid: String,
+
+    /** The best model selected from cross validation */
     val bestModel: Model[_],
+
+    /** Average cross-validation metrics */
     val avgMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
