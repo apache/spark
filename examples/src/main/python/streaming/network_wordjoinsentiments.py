@@ -20,13 +20,14 @@
  every 5 seconds. The streaming data is joined with a static RDD of the AFINN word list
  (http://neuro.imm.dtu.dk/wiki/AFINN)
 
- Usage: network_wordcount.py <hostname> <port>
+ Usage: network_wordjoinsentiments.py <hostname> <port>
    <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
 
  To run this on your local machine, you need to first run a Netcat server
     `$ nc -lk 9999`
  and then run the example
-    `$ bin/spark-submit examples/src/main/python/streaming/network_wordsentiments.py localhost 9999`
+    `$ bin/spark-submit examples/src/main/python/streaming/network_wordjoinsentiments.py \
+    localhost 9999`
 """
 
 from __future__ import print_function
@@ -46,12 +47,13 @@ def print_happiest_words(rdd):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: network_wordsentiments.py <hostname> <port>", file=sys.stderr)
+        print("Usage: network_wordjoinsentiments.py <hostname> <port>", file=sys.stderr)
         exit(-1)
 
-    sc = SparkContext(appName="PythonStreamingNetworkWordSentiments")
+    sc = SparkContext(appName="PythonStreamingNetworkWordJoinSentiments")
     ssc = StreamingContext(sc, 5)
 
+    # Read in the word-sentiment list and create a static RDD from it
     word_sentiments_uri = "http://raw.githubusercontent.com/fnielsen/afinn/master/afinn/data/" + \
                           "AFINN-111.txt"
     word_sentiments_lines = urllib2.urlopen(word_sentiments_uri).read().split("\n")
@@ -64,6 +66,9 @@ if __name__ == "__main__":
         .map(lambda word: (word, 1)) \
         .reduceByKey(lambda a, b: a + b)
 
+    # Determine the words with the highest sentiment values by joining the streaming RDD
+    # with the static RDD inside the transform() method and then multiplying
+    # the frequency of the words by its sentiment value
     happiest_words = word_counts.transform(lambda rdd: word_sentiments.join(rdd)) \
         .map(lambda (word, tuple): (word, float(tuple[0]) * tuple[1])) \
         .map(lambda (word, happiness): (happiness, word)) \

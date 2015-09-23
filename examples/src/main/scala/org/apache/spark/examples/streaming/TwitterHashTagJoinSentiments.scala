@@ -26,10 +26,10 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
  * Displays the most positive hash tags by joining the streaming Twitter data with a static RDD of
  * the AFINN word list (http://neuro.imm.dtu.dk/wiki/AFINN)
  */
-object TwitterTagSentiments {
+object TwitterHashTagJoinSentiments {
   def main(args: Array[String]) {
     if (args.length < 4) {
-      System.err.println("Usage: TwitterTagSentiments <consumer key> <consumer secret> " +
+      System.err.println("Usage: TwitterHashTagJoinSentiments <consumer key> <consumer secret> " +
         "<access token> <access token secret> [<filters>]")
       System.exit(1)
     }
@@ -39,17 +39,20 @@ object TwitterTagSentiments {
     val Array(consumerKey, consumerSecret, accessToken, accessTokenSecret) = args.take(4)
     val filters = args.takeRight(args.length - 4)
 
+    // Set the system properties so that Twitter4j library used by Twitter stream
+    // can use them to generate OAuth credentials
     System.setProperty("twitter4j.oauth.consumerKey", consumerKey)
     System.setProperty("twitter4j.oauth.consumerSecret", consumerSecret)
     System.setProperty("twitter4j.oauth.accessToken", accessToken)
     System.setProperty("twitter4j.oauth.accessTokenSecret", accessTokenSecret)
 
-    val sparkConf = new SparkConf().setAppName("TwitterTagSentiments")
+    val sparkConf = new SparkConf().setAppName("TwitterHashTagJoinSentiments")
     val ssc = new StreamingContext(sparkConf, Seconds(2))
     val stream = TwitterUtils.createStream(ssc, None, filters)
 
     val hashTags = stream.flatMap(status => status.getText.split(" ").filter(_.startsWith("#")))
 
+    // Read in the word-sentiment list and create a static RDD from it
     val wordSentimentURI =
       "https://raw.githubusercontent.com/fnielsen/afinn/master/afinn/data/AFINN-111.txt"
     val wordSentimentLines = scala.io.Source.fromURL(wordSentimentURI).mkString.split("\n")
@@ -58,6 +61,9 @@ object TwitterTagSentiments {
       (word, happinessValue)
     } cache()
 
+    // Determine the hash tags with the highest sentiment values by joining the streaming RDD
+    // with the static RDD inside the transform() method and then multiplying
+    // the frequency of the hash tag by its sentiment value
     val happiest60 = hashTags.map(hashTag => (hashTag.tail, 1))
       .reduceByKeyAndWindow(_ + _, Seconds(60))
       .transform{topicCount => wordSentiments.join(topicCount)}
@@ -72,6 +78,7 @@ object TwitterTagSentiments {
       .map{case (topic, happinessValue) => (happinessValue, topic)}
       .transform(_.sortByKey(false))
 
+    // Print hash tags with the most positive sentiment values
     happiest60.foreachRDD(rdd => {
       val topList = rdd.take(10)
       println("\nHappiest topics in last 60 seconds (%s total):".format(rdd.count()))
