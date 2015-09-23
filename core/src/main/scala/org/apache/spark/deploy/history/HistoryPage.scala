@@ -33,9 +33,15 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val requestedFirst = (requestedPage - 1) * pageSize
     val requestedIncomplete =
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
+    val requestedQuery = Option(request.getParameter("query")).getOrElse("")
 
-    val allApps = parent.getApplicationList()
+    var allApps = parent.getApplicationList()
       .filter(_.attempts.head.completed != requestedIncomplete)
+    if (!requestedQuery.equals("")) {
+      val query = requestedQuery.toLowerCase
+      allApps = allApps.filter(app =>
+        app.id.contains(query) || app.name.toLowerCase.contains(query))
+    }
     val allAppsSize = allApps.size
 
     val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0
@@ -74,19 +80,27 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             // page, `...` will be displayed.
             if (allAppsSize > 0) {
               val leftSideIndices =
-                rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _, requestedIncomplete)
+                rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _, requestedIncomplete,
+                  requestedQuery)
               val rightSideIndices =
                 rangeIndices(actualPage + 1 to actualPage + plusOrMinus, _ < pageCount,
-                  requestedIncomplete)
+                  requestedIncomplete, requestedQuery)
 
               <h4>
+                <form action="" method="GET">
+                  Search: <input type="text" name="query" value={requestedQuery} />
+                  <input type="hidden" name="showIncomplete" value={requestedIncomplete.toString} />
+                  <input type="submit" value="Submit" />
+                </form>
                 Showing {actualFirst + 1}-{last + 1} of {allAppsSize}
                 {if (requestedIncomplete) "(Incomplete applications)"}
                 <span style="float: right">
                   {
                     if (actualPage > 1) {
-                      <a href={makePageLink(actualPage - 1, requestedIncomplete)}>&lt; </a>
-                      <a href={makePageLink(1, requestedIncomplete)}>1</a>
+                      <a href={makePageLink(actualPage - 1, requestedIncomplete, requestedQuery)}>
+                        &lt;
+                      </a>
+                      <a href={makePageLink(1, requestedIncomplete, requestedQuery)}>1</a>
                     }
                   }
                   {if (actualPage - plusOrMinus > secondPageFromLeft) " ... "}
@@ -96,8 +110,12 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
                   {if (actualPage + plusOrMinus < secondPageFromRight) " ... "}
                   {
                     if (actualPage < pageCount) {
-                      <a href={makePageLink(pageCount, requestedIncomplete)}>{pageCount}</a>
-                      <a href={makePageLink(actualPage + 1, requestedIncomplete)}> &gt;</a>
+                      <a href={makePageLink(pageCount, requestedIncomplete, requestedQuery)}>
+                        {pageCount}
+                      </a>
+                      <a href={makePageLink(actualPage + 1, requestedIncomplete, requestedQuery)}>
+                        &gt;
+                      </a>
                     }
                   }
                 </span>
@@ -115,7 +133,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               </p>
             }
           }
-          <a href={makePageLink(actualPage, !requestedIncomplete)}>
+          <a href={makePageLink(actualPage, !requestedIncomplete, "")}>
             {
               if (requestedIncomplete) {
                 "Back to completed applications"
@@ -151,9 +169,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   private def rangeIndices(
       range: Seq[Int],
       condition: Int => Boolean,
-      showIncomplete: Boolean): Seq[Node] = {
+      showIncomplete: Boolean,
+      showQuery: String): Seq[Node] = {
     range.filter(condition).map(nextPage =>
-      <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
+      <a href={makePageLink(nextPage, showIncomplete, showQuery)}> {nextPage} </a>)
   }
 
   private def attemptRow(
@@ -217,10 +236,11 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       info.attempts.drop(1).flatMap(attemptRow(true, info, _, false))
   }
 
-  private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
+  private def makePageLink(linkPage: Int, showIncomplete: Boolean, showQuery: String): String = {
     "/?" + Array(
       "page=" + linkPage,
-      "showIncomplete=" + showIncomplete
+      "showIncomplete=" + showIncomplete,
+      "query=" + showQuery
     ).mkString("&")
   }
 }
