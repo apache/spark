@@ -70,11 +70,11 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   /** @group getParam */
   @Since("1.6.0")
   def getQuantileProbabilities: Array[Double] = $(quantileProbabilities)
+  setDefault(quantileProbabilities -> Array(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
 
   /**
    * Param for quantiles column name.
-   * If quantileProbabilities is set, quantiles of corresponding probabilities
-   * will be outputed in this column.
+   * This column will output quantiles of corresponding quantileProbabilities if it is set.
    * @group param
    */
   @Since("1.6.0")
@@ -83,11 +83,6 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   /** @group getParam */
   @Since("1.6.0")
   def getQuantilesCol: String = $(quantilesCol)
-
-  /** Checks whether the input has quantile probabilities array. */
-  protected[regression] def hasQuantileProbabilities: Boolean = {
-    isDefined(quantileProbabilities) && $(quantileProbabilities).size != 0
-  }
 
   /** Checks whether the input has quantiles column name. */
   protected[regression] def hasQuantilesCol: Boolean = {
@@ -108,11 +103,8 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
       SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
     }
-    if (hasQuantileProbabilities && hasQuantilesCol) {
+    if (hasQuantilesCol) {
       SchemaUtils.appendColumn(schema, $(quantilesCol), new VectorUDT)
-    } else if (hasQuantileProbabilities || hasQuantilesCol) {
-      logWarning("The output will not include quantiles column. " +
-        "If you want to include, please set both quantileProbabilities and quantilesCol.")
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
@@ -281,8 +273,6 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("1.6.0")
   def predictQuantiles(features: Vector): Vector = {
-    require(hasQuantileProbabilities,
-      "AFTSurvivalRegressionModel predictQuantiles must set quantile probabilities array")
     // scale parameter for the Weibull distribution of lifetime
     val lambda = math.exp(BLAS.dot(coefficients, features) + intercept)
     // shape parameter for the Weibull distribution of lifetime
@@ -303,7 +293,7 @@ class AFTSurvivalRegressionModel private[ml] (
     transformSchema(dataset.schema)
     val predictUDF = udf { features: Vector => predict(features) }
     val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
-    if (hasQuantileProbabilities && hasQuantilesCol) {
+    if (hasQuantilesCol) {
       dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
         .withColumn($(quantilesCol), predictQuantilesUDF(col($(featuresCol))))
     } else {
