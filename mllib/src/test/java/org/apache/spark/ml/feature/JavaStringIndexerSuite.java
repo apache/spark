@@ -58,7 +58,7 @@ public class JavaStringIndexerSuite {
       createStructField("label", StringType, false)
     });
     List<Row> data = Arrays.asList(
-        c(0, "a"), c(1, "b"), c(2, "c"), c(3, "a"), c(4, "a"), c(5, "c"));
+      c(0, "a"), c(1, "b"), c(2, "c"), c(3, "a"), c(4, "a"), c(5, "c"));
     DataFrame dataset = sqlContext.createDataFrame(data, schema);
 
     StringIndexer indexer = new StringIndexer()

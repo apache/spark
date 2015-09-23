@@ -59,12 +59,12 @@ public class JavaBucketizerSuite {
       new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
     });
     DataFrame dataset = jsql.createDataFrame(
-        Arrays.asList(
-            RowFactory.create(-0.5),
-            RowFactory.create(-0.3),
-            RowFactory.create(0.0),
-            RowFactory.create(0.2)),
-        schema);
+      Arrays.asList(
+        RowFactory.create(-0.5),
+        RowFactory.create(-0.3),
+        RowFactory.create(0.0),
+        RowFactory.create(0.2)),
+      schema);
 
     Bucketizer bucketizer = new Bucketizer()
       .setInputCol("feature")

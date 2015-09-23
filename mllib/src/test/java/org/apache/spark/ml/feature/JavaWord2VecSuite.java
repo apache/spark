@@ -55,11 +55,11 @@ public class JavaWord2VecSuite {
       new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
     });
     DataFrame documentDF = sqlContext.createDataFrame(
-        Arrays.asList(
-            RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
-            RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
-            RowFactory.create(Arrays.asList("Logistic regression models are neat".split(" ")))),
-        schema);
+      Arrays.asList(
+        RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
+        RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
+        RowFactory.create(Arrays.asList("Logistic regression models are neat".split(" ")))),
+      schema);
 
     Word2Vec word2Vec = new Word2Vec()
       .setInputCol("text")

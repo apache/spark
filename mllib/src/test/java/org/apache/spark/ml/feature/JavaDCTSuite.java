@@ -58,10 +58,10 @@ public class JavaDCTSuite {
   public void javaCompatibilityTest() {
     double[] input = new double[] {1D, 2D, 3D, 4D};
     DataFrame dataset = jsql.createDataFrame(
-        Arrays.asList(RowFactory.create(Vectors.dense(input))),
-        new StructType(new StructField[]{
-            new StructField("vec", (new VectorUDT()), false, Metadata.empty())
-          }));
+      Arrays.asList(RowFactory.create(Vectors.dense(input))),
+      new StructType(new StructField[]{
+        new StructField("vec", (new VectorUDT()), false, Metadata.empty())
+      }));
 
     double[] expectedResult = input.clone();
     (new DoubleDCT_1D(input.length)).forward(expectedResult, true);
