@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.hive;
 
 import java.io.File;
@@ -52,7 +53,7 @@ public class JavaMetastoreDataSourcesSuite {
   FileSystem fs;
   DataFrame df;
 
-  private void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(DataFrame actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -76,27 +77,33 @@ public class JavaMetastoreDataSourcesSuite {
       fs.delete(hiveManagedPath, true);
     }
 
-    List<String> jsonObjects = new ArrayList<String>(10);
+    List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
-    df = sqlContext.jsonRDD(rdd);
+    df = sqlContext.read().json(rdd);
     df.registerTempTable("jsonTable");
   }
 
   @After
   public void tearDown() throws IOException {
     // Clean up tables.
-    sqlContext.sql("DROP TABLE IF EXISTS javaSavedTable");
-    sqlContext.sql("DROP TABLE IF EXISTS externalTable");
+    if (sqlContext != null) {
+      sqlContext.sql("DROP TABLE IF EXISTS javaSavedTable");
+      sqlContext.sql("DROP TABLE IF EXISTS externalTable");
+    }
   }
 
   @Test
   public void saveExternalTableAndQueryIt() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
@@ -113,15 +120,19 @@ public class JavaMetastoreDataSourcesSuite {
 
   @Test
   public void saveExternalTableWithSchemaAndQueryIt() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
       df.collectAsList());
 
-    List<StructField> fields = new ArrayList<StructField>();
+    List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
     DataFrame loadedDF =
@@ -137,8 +148,12 @@ public class JavaMetastoreDataSourcesSuite {
 
   @Test
   public void saveTableAndQueryIt() {
-    Map<String, String> options = new HashMap<String, String>();
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    Map<String, String> options = new HashMap<>();
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),

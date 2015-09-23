@@ -19,8 +19,8 @@ package org.apache.spark.mllib.util
 
 import scala.util.Random
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
  * cluster with scale 1 around each center.
  */
 @DeveloperApi
+@Since("0.8.0")
 object KMeansDataGenerator {
 
   /**
@@ -42,6 +43,7 @@ object KMeansDataGenerator {
    * @param r Scaling factor for the distribution of the initial centers
    * @param numPartitions Number of partitions of the generated RDD; default 2
    */
+  @Since("0.8.0")
   def generateKMeansRDD(
       sc: SparkContext,
       numPoints: Int,
@@ -62,10 +64,13 @@ object KMeansDataGenerator {
     }
   }
 
+  @Since("0.8.0")
   def main(args: Array[String]) {
     if (args.length < 6) {
+      // scalastyle:off println
       println("Usage: KMeansGenerator " +
         "<master> <output_dir> <num_points> <k> <d> <r> [<num_partitions>]")
+      // scalastyle:on println
       System.exit(1)
     }
 

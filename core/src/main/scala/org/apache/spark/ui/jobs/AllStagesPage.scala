@@ -64,22 +64,15 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val shouldShowCompletedStages = completedStages.nonEmpty
       val shouldShowFailedStages = failedStages.nonEmpty
 
+      val completedStageNumStr = if (numCompletedStages == completedStages.size) {
+        s"$numCompletedStages"
+      } else {
+        s"$numCompletedStages, only showing ${completedStages.size}"
+      }
+
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {
-              if (sc.isDefined) {
-                // Total duration is not meaningful unless the UI is live
-                <li>
-                  <strong>Total Duration: </strong>
-                  {UIUtils.formatDuration(now - sc.get.startTime)}
-                </li>
-              }
-            }
-            <li>
-              <strong>Scheduling Mode: </strong>
-              {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
-            </li>
             {
               if (shouldShowActiveStages) {
                 <li>
@@ -98,9 +91,9 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
             }
             {
               if (shouldShowCompletedStages) {
-                <li>
+                <li id="completed-summary">
                   <a href="#completed"><strong>Completed Stages:</strong></a>
-                  {numCompletedStages}
+                  {completedStageNumStr}
                 </li>
               }
             }
@@ -132,14 +125,14 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         pendingStagesTable.toNodeSeq
       }
       if (shouldShowCompletedStages) {
-        content ++= <h4 id="completed">Completed Stages ({numCompletedStages})</h4> ++
+        content ++= <h4 id="completed">Completed Stages ({completedStageNumStr})</h4> ++
         completedStagesTable.toNodeSeq
       }
       if (shouldShowFailedStages) {
         content ++= <h4 id ="failed">Failed Stages ({numFailedStages})</h4> ++
         failedStagesTable.toNodeSeq
       }
-      UIUtils.headerSparkPage("Spark Stages (for all jobs)", content, parent)
+      UIUtils.headerSparkPage("Stages for All Jobs", content, parent)
     }
   }
 }

@@ -20,6 +20,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
@@ -28,15 +29,15 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.util.{ManualClock, Utils}
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
-class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
+class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
 
   import WriteAheadLogSuite._
-  
+
   val hadoopConf = new Configuration()
   var tempDir: File = null
   var testDir: String = null
@@ -359,7 +360,7 @@ object WriteAheadLogSuite {
     ): FileBasedWriteAheadLog = {
     if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
     val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
-    
+
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
       manualClock.advance(500)
@@ -417,9 +418,8 @@ object WriteAheadLogSuite {
 
   /** Read all the data in the log file in a directory using the WriteAheadLog class. */
   def readDataUsingWriteAheadLog(logDirectory: String): Seq[String] = {
-    import scala.collection.JavaConversions._
     val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
-    val data = wal.readAll().map(byteBufferToString).toSeq
+    val data = wal.readAll().asScala.map(byteBufferToString).toSeq
     wal.close()
     data
   }

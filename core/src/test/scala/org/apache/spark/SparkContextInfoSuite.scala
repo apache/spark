@@ -17,10 +17,10 @@
 
 package org.apache.spark
 
-import org.scalatest.{Assertions, FunSuite}
+import org.scalatest.Assertions
 import org.apache.spark.storage.StorageLevel
 
-class SparkContextInfoSuite extends FunSuite with LocalSparkContext {
+class SparkContextInfoSuite extends SparkFunSuite with LocalSparkContext {
   test("getPersistentRDDs only returns RDDs that are marked as cached") {
     sc = new SparkContext("local", "test")
     assert(sc.getPersistentRDDs.isEmpty === true)

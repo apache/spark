@@ -17,15 +17,19 @@
 
 package org.apache.spark.ml
 
+import scala.collection.JavaConverters._
+
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.when
-import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar.mock
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.sql.DataFrame
 
-class PipelineSuite extends FunSuite {
+class PipelineSuite extends SparkFunSuite {
 
   abstract class MyModel extends Model[MyModel]
 
@@ -62,6 +66,8 @@ class PipelineSuite extends FunSuite {
       .setStages(Array(estimator0, transformer1, estimator2, transformer3))
     val pipelineModel = pipeline.fit(dataset0)
 
+    MLTestingUtils.checkCopy(pipelineModel)
+
     assert(pipelineModel.stages.length === 4)
     assert(pipelineModel.stages(0).eq(model0))
     assert(pipelineModel.stages(1).eq(transformer1))
@@ -80,5 +86,29 @@ class PipelineSuite extends FunSuite {
     intercept[IllegalArgumentException] {
       pipeline.fit(dataset)
     }
+  }
+
+  test("PipelineModel.copy") {
+    val hashingTF = new HashingTF()
+      .setNumFeatures(100)
+    val model = new PipelineModel("pipeline", Array[Transformer](hashingTF))
+    val copied = model.copy(ParamMap(hashingTF.numFeatures -> 10))
+    require(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
+      "copy should handle extra stage params")
+  }
+
+  test("pipeline model constructors") {
+    val transform0 = mock[Transformer]
+    val model1 = mock[MyModel]
+
+    val stages = Array(transform0, model1)
+    val pipelineModel0 = new PipelineModel("pipeline0", stages)
+    assert(pipelineModel0.uid === "pipeline0")
+    assert(pipelineModel0.stages === stages)
+
+    val stagesAsList = stages.toList.asJava
+    val pipelineModel1 = new PipelineModel("pipeline1", stagesAsList)
+    assert(pipelineModel1.uid === "pipeline1")
+    assert(pipelineModel1.stages === stages)
   }
 }

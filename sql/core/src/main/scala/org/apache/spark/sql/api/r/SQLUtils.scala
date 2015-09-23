@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpres
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, SaveMode}
 
+import scala.util.matching.Regex
+
 private[r] object SQLUtils {
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
     new SQLContext(jsc)
@@ -35,18 +37,20 @@ private[r] object SQLUtils {
     new JavaSparkContext(sqlCtx.sparkContext)
   }
 
-  def toSeq[T](arr: Array[T]): Seq[T] = {
-    arr.toSeq
-  }
-
   def createStructType(fields : Seq[StructField]): StructType = {
     StructType(fields)
+  }
+
+  // Support using regex in string interpolation
+  private[this] implicit class RegexContext(sc: StringContext) {
+    def r: Regex = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)
   }
 
   def getSQLDataType(dataType: String): DataType = {
     dataType match {
       case "byte" => org.apache.spark.sql.types.ByteType
       case "integer" => org.apache.spark.sql.types.IntegerType
+      case "float" => org.apache.spark.sql.types.FloatType
       case "double" => org.apache.spark.sql.types.DoubleType
       case "numeric" => org.apache.spark.sql.types.DoubleType
       case "character" => org.apache.spark.sql.types.StringType
@@ -57,6 +61,15 @@ private[r] object SQLUtils {
       case "boolean" => org.apache.spark.sql.types.BooleanType
       case "timestamp" => org.apache.spark.sql.types.TimestampType
       case "date" => org.apache.spark.sql.types.DateType
+      case r"\Aarray<(.*)${elemType}>\Z" => {
+        org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
+      }
+      case r"\Amap<(.*)${keyType},(.*)${valueType}>\Z" => {
+        if (keyType != "string" && keyType != "character") {
+          throw new IllegalArgumentException("Key type of a map must be string or character")
+        }
+        org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
+      }
       case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
     }
   }
@@ -68,31 +81,28 @@ private[r] object SQLUtils {
 
   def createDF(rdd: RDD[Array[Byte]], schema: StructType, sqlContext: SQLContext): DataFrame = {
     val num = schema.fields.size
-    val rowRDD = rdd.map(bytesToRow)
+    val rowRDD = rdd.map(bytesToRow(_, schema))
     sqlContext.createDataFrame(rowRDD, schema)
-  }
-
-  // A helper to include grouping columns in Agg()
-  def aggWithGrouping(gd: GroupedData, exprs: Column*): DataFrame = {
-    val aggExprs = exprs.map { col =>
-      col.expr match {
-        case expr: NamedExpression => expr
-        case expr: Expression => Alias(expr, expr.simpleString)()
-      }
-    }
-    gd.toDF(aggExprs)
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
     df.map(r => rowToRBytes(r))
   }
 
-  private[this] def bytesToRow(bytes: Array[Byte]): Row = {
+  private[this] def doConversion(data: Object, dataType: DataType): Object = {
+    data match {
+      case d: java.lang.Double if dataType == FloatType =>
+        new java.lang.Float(d)
+      case _ => data
+    }
+  }
+
+  private[this] def bytesToRow(bytes: Array[Byte], schema: StructType): Row = {
     val bis = new ByteArrayInputStream(bytes)
     val dis = new DataInputStream(bis)
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
-      SerDe.readObject(dis)
+      doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
     }.toSeq)
   }
 
@@ -100,46 +110,22 @@ private[r] object SQLUtils {
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
 
-    SerDe.writeInt(dos, row.length)
-    (0 until row.length).map { idx =>
-      val obj: Object = row(idx).asInstanceOf[Object]
-      SerDe.writeObject(dos, obj)
-    }
+    val cols = (0 until row.length).map(row(_).asInstanceOf[Object]).toArray
+    SerDe.writeObject(dos, cols)
     bos.toByteArray()
   }
 
-  def dfToCols(df: DataFrame): Array[Array[Byte]] = {
+  def dfToCols(df: DataFrame): Array[Array[Any]] = {
     // localDF is Array[Row]
     val localDF = df.collect()
     val numCols = df.columns.length
-    // dfCols is Array[Array[Any]]
-    val dfCols = convertRowsToColumns(localDF, numCols)
 
-    dfCols.map { col =>
-      colToRBytes(col)
-    } 
-  }
-
-  def convertRowsToColumns(localDF: Array[Row], numCols: Int): Array[Array[Any]] = {
+    // result is Array[Array[Any]]
     (0 until numCols).map { colIdx =>
       localDF.map { row =>
         row(colIdx)
       }
     }.toArray
-  }
-
-  def colToRBytes(col: Array[Any]): Array[Byte] = {
-    val numRows = col.length
-    val bos = new ByteArrayOutputStream()
-    val dos = new DataOutputStream(bos)
-    
-    SerDe.writeInt(dos, numRows)
-
-    col.map { item =>
-      val obj: Object = item.asInstanceOf[Object]
-      SerDe.writeObject(dos, obj)
-    }
-    bos.toByteArray()
   }
 
   def saveMode(mode: String): SaveMode = {
@@ -149,5 +135,20 @@ private[r] object SQLUtils {
       case "error" => SaveMode.ErrorIfExists
       case "ignore" => SaveMode.Ignore
     }
+  }
+
+  def loadDF(
+      sqlContext: SQLContext,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    sqlContext.read.format(source).options(options).load()
+  }
+
+  def loadDF(
+      sqlContext: SQLContext,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    sqlContext.read.format(source).schema(schema).options(options).load()
   }
 }

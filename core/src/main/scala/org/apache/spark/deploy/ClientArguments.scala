@@ -72,9 +72,11 @@ private[deploy] class ClientArguments(args: Array[String]) {
       cmd = "launch"
 
       if (!ClientArguments.isValidJarUrl(_jarUrl)) {
+        // scalastyle:off println
         println(s"Jar url '${_jarUrl}' is not in valid format.")
         println(s"Must be a jar file path in URL format " +
           "(e.g. hdfs://host:port/XX.jar, file:///XX.jar)")
+        // scalastyle:on println
         printUsageAndExit(-1)
       }
 
@@ -110,14 +112,16 @@ private[deploy] class ClientArguments(args: Array[String]) {
       |                                  (default: $DEFAULT_SUPERVISE)
       |   -v, --verbose                  Print more debugging output
      """.stripMargin
+    // scalastyle:off println
     System.err.println(usage)
+    // scalastyle:on println
     System.exit(exitCode)
   }
 }
 
 private[deploy] object ClientArguments {
   val DEFAULT_CORES = 1
-  val DEFAULT_MEMORY = 512 // MB
+  val DEFAULT_MEMORY = Utils.DEFAULT_DRIVER_MEM_MB // MB
   val DEFAULT_SUPERVISE = false
 
   def isValidJarUrl(s: String): Boolean = {

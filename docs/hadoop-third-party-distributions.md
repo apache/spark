@@ -14,7 +14,7 @@ property. For certain versions, you will need to specify additional profiles. Fo
 see the guide on [building with maven](building-spark.html#specifying-the-hadoop-version):
 
     mvn -Dhadoop.version=1.0.4 -DskipTests clean package
-    mvn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
+    mvn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 
 The table below lists the corresponding `hadoop.version` code for each CDH/HDP release. Note that
 some Hadoop releases are binary compatible across client versions. This means the pre-built Spark

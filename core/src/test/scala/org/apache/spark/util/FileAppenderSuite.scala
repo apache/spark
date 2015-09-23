@@ -22,15 +22,15 @@ import java.io._
 import scala.collection.mutable.HashSet
 import scala.reflect._
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.util.logging.{RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy, FileAppender}
 
-class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
+class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
   val testFile = new File(Utils.createTempDir(), "FileAppenderSuite-test").getAbsoluteFile
 

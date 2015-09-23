@@ -22,22 +22,25 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Comparator}
 
+import scala.collection.JavaConverters._
+import scala.concurrent.duration._
+import scala.language.postfixOps
+import scala.util.control.NonFatal
+
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.fs.FileSystem.Statistics
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.JobContext
+import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
+import org.apache.hadoop.mapreduce.{TaskAttemptID => MapReduceTaskAttemptID}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
-
-import scala.collection.JavaConversions._
-import scala.concurrent.duration._
-import scala.language.postfixOps
+import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /**
  * :: DeveloperApi ::
@@ -68,12 +71,12 @@ class SparkHadoopUtil extends Logging {
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
-    for (token <- source.getTokens()) {
+    for (token <- source.getTokens.asScala) {
       dest.addToken(token)
     }
   }
 
-  @Deprecated
+  @deprecated("use newConfiguration with SparkConf argument", "1.2.0")
   def newConfiguration(): Configuration = newConfiguration(null)
 
   /**
@@ -172,13 +175,13 @@ class SparkHadoopUtil extends Logging {
   }
 
   private def getFileSystemThreadStatistics(): Seq[AnyRef] = {
-    val stats = FileSystem.getAllStatistics()
-    stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+    FileSystem.getAllStatistics.asScala.map(
+      Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
   }
 
   private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
     val statisticsDataClass =
-      Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
+      Utils.classForName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
     statisticsDataClass.getDeclaredMethod(methodName)
   }
 
@@ -189,8 +192,24 @@ class SparkHadoopUtil extends Logging {
    * while it's interface in Hadoop 2.+.
    */
   def getConfigurationFromJobContext(context: JobContext): Configuration = {
+    // scalastyle:off jobconfig
     val method = context.getClass.getMethod("getConfiguration")
+    // scalastyle:on jobconfig
     method.invoke(context).asInstanceOf[Configuration]
+  }
+
+  /**
+   * Using reflection to call `getTaskAttemptID` from TaskAttemptContext. If we directly
+   * call `TaskAttemptContext.getTaskAttemptID`, it will generate different byte codes
+   * for Hadoop 1.+ and Hadoop 2.+ because TaskAttemptContext is class in Hadoop 1.+
+   * while it's interface in Hadoop 2.+.
+   */
+  def getTaskAttemptIDFromTaskAttemptContext(
+      context: MapReduceTaskAttemptContext): MapReduceTaskAttemptID = {
+    // scalastyle:off jobconfig
+    val method = context.getClass.getMethod("getTaskAttemptID")
+    // scalastyle:on jobconfig
+    method.invoke(context).asInstanceOf[MapReduceTaskAttemptID]
   }
 
   /**
@@ -199,13 +218,51 @@ class SparkHadoopUtil extends Logging {
    * that file.
    */
   def listLeafStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
-    def recurse(path: Path): Array[FileStatus] = {
-      val (directories, leaves) = fs.listStatus(path).partition(_.isDir)
-      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f.getPath))
+    listLeafStatuses(fs, fs.getFileStatus(basePath))
+  }
+
+  /**
+   * Get [[FileStatus]] objects for all leaf children (files) under the given base path. If the
+   * given path points to a file, return a single-element collection containing [[FileStatus]] of
+   * that file.
+   */
+  def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
+    def recurse(status: FileStatus): Seq[FileStatus] = {
+      val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDir)
+      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))
     }
 
-    val baseStatus = fs.getFileStatus(basePath)
-    if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
+    if (baseStatus.isDir) recurse(baseStatus) else Seq(baseStatus)
+  }
+
+  def listLeafDirStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
+    listLeafDirStatuses(fs, fs.getFileStatus(basePath))
+  }
+
+  def listLeafDirStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
+    def recurse(status: FileStatus): Seq[FileStatus] = {
+      val (directories, files) = fs.listStatus(status.getPath).partition(_.isDir)
+      val leaves = if (directories.isEmpty) Seq(status) else Seq.empty[FileStatus]
+      leaves ++ directories.flatMap(dir => listLeafDirStatuses(fs, dir))
+    }
+
+    assert(baseStatus.isDir)
+    recurse(baseStatus)
+  }
+
+  def globPath(pattern: Path): Seq[Path] = {
+    val fs = pattern.getFileSystem(conf)
+    Option(fs.globStatus(pattern)).map { statuses =>
+      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
+    }.getOrElse(Seq.empty[Path])
+  }
+
+  def globPathIfNecessary(pattern: Path): Seq[Path] = {
+    if (pattern.toString.exists("{}[]*?\\".toSet.contains)) {
+      globPath(pattern)
+    } else {
+      Seq(pattern)
+    }
   }
 
   /**
@@ -218,19 +275,25 @@ class SparkHadoopUtil extends Logging {
       dir: Path,
       prefix: String,
       exclusionSuffix: String): Array[FileStatus] = {
-    val fileStatuses = remoteFs.listStatus(dir,
-      new PathFilter {
-        override def accept(path: Path): Boolean = {
-          val name = path.getName
-          name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
+    try {
+      val fileStatuses = remoteFs.listStatus(dir,
+        new PathFilter {
+          override def accept(path: Path): Boolean = {
+            val name = path.getName
+            name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
+          }
+        })
+      Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+        override def compare(o1: FileStatus, o2: FileStatus): Int = {
+          Longs.compare(o1.getModificationTime, o2.getModificationTime)
         }
       })
-    Arrays.sort(fileStatuses, new Comparator[FileStatus] {
-      override def compare(o1: FileStatus, o2: FileStatus): Int = {
-        Longs.compare(o1.getModificationTime, o2.getModificationTime)
-      }
-    })
-    fileStatuses
+      fileStatuses
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error while attempting to list files from application staging dir", e)
+        Array.empty
+    }
   }
 
   /**
@@ -247,12 +310,13 @@ class SparkHadoopUtil extends Logging {
     val renewalInterval =
       sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
 
-    credentials.getAllTokens.filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+    credentials.getAllTokens.asScala
+      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .map { t =>
-      val identifier = new DelegationTokenIdentifier()
-      identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-      (identifier.getIssueDate + fraction * renewalInterval).toLong - now
-    }.foldLeft(0L)(math.max)
+        val identifier = new DelegationTokenIdentifier()
+        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+        (identifier.getIssueDate + fraction * renewalInterval).toLong - now
+      }.foldLeft(0L)(math.max)
   }
 
 
@@ -304,6 +368,19 @@ class SparkHadoopUtil extends Logging {
    * Stop the thread that does the delegation token updates.
    */
   private[spark] def stopExecutorDelegationTokenRenewer() {}
+
+  /**
+   * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
+   * This is to prevent the DFSClient from using an old cached token to connect to the NameNode.
+   */
+  private[spark] def getConfBypassingFSCache(
+      hadoopConf: Configuration,
+      scheme: String): Configuration = {
+    val newConf = new Configuration(hadoopConf)
+    val confKey = s"fs.${scheme}.impl.disable.cache"
+    newConf.setBoolean(confKey, true)
+    newConf
+  }
 }
 
 object SparkHadoopUtil {
@@ -313,7 +390,7 @@ object SparkHadoopUtil {
         System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
       try {
-        Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
           .newInstance()
           .asInstanceOf[SparkHadoopUtil]
       } catch {

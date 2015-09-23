@@ -59,14 +59,14 @@ for applications that involve the REPL (e.g. Spark shell).
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
 the drivers and the executors. Note that `cluster` mode is currently not supported for
-Mesos clusters or Python applications.
+Mesos clusters. Currently only YARN supports cluster mode for Python applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
 
 There are a few options available that are specific to the
-[cluster manager](#cluster-overview.html#cluster-manager-types) that is being used.
-For example, with a [Spark Standalone](#spark-standalone) cluster with `cluster` deploy mode,
+[cluster manager](cluster-overview.html#cluster-manager-types) that is being used.
+For example, with a [Spark standalone cluster](spark-standalone.html) with `cluster` deploy mode,
 you can also specify `--supervise` to make sure that the driver is automatically restarted if it
 fails with non-zero exit code. To enumerate all such options available to `spark-submit`,
 run it with `--help`. Here are a few examples of common options:
@@ -79,7 +79,7 @@ run it with `--help`. Here are a few examples of common options:
   /path/to/examples.jar \
   100
 
-# Run on a Spark Standalone cluster in client deploy mode
+# Run on a Spark standalone cluster in client deploy mode
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
@@ -88,7 +88,7 @@ run it with `--help`. Here are a few examples of common options:
   /path/to/examples.jar \
   1000
 
-# Run on a Spark Standalone cluster in cluster deploy mode with supervise
+# Run on a Spark standalone cluster in cluster deploy mode with supervise
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
@@ -103,13 +103,13 @@ run it with `--help`. Here are a few examples of common options:
 export HADOOP_CONF_DIR=XXX
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
-  --master yarn-cluster \  # can also be `yarn-client` for client mode
+  --master yarn-cluster \  # can also be yarn-client for client mode
   --executor-memory 20G \
   --num-executors 50 \
   /path/to/examples.jar \
   1000
 
-# Run a Python application on a Spark Standalone cluster
+# Run a Python application on a Spark standalone cluster
 ./bin/spark-submit \
   --master spark://207.184.161.138:7077 \
   examples/src/main/python/pi.py \
@@ -174,9 +174,9 @@ This can use up a significant amount of space over time and will need to be clea
 is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
 `spark.worker.cleanup.appDataTtl` property.
 
-Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates 
-with `--packages`. All transitive dependencies will be handled when using this command. Additional 
-repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`. 
+Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates
+with `--packages`. All transitive dependencies will be handled when using this command. Additional
+repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`.
 These commands can be used with `pyspark`, `spark-shell`, and `spark-submit` to include Spark Packages.
 
 For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries

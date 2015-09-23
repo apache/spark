@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -69,7 +70,7 @@ object GradientBoostedTreesRunner {
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
-      opt[String]("<dataFormat>")
+      opt[String]("dataFormat")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
@@ -145,3 +146,4 @@ object GradientBoostedTreesRunner {
     sc.stop()
   }
 }
+// scalastyle:on println

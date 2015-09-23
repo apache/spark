@@ -19,6 +19,7 @@ package org.apache.spark.streaming.util
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
@@ -26,7 +27,7 @@ import scala.language.postfixOps
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{CompletionIterator, ThreadUtils}
 import org.apache.spark.{Logging, SparkConf}
 
 /**
@@ -118,14 +119,14 @@ private[streaming] class FileBasedWriteAheadLog(
    * hence the implementation is kept simple.
    */
   def readAll(): JIterator[ByteBuffer] = synchronized {
-    import scala.collection.JavaConversions._
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
 
     logFilesToRead.iterator.map { file =>
       logDebug(s"Creating log reader with $file")
-      new FileBasedWriteAheadLogReader(file, hadoopConf)
-    } flatMap { x => x }
+      val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
+      CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
+    }.flatten.asJava
   }
 
   /**
@@ -199,7 +200,7 @@ private[streaming] class FileBasedWriteAheadLog(
   /** Initialize the log directory or recover existing logs inside the directory */
   private def initializeOrRecover(): Unit = synchronized {
     val logDirectoryPath = new Path(logDirectory)
-    val fileSystem =  HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
+    val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
     if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
       val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })

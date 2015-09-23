@@ -17,9 +17,12 @@
 
 package org.apache.spark.deploy.history
 
+import java.util.zip.ZipOutputStream
+
+import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
 
-private[history] case class ApplicationAttemptInfo(
+private[spark] case class ApplicationAttemptInfo(
     attemptId: Option[String],
     startTime: Long,
     endTime: Long,
@@ -27,7 +30,7 @@ private[history] case class ApplicationAttemptInfo(
     sparkUser: String,
     completed: Boolean = false)
 
-private[history] case class ApplicationHistoryInfo(
+private[spark] case class ApplicationHistoryInfo(
     id: String,
     name: String,
     attempts: List[ApplicationAttemptInfo])
@@ -61,5 +64,13 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return A map with the configuration data. Data is show in the order returned by the map.
    */
   def getConfig(): Map[String, String] = Map()
+
+  /**
+   * Writes out the event logs to the output stream provided. The logs will be compressed into a
+   * single zip file and written out.
+   * @throws SparkException if the logs for the app id cannot be found.
+   */
+  @throws(classOf[SparkException])
+  def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
 }

@@ -25,7 +25,6 @@ import scala.language.implicitConversions
 import scala.language.postfixOps
 
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
 import org.scalatest.concurrent.Interruptor
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.mock.MockitoSugar
@@ -35,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.util.Utils
 
 class ExecutorClassLoaderSuite
-  extends FunSuite
+  extends SparkFunSuite
   with BeforeAndAfterAll
   with MockitoSugar
   with Logging {

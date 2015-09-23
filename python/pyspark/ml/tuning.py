@@ -18,6 +18,7 @@
 import itertools
 import numpy as np
 
+from pyspark import since
 from pyspark.ml.param import Params, Param
 from pyspark.ml import Estimator, Model
 from pyspark.ml.util import keyword_only
@@ -27,33 +28,34 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel']
 
 
 class ParamGridBuilder(object):
-    """
+    r"""
     Builder for a param grid used in grid search-based model selection.
 
-    >>> from classification import LogisticRegression
+    >>> from pyspark.ml.classification import LogisticRegression
     >>> lr = LogisticRegression()
-    >>> output = ParamGridBuilder().baseOn({lr.labelCol: 'l'}) \
-            .baseOn([lr.predictionCol, 'p']) \
-            .addGrid(lr.regParam, [1.0, 2.0, 3.0]) \
-            .addGrid(lr.maxIter, [1, 5]) \
-            .addGrid(lr.featuresCol, ['f']) \
-            .build()
-    >>> expected = [ \
-{lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}]
+    >>> output = ParamGridBuilder() \
+    ...     .baseOn({lr.labelCol: 'l'}) \
+    ...     .baseOn([lr.predictionCol, 'p']) \
+    ...     .addGrid(lr.regParam, [1.0, 2.0]) \
+    ...     .addGrid(lr.maxIter, [1, 5]) \
+    ...     .build()
+    >>> expected = [
+    ...     {lr.regParam: 1.0, lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 2.0, lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 1.0, lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 2.0, lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}]
     >>> len(output) == len(expected)
     True
     >>> all([m in expected for m in output])
     True
+
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self):
         self._param_grid = {}
 
+    @since("1.4.0")
     def addGrid(self, param, values):
         """
         Sets the given parameters in this grid to fixed values.
@@ -62,6 +64,7 @@ class ParamGridBuilder(object):
 
         return self
 
+    @since("1.4.0")
     def baseOn(self, *args):
         """
         Sets the given parameters in this grid to fixed values.
@@ -75,6 +78,7 @@ class ParamGridBuilder(object):
 
         return self
 
+    @since("1.4.0")
     def build(self):
         """
         Builds and returns all combinations of parameters specified
@@ -93,20 +97,21 @@ class CrossValidator(Estimator):
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.mllib.linalg import Vectors
     >>> dataset = sqlContext.createDataFrame(
-    ...     [(Vectors.dense([0.0, 1.0]), 0.0),
-    ...      (Vectors.dense([1.0, 2.0]), 1.0),
-    ...      (Vectors.dense([0.55, 3.0]), 0.0),
-    ...      (Vectors.dense([0.45, 4.0]), 1.0),
-    ...      (Vectors.dense([0.51, 5.0]), 1.0)] * 10,
+    ...     [(Vectors.dense([0.0]), 0.0),
+    ...      (Vectors.dense([0.4]), 1.0),
+    ...      (Vectors.dense([0.5]), 0.0),
+    ...      (Vectors.dense([0.6]), 1.0),
+    ...      (Vectors.dense([1.0]), 1.0)] * 10,
     ...     ["features", "label"])
     >>> lr = LogisticRegression()
-    >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1, 5]).build()
+    >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
-    >>> # SPARK-7432: The following test is flaky.
-    >>> # cvModel = cv.fit(dataset)
-    >>> # expected = lr.fit(dataset, {lr.maxIter: 5}).transform(dataset)
-    >>> # cvModel.transform(dataset).collect() == expected.collect()
+    >>> cvModel = cv.fit(dataset)
+    >>> evaluator.evaluate(cvModel.transform(dataset))
+    0.8333...
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -145,6 +150,7 @@ class CrossValidator(Estimator):
         self._set(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
@@ -153,65 +159,72 @@ class CrossValidator(Estimator):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setEstimator(self, value):
         """
         Sets the value of :py:attr:`estimator`.
         """
-        self.paramMap[self.estimator] = value
+        self._paramMap[self.estimator] = value
         return self
 
+    @since("1.4.0")
     def getEstimator(self):
         """
         Gets the value of estimator or its default value.
         """
         return self.getOrDefault(self.estimator)
 
+    @since("1.4.0")
     def setEstimatorParamMaps(self, value):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
         """
-        self.paramMap[self.estimatorParamMaps] = value
+        self._paramMap[self.estimatorParamMaps] = value
         return self
 
+    @since("1.4.0")
     def getEstimatorParamMaps(self):
         """
         Gets the value of estimatorParamMaps or its default value.
         """
         return self.getOrDefault(self.estimatorParamMaps)
 
+    @since("1.4.0")
     def setEvaluator(self, value):
         """
         Sets the value of :py:attr:`evaluator`.
         """
-        self.paramMap[self.evaluator] = value
+        self._paramMap[self.evaluator] = value
         return self
 
+    @since("1.4.0")
     def getEvaluator(self):
         """
         Gets the value of evaluator or its default value.
         """
         return self.getOrDefault(self.evaluator)
 
+    @since("1.4.0")
     def setNumFolds(self, value):
         """
         Sets the value of :py:attr:`numFolds`.
         """
-        self.paramMap[self.numFolds] = value
+        self._paramMap[self.numFolds] = value
         return self
 
+    @since("1.4.0")
     def getNumFolds(self):
         """
         Gets the value of numFolds or its default value.
         """
         return self.getOrDefault(self.numFolds)
 
-    def fit(self, dataset, params={}):
-        paramMap = self.extractParamMap(params)
-        est = paramMap[self.estimator]
-        epm = paramMap[self.estimatorParamMaps]
+    def _fit(self, dataset):
+        est = self.getOrDefault(self.estimator)
+        epm = self.getOrDefault(self.estimatorParamMaps)
         numModels = len(epm)
-        eva = paramMap[self.evaluator]
-        nFolds = paramMap[self.numFolds]
+        eva = self.getOrDefault(self.evaluator)
+        nFolds = self.getOrDefault(self.numFolds)
         h = 1.0 / nFolds
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(0).alias(randCol))
@@ -227,22 +240,64 @@ class CrossValidator(Estimator):
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, epm[j]))
                 metrics[j] += metric
-        bestIndex = np.argmax(metrics)
+
+        if eva.isLargerBetter():
+            bestIndex = np.argmax(metrics)
+        else:
+            bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
         return CrossValidatorModel(bestModel)
+
+    @since("1.4.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies creates a deep copy of
+        the embedded paramMap, and copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        newCV = Params.copy(self, extra)
+        if self.isSet(self.estimator):
+            newCV.setEstimator(self.getEstimator().copy(extra))
+        # estimatorParamMaps remain the same
+        if self.isSet(self.evaluator):
+            newCV.setEvaluator(self.getEvaluator().copy(extra))
+        return newCV
 
 
 class CrossValidatorModel(Model):
     """
     Model from k-fold cross validation.
+
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self, bestModel):
+        super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
 
-    def transform(self, dataset, params={}):
-        return self.bestModel.transform(dataset, params)
+    def _transform(self, dataset):
+        return self.bestModel.transform(dataset)
+
+    @since("1.4.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies the underlying bestModel,
+        creates a deep copy of the embedded paramMap, and
+        copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        return CrossValidatorModel(self.bestModel.copy(extra))
 
 
 if __name__ == "__main__":

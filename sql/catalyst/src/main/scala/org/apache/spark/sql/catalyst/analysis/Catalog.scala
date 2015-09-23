@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{TableIdentifier, CatalystConf, EmptyConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
@@ -34,7 +40,7 @@ class NoSuchDatabaseException extends Exception
  */
 trait Catalog {
 
-  def caseSensitive: Boolean
+  val conf: CatalystConf
 
   def tableExists(tableIdentifier: Seq[String]): Boolean
 
@@ -48,22 +54,26 @@ trait Catalog {
    */
   def getTables(databaseName: Option[String]): Seq[(String, Boolean)]
 
-  def refreshTable(databaseName: String, tableName: String): Unit
+  def refreshTable(tableIdent: TableIdentifier): Unit
 
+  // TODO: Refactor it in the work of SPARK-10104
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
+  // TODO: Refactor it in the work of SPARK-10104
   def unregisterTable(tableIdentifier: Seq[String]): Unit
 
   def unregisterAllTables(): Unit
 
+  // TODO: Refactor it in the work of SPARK-10104
   protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
-    if (!caseSensitive) {
-      tableIdentifier.map(_.toLowerCase)
-    } else {
+    if (conf.caseSensitiveAnalysis) {
       tableIdentifier
+    } else {
+      tableIdentifier.map(_.toLowerCase)
     }
   }
 
+  // TODO: Refactor it in the work of SPARK-10104
   protected def getDbTableName(tableIdent: Seq[String]): String = {
     val size = tableIdent.size
     if (size <= 2) {
@@ -73,24 +83,39 @@ trait Catalog {
     }
   }
 
+  // TODO: Refactor it in the work of SPARK-10104
   protected def getDBTable(tableIdent: Seq[String]) : (Option[String], String) = {
     (tableIdent.lift(tableIdent.size - 2), tableIdent.last)
   }
+
+  /**
+   * It is not allowed to specifiy database name for tables stored in [[SimpleCatalog]].
+   * We use this method to check it.
+   */
+  protected def checkTableIdentifier(tableIdentifier: Seq[String]): Unit = {
+    if (tableIdentifier.length > 1) {
+      throw new AnalysisException("Specifying database name or other qualifiers are not allowed " +
+        "for temporary tables. If the table name has dots (.) in it, please quote the " +
+        "table name with backticks (`).")
+    }
+  }
 }
 
-class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
-  val tables = new mutable.HashMap[String, LogicalPlan]()
+class SimpleCatalog(val conf: CatalystConf) extends Catalog {
+  val tables = new ConcurrentHashMap[String, LogicalPlan]
 
   override def registerTable(
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
+    checkTableIdentifier(tableIdentifier)
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables += ((getDbTableName(tableIdent), plan))
+    tables.put(getDbTableName(tableIdent), plan)
   }
 
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+    checkTableIdentifier(tableIdentifier)
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables -= getDbTableName(tableIdent)
+    tables.remove(getDbTableName(tableIdent))
   }
 
   override def unregisterAllTables(): Unit = {
@@ -98,19 +123,21 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
   }
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
+    checkTableIdentifier(tableIdentifier)
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables.get(getDbTableName(tableIdent)) match {
-      case Some(_) => true
-      case None => false
-    }
+    tables.containsKey(getDbTableName(tableIdent))
   }
 
   override def lookupRelation(
       tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan = {
+    checkTableIdentifier(tableIdentifier)
     val tableIdent = processTableIdentifier(tableIdentifier)
     val tableFullName = getDbTableName(tableIdent)
-    val table = tables.getOrElse(tableFullName, sys.error(s"Table Not Found: $tableFullName"))
+    val table = tables.get(tableFullName)
+    if (table == null) {
+      sys.error(s"Table Not Found: $tableFullName")
+    }
     val tableWithQualifiers = Subquery(tableIdent.last, table)
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
@@ -119,12 +146,14 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    tables.map {
-      case (name, _) => (name, true)
-    }.toSeq
+    val result = ArrayBuffer.empty[(String, Boolean)]
+    for (name <- tables.keySet().asScala) {
+      result += ((name, true))
+    }
+    result
   }
 
-  override def refreshTable(databaseName: String, tableName: String): Unit = {
+  override def refreshTable(tableIdent: TableIdentifier): Unit = {
     throw new UnsupportedOperationException
   }
 }
@@ -138,11 +167,17 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
 trait OverrideCatalog extends Catalog {
 
   // TODO: This doesn't work when the database changes...
-  val overrides = new mutable.HashMap[(Option[String],String), LogicalPlan]()
+  val overrides = new mutable.HashMap[(Option[String], String), LogicalPlan]()
 
   abstract override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    overrides.get(getDBTable(tableIdent)) match {
+    // A temporary tables only has a single part in the tableIdentifier.
+    val overriddenTable = if (tableIdentifier.length > 1) {
+      None: Option[LogicalPlan]
+    } else {
+      overrides.get(getDBTable(tableIdent))
+    }
+    overriddenTable match {
       case Some(_) => true
       case None => super.tableExists(tableIdentifier)
     }
@@ -152,7 +187,12 @@ trait OverrideCatalog extends Catalog {
       tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    val overriddenTable = overrides.get(getDBTable(tableIdent))
+    // A temporary tables only has a single part in the tableIdentifier.
+    val overriddenTable = if (tableIdentifier.length > 1) {
+      None: Option[LogicalPlan]
+    } else {
+      overrides.get(getDBTable(tableIdent))
+    }
     val tableWithQualifers = overriddenTable.map(r => Subquery(tableIdent.last, r))
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
@@ -164,20 +204,8 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    val dbName = if (!caseSensitive) {
-      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
-    } else {
-      databaseName
-    }
-
-    val temporaryTables = overrides.filter {
-      // If a temporary table does not have an associated database, we should return its name.
-      case ((None, _), _) => true
-      // If a temporary table does have an associated database, we should return it if the database
-      // matches the given database name.
-      case ((db: Some[String], _), _) if db == dbName => true
-      case _ => false
-    }.map {
+    // We always return all temporary tables.
+    val temporaryTables = overrides.map {
       case ((_, tableName), _) => (tableName, true)
     }.toSeq
 
@@ -187,13 +215,19 @@ trait OverrideCatalog extends Catalog {
   override def registerTable(
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
+    checkTableIdentifier(tableIdentifier)
     val tableIdent = processTableIdentifier(tableIdentifier)
     overrides.put(getDBTable(tableIdent), plan)
   }
 
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
-    val tableIdent = processTableIdentifier(tableIdentifier)
-    overrides.remove(getDBTable(tableIdent))
+    // A temporary tables only has a single part in the tableIdentifier.
+    // If tableIdentifier has more than one parts, it is not a temporary table
+    // and we do not need to do anything at here.
+    if (tableIdentifier.length == 1) {
+      val tableIdent = processTableIdentifier(tableIdentifier)
+      overrides.remove(getDBTable(tableIdent))
+    }
   }
 
   override def unregisterAllTables(): Unit = {
@@ -207,7 +241,7 @@ trait OverrideCatalog extends Catalog {
  */
 object EmptyCatalog extends Catalog {
 
-  override val caseSensitive: Boolean = true
+  override val conf: CatalystConf = EmptyConf
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     throw new UnsupportedOperationException
@@ -233,7 +267,7 @@ object EmptyCatalog extends Catalog {
 
   override def unregisterAllTables(): Unit = {}
 
-  override def refreshTable(databaseName: String, tableName: String): Unit = {
+  override def refreshTable(tableIdent: TableIdentifier): Unit = {
     throw new UnsupportedOperationException
   }
 }

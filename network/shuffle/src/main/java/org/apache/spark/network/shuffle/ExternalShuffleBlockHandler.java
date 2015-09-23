@@ -17,11 +17,12 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import org.apache.spark.network.util.TransportConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,10 +32,10 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
-import org.apache.spark.network.shuffle.protocol.OpenBlocks;
-import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
-import org.apache.spark.network.shuffle.protocol.StreamHandle;
+import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
+import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.util.TransportConf;
+
 
 /**
  * RPC Handler for a server which can serve shuffle blocks from outside of an Executor process.
@@ -46,18 +47,20 @@ import org.apache.spark.network.shuffle.protocol.StreamHandle;
 public class ExternalShuffleBlockHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
-  private final ExternalShuffleBlockManager blockManager;
+  @VisibleForTesting
+  final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
 
-  public ExternalShuffleBlockHandler(TransportConf conf) {
-    this(new OneForOneStreamManager(), new ExternalShuffleBlockManager(conf));
+  public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile) throws IOException {
+    this(new OneForOneStreamManager(),
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */
   @VisibleForTesting
-  ExternalShuffleBlockHandler(
+  public ExternalShuffleBlockHandler(
       OneForOneStreamManager streamManager,
-      ExternalShuffleBlockManager blockManager) {
+      ExternalShuffleBlockResolver blockManager) {
     this.streamManager = streamManager;
     this.blockManager = blockManager;
   }
@@ -65,20 +68,28 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
     BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteArray(message);
+    handleMessage(msgObj, client, callback);
+  }
 
+  protected void handleMessage(
+      BlockTransferMessage msgObj,
+      TransportClient client,
+      RpcResponseCallback callback) {
     if (msgObj instanceof OpenBlocks) {
       OpenBlocks msg = (OpenBlocks) msgObj;
-      List<ManagedBuffer> blocks = Lists.newArrayList();
+      checkAuth(client, msg.appId);
 
+      List<ManagedBuffer> blocks = Lists.newArrayList();
       for (String blockId : msg.blockIds) {
         blocks.add(blockManager.getBlockData(msg.appId, msg.execId, blockId));
       }
-      long streamId = streamManager.registerStream(blocks.iterator());
+      long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
       logger.trace("Registered streamId {} with {} buffers", streamId, msg.blockIds.length);
       callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteArray());
 
     } else if (msgObj instanceof RegisterExecutor) {
       RegisterExecutor msg = (RegisterExecutor) msgObj;
+      checkAuth(client, msg.appId);
       blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
       callback.onSuccess(new byte[0]);
 
@@ -99,4 +110,30 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     blockManager.applicationRemoved(appId, cleanupLocalDirs);
   }
+
+  /**
+   * Register an (application, executor) with the given shuffle info.
+   *
+   * The "re-" is meant to highlight the intended use of this method -- when this service is
+   * restarted, this is used to restore the state of executors from before the restart.  Normal
+   * registration will happen via a message handled in receive()
+   *
+   * @param appExecId
+   * @param executorInfo
+   */
+  public void reregisterExecutor(AppExecId appExecId, ExecutorShuffleInfo executorInfo) {
+    blockManager.registerExecutor(appExecId.appId, appExecId.execId, executorInfo);
+  }
+
+  public void close() {
+    blockManager.close();
+  }
+
+  private void checkAuth(TransportClient client, String appId) {
+    if (client.getClientId() != null && !client.getClientId().equals(appId)) {
+      throw new SecurityException(String.format(
+        "Client for %s not authorized for application %s.", client.getClientId(), appId));
+    }
+  }
+
 }

@@ -22,16 +22,12 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.tools.nsc.interpreter.SparkILoop
 
-import org.scalatest.FunSuite
 import org.apache.commons.lang3.StringEscapeUtils
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-
-
-class ReplSuite extends FunSuite {
+class ReplSuite extends SparkFunSuite {
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
@@ -88,10 +84,6 @@ class ReplSuite extends FunSuite {
       settings = new scala.tools.nsc.Settings
       settings.usejavacp.value = true
       org.apache.spark.repl.Main.interp = this
-      override def createInterpreter() {
-        intp = new SparkILoopInterpreter
-        intp.setContextClassLoader()
-      }
     }
 
     val out = new StringWriter()
@@ -217,7 +209,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("local-cluster mode") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |var v = 7
         |def getV() = v
@@ -239,7 +231,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |case class Sum(exp: String, exp2: String)
         |val a = Sum("A", "B")
@@ -262,7 +254,7 @@ class ReplSuite extends FunSuite {
 
   test("SPARK-2576 importing SQLContext.createDataFrame.") {
     // We need to use local-cluster to test this case.
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
         |import sqlContext.implicits._
@@ -275,7 +267,7 @@ class ReplSuite extends FunSuite {
 
   test("SPARK-2632 importing a method from non serializable class and not using it.") {
     val output = runInterpreter("local",
-    """
+      """
       |class TestClass() { def testMethod = 3 }
       |val t = new TestClass
       |import t.testMethod
@@ -320,9 +312,9 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
-  
+
   test("collecting objects of class defined in repl - shuffling") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |case class Foo(i: Int)
         |val list = List((1, Foo(1)), (1, Foo(2)))
