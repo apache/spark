@@ -194,6 +194,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val model = lr.fit(dataset)
     assert(model.numClasses === 2)
+    val numFeatures = dataset.select("features").first().getAs[Vector](0).size
+    assert(model.numFeatures === numFeatures)
 
     val threshold = model.getThreshold
     val results = model.transform(dataset)
