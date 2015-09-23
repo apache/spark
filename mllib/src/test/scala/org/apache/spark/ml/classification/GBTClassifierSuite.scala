@@ -23,12 +23,14 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.Utils
 
 
@@ -75,6 +77,23 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
           .setMaxIter(maxIter)
           .setStepSize(learningRate)
         compareAPIs(data, None, gbt, categoricalFeatures)
+    }
+  }
+
+  test("prediction on single instance") {
+    val gbt = new GBTClassifier()
+      .setMaxDepth(2)
+      .setSubsamplingRate(1.0)
+      .setLossType("logistic")
+      .setMaxIter(10)
+      .setStepSize(1.0)
+
+    val newData: DataFrame = TreeTests.setMetadata(data, Map.empty[Int, Int], numClasses = 2)
+    val newModel = gbt.fit(newData)
+
+    newModel.transform(newData).select(gbt.getFeaturesCol, gbt.getPredictionCol).collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== newModel.predict(features) relTol 1E-5)
     }
   }
 

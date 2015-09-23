@@ -328,7 +328,7 @@ class LinearRegressionModel private[ml] (
     new LinearRegressionSummary(predictionAndObservations, $(predictionCol), $(labelCol))
   }
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     dot(features, weights) + intercept
   }
 

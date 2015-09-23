@@ -26,6 +26,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
@@ -258,6 +259,28 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       val sum = rawPred.toArray.sum
       assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
         "probability prediction mismatch")
+    }
+  }
+
+  test("prediction on single instance") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+    val predictions = newTree.transform(newData)
+      .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)
+      .collect()
+    newTree.transform(newData).select(newTree.getFeaturesCol, newTree.getPredictionCol)
+      .collect().foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== newTree.predict(features) relTol 1E-5)
     }
   }
 
