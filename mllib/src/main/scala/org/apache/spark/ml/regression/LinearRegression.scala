@@ -24,6 +24,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -168,6 +169,23 @@ class LinearRegression(override val uid: String)
     val numFeatures = featuresSummarizer.mean.size
     val yMean = ySummarizer.mean(0)
     val yStd = math.sqrt(ySummarizer.variance(0))
+
+    if ($(elasticNetParam) == 0.0 && numFeatures <= 4096) {
+      // In case of feature size is small, WeightedLeastSquares can train more efficiently
+      // because it requires one pass through to the data. (SPARK-10668)
+      val instances: RDD[WeightedLeastSquares.Instance] = dataset.select(
+        col($(labelCol)), w, col($(featuresCol))).map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+        WeightedLeastSquares.Instance(weight, features, label)
+      }
+
+      val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
+        $(standardization), true)
+      val model = optimizer.fit(instances)
+      // When it is trained by WeightedLeastSquares, training summary does not
+      // attached returned model.
+      return new LinearRegressionModel(uid, model.coefficients, model.intercept)
+    }
 
     // If the yStd is zero, then the intercept is yMean with zero weights;
     // as a result, training is not needed.

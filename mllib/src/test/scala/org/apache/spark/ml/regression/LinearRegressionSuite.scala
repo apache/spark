@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
+  private val seed: Int = 42
   @transient var dataset: DataFrame = _
   @transient var datasetWithoutIntercept: DataFrame = _
 
@@ -49,15 +50,14 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     super.beforeAll()
     dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2))
+        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, seed, 0.1), 2))
     /*
        datasetWithoutIntercept is not needed for correctness testing but is useful for illustrating
        training model without intercept
      */
     datasetWithoutIntercept = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        0.0, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2))
-
+        0.0, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, seed, 0.1), 2))
   }
 
   test("params") {
@@ -457,7 +457,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression model training summary") {
-    val trainer = new LinearRegression
+    val trainer = new LinearRegression().setElasticNetParam(0.3)
     val model = trainer.fit(dataset)
 
     // Training results for the model should be available
@@ -502,7 +502,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression model testset evaluation summary") {
-    val trainer = new LinearRegression
+    val trainer = new LinearRegression().setElasticNetParam(0.3)
     val model = trainer.fit(dataset)
 
     // Evaluating on training dataset should yield results summary equal to training summary
