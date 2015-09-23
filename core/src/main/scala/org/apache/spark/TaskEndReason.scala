@@ -17,16 +17,12 @@
 
 package org.apache.spark
 
-import java.io.{ObjectInputStream, ObjectOutputStream}
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
-
-// ==============================================================================================
-// NOTE: new task end reasons MUST be accompanied with serialization logic in util.JsonProtocol!
-// ==============================================================================================
 
 /**
  * :: DeveloperApi ::
