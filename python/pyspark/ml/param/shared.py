@@ -160,16 +160,16 @@ class HasPredictionCol(Params):
 
 class HasProbabilityCol(Params):
     """
-    Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
+    Mixin for param probabilityCol: Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
     """
 
     # a placeholder to make it appear in the generated doc
-    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
+    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
 
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
-        #: param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
-        self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
+        #: param for Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
+        self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
         self._setDefault(probabilityCol='probability')
 
     def setProbabilityCol(self, value):
@@ -568,6 +568,33 @@ class HasThresholds(Params):
         Gets the value of thresholds or its default value.
         """
         return self.getOrDefault(self.thresholds)
+
+
+class HasWeightCol(Params):
+    """
+    Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    weightCol = Param(Params._dummy(), "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+    def __init__(self):
+        super(HasWeightCol, self).__init__()
+        #: param for weight column name. If this is not set or empty, we treat all instance weights as 1.0.
+        self.weightCol = Param(self, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        self._paramMap[self.weightCol] = value
+        return self
+
+    def getWeightCol(self):
+        """
+        Gets the value of weightCol or its default value.
+        """
+        return self.getOrDefault(self.weightCol)
 
 
 class DecisionTreeParams(Params):
