@@ -159,7 +159,7 @@ public final class UnsafeExternalSorter {
   /**
    * Allocates new sort data structures. Called when creating the sorter and after each spill.
    */
-  public void initializeForWriting() throws IOException {
+  private void initializeForWriting() throws IOException {
     this.writeMetrics = new ShuffleWriteMetrics();
     final long pointerArrayMemory =
       UnsafeInMemorySorter.getMemoryRequirementsForPointerArray(initialSize);
@@ -187,14 +187,6 @@ public final class UnsafeExternalSorter {
    * Sort and spill the current records in response to memory pressure.
    */
   public void spill() throws IOException {
-    spill(true);
-  }
-
-  /**
-   * Sort and spill the current records in response to memory pressure.
-   * @param shouldInitializeForWriting whether to allocate memory for writing after the spill
-   */
-  public void spill(boolean shouldInitializeForWriting) throws IOException {
     assert(inMemSorter != null);
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
@@ -225,9 +217,7 @@ public final class UnsafeExternalSorter {
     // written to disk. This also counts the space needed to store the sorter's pointer array.
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
 
-    if (shouldInitializeForWriting) {
-      initializeForWriting();
-    }
+    initializeForWriting();
   }
 
   /**
