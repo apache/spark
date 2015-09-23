@@ -68,7 +68,8 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
         classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
         HiveUDAFFunction(new HiveFunctionWrapper(functionClassName), children)
       } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveUDAFFunction(new HiveFunctionWrapper(functionClassName), children, true)
+        HiveUDAFFunction(
+          new HiveFunctionWrapper(functionClassName), children, isUDAFBridgeRequired = true)
       } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
         HiveGenericUDTF(new HiveFunctionWrapper(functionClassName), children)
       } else {
@@ -554,7 +555,7 @@ private[hive] case class HiveUDAFFunction(
   private lazy val returnInspector = functionAndInspector._2
 
   @transient
-  private lazy val buffer = function.getNewAggregationBuffer
+  private[this] var buffer: GenericUDAFEvaluator.AggregationBuffer = _
 
   override def eval(input: InternalRow): Any = unwrap(function.evaluate(buffer), returnInspector)
 
@@ -567,11 +568,12 @@ private[hive] case class HiveUDAFFunction(
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
 
-  // Hive UDAF has its own buffer
+  // Hive UDAF has its own buffer, so we don't need to occupy a slot in the aggregation
+  // buffer for it.
   override def bufferSchema: StructType = StructType(Nil)
 
-  override def update(_buffer: MutableRow, _input: InternalRow): Unit = {
-    val inputs = inputProjection(_input)
+  override def update(_buffer: MutableRow, input: InternalRow): Unit = {
+    val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached, inputDataTypes))
   }
 
@@ -582,7 +584,9 @@ private[hive] case class HiveUDAFFunction(
 
   override def cloneBufferAttributes: Seq[Attribute] = Nil
 
-  override def initialize(buffer: MutableRow): Unit = {}
+  override def initialize(_buffer: MutableRow): Unit = {
+    buffer = function.getNewAggregationBuffer
+  }
 
   override def bufferAttributes: Seq[AttributeReference] = Nil
 
@@ -590,7 +594,7 @@ private[hive] case class HiveUDAFFunction(
 
   override def nullable: Boolean = true
 
-  override def supportPartial: Boolean = false
+  override def supportsPartial: Boolean = false
 
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 }

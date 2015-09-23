@@ -169,8 +169,11 @@ abstract class AggregateFunction2
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
-  // Some aggregate function like Hive UDAF doesn't support partial aggregation, should override it.
-  def supportPartial: Boolean = true
+  /**
+   * Indicates if this function supports partial aggregation.
+   * Currently Hive UDAF is the only one that doesn't support partial aggregation.
+   */
+  def supportsPartial: Boolean = true
 }
 
 /**

@@ -56,9 +56,9 @@ object Utils {
     val groupExpressionMap = namedGroupingExpressions.toMap
     val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
 
-    val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
-    val finalAggregateAttributes =
-      finalAggregateExpressions.map {
+    val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
+    val completeAggregateAttributes =
+      completeAggregateExpressions.map {
         expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)._2
       }
 
@@ -80,8 +80,8 @@ object Utils {
       groupingExpressions = namedGroupingExpressions.map(_._2),
       nonCompleteAggregateExpressions = Nil,
       nonCompleteAggregateAttributes = Nil,
-      completeAggregateExpressions = finalAggregateExpressions,
-      completeAggregateAttributes = finalAggregateAttributes,
+      completeAggregateExpressions = completeAggregateExpressions,
+      completeAggregateAttributes = completeAggregateAttributes,
       initialInputBufferOffset = 0,
       resultExpressions = rewrittenResultExpressions,
       child = child
