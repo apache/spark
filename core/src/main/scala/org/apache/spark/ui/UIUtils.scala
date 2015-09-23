@@ -399,8 +399,12 @@ private[spark] object UIUtils extends Logging {
 
   /**
    * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
-   * and make sure that it only contains anchors with relative links. Otherwise, the whole string
-   * will rendered as a simple escaped text.
+   * and make sure that it only contains anchors with root-relative links. Otherwise,
+   * the whole string will rendered as a simple escaped text.
+   *
+   * Note: In terms of security, only anchor tags with root relative links are supported. So any
+   * attempts to embed links outside Spark UI, or other tags like <script> will cause in the whole
+   * description to be treated as plain text.
    */
   def makeDescription(desc: String, basePathUri: String): NodeSeq = {
     import scala.language.postfixOps

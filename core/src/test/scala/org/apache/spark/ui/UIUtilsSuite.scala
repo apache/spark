@@ -57,7 +57,8 @@ class UIUtilsSuite extends SparkFunSuite {
     )
   }
 
-  def verify(desc: String, expected: Elem, errorMsg: String = "", baseUrl: String = ""): Unit = {
+  private def verify(
+      desc: String, expected: Elem, errorMsg: String = "", baseUrl: String = ""): Unit = {
     val generated = makeDescription(desc, baseUrl)
     assert(generated.sameElements(expected),
       s"\n$errorMsg\n\nExpected:\n$expected\nGenerated:\n$generated")
