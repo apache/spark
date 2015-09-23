@@ -266,6 +266,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
+  /**
+   * @return true if context is stopped or in the midst of stopping.
+   */
+  def isStopped: Boolean = stopped.get()
+
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
 

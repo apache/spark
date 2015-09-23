@@ -85,6 +85,7 @@ public final class UnsafeKVExternalSorter {
       // We will use the number of elements in the map as the initialSize of the
       // UnsafeInMemorySorter. Because UnsafeInMemorySorter does not accept 0 as the initialSize,
       // we will use 1 as its initial size if the map is empty.
+      // TODO: track pointer array memory used by this in-memory sorter!
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
@@ -123,8 +124,13 @@ public final class UnsafeKVExternalSorter {
         pageSizeBytes,
         inMemSorter);
 
-      sorter.spill();
+      // Note: This spill doesn't actually release any memory, so if we try to allocate a new
+      // pointer array immediately after the spill then we may fail to acquire sufficient space
+      // for it (SPARK-10474). For this reason, we must initialize for writing explicitly *after*
+      // we have actually freed memory from our map.
+      sorter.spill(false /* initialize for writing */);
       map.free();
+      sorter.initializeForWriting();
     }
   }
 
