@@ -25,7 +25,6 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntParam, _}
 import org.apache.spark.ml.util._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.random.XORShiftRandom
@@ -36,11 +35,12 @@ import org.apache.spark.util.random.XORShiftRandom
 private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol with HasOutputCol {
 
   /**
-   * Number of buckets to collect data points, which should be a positive integer.
+   * Maximum number of buckets (quantiles, or categories) into which data points are grouped. Must
+   * be >= 2.
    * @group param
    */
-  val numBuckets = new IntParam(this, "numBuckets",
-    "Number of buckets to collect data points, which should be a positive integer.",
+  val numBuckets = new IntParam(this, "numBuckets", "Maximum number of buckets (quantiles, or " +
+    "categories) into which data points are grouped. Must be >= 2.",
     ParamValidators.gtEq(2))
   setDefault(numBuckets -> 2)
 
@@ -51,13 +51,16 @@ private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol w
 /**
  * :: AlphaComponent ::
  * `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
- * categorical features.
+ * categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
+ * into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
+ * covering all real values. This attempts to find numBuckets partitions based on a sample of data,
+ * but it may find fewer depending on the data sample values.
  */
 @AlphaComponent
 final class QuantileDiscretizer(override val uid: String)
   extends Estimator[Bucketizer] with QuantileDiscretizerBase {
 
-  def this() = this(Identifiable.randomUID("QuantileDiscretizer"))
+  def this() = this(Identifiable.randomUID("quantileDiscretizer"))
 
   /** @group setParam */
   def setNumBuckets(value: Int): this.type = set(numBuckets, value)
@@ -79,18 +82,34 @@ final class QuantileDiscretizer(override val uid: String)
   }
 
   override def fit(dataset: DataFrame): Bucketizer = {
-    val input = dataset.select($(inputCol)).map { case Row(feature: Double) => feature }
-    val samples = getSampledInput(input, $(numBuckets))
-    val splits = Array(Double.NegativeInfinity) ++ findSplits(samples, $(numBuckets) - 1) ++
-      Array(Double.PositiveInfinity)
+    val samples = QuantileDiscretizer.getSampledInput(dataset.select($(inputCol)), $(numBuckets))
+      .map { case Row(feature: Double) => feature }
+    val splitCandidates = QuantileDiscretizer.findSplits(samples, $(numBuckets) - 1)
+    val splits = if (splitCandidates.size == 0) {
+      logInfo("Failed to find any suitable splits, using 0 as default split point.")
+      Array(Double.NegativeInfinity, 0, Double.PositiveInfinity)
+    } else {
+      if (splitCandidates.head == Double.NegativeInfinity
+        && splitCandidates.last == Double.PositiveInfinity) {
+        splitCandidates
+      } else if (splitCandidates.head == Double.NegativeInfinity) {
+        splitCandidates ++ Array(Double.PositiveInfinity)
+      } else if (splitCandidates.last == Double.PositiveInfinity) {
+        Array(Double.NegativeInfinity) ++ splitCandidates
+      } else {
+        Array(Double.NegativeInfinity) ++ splitCandidates ++ Array(Double.PositiveInfinity)
+      }
+    }
     val bucketizer = new Bucketizer(uid).setSplits(splits)
     copyValues(bucketizer)
   }
+}
 
+private[feature] object QuantileDiscretizer {
   /**
    * Sampling from the given dataset to collect quantile statistics.
    */
-  private def getSampledInput(dataset: RDD[Double], numBins: Int): Array[Double] = {
+  def getSampledInput(dataset: DataFrame, numBins: Int): Array[Row] = {
     val totalSamples = dataset.count()
     assert(totalSamples > 0)
     val requiredSamples = math.max(numBins * numBins, 10000)
@@ -101,33 +120,31 @@ final class QuantileDiscretizer(override val uid: String)
   /**
    * Compute split points with respect to the sample distribution.
    */
-  private def findSplits(samples: Array[Double], numSplits: Int): Array[Double] = {
+  def findSplits(samples: Array[Double], numSplits: Int): Array[Double] = {
     val valueCountMap = samples.foldLeft(Map.empty[Double, Int]) { (m, x) =>
       m + ((x, m.getOrElse(x, 0) + 1))
     }
-    val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
-    val possibleSplits = valueCounts.length
+    val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray ++ Array((Double.MaxValue, 1))
+    val possibleSplits = valueCounts.length - 1
     if (possibleSplits <= numSplits) {
-      valueCounts.map(_._1)
+      valueCounts.dropRight(1).map(_._1)
     } else {
       val stride: Double = samples.length.toDouble / (numSplits + 1)
       val splitsBuilder = mutable.ArrayBuilder.make[Double]
       var index = 1
       // currentCount: sum of counts of values that have been visited
       var currentCount = valueCounts(0)._2
-      // targetCount: target value for `currentCount`.
-      // If `currentCount` is closest value to `targetCount`,
-      // then current value is a split threshold.
-      // After finding a split threshold, `targetCount` is added by stride.
+      // targetCount: target value for `currentCount`. If `currentCount` is closest value to
+      // `targetCount`, then current value is a split threshold. After finding a split threshold,
+      // `targetCount` is added by stride.
       var targetCount = stride
       while (index < valueCounts.length) {
         val previousCount = currentCount
         currentCount += valueCounts(index)._2
         val previousGap = math.abs(previousCount - targetCount)
         val currentGap = math.abs(currentCount - targetCount)
-        // If adding count of current value to currentCount
-        // makes the gap between currentCount and targetCount smaller,
-        // previous value is a split threshold.
+        // If adding count of current value to currentCount makes the gap between currentCount and
+        // targetCount smaller, previous value is a split threshold.
         if (previousGap < currentGap) {
           splitsBuilder += valueCounts(index - 1)._1
           targetCount += stride

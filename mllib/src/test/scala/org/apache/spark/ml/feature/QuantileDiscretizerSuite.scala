@@ -55,4 +55,11 @@ class QuantileDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
       "0.18847866977771732, 0.5309454508634242",
       "0.5309454508634242, Infinity"))
   }
+
+  test("Test find splits") {
+    val sample = Array[Double](1, 2, 3, 3, 3, 3, 3, 3, 3)
+    val numSplits = 2
+    val res = QuantileDiscretizer.findSplits(sample, numSplits)
+    println(res.mkString(", "))
+  }
 }
