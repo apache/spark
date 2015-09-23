@@ -531,6 +531,32 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Applies a schema to an List of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   * @group dataframes
+   * @since 1.6.0
+   */
+  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
+    val schema = getSchema(beanClass)
+    val className = beanClass.getName
+    val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
+    val extractors =
+      localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+    val methodsToConverts = extractors.zip(schema).map { case (e, attr) =>
+      (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+    }
+    val rows = data.asScala.map{ element =>
+        new GenericInternalRow(
+          methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
+        ): Row
+    }
+    DataFrame(self, LocalRelation.fromExternalRows(schema, rows.toSeq))
+  }
+
+
+  /**
    * :: Experimental ::
    * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
    * {{{
