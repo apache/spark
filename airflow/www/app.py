@@ -1055,7 +1055,7 @@ class Airflow(BaseView):
         num_runs = int(num_runs) if num_runs else 25
 
         if not base_date:
-            base_date = dag.latest_execution_date or datetime.now()
+            base_date = (dag.latest_execution_date + 2 * dag.schedule_interval) or datetime.now()
         else:
             base_date = dateutil.parser.parse(base_date)
         base_date = utils.round_time(base_date, dag.schedule_interval)
