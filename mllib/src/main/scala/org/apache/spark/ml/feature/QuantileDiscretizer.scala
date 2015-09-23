@@ -49,7 +49,7 @@ private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol w
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
  * categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
  * into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
@@ -103,6 +103,8 @@ final class QuantileDiscretizer(override val uid: String)
     val bucketizer = new Bucketizer(uid).setSplits(splits)
     copyValues(bucketizer)
   }
+
+  override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
 }
 
 private[feature] object QuantileDiscretizer {
