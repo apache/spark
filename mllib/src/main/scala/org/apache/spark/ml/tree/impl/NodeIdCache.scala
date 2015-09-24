@@ -122,7 +122,7 @@ private[spark] class NodeIdCache(
     rddUpdateCount += 1
 
     // Handle checkpointing if the directory is not None.
-    if (canCheckpoint && (rddUpdateCount % checkpointInterval) == 0) {
+    if (canCheckpoint && checkpointInterval != -1 && (rddUpdateCount % checkpointInterval) == 0) {
       // Let's see if we can delete previous checkpoints.
       var canDelete = true
       while (checkpointQueue.size > 1 && canDelete) {
@@ -164,10 +164,10 @@ private[spark] class NodeIdCache(
         }
       }
     }
-  }
-  if (prevNodeIdsForInstances != null) {
-    // Unpersist the previous one if one exists.
-    prevNodeIdsForInstances.unpersist()
+    if (prevNodeIdsForInstances != null) {
+      // Unpersist the previous one if one exists.
+      prevNodeIdsForInstances.unpersist()
+    }
   }
 }
 

@@ -131,7 +131,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     hiveContext.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
   }
 
-  test("SPARK-6409 UDAFAverage test") {
+  test("SPARK-6409 UDAF Average test") {
     sql(s"CREATE TEMPORARY FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
     checkAnswer(
       sql("SELECT test_avg(1), test_avg(substr(value,5)) FROM src"),

@@ -70,10 +70,14 @@ object MimaExcludes {
           "org.apache.spark.scheduler.AskPermissionToCommitOutput.this"),
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
-      ) ++
-      Seq(
+      ) ++ Seq(
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.shuffle.FileShuffleBlockResolver$ShuffleFileGroup")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.regression.LeastSquaresCostFun.this")
       )
     case v if v.startsWith("1.5") =>
       Seq(
