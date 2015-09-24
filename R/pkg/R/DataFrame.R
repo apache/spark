@@ -1868,7 +1868,7 @@ setMethod(f = "as.data.frame", signature = "DataFrame", definition =
             function(x, ...) {
               # Check if additional parameters have been passed
               if (length(list(...)) > 0) {
-                stop("Unused argument(s): (" %++% paste(list(...), collapse=", ") %++% ")")
+                stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
               }
               return(collect(x))
             }
