@@ -451,7 +451,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     def refresh(): Unit = {
       val sources = paths.map(new Path(_))
-      val files = listLeafFiles(sourcePath)
+      val files = listLeafFiles(sources)
 
       leafFiles.clear()
       leafDirToChildrenFiles.clear()
