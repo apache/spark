@@ -78,6 +78,10 @@ public class TransportClient implements Closeable {
     this.handler = Preconditions.checkNotNull(handler);
   }
 
+  public Channel getChannel() {
+    return channel;
+  }
+
   public boolean isActive() {
     return channel.isOpen() || channel.isActive();
   }
