@@ -1225,13 +1225,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-10741: Sort on Aggregate using parquet") {
-    withTable("test") {
-      sql("CREATE TABLE test(c1 STRING, c2 INT) STORED AS PARQUET")
+    withTable("test10741") {
+      sql("CREATE TABLE test10741(c1 STRING, c2 INT) STORED AS PARQUET")
 
       checkAnswer(sql(
         """
           |SELECT c1, AVG(c2) AS c_avg
-          |FROM test
+          |FROM test10741
           |GROUP BY c1
           |HAVING (AVG(c2) > 5) ORDER BY c1
         """.stripMargin), Nil)
@@ -1239,7 +1239,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(sql(
         """
           |SELECT c1, AVG(c2) AS c_avg
-          |FROM test
+          |FROM test10741
           |GROUP BY c1
           |ORDER BY AVG(c2)
         """.stripMargin), Nil)

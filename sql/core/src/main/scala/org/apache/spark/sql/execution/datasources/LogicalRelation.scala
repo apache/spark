@@ -26,29 +26,25 @@ import org.apache.spark.sql.sources.BaseRelation
  *
  * Note that sometimes we need to use `LogicalRelation` to replace an existing leaf node without
  * changing the output attributes' IDs.  The `expectedOutputAttributes` parameter is used for
- * this purpose.
+ * this purpose.  See https://issues.apache.org/jira/browse/SPARK-10741 for more details.
  */
 private[sql] case class LogicalRelation(
     relation: BaseRelation,
-    expectedOutputAttributes: Seq[Attribute] = Nil)
+    expectedOutputAttributes: Option[Seq[Attribute]] = None)
   extends LeafNode with MultiInstanceRelation {
-
-  assert(expectedOutputAttributes == Nil ||
-    relation.schema.length == expectedOutputAttributes.length)
 
   override val output: Seq[AttributeReference] = {
     val attrs = relation.schema.toAttributes
-    if (expectedOutputAttributes == Nil) {
-      attrs
-    } else {
-      attrs.zip(expectedOutputAttributes).map {
+    expectedOutputAttributes.map { expectedAttrs =>
+      assert(expectedAttrs.length == attrs.length)
+      attrs.zip(expectedAttrs).map {
         // We should respect the attribute names provided by base relation and only use the
         // exprId in `expectedOutputAttributes`.
         // The reason is that, some relations(like parquet) will reconcile attribute names to
         // workaround case insensitivity issue.
-        case (ref, expected) => ref.withExprId(expected.exprId)
+        case (attr, expected) => attr.withExprId(expected.exprId)
       }
-    }
+    }.getOrElse(attrs)
   }
 
   // Logical Relations are distinct if they have different output for the sake of transformations.

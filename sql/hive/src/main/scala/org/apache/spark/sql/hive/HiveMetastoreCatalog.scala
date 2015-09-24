@@ -514,7 +514,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       parquetRelation
     }
 
-    result.copy(expectedOutputAttributes = metastoreRelation.output)
+    result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
