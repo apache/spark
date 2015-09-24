@@ -65,6 +65,7 @@ We list major functionality from both below, with links to detailed guides.
 * [PMML model export](mllib-pmml-model-export.html)
 * [Matrix Factorization](mllib-matrix-factorization.html)
   * [LU Factorization](mllib-matrix-factorization.html#lu-factorization)
+  * [Solving a Linear System of Equations](mllib-matrix-factorization.html#solving-a-linear-system-of-equations)
 
 MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
