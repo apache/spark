@@ -180,7 +180,9 @@ private[sql] class OrcRelation(
       paths.head, Some(sqlContext.sparkContext.hadoopConfiguration))
   }
 
-  override def needConversion: Boolean = false
+  override def inputNeedConversion: Boolean = false
+
+  override def outputNeedConversion: Boolean = false
 
   override def equals(other: Any): Boolean = other match {
     case that: OrcRelation =>

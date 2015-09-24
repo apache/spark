@@ -59,7 +59,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
       )
     ))
 
-  override def needConversion: Boolean = false
+  override def inputNeedConversion: Boolean = false
 
   override def buildScan(): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
