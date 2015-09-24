@@ -29,8 +29,6 @@ import org.apache.spark.streaming.Time
  *                        the streaming scheduler queue
  * @param processingStartTime Clock time of when the first job of this batch started processing
  * @param processingEndTime Clock time of when the last job of this batch finished processing
- * @param failureReasons The failure reasons if there are any jobs in this batch failed. The key is
- *                       `outputOpId` and the value is the failure reason.
  */
 @DeveloperApi
 case class BatchInfo(
@@ -38,21 +36,10 @@ case class BatchInfo(
     streamIdToInputInfo: Map[Int, StreamInputInfo],
     submissionTime: Long,
     processingStartTime: Option[Long],
-    processingEndTime: Option[Long],
-    private[streaming] val failureReasons: Map[Int, String]) {
+    processingEndTime: Option[Long]
+  ) {
 
-  /**
-   * Create `BatchInfo`. This is for binary compatibility.
-   */
-  def this(
-      batchTime: Time,
-      streamIdToInputInfo: Map[Int, StreamInputInfo],
-      submissionTime: Long,
-      processingStartTime: Option[Long],
-      processingEndTime: Option[Long]) {
-    this(batchTime, streamIdToInputInfo, submissionTime, processingStartTime, processingEndTime,
-      Map.empty)
-  }
+  private var _failureReasons: Map[Int, String] = Map.empty
 
   @deprecated("Use streamIdToInputInfo instead", "1.5.0")
   def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
@@ -82,21 +69,12 @@ case class BatchInfo(
    * The number of recorders received by the receivers in this batch.
    */
   def numRecords: Long = streamIdToInputInfo.values.map(_.numRecords).sum
-}
 
-@DeveloperApi
-object BatchInfo {
-
-  /**
-   * Create `BatchInfo`. This is for binary compatibility.
-   */
-  def apply(
-      batchTime: Time,
-      streamIdToInputInfo: Map[Int, StreamInputInfo],
-      submissionTime: Long,
-      processingStartTime: Option[Long],
-      processingEndTime: Option[Long]): BatchInfo = {
-    BatchInfo(batchTime, streamIdToInputInfo, submissionTime, processingStartTime,
-      processingEndTime, Map.empty)
+  /** Set the failure reasons corresponding to every output ops in the batch */
+  private[streaming] def setFailureReason(reasons: Map[Int, String]): Unit = {
+    _failureReasons = reasons
   }
+
+  /** Failure reasons corresponding to every output ops in the batch */
+  private[streaming] def failureReasons = _failureReasons
 }

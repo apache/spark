@@ -73,13 +73,14 @@ case class JobSet(
         Map.empty
       }
     }
-    BatchInfo(
+    val binfo = new BatchInfo(
       time,
       streamIdToInputInfo,
       submissionTime,
       if (processingStartTime >= 0) Some(processingStartTime) else None,
-      if (processingEndTime >= 0) Some(processingEndTime) else None,
-      failureReasons
+      if (processingEndTime >= 0) Some(processingEndTime) else None
     )
+    binfo.setFailureReason(failureReasons)
+    binfo
   }
 }
