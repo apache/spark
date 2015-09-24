@@ -45,10 +45,6 @@ private[spark] class JavaSerializationStream(
     } catch {
       case e: NotSerializableException if extraDebugInfo =>
         throw SerializationDebugger.improveException(t, e)
-      case e: OutOfMemoryError =>
-        objOut.reset()
-        counter = 0
-        objOut.writeObject(t)
     }
     counter += 1
     if (counterReset > 0 && counter >= counterReset) {
