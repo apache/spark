@@ -74,7 +74,7 @@ class HiveContext private[hive](
     @transient metaHive: ClientInterface) extends SQLContext(sc, cacheManager) with Logging {
   self =>
 
-  def this(sc: SparkContext) =  this(sc, new CacheManager, null, null)
+  def this(sc: SparkContext) = this(sc, new CacheManager, null, null)
   def this(sc: JavaSparkContext) = this(sc.sc)
 
   import org.apache.spark.sql.hive.HiveContext._
@@ -541,6 +541,13 @@ class HiveContext private[hive](
       CartesianProduct,
       BroadcastNestedLoopJoin
     )
+  }
+
+  override def sql(sql: String): DataFrame = {
+    // This is need for current_database()
+    metadataHive.withHiveState {
+      super.sql(sql)
+    }
   }
 
   protected[hive] def runSqlHive(sql: String): Seq[String] = {

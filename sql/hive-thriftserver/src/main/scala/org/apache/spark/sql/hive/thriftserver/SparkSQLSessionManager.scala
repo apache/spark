@@ -66,7 +66,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    sparkSqlOperationManager.sessionToContexts += sessionHandle.getSessionId -> hiveContext.newSession()
+    sparkSqlOperationManager.sessionToContexts += sessionHandle -> hiveContext.newSession()
     sessionHandle
   }
 

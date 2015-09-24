@@ -150,7 +150,7 @@ private[hive] class IsolatedClientLoader(
     name.replaceAll("\\.", "/") + ".class"
 
   /** The classloader that is used to load an isolated version of Hive. */
-  var classLoader: ClassLoader = if (isolationOn) {
+  private[hive] var classLoader: ClassLoader = if (isolationOn) {
     baseClassLoader
   } else {
     new URLClassLoader(allJars, rootClassLoader) {
@@ -196,14 +196,13 @@ private[hive] class IsolatedClientLoader(
     }
   }
 
-  def addJar(path: String) = synchronized {
+  private[hive] def addJar(path: String): Unit = synchronized {
     val jarURL = new java.io.File(path).toURI.toURL
-    println(s"add $path to classLoader")
     classLoader = new java.net.URLClassLoader(Array(jarURL), classLoader)
   }
 
   /** The isolated client interface to Hive. */
-  def createClient(): ClientInterface = {
+  private[hive] def createClient(): ClientInterface = {
     if (!isolationOn) {
       return new ClientWrapper(version, config, baseClassLoader, this)
     }
@@ -224,8 +223,8 @@ private[hive] class IsolatedClientLoader(
           val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
           throw new ClassNotFoundException(
             s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
-              "Please make sure that jars for your version of hive and hadoop are included in the " +
-              s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
+            "Please make sure that jars for your version of hive and hadoop are included in the " +
+            s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
         } else {
           throw e
         }
@@ -234,5 +233,5 @@ private[hive] class IsolatedClientLoader(
     }
   }
 
-  var cachedHive: Any = null
+  private[hive] var cachedHive: Any = null
 }

@@ -100,6 +100,8 @@ private[hive] trait ClientInterface {
    */
   def runSqlHive(sql: String): Seq[String]
 
+  def withHiveState[A](f: => A): A
+
   def setOut(stream: PrintStream): Unit
   def setInfo(stream: PrintStream): Unit
   def setError(stream: PrintStream): Unit

@@ -1133,6 +1133,17 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     conf.clear()
   }
 
+  test("current_database with mutiple sessions") {
+    sql("create database a")
+    sql("use a")
+    val s2 = newSession()
+    s2.sql("create database b")
+    s2.sql("use b")
+
+    assert(sql("select current_database()").first() === Row("a"))
+    assert(s2.sql("select current_database()").first() === Row("b"))
+  }
+
   createQueryTest("select from thrift based table",
     "SELECT * from src_thrift")
 
