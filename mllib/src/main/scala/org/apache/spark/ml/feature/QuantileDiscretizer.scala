@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.Logging
+
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
@@ -37,6 +39,7 @@ private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol w
   /**
    * Maximum number of buckets (quantiles, or categories) into which data points are grouped. Must
    * be >= 2.
+   * default: 2
    * @group param
    */
   val numBuckets = new IntParam(this, "numBuckets", "Maximum number of buckets (quantiles, or " +
@@ -84,22 +87,8 @@ final class QuantileDiscretizer(override val uid: String)
   override def fit(dataset: DataFrame): Bucketizer = {
     val samples = QuantileDiscretizer.getSampledInput(dataset.select($(inputCol)), $(numBuckets))
       .map { case Row(feature: Double) => feature }
-    val splitCandidates = QuantileDiscretizer.findSplits(samples, $(numBuckets) - 1)
-    val splits = if (splitCandidates.size == 0) {
-      logInfo("Failed to find any suitable splits, using 0 as default split point.")
-      Array(Double.NegativeInfinity, 0, Double.PositiveInfinity)
-    } else {
-      if (splitCandidates.head == Double.NegativeInfinity
-        && splitCandidates.last == Double.PositiveInfinity) {
-        splitCandidates
-      } else if (splitCandidates.head == Double.NegativeInfinity) {
-        splitCandidates ++ Array(Double.PositiveInfinity)
-      } else if (splitCandidates.last == Double.PositiveInfinity) {
-        Array(Double.NegativeInfinity) ++ splitCandidates
-      } else {
-        Array(Double.NegativeInfinity) ++ splitCandidates ++ Array(Double.PositiveInfinity)
-      }
-    }
+    val splitCandidates = QuantileDiscretizer.findSplitCandidates(samples, $(numBuckets) - 1)
+    val splits = QuantileDiscretizer.getSplits(splitCandidates)
     val bucketizer = new Bucketizer(uid).setSplits(splits)
     copyValues(bucketizer)
   }
@@ -107,13 +96,14 @@ final class QuantileDiscretizer(override val uid: String)
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
 }
 
-private[feature] object QuantileDiscretizer {
+private[feature] object QuantileDiscretizer extends Logging {
   /**
    * Sampling from the given dataset to collect quantile statistics.
    */
   def getSampledInput(dataset: DataFrame, numBins: Int): Array[Row] = {
     val totalSamples = dataset.count()
-    assert(totalSamples > 0)
+    require(totalSamples > 0,
+      "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
     val requiredSamples = math.max(numBins * numBins, 10000)
     val fraction = math.min(requiredSamples / dataset.count(), 1.0)
     dataset.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
@@ -122,7 +112,7 @@ private[feature] object QuantileDiscretizer {
   /**
    * Compute split points with respect to the sample distribution.
    */
-  def findSplits(samples: Array[Double], numSplits: Int): Array[Double] = {
+  def findSplitCandidates(samples: Array[Double], numSplits: Int): Array[Double] = {
     val valueCountMap = samples.foldLeft(Map.empty[Double, Int]) { (m, x) =>
       m + ((x, m.getOrElse(x, 0) + 1))
     }
@@ -154,6 +144,34 @@ private[feature] object QuantileDiscretizer {
         index += 1
       }
       splitsBuilder.result()
+    }
+  }
+
+  /**
+   * Regulate split candidates to effective splits, such as adding positive/negative infinity in
+   * both sides, or using default split value in case of only ineffectiveness split candidates are
+   * found.
+   */
+  def getSplits(splitCandidates: Array[Double]): Array[Double] = {
+    if (splitCandidates.size == 0) {
+      logInfo("Failed to find any effective splits, using 0 as default split point.")
+      Array(Double.NegativeInfinity, 0, Double.PositiveInfinity)
+    } else {
+      if (splitCandidates.head == Double.NegativeInfinity
+        && splitCandidates.last == Double.PositiveInfinity) {
+        if (splitCandidates.size == 2) {
+          logInfo("Failed to find any effective splits, using 0 as default split point.")
+          Array(splitCandidates.head, 0, splitCandidates.last)
+        } else {
+          splitCandidates
+        }
+      } else if (splitCandidates.head == Double.NegativeInfinity) {
+        splitCandidates ++ Array(Double.PositiveInfinity)
+      } else if (splitCandidates.last == Double.PositiveInfinity) {
+        Array(Double.NegativeInfinity) ++ splitCandidates
+      } else {
+        Array(Double.NegativeInfinity) ++ splitCandidates ++ Array(Double.PositiveInfinity)
+      }
     }
   }
 }

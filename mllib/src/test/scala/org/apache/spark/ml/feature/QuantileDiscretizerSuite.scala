@@ -61,7 +61,7 @@ private object QuantileDiscretizerSuite extends SparkFunSuite {
       numBucket: Int,
       expectedResult: Array[Double],
       expectedAttrs: Array[String]): Unit = {
-    val sqlCtx = new SQLContext(sc)
+    val sqlCtx = SQLContext.getOrCreate(sc)
     import sqlCtx.implicits._
 
     val df = sc.parallelize(data.map(Tuple1.apply)).toDF("input")
