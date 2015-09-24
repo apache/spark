@@ -37,6 +37,57 @@ object Utils {
       UnsafeProjection.canSupport(groupingExpressions)
   }
 
+  def planAggregateWithoutPartial(
+      groupingExpressions: Seq[Expression],
+      aggregateExpressions: Seq[AggregateExpression2],
+      aggregateFunctionMap: Map[(AggregateFunction2, Boolean), (AggregateFunction2, Attribute)],
+      resultExpressions: Seq[NamedExpression],
+      child: SparkPlan): Seq[SparkPlan] = {
+
+    val namedGroupingExpressions = groupingExpressions.map {
+      case ne: NamedExpression => ne -> ne
+      // If the expression is not a NamedExpressions, we add an alias.
+      // So, when we generate the result of the operator, the Aggregate Operator
+      // can directly get the Seq of attributes representing the grouping expressions.
+      case other =>
+        val withAlias = Alias(other, other.toString)()
+        other -> withAlias
+    }
+    val groupExpressionMap = namedGroupingExpressions.toMap
+    val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
+
+    val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
+    val completeAggregateAttributes =
+      completeAggregateExpressions.map {
+        expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)._2
+      }
+
+    val rewrittenResultExpressions = resultExpressions.map { expr =>
+      expr.transformDown {
+        case agg: AggregateExpression2 =>
+          aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct)._2
+        case expression =>
+          // We do not rely on the equality check at here since attributes may
+          // different cosmetically. Instead, we use semanticEquals.
+          groupExpressionMap.collectFirst {
+            case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+          }.getOrElse(expression)
+      }.asInstanceOf[NamedExpression]
+    }
+
+    SortBasedAggregate(
+      requiredChildDistributionExpressions = Some(namedGroupingAttributes),
+      groupingExpressions = namedGroupingExpressions.map(_._2),
+      nonCompleteAggregateExpressions = Nil,
+      nonCompleteAggregateAttributes = Nil,
+      completeAggregateExpressions = completeAggregateExpressions,
+      completeAggregateAttributes = completeAggregateAttributes,
+      initialInputBufferOffset = 0,
+      resultExpressions = rewrittenResultExpressions,
+      child = child
+    ) :: Nil
+  }
+
   def planAggregateWithoutDistinct(
       groupingExpressions: Seq[Expression],
       aggregateExpressions: Seq[AggregateExpression2],
