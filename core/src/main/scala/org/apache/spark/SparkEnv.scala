@@ -20,10 +20,11 @@ package org.apache.spark
 import java.io.File
 import java.net.Socket
 
+import akka.actor.ActorSystem
+
 import scala.collection.mutable
 import scala.util.Properties
 
-import akka.actor.ActorSystem
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
@@ -40,7 +41,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
-import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
+import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
  * :: DeveloperApi ::
@@ -56,7 +57,6 @@ import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
 class SparkEnv (
     val executorId: String,
     private[spark] val rpcEnv: RpcEnv,
-    _actorSystem: ActorSystem, // TODO Remove actorSystem
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -76,7 +76,7 @@ class SparkEnv (
 
   // TODO Remove actorSystem
   @deprecated("Actor system is no longer supported as of 1.4.0", "1.4.0")
-  val actorSystem: ActorSystem = _actorSystem
+  val actorSystem: ActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
@@ -100,9 +100,6 @@ class SparkEnv (
       blockManager.master.stop()
       metricsSystem.stop()
       outputCommitCoordinator.stop()
-      if (!rpcEnv.isInstanceOf[AkkaRpcEnv]) {
-        actorSystem.shutdown()
-      }
       rpcEnv.shutdown()
 
       // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
@@ -252,13 +249,7 @@ object SparkEnv extends Logging {
     // Create the ActorSystem for Akka and get the port it binds to.
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
     val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager)
-    val actorSystem: ActorSystem =
-      if (rpcEnv.isInstanceOf[AkkaRpcEnv]) {
-        rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
-      } else {
-        // Create a ActorSystem for legacy codes
-        AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)._1
-      }
+    val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
     if (isDriver) {
@@ -404,7 +395,6 @@ object SparkEnv extends Logging {
     val envInstance = new SparkEnv(
       executorId,
       rpcEnv,
-      actorSystem,
       serializer,
       closureSerializer,
       cacheManager,
