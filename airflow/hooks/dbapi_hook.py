@@ -97,8 +97,8 @@ class DbApiHook(BaseHook):
         cur = conn.cursor()
         for s in sql:
             cur.execute(s, parameters)
-        conn.commit()
         cur.close()
+        conn.commit()
         conn.close()
 
     def set_autocommit(self, conn, autocommit):
