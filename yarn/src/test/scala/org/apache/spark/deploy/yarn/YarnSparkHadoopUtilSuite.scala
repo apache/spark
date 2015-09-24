@@ -233,4 +233,17 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       }
     assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
   }
+
+  test("check different hadoop utils based on env variable") {
+    import org.apache.spark.deploy.SparkHadoopUtil
+    System.setProperty("SPARK_YARN_MODE", "true")
+    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
+    System.setProperty("SPARK_YARN_MODE", "false")
+    val caught = intercept[java.lang.ClassCastException] {
+      SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
+    }
+    assert(caught.getMessage === "org.apache.spark.deploy.SparkHadoopUtil cannot be cast to " +
+      "org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+    System.clearProperty("SPARK_YARN_MODE")
+  }
 }
