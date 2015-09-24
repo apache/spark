@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.{DataOutput, OutputStream}
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 
@@ -282,24 +281,6 @@ private[parquet] class CatalystRowConverter(
     }
   }
 
-  // !! HACK ALERT !!
-  //
-  // This is a hacky utility class used to steal underlying byte array from a Parquet `Binary`
-  // without copying it as long as we know that it's safe to do so.
-  private final class ByteArrayThief extends OutputStream {
-    var bytes: Array[Byte] = _
-    var offset: Int = _
-    var numBytes: Int = _
-
-    override def write(bytes: Array[Byte], offset: Int, length: Int): Unit = {
-      this.bytes = bytes
-      this.offset = offset
-      this.numBytes = length
-    }
-
-    override def write(b: Int): Unit = ()
-  }
-
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
    */
@@ -307,8 +288,6 @@ private[parquet] class CatalystRowConverter(
     extends CatalystPrimitiveConverter(updater) {
 
     private var expandedDictionary: Array[UTF8String] = null
-
-    private val byteArrayThief = new ByteArrayThief
 
     override def hasDictionarySupport: Boolean = true
 
@@ -323,11 +302,13 @@ private[parquet] class CatalystRowConverter(
     }
 
     override def addBinary(value: Binary): Unit = {
-      value.writeTo(byteArrayThief)
-      val bytes = byteArrayThief.bytes
-      val offset = byteArrayThief.offset
-      val numBytes = byteArrayThief.numBytes
-      updater.set(UTF8String.fromBytes(bytes, offset, numBytes))
+      // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here we
+      // are using `Binary.toByteBuffer.array()` to steal the underlying byte array without copying
+      // it.
+      val buffer = value.toByteBuffer
+      val offset = buffer.position()
+      val numBytes = buffer.limit() - buffer.position()
+      updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
     }
   }
 
@@ -338,8 +319,6 @@ private[parquet] class CatalystRowConverter(
       decimalType: DecimalType,
       updater: ParentContainerUpdater)
     extends CatalystPrimitiveConverter(updater) {
-
-    private val byteArrayThief = new ByteArrayThief
 
     // Converts decimals stored as INT32
     override def addInt(value: Int): Unit = {
@@ -361,21 +340,23 @@ private[parquet] class CatalystRowConverter(
       val scale = decimalType.scale
 
       if (precision <= CatalystSchemaConverter.MAX_PRECISION_FOR_INT64) {
-        // Constructs a `Decimal` with an unscaled `Long` value if possible.
-        value.writeTo(byteArrayThief)
-        val bytes = byteArrayThief.bytes
-        val begin = byteArrayThief.offset
-        val end = begin + byteArrayThief.numBytes
+        // Constructs a `Decimal` with an unscaled `Long` value if possible.  The underlying
+        // `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here we are using
+        // `Binary.toByteBuffer.array()` to steal the underlying byte array without copying it.
+        val buffer = value.toByteBuffer
+        val bytes = buffer.array()
+        val start = buffer.position()
+        val end = buffer.limit()
 
         var unscaled = 0L
-        var i = begin
+        var i = start
 
         while (i < end) {
           unscaled = (unscaled << 8) | (bytes(i) & 0xff)
           i += 1
         }
 
-        val bits = 8 * byteArrayThief.numBytes
+        val bits = 8 * (end - start)
         unscaled = (unscaled << (64 - bits)) >> (64 - bits)
         Decimal(unscaled, precision, scale)
       } else {
