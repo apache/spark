@@ -174,7 +174,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   def testSpillingInLocalCluster(conf: SparkConf) {
-    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.memoryFraction", "0.01")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 
@@ -252,7 +252,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   def spillingInLocalClusterWithManyReduceTasks(conf: SparkConf) {
-    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.memoryFraction", "0.01")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
