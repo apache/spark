@@ -38,6 +38,10 @@ import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
+import org.apache.spark.sql.execution.{Filter, _}
+import org.apache.spark.sql.{execution => sparkexecution}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
@@ -188,9 +192,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
-  protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String):
+    org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
+  protected[sql] def executePlan(plan: LogicalPlan) =
+    new sparkexecution.QueryExecution(this, plan)
 
   @transient
   protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
@@ -471,6 +477,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: DeveloperApi ::
+   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * It is important to make sure that the structure of every [[Row]] of the provided List matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @group dataframes
+   * @since 1.6.0
+   */
+  @DeveloperApi
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+    DataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+  }
+
+  /**
    * Applies a schema to an RDD of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
@@ -584,7 +604,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -630,7 +650,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -726,7 +746,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(new SqlParser().parseTableIdentifier(tableName))
+    table(SqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
@@ -781,77 +801,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }.toArray
   }
 
-  protected[sql] class SparkPlanner extends SparkStrategies {
-    val sparkContext: SparkContext = self.sparkContext
-
-    val sqlContext: SQLContext = self
-
-    def codegenEnabled: Boolean = self.conf.codegenEnabled
-
-    def unsafeEnabled: Boolean = self.conf.unsafeEnabled
-
-    def numPartitions: Int = self.conf.numShufflePartitions
-
-    def strategies: Seq[Strategy] =
-      experimental.extraStrategies ++ (
-      DataSourceStrategy ::
-      DDLStrategy ::
-      TakeOrderedAndProject ::
-      HashAggregation ::
-      Aggregation ::
-      LeftSemiJoin ::
-      EquiJoinSelection ::
-      InMemoryScans ::
-      BasicOperators ::
-      CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil)
-
-    /**
-     * Used to build table scan operators where complex projection and filtering are done using
-     * separate physical operators.  This function returns the given scan operator with Project and
-     * Filter nodes added only when needed.  For example, a Project operator is only used when the
-     * final desired output requires complex expressions to be evaluated or when columns can be
-     * further eliminated out after filtering has been done.
-     *
-     * The `prunePushedDownFilters` parameter is used to remove those filters that can be optimized
-     * away by the filter pushdown optimization.
-     *
-     * The required attributes for both filtering and expression evaluation are passed to the
-     * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
-     */
-    def pruneFilterProject(
-        projectList: Seq[NamedExpression],
-        filterPredicates: Seq[Expression],
-        prunePushedDownFilters: Seq[Expression] => Seq[Expression],
-        scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
-
-      val projectSet = AttributeSet(projectList.flatMap(_.references))
-      val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-      val filterCondition =
-        prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
-
-      // Right now we still use a projection even if the only evaluation is applying an alias
-      // to a column.  Since this is a no-op, it could be avoided. However, using this
-      // optimization with the current implementation would change the output schema.
-      // TODO: Decouple final output schema from expression evaluation so this copy can be
-      // avoided safely.
-
-      if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
-          filterSet.subsetOf(projectSet)) {
-        // When it is possible to just use column pruning to get the right projection and
-        // when the columns of this projection are enough to evaluate all filter conditions,
-        // just do a scan followed by a filter, with no extra project.
-        val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
-        filterCondition.map(Filter(_, scan)).getOrElse(scan)
-      } else {
-        val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-        Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
-      }
-    }
-  }
+  @deprecated("use org.apache.spark.sql.SparkPlanner", "1.6.0")
+  protected[sql] class SparkPlanner extends sparkexecution.SparkPlanner(this)
 
   @transient
-  protected[sql] val planner = new SparkPlanner
+  protected[sql] val planner: sparkexecution.SparkPlanner = new sparkexecution.SparkPlanner(this)
 
   @transient
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
@@ -898,59 +852,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected[sql] lazy val conf: SQLConf = new SQLConf
   }
 
-  /**
-   * :: DeveloperApi ::
-   * The primary workflow for executing relational queries using Spark.  Designed to allow easy
-   * access to the intermediate phases of query execution for developers.
-   */
-  @DeveloperApi
-  protected[sql] class QueryExecution(val logical: LogicalPlan) {
-    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
-
-    lazy val analyzed: LogicalPlan = analyzer.execute(logical)
-    lazy val withCachedData: LogicalPlan = {
-      assertAnalyzed()
-      cacheManager.useCachedData(analyzed)
-    }
-    lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
-
-    // TODO: Don't just pick the first one...
-    lazy val sparkPlan: SparkPlan = {
-      SparkPlan.currentContext.set(self)
-      planner.plan(optimizedPlan).next()
-    }
-    // executedPlan should not be used to initialize any SparkPlan. It should be
-    // only used for execution.
-    lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
-
-    /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
-
-    protected def stringOrError[A](f: => A): String =
-      try f.toString catch { case e: Throwable => e.toString }
-
-    def simpleString: String =
-      s"""== Physical Plan ==
-         |${stringOrError(executedPlan)}
-      """.stripMargin.trim
-
-    override def toString: String = {
-      def output =
-        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
-
-      s"""== Parsed Logical Plan ==
-         |${stringOrError(logical)}
-         |== Analyzed Logical Plan ==
-         |${stringOrError(output)}
-         |${stringOrError(analyzed)}
-         |== Optimized Logical Plan ==
-         |${stringOrError(optimizedPlan)}
-         |== Physical Plan ==
-         |${stringOrError(executedPlan)}
-         |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
-      """.stripMargin.trim
-    }
-  }
+  @deprecated("use org.apache.spark.sql.QueryExecution", "1.6.0")
+  protected[sql] class QueryExecution(logical: LogicalPlan)
+    extends sparkexecution.QueryExecution(this, logical)
 
   /**
    * Parses the data type in our internal string representation. The data type string should

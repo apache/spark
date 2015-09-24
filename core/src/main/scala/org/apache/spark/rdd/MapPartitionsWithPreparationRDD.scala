@@ -41,7 +41,7 @@ private[spark] class MapPartitionsWithPreparationRDD[U: ClassTag, T: ClassTag, M
 
   // In certain join operations, prepare can be called on the same partition multiple times.
   // In this case, we need to ensure that each call to compute gets a separate prepare argument.
-  private[this] var preparedArguments: ArrayBuffer[M] = new ArrayBuffer[M]
+  private[this] val preparedArguments: ArrayBuffer[M] = new ArrayBuffer[M]
 
   /**
    * Prepare a partition for a single call to compute.

@@ -530,8 +530,9 @@ public class UnsafeShuffleWriterSuite {
       for (int i = 0; i < numRecordsPerPage * 10; i++) {
         writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
         newPeakMemory = writer.getPeakMemoryUsedBytes();
-        if (i % numRecordsPerPage == 0) {
-          // We allocated a new page for this record, so peak memory should change
+        if (i % numRecordsPerPage == 0 && i != 0) {
+          // The first page is allocated in constructor, another page will be allocated after
+          // every numRecordsPerPage records (peak memory should change).
           assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
           assertEquals(previousPeakMemory, newPeakMemory);

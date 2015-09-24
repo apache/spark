@@ -65,7 +65,12 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
    */
   private[param] def validate(value: T): Unit = {
     if (!isValid(value)) {
-      throw new IllegalArgumentException(s"$parent parameter $name given invalid value $value.")
+      val valueToString = value match {
+        case v: Array[_] => v.mkString("[", ",", "]")
+        case _ => value.toString
+      }
+      throw new IllegalArgumentException(
+        s"$parent parameter $name given invalid value $valueToString.")
     }
   }
 
@@ -461,7 +466,8 @@ trait Params extends Identifiable with Serializable {
    */
   final def getOrDefault[T](param: Param[T]): T = {
     shouldOwn(param)
-    get(param).orElse(getDefault(param)).get
+    get(param).orElse(getDefault(param)).getOrElse(
+      throw new NoSuchElementException(s"Failed to find a default value for ${param.name}"))
   }
 
   /** An alias for [[getOrDefault()]]. */

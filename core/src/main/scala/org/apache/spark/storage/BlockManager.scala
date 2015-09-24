@@ -23,6 +23,7 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{ExecutionContext, Await, Future}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 import scala.util.Random
 
 import sun.nio.ch.DirectBuffer
@@ -103,15 +104,6 @@ private[spark] class BlockManager(
     } else {
       tmpPort
     }
-  }
-
-  // Check that we're not using external shuffle service with consolidated shuffle files.
-  if (externalShuffleServiceEnabled
-      && conf.getBoolean("spark.shuffle.consolidateFiles", false)
-      && shuffleManager.isInstanceOf[HashShuffleManager]) {
-    throw new UnsupportedOperationException("Cannot use external shuffle service with consolidated"
-      + " shuffle files in hash-based shuffle. Please disable spark.shuffle.consolidateFiles or "
-      + " switch to sort-based shuffle.")
   }
 
   var blockManagerId: BlockManagerId = _
@@ -600,10 +592,26 @@ private[spark] class BlockManager(
   private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     require(blockId != null, "BlockId is null")
     val locations = Random.shuffle(master.getLocations(blockId))
+    var numFetchFailures = 0
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
-      val data = blockTransferService.fetchBlockSync(
-        loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
+      val data = try {
+        blockTransferService.fetchBlockSync(
+          loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
+      } catch {
+        case NonFatal(e) =>
+          numFetchFailures += 1
+          if (numFetchFailures == locations.size) {
+            // An exception is thrown while fetching this block from all locations
+            throw new BlockFetchException(s"Failed to fetch block from" +
+              s" ${locations.size} locations. Most recent failure cause:", e)
+          } else {
+            // This location failed, so we retry fetch from a different one by returning null here
+            logWarning(s"Failed to fetch remote block $blockId " +
+              s"from $loc (failed attempt $numFetchFailures)", e)
+            null
+          }
+      }
 
       if (data != null) {
         if (asBlockResult) {

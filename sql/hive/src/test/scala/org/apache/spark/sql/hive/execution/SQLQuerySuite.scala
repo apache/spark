@@ -26,9 +26,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
@@ -65,12 +63,12 @@ class MyDialect extends DefaultParserDialect
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext._
+  import hiveContext.implicits._
 
   test("UDTF") {
-    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
     // The function source code can be found at:
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
@@ -509,19 +507,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       Row(1))
-    checkAnswer(sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested"),
-      Seq.empty[Row])
+
+    sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
     checkAnswer(
       sql("SELECT * FROM test_ctas_1234"),
       sql("SELECT * FROM nested").collect().toSeq)
 
     intercept[AnalysisException] {
-      sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
+      sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
     }
   }
 
   test("test CTAS") {
-    checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
+    sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
     checkAnswer(
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
@@ -614,7 +612,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    TestHive.createDataFrame(rowRdd, schema).registerTempTable("testTable")
+    hiveContext.createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -1044,10 +1042,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val thread = new Thread {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
-        TestHive.sql(
-          s"ADD JAR ${TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+        sql(
+          s"ADD JAR ${hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
         try {
-          TestHive.sql(
+          sql(
             """
               |CREATE TEMPORARY FUNCTION example_max
               |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
@@ -1097,21 +1095,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
     val df =
-      TestHive.createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
+      createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
     df.toDF("id", "datef").registerTempTable("test_SPARK8588")
     checkAnswer(
-      TestHive.sql(
+      sql(
         """
           |select id, concat(year(datef))
           |from test_SPARK8588 where concat(year(datef), ' year') in ('2015 year', '2014 year')
         """.stripMargin),
       Row(1, "2014") :: Row(2, "2015") :: Nil
     )
-    TestHive.dropTempTable("test_SPARK8588")
+    dropTempTable("test_SPARK8588")
   }
 
   test("SPARK-9371: fix the support for special chars in column names for hive context") {
-    TestHive.read.json(TestHive.sparkContext.makeRDD(
+    read.json(sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
       .registerTempTable("t")
 
@@ -1142,8 +1140,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   test("specifying database name for a temporary table is not allowed") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df =
-        sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df
         .write
         .format("parquet")
@@ -1172,5 +1169,58 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         """.stripMargin)
       checkAnswer(sqlContext.table("`db.t`"), df)
     }
+  }
+
+  test("SPARK-10593 same column names in lateral view") {
+    val df = sqlContext.sql(
+    """
+      |select
+      |insideLayer2.json as a2
+      |from (select '{"layer1": {"layer2": "text inside layer 2"}}' json) test
+      |lateral view json_tuple(json, 'layer1') insideLayer1 as json
+      |lateral view json_tuple(insideLayer1.json, 'layer2') insideLayer2 as json
+    """.stripMargin
+    )
+
+    checkAnswer(df, Row("text inside layer 2") :: Nil)
+  }
+
+  test("SPARK-10310: " +
+    "script transformation using default input/output SerDe and record reader/writer") {
+    sqlContext
+      .range(5)
+      .selectExpr("id AS a", "id AS b")
+      .registerTempTable("test")
+
+    checkAnswer(
+      sql(
+        """FROM(
+          |  FROM test SELECT TRANSFORM(a, b)
+          |  USING 'python src/test/resources/data/scripts/test_transform.py "\t"'
+          |  AS (c STRING, d STRING)
+          |) t
+          |SELECT c
+        """.stripMargin),
+      (0 until 5).map(i => Row(i + "#")))
+  }
+
+  test("SPARK-10310: script transformation using LazySimpleSerDe") {
+    sqlContext
+      .range(5)
+      .selectExpr("id AS a", "id AS b")
+      .registerTempTable("test")
+
+    val df = sql(
+      """FROM test
+        |SELECT TRANSFORM(a, b)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |WITH SERDEPROPERTIES('field.delim' = '|')
+        |USING 'python src/test/resources/data/scripts/test_transform.py "|"'
+        |AS (c STRING, d STRING)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |WITH SERDEPROPERTIES('field.delim' = '|')
+      """.stripMargin)
+
+    checkAnswer(df, (0 until 5).map(i => Row(i + "#", i + "#")))
   }
 }

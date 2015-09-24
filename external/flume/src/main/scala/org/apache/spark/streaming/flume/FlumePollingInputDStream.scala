@@ -46,7 +46,7 @@ import org.apache.spark.streaming.flume.sink._
  * @tparam T Class type of the object of this stream
  */
 private[streaming] class FlumePollingInputDStream[T: ClassTag](
-    @transient _ssc: StreamingContext,
+    _ssc: StreamingContext,
     val addresses: Seq[InetSocketAddress],
     val maxBatchSize: Int,
     val parallelism: Int,

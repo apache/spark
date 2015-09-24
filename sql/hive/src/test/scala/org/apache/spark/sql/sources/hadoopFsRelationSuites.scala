@@ -28,17 +28,17 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  protected val sqlContext = _sqlContext
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import sqlContext.implicits._
 
   val dataSourceName: String
+
+  protected def supportsDataType(dataType: DataType): Boolean = true
 
   val dataSchema =
     StructType(
@@ -97,6 +97,60 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
             |ON l.a = r.a AND l.p1 = r.p1 AND l.p2 = r.p2
           """.stripMargin),
         for (i <- 1 to 3; p1 <- 1 to 2; p2 <- Seq("foo", "bar")) yield Row(i, s"val_$i", p1, p2))
+    }
+  }
+
+  private val supportedDataTypes = Seq(
+    StringType, BinaryType,
+    NullType, BooleanType,
+    ByteType, ShortType, IntegerType, LongType,
+    FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
+    DateType, TimestampType,
+    ArrayType(IntegerType),
+    MapType(StringType, LongType),
+    new StructType()
+      .add("f1", FloatType, nullable = true)
+      .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
+    new MyDenseVectorUDT()
+  ).filter(supportsDataType)
+
+  for (dataType <- supportedDataTypes) {
+    test(s"test all data types - $dataType") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+
+        val dataGenerator = RandomDataGenerator.forType(
+          dataType = dataType,
+          nullable = true,
+          seed = Some(System.nanoTime())
+        ).getOrElse {
+          fail(s"Failed to create data generator for schema $dataType")
+        }
+
+        // Create a DF for the schema with random data. The index field is used to sort the
+        // DataFrame.  This is a workaround for SPARK-10591.
+        val schema = new StructType()
+          .add("index", IntegerType, nullable = false)
+          .add("col", dataType, nullable = true)
+        val rdd = sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+        val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+
+        df.write
+          .mode("overwrite")
+          .format(dataSourceName)
+          .option("dataSchema", df.schema.json)
+          .save(path)
+
+        val loadedDF = sqlContext
+          .read
+          .format(dataSourceName)
+          .option("dataSchema", df.schema.json)
+          .schema(df.schema)
+          .load(path)
+          .orderBy("index")
+
+        checkAnswer(loadedDF, df)
+      }
     }
   }
 
@@ -295,6 +349,19 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
 
     withTable("t") {
       checkQueries(sqlContext.table("t"))
+    }
+  }
+
+  test("saveAsTable()/load() - partitioned table - boolean type") {
+    sqlContext.range(2)
+      .select('id, ('id % 2 === 0).as("b"))
+      .write.partitionBy("b").saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(
+        sqlContext.table("t").sort('id),
+        Row(0, true) :: Row(1, false) :: Nil
+      )
     }
   }
 
@@ -504,17 +571,17 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-8578 specified custom output committer will not be used to append data") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
     try {
       val df = sqlContext.range(1, 10).toDF("i")
       withTempPath { dir =>
         df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
         // Since Parquet has its own output committer setting, also set it
         // to AlwaysFailParquetOutputCommitter at here.
-        configuration.set("spark.sql.parquet.output.committer.class",
+        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
           classOf[AlwaysFailParquetOutputCommitter].getName)
         // Because there data already exists,
         // this append should succeed because we will use the output committer associated
@@ -533,12 +600,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         }
       }
       withTempPath { dir =>
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
         // Since Parquet has its own output committer setting, also set it
         // to AlwaysFailParquetOutputCommitter at here.
-        configuration.set("spark.sql.parquet.output.committer.class",
+        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
           classOf[AlwaysFailParquetOutputCommitter].getName)
         // Because there is no existing data,
         // this append will fail because AlwaysFailOutputCommitter is used when we do append
@@ -549,8 +616,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.asScala.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
 
@@ -570,7 +637,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-9899 Disable customized output committer when speculation is on") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
     val speculationEnabled =
       sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
 
@@ -580,7 +647,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         sqlContext.sparkContext.conf.set("spark.speculation", "true")
 
         // Uses a customized output committer which always fails
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
 
@@ -597,8 +664,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.asScala.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
       sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
     }
   }

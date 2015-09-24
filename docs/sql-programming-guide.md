@@ -1676,7 +1676,7 @@ results <- collect(sql(sqlContext, "FROM src SELECT key, value"))
 ### Interacting with Different Versions of Hive Metastore
 
 One of the most important pieces of Spark SQL's Hive support is interaction with Hive metastore,
-which enables Spark SQL to access metadata of Hive tables. Starting from Spark 1.4.0, a single binary 
+which enables Spark SQL to access metadata of Hive tables. Starting from Spark 1.4.0, a single binary
 build of Spark SQL can be used to query different versions of Hive metastores, using the configuration described below.
 Note that independent of the version of Hive that is being used to talk to the metastore, internally Spark SQL
 will compile against Hive 1.2.1 and use those classes for internal execution (serdes, UDFs, UDAFs, etc).
@@ -1687,7 +1687,7 @@ The following options can be used to configure the version of Hive that is used 
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
-    <td><code>0.13.1</code></td>
+    <td><code>1.2.1</code></td>
     <td>
       Version of the Hive metastore. Available
       options are <code>0.12.0</code> through <code>1.2.1</code>.
@@ -1706,8 +1706,8 @@ The following options can be used to configure the version of Hive that is used 
         either <code>1.2.1</code> or not defined.
         <li><code>maven</code></li>
         Use Hive jars of specified version downloaded from Maven repositories.  This configuration
-        is not generally recommended for production deployments. 
-        <li>A classpath in the standard format for the JVM.  This classpath must include all of Hive 
+        is not generally recommended for production deployments.
+        <li>A classpath in the standard format for the JVM.  This classpath must include all of Hive
         and its dependencies, including the correct version of Hadoop.  These jars only need to be
         present on the driver, but if you are running in yarn cluster mode then you must ensure
         they are packaged with you application.</li>
@@ -1806,7 +1806,7 @@ the Data Sources API.  The following options are supported:
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val jdbcDF = sqlContext.read.format("jdbc").options( 
+val jdbcDF = sqlContext.read.format("jdbc").options(
   Map("url" -> "jdbc:postgresql:dbserver",
   "dbtable" -> "schema.tablename")).load()
 {% endhighlight %}
@@ -1936,13 +1936,6 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
   </tr>
-  <tr>
-    <td><code>spark.sql.planner.externalSort</code></td>
-    <td>true</td>
-    <td>
-      When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
-    </td>
-  </tr>
 </table>
 
 # Distributed SQL Engine
@@ -1954,7 +1947,7 @@ without the need to write any code.
 ## Running the Thrift JDBC/ODBC server
 
 The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
-in Hive 0.13. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.13.
+in Hive 1.2.1 You can test the JDBC server with the beeline script that comes with either Spark or Hive 1.2.1.
 
 To start the JDBC/ODBC server, run the following in the Spark directory:
 
@@ -2030,11 +2023,11 @@ options.
 
  - Optimized execution using manually managed memory (Tungsten) is now enabled by default, along with
    code generation for expression evaluation.  These features can both be disabled by setting
-   `spark.sql.tungsten.enabled` to `false.
- - Parquet schema merging is no longer enabled by default.  It can be re-enabled by setting 
+   `spark.sql.tungsten.enabled` to `false`.
+ - Parquet schema merging is no longer enabled by default.  It can be re-enabled by setting
    `spark.sql.parquet.mergeSchema` to `true`.
- - Resolution of strings to columns in python now supports using dots (`.`) to qualify the column or 
-   access nested values.  For example `df['table.column.nestedField']`.  However, this means that if 
+ - Resolution of strings to columns in python now supports using dots (`.`) to qualify the column or
+   access nested values.  For example `df['table.column.nestedField']`.  However, this means that if
    your column name contains any dots you must now escape them using backticks (e.g., ``table.`column.with.dots`.nested``).   
  - In-memory columnar storage partition pruning is on by default. It can be disabled by setting
    `spark.sql.inMemoryColumnarStorage.partitionPruning` to `false`.
@@ -2260,8 +2253,10 @@ Several caching related features are not supported yet:
 
 ## Compatibility with Apache Hive
 
-Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.  Currently Spark
-SQL is based on Hive 0.12.0 and 0.13.1.
+Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
+Currently Hive SerDes and UDFs are based on Hive 1.2.1,
+and Spark SQL can be connected to different versions of Hive Metastore
+(from 0.12.0 to 1.2.1. Also see http://spark.apache.org/docs/latest/sql-programming-guide.html#interacting-with-different-versions-of-hive-metastore).
 
 #### Deploying in Existing Hive Warehouses
 

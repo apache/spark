@@ -123,12 +123,21 @@ for features_label in rescaledData.select("features", "label").take(3):
 
 ## Word2Vec
 
-`Word2Vec` is an `Estimator` which takes sequences of words that represents documents and trains a `Word2VecModel`. The model is a `Map(String, Vector)` essentially, which maps each word to an unique fix-sized vector. The `Word2VecModel` transforms each documents into a vector using the average of all words in the document, which aims to other computations of documents such as similarity calculation consequencely. Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more details on Word2Vec.
+`Word2Vec` is an `Estimator` which takes sequences of words representing documents and trains a
+`Word2VecModel`. The model maps each word to a unique fixed-size vector. The `Word2VecModel`
+transforms each document into a vector using the average of all words in the document; this vector
+can then be used for as features for prediction, document similarity calculations, etc.
+Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more
+details.
 
-Word2Vec is implemented in [Word2Vec](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec). In the following code segment, we start with a set of documents, each of them is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
+In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [Word2Vec Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.Word2Vec
 
@@ -152,6 +161,10 @@ result.select("result").take(3).foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Word2Vec Java docs](api/java/org/apache/spark/ml/feature/Word2Vec.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -192,6 +205,10 @@ for (Row r: result.select("result").take(3)) {
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Word2Vec Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Word2Vec)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import Word2Vec
 
@@ -512,6 +529,25 @@ DataFrame dataset = jsql.createDataFrame(rdd, schema);
 remover.transform(dataset).show();
 {% endhighlight %}
 </div>
+
+<div data-lang="python" markdown="1">
+[`StopWordsRemover`](api/python/pyspark.ml.html#pyspark.ml.feature.StopWordsRemover)
+takes an input column name, an output column name, a list of stop words,
+and a boolean indicating if the matches should be case sensitive (false
+by default).
+
+{% highlight python %}
+from pyspark.ml.feature import StopWordsRemover
+
+sentenceData = sqlContext.createDataFrame([
+  (0, ["I", "saw", "the", "red", "baloon"]),
+  (1, ["Mary", "had", "a", "little", "lamb"])
+], ["label", "raw"])
+
+remover = StopWordsRemover(inputCol="raw", outputCol="filtered")
+remover.transform(sentenceData).show(truncate=False)
+{% endhighlight %}
+</div>
 </div>
 
 ## $n$-gram
@@ -602,12 +638,15 @@ for ngrams_label in ngramDataFrame.select("ngrams", "label").take(3):
 
 ## Binarizer
 
-Binarization is the process of thresholding numerical features to binary features. As some probabilistic estimators make assumption that the input data is distributed according to [Bernoulli distribution](http://en.wikipedia.org/wiki/Bernoulli_distribution), a binarizer is useful for pre-processing the input data with continuous numerical features.
+Binarization is the process of thresholding numerical features to binary (0/1) features.
 
-A simple [Binarizer](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) class provides this functionality. Besides the common parameters of `inputCol` and `outputCol`, `Binarizer` has the parameter `threshold` used for binarizing continuous numerical features. The features greater than the threshold, will be binarized to 1.0. The features equal to or less than the threshold, will be binarized to 0.0. The example below shows how to binarize numerical features.
+`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold` for binarization. Feature values greater than the threshold are binarized to 1.0; values equal to or less than the threshold are binarized to 0.0.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [Binarizer API doc](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) for more details.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.Binarizer
 import org.apache.spark.sql.DataFrame
@@ -631,6 +670,9 @@ binarizedFeatures.collect().foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Binarizer API doc](api/java/org/apache/spark/ml/feature/Binarizer.html) for more details.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -668,6 +710,9 @@ for (Row r : binarizedFeatures.collect()) {
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Binarizer API doc](api/python/pyspark.ml.html#pyspark.ml.feature.Binarizer) for more details.
+
 {% highlight python %}
 from pyspark.ml.feature import Binarizer
 
@@ -1160,9 +1205,9 @@ In the example below, we read in a dataset of labeled points and then use `Vecto
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.feature.VectorIndexer
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 val indexer = new VectorIndexer()
   .setInputCol("features")
   .setOutputCol("indexed")
@@ -1181,16 +1226,12 @@ val indexedData = indexerModel.transform(data)
 {% highlight java %}
 import java.util.Map;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(),
-  "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+DataFrame data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 VectorIndexer indexer = new VectorIndexer()
   .setInputCol("features")
   .setOutputCol("indexed")
@@ -1211,9 +1252,9 @@ DataFrame indexedData = indexerModel.transform(data);
 <div data-lang="python" markdown="1">
 {% highlight python %}
 from pyspark.ml.feature import VectorIndexer
-from pyspark.mllib.util import MLUtils
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+data = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 indexer = VectorIndexer(inputCol="features", outputCol="indexed", maxCategories=10)
 indexerModel = indexer.fit(data)
 
@@ -1234,10 +1275,9 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.ml.feature.Normalizer
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
+val dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 
 // Normalize each Vector using $L^1$ norm.
 val normalizer = new Normalizer()
@@ -1253,15 +1293,11 @@ val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.Positi
 
 <div data-lang="java">
 {% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Normalizer;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+DataFrame dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 
 // Normalize each Vector using $L^1$ norm.
 Normalizer normalizer = new Normalizer()
@@ -1278,11 +1314,10 @@ DataFrame lInfNormData =
 
 <div data-lang="python">
 {% highlight python %}
-from pyspark.mllib.util import MLUtils
 from pyspark.ml.feature import Normalizer
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-dataFrame = sqlContext.createDataFrame(data)
+dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 
 # Normalize each Vector using $L^1$ norm.
 normalizer = Normalizer(inputCol="features", outputCol="normFeatures", p=1.0)
@@ -1316,10 +1351,9 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.ml.feature.StandardScaler
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
+val dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 val scaler = new StandardScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures")
@@ -1336,16 +1370,12 @@ val scaledData = scalerModel.transform(dataFrame)
 
 <div data-lang="java">
 {% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StandardScaler;
 import org.apache.spark.ml.feature.StandardScalerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+DataFrame dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 StandardScaler scaler = new StandardScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures")
@@ -1362,11 +1392,10 @@ DataFrame scaledData = scalerModel.transform(dataFrame);
 
 <div data-lang="python">
 {% highlight python %}
-from pyspark.mllib.util import MLUtils
 from pyspark.ml.feature import StandardScaler
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-dataFrame = sqlContext.createDataFrame(data)
+dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 scaler = StandardScaler(inputCol="features", outputCol="scaledFeatures",
                         withStd=True, withMean=False)
 
@@ -1405,10 +1434,9 @@ More details can be found in the API docs for
 [MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
 {% highlight scala %}
 import org.apache.spark.ml.feature.MinMaxScaler
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
+val dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt")
 val scaler = new MinMaxScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures")
@@ -1429,13 +1457,10 @@ More details can be found in the API docs for
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.MinMaxScaler;
 import org.apache.spark.ml.feature.MinMaxScalerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+DataFrame dataFrame = sqlContext.read.format("libsvm")
+  .load("data/mllib/sample_libsvm_data.txt");
 MinMaxScaler scaler = new MinMaxScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures");
