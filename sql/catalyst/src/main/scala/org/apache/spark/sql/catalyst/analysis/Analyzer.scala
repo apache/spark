@@ -488,10 +488,6 @@ class Analyzer(
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
               registry.lookupFunction(name, children) match {
-                // We can't support distinct on Aggregate2 functions which don't support
-                // partial aggregate.
-                case agg2: AggregateFunction2 if !agg2.supportsPartial && isDistinct =>
-                  failAnalysis(s"$name does not support DISTINCT keyword.")
                 // We get an aggregate function built based on AggregateFunction2 interface.
                 // So, we wrap it in AggregateExpression2.
                 case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)

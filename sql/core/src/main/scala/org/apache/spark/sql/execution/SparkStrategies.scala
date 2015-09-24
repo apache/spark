@@ -222,12 +222,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
             val aggregateOperator =
               if (aggregateExpressions.map(_.aggregateFunction).exists(!_.supportsPartial)) {
-                aggregate.Utils.planAggregateWithoutPartial(
-                  groupingExpressions,
-                  aggregateExpressions,
-                  aggregateFunctionMap,
-                  resultExpressions,
-                  planLater(child))
+                if (functionsWithDistinct.nonEmpty) {
+                  sys.error("Distinct columns cannot exist in Aggregate operator containing " +
+                    "aggregate functions which don't support partial aggregation.")
+                } else {
+                  aggregate.Utils.planAggregateWithoutPartial(
+                    groupingExpressions,
+                    aggregateExpressions,
+                    aggregateFunctionMap,
+                    resultExpressions,
+                    planLater(child))
+                }
               } else if (functionsWithDistinct.isEmpty) {
                 aggregate.Utils.planAggregateWithoutDistinct(
                   groupingExpressions,
