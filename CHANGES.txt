@@ -3,15 +3,15 @@ Spark Change Log
 
 Release 1.5.1
 
-  Bump R version
-  Reynold Xin <rxin@databricks.com>
-  2015-09-23 19:44:09 -0700
-  Commit: 1c60fc1
+  [SPARK-10692] [STREAMING] Expose failureReasons in BatchInfo for streaming UI to clear failed batches
+  zsxwing <zsxwing@gmail.com>, Tathagata Das <tathagata.das1565@gmail.com>
+  2015-09-23 19:52:02 -0700
+  Commit: 4c48593, github.com/apache/spark/pull/8892
 
   Update branch-1.5 for 1.5.1 release.
   Reynold Xin <rxin@databricks.com>
-  2015-09-23 18:14:36 -0700
-  Commit: a32934c
+  2015-09-23 19:46:13 -0700
+  Commit: 1000b5d, github.com/apache/spark/pull/8890
 
   [SPARK-10474] [SQL] Aggregation fails to allocate memory for pointer array (round 2)
   Andrew Or <andrew@databricks.com>
