@@ -29,7 +29,6 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.Logging
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
@@ -38,8 +37,6 @@ import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
-import org.apache.spark.util.SerializableConfiguration
-
 
 class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
@@ -79,12 +76,16 @@ private[sql] class JSONRelation(
 
   override val needConversion: Boolean = false
 
-  private def createBaseRdd(inputPaths: Array[FileStatus]): RDD[String] = {
+  private def createBaseRdd(
+      inputPaths: Array[FileStatus],
+      sources: Array[Path] = Array.empty): RDD[String] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
     val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
-    val paths = inputPaths.map(_.getPath)
-
+    var paths = inputPaths.map(_.getPath)
+    if (paths.isEmpty) {
+      paths = sources   // try with original sources
+    }
     if (paths.nonEmpty) {
       FileInputFormat.setInputPaths(job, paths: _*)
     }
@@ -103,7 +104,7 @@ private[sql] class JSONRelation(
         name.startsWith("_") || name.startsWith(".")
       }.toArray
       InferSchema(
-        inputRDD.getOrElse(createBaseRdd(files)),
+        inputRDD.getOrElse(createBaseRdd(files, cachedSourcePaths())),
         samplingRatio,
         sqlContext.conf.columnNameOfCorruptRecord)
     }
