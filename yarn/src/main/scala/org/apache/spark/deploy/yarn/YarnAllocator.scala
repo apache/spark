@@ -88,12 +88,7 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter = 0
   @volatile private var numExecutorsFailed = 0
 
-  @volatile private var targetNumExecutors =
-    if (Utils.isDynamicAllocationEnabled(sparkConf)) {
-      sparkConf.getInt("spark.dynamicAllocation.initialExecutors", 0)
-    } else {
-      sparkConf.getInt("spark.executor.instances", YarnSparkHadoopUtil.DEFAULT_NUMBER_EXECUTORS)
-    }
+  @volatile private var targetNumExecutors = YarnSparkHadoopUtil.getTargetExecutorNumber(sparkConf)
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
   // list of requesters that should be responded to once we find out why the given executor
