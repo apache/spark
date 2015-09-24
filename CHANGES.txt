@@ -1,6 +1,474 @@
 Spark Change Log
 ----------------
 
+Release 1.5.1
+
+  Bump R version
+  Reynold Xin <rxin@databricks.com>
+  2015-09-23 19:44:09 -0700
+  Commit: 1c60fc1
+
+  Update branch-1.5 for 1.5.1 release.
+  Reynold Xin <rxin@databricks.com>
+  2015-09-23 18:14:36 -0700
+  Commit: a32934c
+
+  [SPARK-10474] [SQL] Aggregation fails to allocate memory for pointer array (round 2)
+  Andrew Or <andrew@databricks.com>
+  2015-09-23 19:34:31 -0700
+  Commit: 1f47e68, github.com/apache/spark/pull/8888
+
+  [SPARK-10731] [SQL] Delegate to Scala's DataFrame.take implementation in Python DataFrame.
+  Reynold Xin <rxin@databricks.com>
+  2015-09-23 16:43:21 -0700
+  Commit: 7564c24, github.com/apache/spark/pull/8876
+
+  [SPARK-10403] Allow UnsafeRowSerializer to work with tungsten-sort ShuffleManager
+  Josh Rosen <joshrosen@databricks.com>
+  2015-09-23 11:31:01 -0700
+  Commit: 64cc62c, github.com/apache/spark/pull/8873
+
+  [SPARK-9710] [TEST] Fix RPackageUtilsSuite when R is not available.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-08-10 10:10:40 -0700
+  Commit: 6c6cadb, github.com/apache/spark/pull/8008
+
+  [SPARK-10769] [STREAMING] [TESTS] Fix o.a.s.streaming.CheckpointSuite.maintains rate controller
+  zsxwing <zsxwing@gmail.com>
+  2015-09-23 01:29:30 -0700
+  Commit: 4174b94, github.com/apache/spark/pull/8877
+
+  [SPARK-10224] [STREAMING] Fix the issue that blockIntervalTimer won't call updateCurrentBuffer when stopping
+  zsxwing <zsxwing@gmail.com>
+  2015-09-23 01:28:02 -0700
+  Commit: 6a616d0, github.com/apache/spark/pull/8417
+
+  [SPARK-10652] [SPARK-10742] [STREAMING] Set meaningful job descriptions for all streaming jobs
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-09-22 22:44:09 -0700
+  Commit: 8a23ef5, github.com/apache/spark/pull/8791
+
+  [SPARK-10663] Removed unnecessary invocation of DataFrame.toDF method.
+  Matt Hagen <anonz3000@gmail.com>
+  2015-09-22 21:14:25 -0700
+  Commit: 7f07cc6, github.com/apache/spark/pull/8875
+
+  [SPARK-10310] [SQL] Fixes script transformation field/line delimiters
+  Cheng Lian <lian@databricks.com>
+  2015-09-22 19:41:57 -0700
+  Commit: 73d0621, github.com/apache/spark/pull/8860
+
+  [SPARK-10640] History server fails to parse TaskCommitDenied
+  Andrew Or <andrew@databricks.com>
+  2015-09-22 16:35:43 -0700
+  Commit: 26187ab, github.com/apache/spark/pull/8828
+
+  Revert "[SPARK-10640] History server fails to parse TaskCommitDenied"
+  Andrew Or <andrew@databricks.com>
+  2015-09-22 17:10:58 -0700
+  Commit: 118ebd4
+
+  [SPARK-10640] History server fails to parse TaskCommitDenied
+  Andrew Or <andrew@databricks.com>
+  2015-09-22 16:35:43 -0700
+  Commit: 5ffd084, github.com/apache/spark/pull/8828
+
+  [SPARK-10714] [SPARK-8632] [SPARK-10685] [SQL] Refactor Python UDF handling
+  Reynold Xin <rxin@databricks.com>
+  2015-09-22 14:11:46 -0700
+  Commit: 3339916, github.com/apache/spark/pull/8835
+
+  [SPARK-10737] [SQL] When using UnsafeRows, SortMergeJoin may return wrong results
+  Yin Huai <yhuai@databricks.com>
+  2015-09-22 13:31:35 -0700
+  Commit: 6b1e5c2, github.com/apache/spark/pull/8854
+
+  [SPARK-10672] [SQL] Do not fail when we cannot save the metadata of a data source table in a hive compatible way
+  Yin Huai <yhuai@databricks.com>
+  2015-09-22 13:29:39 -0700
+  Commit: d83dcc9, github.com/apache/spark/pull/8824
+
+  [SPARK-10740] [SQL] handle nondeterministic expressions correctly for set operations
+  Wenchen Fan <cloud0fan@163.com>
+  2015-09-22 12:14:15 -0700
+  Commit: 54334d3, github.com/apache/spark/pull/8858
+
+  [SPARK-10593] [SQL] fix resolve output of Generate
+  Davies Liu <davies@databricks.com>
+  2015-09-22 11:07:01 -0700
+  Commit: c3112a9, github.com/apache/spark/pull/8755
+
+  [SPARK-10695] [DOCUMENTATION] [MESOS] Fixing incorrect value informati…
+  Akash Mishra <akash.mishra20@gmail.com>
+  2015-09-22 00:14:27 -0700
+  Commit: 646155e, github.com/apache/spark/pull/8816
+
+  [SQL] [MINOR] map -> foreach.
+  Reynold Xin <rxin@databricks.com>
+  2015-09-22 00:09:29 -0700
+  Commit: a2b0fee, github.com/apache/spark/pull/8862
+
+  [SPARK-8567] [SQL] Increase the timeout of o.a.s.sql.hive.HiveSparkSubmitSuite to 5 minutes.
+  Yin Huai <yhuai@databricks.com>
+  2015-09-22 00:07:30 -0700
+  Commit: 03215e3, github.com/apache/spark/pull/8850
+
+  [SPARK-10649] [STREAMING] Prevent inheriting job group and irrelevant job description in streaming jobs
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-09-22 00:06:18 -0700
+  Commit: d0e6e53, github.com/apache/spark/pull/8856
+
+  [SPARK-10716] [BUILD] spark-1.5.0-bin-hadoop2.6.tgz file doesn't uncompress on OS X due to hidden file
+  Sean Owen <sowen@cloudera.com>
+  2015-09-21 23:29:59 -0700
+  Commit: f83b6e6, github.com/apache/spark/pull/8846
+
+  [SPARK-10711] [SPARKR] Do not assume spark.submit.deployMode is always set
+  Hossein <hossein@databricks.com>
+  2015-09-21 21:09:59 -0700
+  Commit: bb8e481, github.com/apache/spark/pull/8832
+
+  [SPARK-10495] [SQL] [BRANCH-1.5] Fix build.
+  Yin Huai <yhuai@databricks.com>
+  2015-09-21 21:05:51 -0700
+  Commit: 86f9a35, github.com/apache/spark/pull/8861
+
+  [DOC] [PYSPARK] [MLLIB] Added newlines to docstrings to fix parameter formatting (1.5 backport)
+  noelsmith <mail@noelsmith.com>
+  2015-09-21 18:27:57 -0700
+  Commit: ed74d30, github.com/apache/spark/pull/8855
+
+  [SPARK-10495] [SQL] Read date values in JSON data stored by Spark 1.5.0.
+  Yin Huai <yhuai@databricks.com>
+  2015-09-21 18:06:45 -0700
+  Commit: 7ab4d17, github.com/apache/spark/pull/8806
+
+  [SPARK-10676] [DOCS] Add documentation for SASL encryption options.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-09-21 13:15:44 -0700
+  Commit: 6152099, github.com/apache/spark/pull/8803
+
+  [SPARK-10155] [SQL] Change SqlParser to object to avoid memory leak
+  zsxwing <zsxwing@gmail.com>
+  2015-09-19 18:22:43 -0700
+  Commit: 2591419, github.com/apache/spark/pull/8357
+
+  Fixed links to the API
+  Alexis Seigneurin <alexis.seigneurin@gmail.com>
+  2015-09-19 12:01:22 +0100
+  Commit: 9b74fec, github.com/apache/spark/pull/8838
+
+  [SPARK-10584] [SQL] [DOC] Documentation about the compatible Hive version is wrong.
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2015-09-19 01:59:36 -0700
+  Commit: aaae67d, github.com/apache/spark/pull/8776
+
+  [SPARK-10474] [SQL] Aggregation fails to allocate memory for pointer array
+  Andrew Or <andrew@databricks.com>
+  2015-09-18 23:58:25 -0700
+  Commit: 49355d0, github.com/apache/spark/pull/8827
+
+  [SPARK-10623] [SQL] Fixes ORC predicate push-down
+  Cheng Lian <lian@databricks.com>
+  2015-09-18 18:42:20 -0700
+  Commit: b3f1e65, github.com/apache/spark/pull/8799
+
+  [SPARK-10611] Clone Configuration for each task for NewHadoopRDD
+  Mingyu Kim <mkim@palantir.com>
+  2015-09-18 15:40:58 -0700
+  Commit: a6c3153, github.com/apache/spark/pull/8763
+
+  [SPARK-10449] [SQL] Don't merge decimal types with incompatable precision or scales
+  Holden Karau <holden@pigscanfly.ca>
+  2015-09-18 13:47:14 -0700
+  Commit: 4051fff, github.com/apache/spark/pull/8634
+
+  [SPARK-10539] [SQL] Project should not be pushed down through Intersect or Except #8742
+  Yijie Shen <henry.yijieshen@gmail.com>, Yin Huai <yhuai@databricks.com>
+  2015-09-18 13:20:13 -0700
+  Commit: 3df52cc, github.com/apache/spark/pull/8823
+
+  [SPARK-10540] Fixes flaky all-data-type test
+  Cheng Lian <lian@databricks.com>
+  2015-09-18 12:19:08 -0700
+  Commit: e1e781f, github.com/apache/spark/pull/8768
+
+  [SPARK-10684] [SQL] StructType.interpretedOrdering need not to be serialized
+  navis.ryu <navis@apache.org>
+  2015-09-18 00:43:02 -0700
+  Commit: 2c6a51e, github.com/apache/spark/pull/8808
+
+  docs/running-on-mesos.md: state default values in default column
+  Felix Bechstein <felix.bechstein@otto.de>
+  2015-09-17 22:42:46 -0700
+  Commit: f97db94, github.com/apache/spark/pull/8810
+
+  [SPARK-9522] [SQL] SparkSubmit process can not exit if kill application when HiveThriftServer was starting
+  linweizhong <linweizhong@huawei.com>
+  2015-09-17 22:25:24 -0700
+  Commit: dc5ae03, github.com/apache/spark/pull/7853
+
+  [SPARK-10657] Remove SCP-based Jenkins log archiving
+  Josh Rosen <joshrosen@databricks.com>
+  2015-09-17 11:40:24 -0700
+  Commit: 153a23a, github.com/apache/spark/pull/8793
+
+  [SPARK-10639] [SQL] Need to convert UDAF's result from scala to sql type
+  Yin Huai <yhuai@databricks.com>
+  2015-09-17 11:14:52 -0700
+  Commit: 464d6e7, github.com/apache/spark/pull/8788
+
+  [SPARK-10650] Clean before building docs
+  Michael Armbrust <michael@databricks.com>
+  2015-09-17 11:05:30 -0700
+  Commit: fd58ed4, github.com/apache/spark/pull/8787
+
+  [SPARK-10172] [CORE] disable sort in HistoryServer webUI
+  Josiah Samuel <josiah_sams@in.ibm.com>
+  2015-09-17 10:18:21 -0700
+  Commit: 88176d1, github.com/apache/spark/pull/8506
+
+  [SPARK-10642] [PYSPARK] Fix crash when calling rdd.lookup() on tuple keys
+  Liang-Chi Hsieh <viirya@appier.com>
+  2015-09-17 10:02:15 -0700
+  Commit: 9f8fb33, github.com/apache/spark/pull/8796
+
+  [SPARK-10660] Doc describe error in the "Running Spark on YARN" page
+  yangping.wu <wyphao.2007@163.com>
+  2015-09-17 09:52:40 -0700
+  Commit: eae1566, github.com/apache/spark/pull/8797
+
+  [SPARK-10511] [BUILD] Reset git repository before packaging source distro
+  Luciano Resende <lresende@apache.org>
+  2015-09-16 10:47:30 +0100
+  Commit: 4c4a9ba, github.com/apache/spark/pull/8774
+
+  [SPARK-10381] Fix mixup of taskAttemptNumber & attemptId in OutputCommitCoordinator
+  Josh Rosen <joshrosen@databricks.com>
+  2015-09-15 17:11:21 -0700
+  Commit: 2bbcbc6, github.com/apache/spark/pull/8544
+
+  [SPARK-10548] [SPARK-10563] [SQL] Fix concurrent SQL executions / branch-1.5
+  Andrew Or <andrew@databricks.com>
+  2015-09-15 16:46:34 -0700
+  Commit: 997be78, github.com/apache/spark/pull/8721
+
+  Small fixes to docs
+  Jacek Laskowski <jacek.laskowski@deepsense.io>
+  2015-09-14 23:40:29 -0700
+  Commit: 7286c2b, github.com/apache/spark/pull/8759
+
+  [SPARK-10542] [PYSPARK] fix serialize namedtuple
+  Davies Liu <davies@databricks.com>
+  2015-09-14 19:46:34 -0700
+  Commit: d5c0361, github.com/apache/spark/pull/8707
+
+  [SPARK-10564] ThreadingSuite: assertion failures in threads don't fail the test (round 2)
+  Andrew Or <andrew@databricks.com>
+  2015-09-14 15:09:43 -0700
+  Commit: 5db51f9, github.com/apache/spark/pull/8727
+
+  [SPARK-10543] [CORE] Peak Execution Memory Quantile should be Per-task Basis
+  Forest Fang <forest.fang@outlook.com>
+  2015-09-14 15:07:13 -0700
+  Commit: eb0cb25, github.com/apache/spark/pull/8726
+
+  [SPARK-10549] scala 2.11 spark on yarn with security - Repl doesn't work
+  Tom Graves <tgraves@yahoo-inc.com>, Thomas Graves <tgraves@staydecay.corp.gq1.yahoo.com>
+  2015-09-14 15:05:19 -0700
+  Commit: 0e1c9d9, github.com/apache/spark/pull/8719
+
+  [SPARK-10522] [SQL] Nanoseconds of Timestamp in Parquet should be positive
+  Davies Liu <davies@databricks.com>
+  2015-09-14 14:10:54 -0700
+  Commit: a0d564a, github.com/apache/spark/pull/8674
+
+  [SPARK-10573] [ML] IndexToString output schema should be StringType
+  Nick Pritchard <nicholas.pritchard@falkonry.com>
+  2015-09-14 13:27:45 -0700
+  Commit: 5b7067c, github.com/apache/spark/pull/8751
+
+  [SPARK-10584] [DOC] [SQL] Documentation about spark.sql.hive.metastore.version is wrong.
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2015-09-14 12:06:23 -0700
+  Commit: 5f58704, github.com/apache/spark/pull/8739
+
+  [SPARK-6350] [MESOS] [BACKPORT] Fine-grained mode scheduler respects
+  Iulian Dragos <jaguarul@gmail.com>
+  2015-09-13 11:00:08 +0100
+  Commit: 4586f21, github.com/apache/spark/pull/8732
+
+  [SPARK-10554] [CORE] Fix NPE with ShutdownHook
+  Nithin Asokan <Nithin.Asokan@Cerner.com>
+  2015-09-12 09:50:49 +0100
+  Commit: f8909a6, github.com/apache/spark/pull/8720
+
+  [SPARK-10566] [CORE] SnappyCompressionCodec init exception handling masks important error information
+  Daniel Imfeld <daniel@danielimfeld.com>
+  2015-09-12 09:19:59 +0100
+  Commit: 5bf403c, github.com/apache/spark/pull/8725
+
+  [SPARK-10564] ThreadingSuite: assertion failures in threads don't fail the test
+  Andrew Or <andrew@databricks.com>
+  2015-09-11 15:02:59 -0700
+  Commit: fcb2438, github.com/apache/spark/pull/8723
+
+  [SPARK-9924] [WEB UI] Don't schedule checkForLogs while some of them …
+  Rohit Agarwal <rohita@qubole.com>
+  2015-09-11 10:03:39 -0700
+  Commit: 7f10bd6, github.com/apache/spark/pull/8701
+
+  [SPARK-10540] [SQL] Ignore HadoopFsRelationTest's "test all data types" if it is too flaky
+  Yin Huai <yhuai@databricks.com>
+  2015-09-11 09:42:53 -0700
+  Commit: 295281f, github.com/apache/spark/pull/8705
+
+  [SPARK-10556] Remove explicit Scala version for sbt project build files
+  Ahir Reddy <ahirreddy@gmail.com>
+  2015-09-11 13:06:14 +0100
+  Commit: 4af9256, github.com/apache/spark/pull/8709
+
+  Revert "[SPARK-6350] [MESOS] Fine-grained mode scheduler respects mesosExecutor.cores"
+  Andrew Or <andrew@databricks.com>
+  2015-09-10 14:35:52 -0700
+  Commit: 89d351b
+
+  [SPARK-6350] [MESOS] Fine-grained mode scheduler respects mesosExecutor.cores
+  Iulian Dragos <jaguarul@gmail.com>
+  2015-09-10 12:00:21 -0700
+  Commit: 8cf1619, github.com/apache/spark/pull/8653
+
+  [SPARK-10469] [DOC] Try and document the three options
+  Holden Karau <holden@pigscanfly.ca>
+  2015-09-10 11:49:53 -0700
+  Commit: bff05aa, github.com/apache/spark/pull/8638
+
+  [SPARK-10466] [SQL] UnsafeRow SerDe exception with data spill
+  Cheng Hao <hao.cheng@intel.com>
+  2015-09-10 11:48:43 -0700
+  Commit: bc70043, github.com/apache/spark/pull/8635
+
+  [MINOR] [MLLIB] [ML] [DOC] fixed typo: label for negative result should be 0.0 (original: 1.0)
+  Sean Paradiso <seanparadiso@gmail.com>
+  2015-09-09 22:09:33 -0700
+  Commit: 5e06d41, github.com/apache/spark/pull/8680
+
+  [SPARK-7736] [CORE] Fix a race introduced in PythonRunner.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-08-18 11:36:36 -0700
+  Commit: d6cd356, github.com/apache/spark/pull/8258
+
+  [SPARK-7736] [CORE] [YARN] Make pyspark fail YARN app on failure.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-08-17 10:34:22 -0700
+  Commit: a150625, github.com/apache/spark/pull/7751
+
+  [SPARK-10071] [STREAMING] Output a warning when writing QueueInputDStream and throw a better exception when reading QueueInputDStream
+  zsxwing <zsxwing@gmail.com>
+  2015-09-08 20:39:15 -0700
+  Commit: d4b00c5, github.com/apache/spark/pull/8624
+
+  [SPARK-10301] [SPARK-10428] [SQL] [BRANCH-1.5] Fixes schema merging for nested structs
+  Cheng Lian <lian@databricks.com>
+  2015-09-08 20:30:24 -0700
+  Commit: fca16c5, github.com/apache/spark/pull/8583
+
+  [SPARK-10492] [STREAMING] [DOCUMENTATION] Update Streaming documentation about rate limiting and backpressure
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-09-08 14:54:43 -0700
+  Commit: 63c72b9, github.com/apache/spark/pull/8656
+
+  [SPARK-10441] [SQL] [BRANCH-1.5] Save data correctly to json.
+  Yin Huai <yhuai@databricks.com>
+  2015-09-08 14:20:35 -0700
+  Commit: 7fd4674, github.com/apache/spark/pull/8655
+
+  [SPARK-10470] [ML] ml.IsotonicRegressionModel.copy should set parent
+  Yanbo Liang <ybliang8@gmail.com>
+  2015-09-08 12:48:21 -0700
+  Commit: 34d417e, github.com/apache/spark/pull/8637
+
+  Docs small fixes
+  Jacek Laskowski <jacek@japila.pl>
+  2015-09-08 14:38:10 +0100
+  Commit: 88a07d8, github.com/apache/spark/pull/8629
+
+  [DOC] Added R to the list of languages with "high-level API" support in the…
+  Stephen Hopper <shopper@shopper-osx.local>
+  2015-09-08 14:36:34 +0100
+  Commit: 37c5edf, github.com/apache/spark/pull/8646
+
+  [SPARK-10434] [SQL] Fixes Parquet schema of arrays that may contain null
+  Cheng Lian <lian@databricks.com>
+  2015-09-05 17:50:12 +0800
+  Commit: 640000b, github.com/apache/spark/pull/8586
+
+  [SPARK-10440] [STREAMING] [DOCS] Update python API stuff in the programming guides and python docs
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-09-04 23:16:39 -1000
+  Commit: ec750a7, github.com/apache/spark/pull/8595
+
+  [SPARK-10402] [DOCS] [ML] Add defaults to the scaladoc for params in ml/
+  Holden Karau <holden@pigscanfly.ca>
+  2015-09-04 17:32:35 -0700
+  Commit: cfc5f6f, github.com/apache/spark/pull/8591
+
+  [SPARK-10311] [STREAMING] Reload appId and attemptId when app starts with checkpoint file in cluster mode
+  xutingjun <xutingjun@huawei.com>
+  2015-09-04 15:40:02 -0700
+  Commit: dc39658, github.com/apache/spark/pull/8477
+
+  [SPARK-10454] [SPARK CORE] wait for empty event queue
+  robbins <robbins@uk.ibm.com>
+  2015-09-04 15:23:29 -0700
+  Commit: 09e08db, github.com/apache/spark/pull/8605
+
+  [SPARK-10431] [CORE] Fix intermittent test failure. Wait for event queue to be clear
+  robbins <robbins@uk.ibm.com>
+  2015-09-03 13:47:22 -0700
+  Commit: 4d63335, github.com/apache/spark/pull/8582
+
+  [SPARK-9869] [STREAMING] Wait for all event notifications before asserting results
+  robbins <robbins@uk.ibm.com>
+  2015-09-03 13:48:35 -0700
+  Commit: f945b64, github.com/apache/spark/pull/8589
+
+  [SPARK-10332] [CORE] Fix yarn spark executor validation
+  Holden Karau <holden@pigscanfly.ca>
+  2015-09-03 09:30:54 +0100
+  Commit: f01a967, github.com/apache/spark/pull/8580
+
+  [SPARK-10411] [SQL] Move visualization above explain output and hide explain by default
+  zsxwing <zsxwing@gmail.com>
+  2015-09-02 22:17:39 -0700
+  Commit: 94404ee, github.com/apache/spark/pull/8570
+
+  [SPARK-10379] preserve first page in UnsafeShuffleExternalSorter
+  Davies Liu <davies@databricks.com>
+  2015-09-02 22:15:54 -0700
+  Commit: b846a9d, github.com/apache/spark/pull/8543
+
+  [SPARK-10422] [SQL] String column in InMemoryColumnarCache needs to override clone method
+  Yin Huai <yhuai@databricks.com>
+  2015-09-02 21:00:13 -0700
+  Commit: 2fce5d8, github.com/apache/spark/pull/8578
+
+  [SPARK-10392] [SQL] Pyspark - Wrong DateType support on JDBC connection
+  0x0FFF <programmerag@gmail.com>
+  2015-09-01 14:58:49 -0700
+  Commit: 30efa96, github.com/apache/spark/pull/8556
+
+  [SPARK-10398] [DOCS] Migrate Spark download page to use new lua mirroring scripts
+  Sean Owen <sowen@cloudera.com>
+  2015-09-01 20:06:01 +0100
+  Commit: d19bccd, github.com/apache/spark/pull/8557
+
+  Preparing development version 1.5.1-SNAPSHOT
+  Patrick Wendell <pwendell@gmail.com>
+  2015-08-31 15:57:49 -0700
+  Commit: 2b270a1
+
+
 Release 1.5.0
 
   [SPARK-10143] [SQL] Use parquet's block size (row group size) setting as the min split size if necessary.
