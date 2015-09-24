@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
@@ -134,7 +135,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
-      .setGroupPrefixes(groupPrefixes.toMap)
+    encoderStages += new VectorAttrRewriter($(featuresCol), groupPrefixes.toMap)
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
@@ -240,4 +241,30 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   }
 
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
+}
+
+/**
+ * Utility transformer that rewrites the attributes of a vector.
+ */
+private class VectorAttrRewriter(
+    vectorCol: String,
+    groupPrefixes: Map[String, String])
+  extends Transformer {
+
+  override val uid = Identifiable.randomUID("vectorAttrRewriter")
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    val attrs = AttributeGroup.fromStructField(dataset.schema(vectorCol))
+    val rewrittenCol = dataset.col(vectorCol).as(vectorCol, attrs.toMetadata())
+    val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
+    dataset.select((otherCols :+ rewrittenCol): _*)
+  }
+
+  override def transformSchema(schema: StructType): StructType = {
+    StructType(
+      schema.fields.filter(_.name != vectorCol) ++
+      schema.fields.filter(_.name == vectorCol))
+  }
+
+  override def copy(extra: ParamMap): VectorAttrRewriter = defaultCopy(extra)
 }

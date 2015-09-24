@@ -101,10 +101,10 @@ class RFormulaParserSuite extends SparkFunSuite {
       .add("a", "int", true)
       .add("b", "long", false)
       .add("c", "string", true)
-    checkParse("y ~ .:x", "y", Seq("a:x", "b:x", "c:x"), schema)
-    checkParse("a ~ .:x", "a", Seq("b:x", "c:x"), schema)
-    checkParse("a ~ x:.", "a", Seq("x:b", "x:c"), schema)
-    checkParse("a ~ .:b:.:.:c:.", "a", Seq("b:c"), schema)
+      .add("d", "string", true)
+    checkParse("a ~ .:b", "a", Seq("b", "c:b", "d:b"), schema)
+    checkParse("a ~ b:.", "a", Seq("b", "b:c", "b:d"), schema)
+    checkParse("a ~ .:b:.:.:c:d:.", "a", Seq("b:c:d"), schema)
   }
 
   // Test data generated in R with terms.formula(y ~ .:., data = iris)

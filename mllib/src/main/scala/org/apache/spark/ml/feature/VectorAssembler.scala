@@ -24,7 +24,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
@@ -47,28 +46,6 @@ class VectorAssembler(override val uid: String)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /**
-   * By default, the attribute names of vector components will be `groupName + '_' + attrName`.
-   * This parameter allows the overriding of the group prefix per input column vector.
-   *
-   * @group param Mapping of input vector names to group prefixes. If not specified, the group
-   *              prefix for an input vector column will default to `groupName + '_'`.
-   * @param groupPrefixes
-   */
-  final val groupPrefixes: Param[Map[String, String]] = new Param(
-    this, "groupPrefixes", "Group name prefixes for output ML attrs")
-  setDefault(groupPrefixes -> Map.empty)
-
-  /**
-   * Sets the group prefixes to override in the output attributes.
-   * @group setParam
-   * @param value map of column names to group prefixes
-   */
-  def setGroupPrefixes(value: Map[String, String]): this.type = set(groupPrefixes, value)
-
-  /** @group getParam */
-  def getGroupPrefixes: Map[String, String] = $(groupPrefixes)
 
   override def transform(dataset: DataFrame): DataFrame = {
     // Schema transformation.
@@ -93,10 +70,10 @@ class VectorAssembler(override val uid: String)
           val group = AttributeGroup.fromStructField(field)
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
-            val prefix = $(groupPrefixes).get(c).getOrElse(c + "_")
             group.attributes.get.map { attr =>
               if (attr.name.isDefined) {
-                attr.withName(prefix + attr.name.get)
+                // TODO: Define a rigorous naming scheme.
+                attr.withName(c + "_" + attr.name.get)
               } else {
                 attr
               }

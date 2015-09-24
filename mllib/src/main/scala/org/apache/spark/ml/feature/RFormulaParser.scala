@@ -35,8 +35,8 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     val dotTerms = expandDot(schema)
     var includedTerms = Seq[Seq[String]]()
     terms.foreach {
-      case term: ColumnRef =>
-        includedTerms :+= Seq(term.value)
+      case col: ColumnRef =>
+        includedTerms :+= Seq(col.value)
       case ColumnInteraction(cols) =>
         includedTerms ++= expandInteraction(schema, cols)
       case Dot =>
