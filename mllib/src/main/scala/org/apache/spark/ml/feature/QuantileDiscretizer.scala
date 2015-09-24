@@ -87,8 +87,8 @@ final class QuantileDiscretizer(override val uid: String)
   override def fit(dataset: DataFrame): Bucketizer = {
     val samples = QuantileDiscretizer.getSampledInput(dataset.select($(inputCol)), $(numBuckets))
       .map { case Row(feature: Double) => feature }
-    val splitCandidates = QuantileDiscretizer.findSplitCandidates(samples, $(numBuckets) - 1)
-    val splits = QuantileDiscretizer.getSplits(splitCandidates)
+    val candidates = QuantileDiscretizer.findSplitCandidates(samples, $(numBuckets) - 1)
+    val splits = QuantileDiscretizer.getSplits(candidates)
     val bucketizer = new Bucketizer(uid).setSplits(splits)
     copyValues(bucketizer)
   }
@@ -152,26 +152,26 @@ private[feature] object QuantileDiscretizer extends Logging {
    * both sides, or using default split value in case of only ineffectiveness split candidates are
    * found.
    */
-  def getSplits(splitCandidates: Array[Double]): Array[Double] = {
-    if (splitCandidates.size == 0) {
-      logInfo("Failed to find any effective splits, using 0 as default split point.")
+  def getSplits(candidates: Array[Double]): Array[Double] = {
+    val effectiveValues = if (candidates.size != 0) {
+      if (candidates.head == Double.NegativeInfinity
+        && candidates.last == Double.PositiveInfinity) {
+        candidates.drop(1).dropRight(1)
+      } else if (candidates.head == Double.NegativeInfinity) {
+        candidates.drop(1)
+      } else if (candidates.last == Double.PositiveInfinity) {
+        candidates.dropRight(1)
+      } else {
+        candidates
+      }
+    } else {
+      candidates
+    }
+
+    if (effectiveValues.size == 0) {
       Array(Double.NegativeInfinity, 0, Double.PositiveInfinity)
     } else {
-      if (splitCandidates.head == Double.NegativeInfinity
-        && splitCandidates.last == Double.PositiveInfinity) {
-        if (splitCandidates.size == 2) {
-          logInfo("Failed to find any effective splits, using 0 as default split point.")
-          Array(splitCandidates.head, 0, splitCandidates.last)
-        } else {
-          splitCandidates
-        }
-      } else if (splitCandidates.head == Double.NegativeInfinity) {
-        splitCandidates ++ Array(Double.PositiveInfinity)
-      } else if (splitCandidates.last == Double.PositiveInfinity) {
-        Array(Double.NegativeInfinity) ++ splitCandidates
-      } else {
-        Array(Double.NegativeInfinity) ++ splitCandidates ++ Array(Double.PositiveInfinity)
-      }
+      Array(Double.NegativeInfinity) ++ effectiveValues ++ Array(Double.PositiveInfinity)
     }
   }
 }
