@@ -22,7 +22,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.execution.local.HashJoinNode
+import org.apache.spark.sql.execution.{FragmentInput, BuildingFragment, BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -61,5 +62,21 @@ case class ShuffledHashJoin(
       val hashed = HashedRelation(buildIter, numBuildRows, buildSideKeyGenerator)
       hashJoin(streamIter, numStreamedRows, hashed, numOutputRows)
     }
+  }
+
+  override protected[sql] def executeWithLocalNode(): BuildingFragment = {
+    val leftBuildingFragment = left.executeWithLocalNode()
+    val rightBuildFragment = right.executeWithLocalNode()
+    val inputs = leftBuildingFragment.inputs ++ rightBuildFragment.inputs
+    val joinNode =
+      HashJoinNode(
+        sqlContext.conf,
+        leftKeys,
+        rightKeys,
+        buildSide,
+        leftBuildingFragment.currentTerminalNode,
+        rightBuildFragment.currentTerminalNode)
+
+    BuildingFragment(inputs, joinNode)
   }
 }

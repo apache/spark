@@ -31,6 +31,7 @@ case class FilterNode(conf: SQLConf, condition: Expression, child: LocalNode)
   override def output: Seq[Attribute] = child.output
 
   override def open(): Unit = {
+    println("Filter open!")
     child.open()
     predicate = GeneratePredicate.generate(condition, child.output)
   }

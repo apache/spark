@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.spark.sql.execution.local.{IteratorScanNode, LocalNode}
+import org.apache.spark.util.CompletionIterator
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
@@ -112,7 +115,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def canProcessUnsafeRows: Boolean = false
 
   /**
-   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
+   * Specifies whether this operator is capablef processing Java-object-based Rows (i.e. rows
    * that are not UnsafeRows).
    */
   def canProcessSafeRows: Boolean = true
@@ -135,9 +138,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       assert(!hasUnsafeInputs || canProcessUnsafeRows,
         "Operator will receive unsafe rows as input but cannot process unsafe rows")
     }
-    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
-      prepare()
-      doExecute()
+
+    if (!sqlContext.conf.useLocalNode) {
+      RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+        prepare()
+        doExecute()
+      }
+    } else {
+      RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+        buildFragment
+      }
     }
   }
 
@@ -318,7 +328,64 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
+
+  protected[sql] def executeWithLocalNode(): BuildingFragment = {
+    throw new UnsupportedOperationException(
+      s"$simpleString does not support executeWithLocalNode.")
+  }
+
+  protected[sql] def buildFragment: RDD[InternalRow] = {
+    val buildingFragment = executeWithLocalNode()
+    // Now, we will assemble a complete query fragment.
+    val inputs = buildingFragment.inputs
+    val currentTerminalNode = buildingFragment.currentTerminalNode
+    println("currentTerminalNode " + currentTerminalNode)
+    val fragment = inputs.length match {
+      case 1 =>
+        inputs(0).rdd.mapPartitions { iter =>
+          inputs(0).iteratorScan.withIterator(iter)
+          currentTerminalNode.prepare()
+          currentTerminalNode.open()
+
+          CompletionIterator[InternalRow, Iterator[InternalRow]](currentTerminalNode.asIterator, currentTerminalNode.close())
+        }
+      case 2 =>
+        inputs(0).rdd.zipPartitions(inputs(1).rdd) { (iter0, iter1) =>
+          inputs(0).iteratorScan.withIterator(iter0)
+          inputs(1).iteratorScan.withIterator(iter1)
+
+          currentTerminalNode.prepare()
+          currentTerminalNode.open()
+
+          CompletionIterator[InternalRow, Iterator[InternalRow]](currentTerminalNode.asIterator, currentTerminalNode.close())
+        }
+      case 3 =>
+        inputs(0).rdd.zipPartitions(inputs(1).rdd, inputs(2).rdd) { (iter0, iter1, iter2) =>
+          inputs(0).iteratorScan.withIterator(iter0)
+          inputs(1).iteratorScan.withIterator(iter1)
+          inputs(2).iteratorScan.withIterator(iter2)
+
+          currentTerminalNode.prepare()
+          currentTerminalNode.open()
+
+          CompletionIterator[InternalRow, Iterator[InternalRow]](currentTerminalNode.asIterator, currentTerminalNode.close())
+        }
+      case n =>
+        sys.error(s"A fragment with $n inputs is not supported.")
+    }
+    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+      fragment
+    }
+  }
 }
+
+private[sql] case class BuildingFragment(
+    inputs: Array[FragmentInput],
+    currentTerminalNode: LocalNode)
+
+private[sql] case class FragmentInput(
+    rdd: RDD[InternalRow],
+    iteratorScan: IteratorScanNode)
 
 private[sql] trait LeafNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil

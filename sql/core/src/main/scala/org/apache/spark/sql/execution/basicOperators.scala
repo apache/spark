@@ -23,6 +23,7 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.local.{FilterNode, ProjectNode, LocalNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
@@ -87,6 +88,17 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override protected[sql] def executeWithLocalNode(): BuildingFragment = {
+    val buildingFragment = child.executeWithLocalNode()
+    val projectNode =
+      ProjectNode(
+        sqlContext.conf,
+        projectList,
+        buildingFragment.currentTerminalNode)
+
+    BuildingFragment(buildingFragment.inputs, projectNode)
+  }
 }
 
 
@@ -122,6 +134,17 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def canProcessUnsafeRows: Boolean = true
 
   override def canProcessSafeRows: Boolean = true
+
+  override protected[sql] def executeWithLocalNode(): BuildingFragment = {
+    val buildingFragment = child.executeWithLocalNode()
+    val filterNode =
+      FilterNode(
+        sqlContext.conf,
+        condition,
+        buildingFragment.currentTerminalNode)
+
+    BuildingFragment(buildingFragment.inputs, filterNode)
+  }
 }
 
 /**
