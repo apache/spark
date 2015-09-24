@@ -1848,3 +1848,28 @@ setMethod("crosstab",
             sct <- callJMethod(statFunctions, "crosstab", col1, col2)
             collect(dataFrame(sct))
           })
+
+
+#' This function downloads the contents of a DataFrame into an R's data.frame.
+#' Since data.frames are held in memory, ensure that you have enough memory
+#' in your system to accommodate the contents.
+#' 
+#' @title Download data from a DataFrame into a data.frame
+#' @param x a DataFrame
+#' @return a data.frame
+#' @rdname as.data.frame
+#' @examples \dontrun{
+#' 
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
+#' }
+setGeneric("as.data.frame")
+setMethod(f = "as.data.frame", signature = "DataFrame", definition = 
+            function(x, ...) {
+              # Check if additional parameters have been passed
+              if (length(list(...)) > 0) {
+                stop("Unused argument(s): (" %++% paste(list(...), collapse=", ") %++% ")")
+              }
+              return(collect(x))
+            }
+)
