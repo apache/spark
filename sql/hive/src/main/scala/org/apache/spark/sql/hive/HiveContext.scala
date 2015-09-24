@@ -175,7 +175,6 @@ class HiveContext private[hive](
       execJars = Seq(),
       config = newTemporaryConfiguration(),
       isolationOn = false,
-      rootClassLoader = Utils.getContextOrSparkClassLoader,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
     loader.createClient().asInstanceOf[ClientWrapper]
   }

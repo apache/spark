@@ -123,7 +123,7 @@ private[hive] class IsolatedClientLoader(
   extends Logging {
 
   // Check to make sure that the root classloader does not know about Hive.
-  // assert(Try(rootClassLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+  assert(Try(rootClassLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
   protected def allJars = execJars.toArray
@@ -204,6 +204,9 @@ private[hive] class IsolatedClientLoader(
 
   /** The isolated client interface to Hive. */
   def createClient(): ClientInterface = {
+    if (!isolationOn) {
+      return new ClientWrapper(version, config, baseClassLoader, this)
+    }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
     val origLoader = Thread.currentThread().getContextClassLoader
