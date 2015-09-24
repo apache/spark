@@ -59,6 +59,7 @@ VALID_SPARK_VERSIONS = set([
     "1.2.1",
     "1.3.0",
     "1.3.1",
+    "1.3.2"
 ])
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
