@@ -52,11 +52,12 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param f The math function.
  * @param name The short name of the function
  */
-abstract class UnaryMathExpression(f: Double => Double, name: String)
+abstract class UnaryMathExpression[T <: DataType](
+  f: Double => Any, name: String, returnType: T = DoubleType)
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType)
-  override def dataType: DataType = DoubleType
+  override def dataType: T = returnType
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
@@ -67,20 +68,21 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
+  override final def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, codeBuilder(ctx, ev))
   }
+
+  protected def codeBuilder(ctx: CodeGenContext, ev: GeneratedExpressionCode): (String) => String =
+    c => s"java.lang.Math.${funcName}($c)"
 }
 
 // for floor and ceil which returns bigint instead of double
 abstract class UnaryMathExpressionWithBigIntRet(f: Double => Double, name: String)
-  extends UnaryMathExpression(f, name) {
-  override def dataType: DataType = LongType
-  protected override def nullSafeEval(input: Any): Any = {
-    f(input.asInstanceOf[Double]).toLong
-  }
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"(long)java.lang.Math.${funcName}($c)")
+  extends UnaryMathExpression(f(_).toLong, name, LongType) {
+
+  protected override def codeBuilder(
+    ctx: CodeGenContext, ev: GeneratedExpressionCode): (String) => String = {
+    c => "(long)" + super.codeBuilder(ctx, ev)(c)
   }
 }
 
@@ -95,8 +97,9 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
     if (d <= yAsymptote) null else f(d)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, c =>
+  protected override def codeBuilder(
+    ctx: CodeGenContext, ev: GeneratedExpressionCode): (String) => String = {
+    c =>
       s"""
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
@@ -104,7 +107,6 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
           ${ev.primitive} = java.lang.Math.${funcName}($c);
         }
       """
-    )
   }
 }
 
@@ -276,8 +278,9 @@ case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
 
 case class Log2(child: Expression)
   extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, c =>
+  protected override def codeBuilder(
+    ctx: CodeGenContext, ev: GeneratedExpressionCode): (String) => String = {
+    c =>
       s"""
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
@@ -285,7 +288,6 @@ case class Log2(child: Expression)
           ${ev.primitive} = java.lang.Math.log($c) / java.lang.Math.log(2);
         }
       """
-    )
   }
 }
 
