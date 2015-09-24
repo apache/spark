@@ -633,7 +633,7 @@ private[spark] object PythonRDD extends Logging {
    *
    * The thread will terminate after all the data are sent or any exceptions happen.
    */
-  private def serveIterator[T](items: Iterator[T], threadName: String): Int = {
+  def serveIterator[T](items: Iterator[T], threadName: String): Int = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 3 seconds
     serverSocket.setSoTimeout(3000)
@@ -871,7 +871,8 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
  * write the data into disk after deserialization, then Python can read it from disks.
  */
 // scalastyle:off no.finalize
-private[spark] class PythonBroadcast(@transient var path: String) extends Serializable {
+private[spark] class PythonBroadcast(@transient var path: String) extends Serializable
+  with Logging {
 
   /**
    * Read data from disks, then copy it to `out`
@@ -907,7 +908,9 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     if (!path.isEmpty) {
       val file = new File(path)
       if (file.exists()) {
-        file.delete()
+        if (!file.delete()) {
+          logWarning(s"Error deleting ${file.getPath}")
+        }
       }
     }
   }
