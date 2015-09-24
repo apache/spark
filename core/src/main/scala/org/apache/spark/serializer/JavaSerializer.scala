@@ -42,10 +42,13 @@ private[spark] class JavaSerializationStream(
   def writeObject[T: ClassTag](t: T): SerializationStream = {
     try {
       objOut.writeObject(t)
-      objOut.reset()
     } catch {
       case e: NotSerializableException if extraDebugInfo =>
         throw SerializationDebugger.improveException(t, e)
+      case e: OutOfMemoryError =>
+        objOut.reset()
+        counter = 0
+        objOut.writeObject(t)
     }
     counter += 1
     if (counterReset > 0 && counter >= counterReset) {
