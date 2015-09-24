@@ -144,11 +144,10 @@ object AssociationRules {
     }
 
     /**
-     * Returns String, [antecedent] => [consequent]: [confidence]
-     *
+     * @return [antecedent] => [consequent]: [confidence]
      */
     @Since("1.6.0")
-    override def toString: String = {
+    override def toString = {
       s"${javaAntecedent} => ${javaConsequent}: ${confidence}"
     }
   }
