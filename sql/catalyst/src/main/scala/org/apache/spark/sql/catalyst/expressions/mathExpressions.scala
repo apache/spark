@@ -72,6 +72,18 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   }
 }
 
+// for floor and ceil which returns bigint instead of double
+abstract class UnaryMathExpressionWithBigIntRet(f: Double => Double, name: String)
+  extends UnaryMathExpression(f, name) {
+  override def dataType: DataType = LongType
+  protected override def nullSafeEval(input: Any): Any = {
+    f(input.asInstanceOf[Double]).toLong
+  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"(long)java.lang.Math.${funcName}($c)")
+  }
+}
+
 abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
 
@@ -152,7 +164,7 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
 
 case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
-case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL")
+case class Ceil(child: Expression) extends UnaryMathExpressionWithBigIntRet(math.ceil, "CEIL")
 
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
@@ -195,7 +207,7 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
-case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR")
+case class Floor(child: Expression) extends UnaryMathExpressionWithBigIntRet(math.floor, "FLOOR")
 
 object Factorial {
 
