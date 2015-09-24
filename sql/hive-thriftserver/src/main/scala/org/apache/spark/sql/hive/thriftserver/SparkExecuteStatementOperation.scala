@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.RejectedExecutionException
-import java.util.{Arrays, Map => JMap, UUID}
+import java.util.{Arrays, UUID, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
@@ -28,11 +28,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hive.service.cli._
-import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.metadata.HiveException
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.Utils
+import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
@@ -40,7 +37,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
+import org.apache.spark.sql.{DataFrame, SQLConf, Row => SparkRow}
 
 
 private[hive] class SparkExecuteStatementOperation(
@@ -143,11 +140,8 @@ private[hive] class SparkExecuteStatementOperation(
     if (!runInBackground) {
       runInternal()
     } else {
-      val parentSessionState = SessionState.get()
       val hiveConf = getConfigForOperation()
       val sparkServiceUGI = Utils.getUGI()
-      val sessionHive = getCurrentHive()
-      val currentSqlSession = hiveContext.currentSession
 
       // Runnable impl to call runInternal asynchronously,
       // from a different thread
@@ -156,17 +150,6 @@ private[hive] class SparkExecuteStatementOperation(
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Object]() {
             override def run(): Object = {
-
-              // User information is part of the metastore client member in Hive
-              hiveContext.setSession(currentSqlSession)
-              // Always use the latest class loader provided by executionHive's state.
-              val executionHiveClassLoader =
-                hiveContext.executionHive.state.getConf.getClassLoader
-              sessionHive.getConf.setClassLoader(executionHiveClassLoader)
-              parentSessionState.getConf.setClassLoader(executionHiveClassLoader)
-
-              Hive.set(sessionHive)
-              SessionState.setCurrentSessionState(parentSessionState)
               try {
                 runInternal()
               } catch {
@@ -308,14 +291,5 @@ private[hive] class SparkExecuteStatementOperation(
       }
     }
     return sqlOperationConf
-  }
-
-  private def getCurrentHive(): Hive = {
-    try {
-      return Hive.get()
-    } catch {
-      case e: HiveException =>
-        throw new HiveSQLException("Failed to get current Hive object", e);
-    }
   }
 }

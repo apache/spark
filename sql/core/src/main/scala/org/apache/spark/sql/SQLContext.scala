@@ -38,15 +38,12 @@ import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
-import org.apache.spark.sql.execution.{Filter, _}
-import org.apache.spark.sql.{execution => sparkexecution}
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.sources._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.util.Utils
 
 /**
@@ -64,18 +61,25 @@ import org.apache.spark.util.Utils
  *
  * @since 1.0.0
  */
-class SQLContext(@transient val sparkContext: SparkContext)
+class SQLContext private[sql](
+    @transient val sparkContext: SparkContext,
+    @transient protected[sql] val cacheManager: CacheManager)
   extends org.apache.spark.Logging
   with Serializable {
 
   self =>
 
+  def this(sparkContext: SparkContext) = this(sparkContext, new CacheManager)
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
+
+  def newSession(): SQLContext = {
+    new SQLContext(sparkContext, cacheManager)
+  }
 
   /**
    * @return Spark SQL configuration
    */
-  protected[sql] def conf = currentSession().conf
+  protected[sql] lazy val conf = new SQLConf
 
   // `listener` should be only used in the driver
   @transient private[sql] val listener = new SQLListener(this)
@@ -146,9 +150,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
-  // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin
+  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -198,18 +201,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def executePlan(plan: LogicalPlan) =
     new sparkexecution.QueryExecution(this, plan)
 
-  @transient
-  protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
-    override def initialValue: SQLSession = defaultSession
-  }
-
-  @transient
-  protected[sql] val defaultSession = createSession()
-
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
     classOf[DefaultParserDialect].getCanonicalName
   } else {
     conf.dialect
+  }
+
+  protected[sql] def addJar(path: String): Unit = {
+    sparkContext.addJar(path)
   }
 
   {
@@ -235,9 +234,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case (key, value) => setConf(key, value)
     }
   }
-
-  @transient
-  protected[sql] val cacheManager = new CacheManager(this)
 
   /**
    * :: Experimental ::
@@ -300,21 +296,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group cachemgmt
    * @since 1.3.0
    */
-  def isCached(tableName: String): Boolean = cacheManager.isCached(tableName)
+  def isCached(tableName: String): Boolean = {
+    cacheManager.lookupCachedData(table(tableName)).nonEmpty
+  }
 
   /**
    * Caches the specified table in-memory.
    * @group cachemgmt
    * @since 1.3.0
    */
-  def cacheTable(tableName: String): Unit = cacheManager.cacheTable(tableName)
+  def cacheTable(tableName: String): Unit = {
+    cacheManager.cacheQuery(this, table(tableName), Some(tableName))
+  }
 
   /**
    * Removes the specified table from the in-memory cache.
    * @group cachemgmt
    * @since 1.3.0
    */
-  def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
+  def uncacheTable(tableName: String): Unit = cacheManager.uncacheQuery(table(tableName))
 
   /**
    * Removes all cached tables from the in-memory cache.
@@ -822,36 +822,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     )
   }
 
-  protected[sql] def openSession(): SQLSession = {
-    detachSession()
-    val session = createSession()
-    tlSession.set(session)
-
-    session
-  }
-
-  protected[sql] def currentSession(): SQLSession = {
-    tlSession.get()
-  }
-
-  protected[sql] def createSession(): SQLSession = {
-    new this.SQLSession()
-  }
-
-  protected[sql] def detachSession(): Unit = {
-    tlSession.remove()
-  }
-
-  protected[sql] def setSession(session: SQLSession): Unit = {
-    detachSession()
-    tlSession.set(session)
-  }
-
-  protected[sql] class SQLSession {
-    // Note that this is a lazy val so we can override the default value in subclasses.
-    protected[sql] lazy val conf: SQLConf = new SQLConf
-  }
-
   @deprecated("use org.apache.spark.sql.QueryExecution", "1.6.0")
   protected[sql] class QueryExecution(logical: LogicalPlan)
     extends sparkexecution.QueryExecution(this, logical)
@@ -1200,16 +1170,30 @@ object SQLContext {
   private val INSTANTIATION_LOCK = new Object()
 
   /**
+   * The active SQLContext for threads.
+   */
+  private val activeContexts: InheritableThreadLocal[SQLContext] =
+    new InheritableThreadLocal[SQLContext]
+
+  /**
    * Reference to the last created SQLContext.
    */
   @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
 
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
+   *
    * This function can be used to create a singleton SQLContext object that can be shared across
    * the JVM.
+   *
+   * If there an active SQLContext for current thread, it will returned instead of the global one.
    */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
+    val ctx = activeContexts.get()
+    if (ctx != null) {
+      return ctx
+    }
+
     INSTANTIATION_LOCK.synchronized {
       if (lastInstantiatedContext.get() == null) {
         new SQLContext(sparkContext)
@@ -1226,7 +1210,21 @@ object SQLContext {
 
   private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
     INSTANTIATION_LOCK.synchronized {
-      lastInstantiatedContext.set(sqlContext)
+      lastInstantiatedContext.compareAndSet(null, sqlContext)
     }
+  }
+
+  /**
+   * Set a SQLContext for current thread
+   */
+  def setActive(ctx: SQLContext): Unit = {
+    activeContexts.set(ctx)
+  }
+
+  /**
+   * Clear the SQLContext for current thread
+   */
+  def clearActive(): Unit = {
+    activeContexts.remove()
   }
 }

@@ -22,6 +22,7 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
 
+import scala.collection.mutable
 import scala.language.reflectiveCalls
 import scala.util.Try
 
@@ -122,7 +123,7 @@ private[hive] class IsolatedClientLoader(
   extends Logging {
 
   // Check to make sure that the root classloader does not know about Hive.
-  assert(Try(rootClassLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+  // assert(Try(rootClassLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
   protected def allJars = execJars.toArray
@@ -136,7 +137,8 @@ private[hive] class IsolatedClientLoader(
     (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
     name.startsWith("java.lang.") ||
     name.startsWith("java.net") ||
-    sharedPrefixes.exists(name.startsWith)
+    sharedPrefixes.exists(name.startsWith) ||
+    name.startsWith("[")
 
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
@@ -148,53 +150,86 @@ private[hive] class IsolatedClientLoader(
     name.replaceAll("\\.", "/") + ".class"
 
   /** The classloader that is used to load an isolated version of Hive. */
-  protected val classLoader: ClassLoader = new URLClassLoader(allJars, rootClassLoader) {
-    override def loadClass(name: String, resolve: Boolean): Class[_] = {
-      val loaded = findLoadedClass(name)
-      if (loaded == null) doLoadClass(name, resolve) else loaded
-    }
+  var classLoader: ClassLoader = if (isolationOn) {
+    baseClassLoader
+  } else {
+    new URLClassLoader(allJars, rootClassLoader) {
+      val cache = new java.util.concurrent.ConcurrentHashMap[String, Class[_]]
 
-    def doLoadClass(name: String, resolve: Boolean): Class[_] = {
-      val classFileName = name.replaceAll("\\.", "/") + ".class"
-      if (isBarrierClass(name) && isolationOn) {
-        // For barrier classes, we construct a new copy of the class.
-        val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
-        logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
-        defineClass(name, bytes, 0, bytes.length)
-      } else if (!isSharedClass(name)) {
-        logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
-        super.loadClass(name, resolve)
-      } else {
-        // For shared classes, we delegate to baseClassLoader.
-        logDebug(s"shared class: $name")
-        baseClassLoader.loadClass(name)
+      override def loadClass(name: String, resolve: Boolean): Class[_] = {
+        var clazz = findLoadedClass(name)
+        if (clazz == null) {
+          clazz = cache.get(name)
+          if (clazz == null) {
+            // always assume resolve is false at this point - we'll resolve later
+            clazz = doLoadClass(name, resolve = false)
+            val clazz2 = cache.putIfAbsent(name, clazz)
+            // check if someone else beat us to updating the cache entry
+            if (clazz2 != null) {
+              // if so then we should use the cached entry to be consistent
+              clazz = clazz2
+            }
+          }
+          if (resolve) {
+            resolveClass(clazz)
+          }
+        }
+        clazz
+      }
+
+      def doLoadClass(name: String, resolve: Boolean): Class[_] = {
+        val classFileName = name.replaceAll("\\.", "/") + ".class"
+        if (isBarrierClass(name)) {
+          // For barrier classes, we construct a new copy of the class.
+          val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
+          logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
+          defineClass(name, bytes, 0, bytes.length)
+        } else if (!isSharedClass(name)) {
+          logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
+          super.loadClass(name, resolve)
+        } else {
+          // For shared classes, we delegate to baseClassLoader.
+          logDebug(s"shared class: $name")
+          baseClassLoader.loadClass(name)
+        }
       }
     }
   }
 
-  // Pre-reflective instantiation setup.
-  logDebug("Initializing the logger to avoid disaster...")
-  Thread.currentThread.setContextClassLoader(classLoader)
+  def addJar(path: String) = synchronized {
+    val jarURL = new java.io.File(path).toURI.toURL
+    println(s"add $path to classLoader")
+    classLoader = new java.net.URLClassLoader(Array(jarURL), classLoader)
+  }
 
   /** The isolated client interface to Hive. */
-  val client: ClientInterface = try {
-    classLoader
-      .loadClass(classOf[ClientWrapper].getName)
-      .getConstructors.head
-      .newInstance(version, config, classLoader)
-      .asInstanceOf[ClientInterface]
-  } catch {
-    case e: InvocationTargetException =>
-      if (e.getCause().isInstanceOf[NoClassDefFoundError]) {
-        val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
-        throw new ClassNotFoundException(
-          s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
-           "Please make sure that jars for your version of hive and hadoop are included in the " +
-          s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
-      } else {
-        throw e
-      }
-  } finally {
-    Thread.currentThread.setContextClassLoader(baseClassLoader)
+  def createClient(): ClientInterface = {
+    // Pre-reflective instantiation setup.
+    logDebug("Initializing the logger to avoid disaster...")
+    val origLoader = Thread.currentThread().getContextClassLoader
+    Thread.currentThread.setContextClassLoader(classLoader)
+
+    try {
+      classLoader
+        .loadClass(classOf[ClientWrapper].getName)
+        .getConstructors.head
+        .newInstance(version, config, classLoader, this)
+        .asInstanceOf[ClientInterface]
+    } catch {
+      case e: InvocationTargetException =>
+        if (e.getCause().isInstanceOf[NoClassDefFoundError]) {
+          val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
+          throw new ClassNotFoundException(
+            s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
+              "Please make sure that jars for your version of hive and hadoop are included in the " +
+              s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
+        } else {
+          throw e
+        }
+    } finally {
+      Thread.currentThread.setContextClassLoader(origLoader)
+    }
   }
+
+  var cachedHive: Any = null
 }

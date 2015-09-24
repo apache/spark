@@ -173,6 +173,11 @@ private[hive] trait ClientInterface {
       holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit
 
+  /** Add a jar into classloader */
+  def addJar(path: String): Unit
+
+  def newSession(): ClientInterface
+
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
 }

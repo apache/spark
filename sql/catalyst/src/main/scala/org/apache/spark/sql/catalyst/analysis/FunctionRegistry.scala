@@ -44,6 +44,8 @@ trait FunctionRegistry {
 
   /* Get the class of the registered function by specified name. */
   def lookupFunction(name: String): Option[ExpressionInfo]
+
+  def copy(): FunctionRegistry
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -68,6 +70,14 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   override def lookupFunction(name: String): Option[ExpressionInfo] = {
     functionBuilders.get(name).map(_._1)
   }
+
+  override def copy(): SimpleFunctionRegistry = {
+    val registry = new SimpleFunctionRegistry
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+        registry.registerFunction(name, info, builder)
+    }
+    registry
+  }
 }
 
 /**
@@ -90,6 +100,10 @@ object EmptyFunctionRegistry extends FunctionRegistry {
 
   override def lookupFunction(name: String): Option[ExpressionInfo] = {
     throw new UnsupportedOperationException
+  }
+
+  override def copy(): FunctionRegistry = {
+    this
   }
 }
 

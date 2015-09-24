@@ -37,22 +37,13 @@ private[sql] case class CachedData(plan: LogicalPlan, cachedRepresentation: InMe
  *
  * Internal to Spark SQL.
  */
-private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
+private[sql] class CacheManager extends Logging {
 
   @transient
   private val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
 
   @transient
   private val cacheLock = new ReentrantReadWriteLock
-
-  /** Returns true if the table is currently cached in-memory. */
-  def isCached(tableName: String): Boolean = lookupCachedData(sqlContext.table(tableName)).nonEmpty
-
-  /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = cacheQuery(sqlContext.table(tableName), Some(tableName))
-
-  /** Removes the specified table from the in-memory cache. */
-  def uncacheTable(tableName: String): Unit = uncacheQuery(sqlContext.table(tableName))
 
   /** Acquires a read lock on the cache for the duration of `f`. */
   private def readLock[A](f: => A): A = {
@@ -89,6 +80,7 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
    * the in-memory columnar representation of the underlying table is expensive.
    */
   private[sql] def cacheQuery(
+      sqlContext: SQLContext,
       query: DataFrame,
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
