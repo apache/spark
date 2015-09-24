@@ -129,7 +129,6 @@ public class UnsafeShuffleWriterSuite {
         Object[] args = invocationOnMock.getArguments();
 
         return new DiskBlockObjectWriter(
-          (BlockId) args[0],
           (File) args[1],
           (SerializerInstance) args[2],
           (Integer) args[3],
