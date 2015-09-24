@@ -74,3 +74,4 @@ metastore/
 warehouse/
 TempStatsStore/
 sql/hive-thriftserver/test_warehouses
+.Rproj.user
