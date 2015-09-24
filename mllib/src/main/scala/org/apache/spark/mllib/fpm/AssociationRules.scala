@@ -142,5 +142,14 @@ object AssociationRules {
     def javaConsequent: java.util.List[Item] = {
       consequent.toList.asJava
     }
+
+    /**
+     * Returns String, [antecedent] => [consequent]: [confidence]
+     *
+     */
+    @Since("1.6.0")
+    override def toString: String = {
+      s"${javaAntecedent} => ${javaConsequent}: ${confidence}"
+    }
   }
 }
