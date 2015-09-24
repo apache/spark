@@ -42,6 +42,7 @@ private[spark] class JavaSerializationStream(
   def writeObject[T: ClassTag](t: T): SerializationStream = {
     try {
       objOut.writeObject(t)
+      objOut.reset()
     } catch {
       case e: NotSerializableException if extraDebugInfo =>
         throw SerializationDebugger.improveException(t, e)
