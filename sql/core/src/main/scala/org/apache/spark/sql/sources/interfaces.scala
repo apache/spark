@@ -639,6 +639,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     val dataSchema = this.dataSchema
     val codegenEnabled = this.codegenEnabled
     val inputNeedConversion = this.inputNeedConversion
+    val outputNeedConversion = this.outputNeedConversion
 
     val requiredOutput = requiredColumns.map { col =>
       val field = dataSchema(col)
@@ -667,7 +668,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         rows.map(r => mutableProjection(r))
       }
 
-      if (this.outputNeedConversion) {
+      if (outputNeedConversion) {
         val requiredSchema = StructType(requiredColumns.map(dataSchema(_)))
         val toScala = CatalystTypeConverters.createToScalaConverter(requiredSchema)
         projectedRows.map(toScala(_).asInstanceOf[Row])
