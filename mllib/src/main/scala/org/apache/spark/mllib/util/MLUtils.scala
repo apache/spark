@@ -297,7 +297,7 @@ object MLUtils {
   def kFoldStratified[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)],
       numFolds: Int,
       seed: Int): Array[(RDD[(K, V)], RDD[(K, V)])] = {
-    val keys = rdd.keys.collect().distinct
+    val keys = rdd.keys.distinct().collect()
     val weights: Array[scala.collection.Map[K, Double]] = (1 to numFolds).map {
       n => keys.map(k => (k, 1 / numFolds.toDouble)).toMap
     }.toArray

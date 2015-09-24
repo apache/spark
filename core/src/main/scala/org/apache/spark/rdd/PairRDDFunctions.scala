@@ -323,23 +323,28 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     require(weights.flatMap(_.values).forall(v => v >= 0.0), "Negative sampling rates.")
     if (weights.length > 1) {
-      require(weights.map(m => m.keys.toList).sliding(2).forall(t => t(0) == t(1)),
+      require(weights.map(m => m.keys.toSet).sliding(2).forall(t => t(0) == t(1)),
         "Inconsistent keys between splits.")
     }
 
+    // maps of sampling threshold boundaries at 0.0 and 1.0
+    val leftBoundary = weights(0).map(x => (x._1, 0.0))
+    val rightBoundary = weights(0).map(x => (x._1, 1.0))
+
     // normalize and cumulative sum
-    val baseFold = weights(0).map(x => (x._1, 0.0))
-    val cumWeightsByKey = weights.scanLeft(baseFold){ case (accMap, iterMap) =>
+    val cumWeightsByKey = weights.scanLeft(leftBoundary){ case (accMap, iterMap) =>
       accMap.map { case (k, v) => (k, v + iterMap(k)) }
     }.drop(1)
 
     val weightSumsByKey = cumWeightsByKey.last
     val normedCumWeightsByKey = cumWeightsByKey.dropRight(1).map(_.map { case (key, threshold) =>
-      (key, threshold / weightSumsByKey(key))
+      val keyWeightSum = weightSumsByKey(key)
+      val norm = if (keyWeightSum > 0.0) keyWeightSum else 1.0
+      (key, threshold / norm)
     })
 
     // compute exact thresholds for each stratum if required
-    val splits = if (exact) {
+    val splitPoints = if (exact) {
       normedCumWeightsByKey.map { w =>
         val finalResult = StratifiedSamplingUtils.getAcceptanceResults(self, false, w, None, seed)
         StratifiedSamplingUtils.computeThresholdByKey(finalResult, w)
@@ -348,10 +353,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       normedCumWeightsByKey
     }
 
-    val allSplits = weights(0).map(x => (x._1, 0.0)) +: splits :+ weights(0).map(x => (x._1, 1.0))
-    allSplits.sliding(2).map { x =>
-      (randomSampleByKeyWithRange(x(0), x(1), seed),
-        randomSampleByKeyWithRange(x(0), x(1), seed, complement = true))
+    val splitsPointsAndBounds = leftBoundary +: splitPoints :+ rightBoundary
+    splitsPointsAndBounds.sliding(2).map { x =>
+        (randomSampleByKeyWithRange(x(0), x(1), seed),
+          randomSampleByKeyWithRange(x(0), x(1), seed, complement = true))
     }.toArray
   }
 
@@ -365,6 +370,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @param complement boolean specifying whether to return subsample or its complement
    * @return A random, stratified sub-sample of the RDD without replacement.
    */
+  // TODO: look at withscope
   private[spark] def randomSampleByKeyWithRange(lb: Map[K, Double],
       ub: Map[K, Double],
       seed: Long,

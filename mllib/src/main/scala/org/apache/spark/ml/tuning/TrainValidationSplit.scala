@@ -105,21 +105,21 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
 
-    val Array(training, validation) = if (schema.fieldNames.contains($(stratifiedCol))) {
-      val stratifiedColIndex = schema.fieldNames.indexOf($(stratifiedCol))
-      val pairData = dataset.rdd.map(row => (row(stratifiedColIndex), row))
-      val keys = pairData.keys.distinct().collect()
-      val weights: Array[scala.collection.Map[Any, Double]] =
-        Array(keys.map(k => (k, $(trainRatio))).toMap, keys.map(k => (k, 1 - $(trainRatio))).toMap)
-      val splitsWithKeys = pairData.randomSplitByKey(weights, exact = true, 0)
-      splitsWithKeys.map { case (subsample, complement) => subsample.values }
-    } else {
-      if (isSet(stratifiedCol)) {
-        logWarning("Stratified column not found. Using standard split.")
+    val Array(training, validation) =
+      if (schema.fieldNames.contains($(stratifiedCol)) & isSet(stratifiedCol)) {
+        val stratifiedColIndex = schema.fieldNames.indexOf($(stratifiedCol))
+        val pairData = dataset.rdd.map(row => (row(stratifiedColIndex), row))
+        val keys = pairData.keys.distinct().collect()
+        val weights: Array[scala.collection.Map[Any, Double]] =
+          Array(keys.map((_, $(trainRatio))).toMap, keys.map((_, 1 - $(trainRatio))).toMap)
+        val splitsWithKeys = pairData.randomSplitByKey(weights, exact = true, 0)
+        splitsWithKeys.map { case (subsample, complement) => subsample.values }
+      } else {
+        if (isSet(stratifiedCol)) {
+          logWarning("Stratified column not found. Using standard split.")
+        }
+        dataset.rdd.randomSplit(Array($(trainRatio), 1 - $(trainRatio)))
       }
-      dataset.rdd.randomSplit(Array($(trainRatio), 1 - $(trainRatio)))
-    }
-
 
     val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
     val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()

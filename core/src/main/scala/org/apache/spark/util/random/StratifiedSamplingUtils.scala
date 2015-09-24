@@ -231,14 +231,14 @@ private[spark] object StratifiedSamplingUtils extends Logging {
       rng.reSeed(seed + idx)
 
       if (complement) {
-        iter.filter { t =>
+        iter.filter { case(k, _) =>
           val x = rng.nextUniform()
-          (x < lb(t._1)) || (x >= ub(t._1))
+          (x < lb(k)) || (x >= ub(k))
         }
       } else {
-        iter.filter { t =>
+        iter.filter { case(k, _) =>
           val x = rng.nextUniform()
-          (x >= lb(t._1)) && (x < ub(t._1))
+          (x >= lb(k)) && (x < ub(k))
         }
       }
     }
