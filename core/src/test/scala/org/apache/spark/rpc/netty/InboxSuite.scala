@@ -90,9 +90,11 @@ class InboxSuite extends SparkFunSuite {
         }
       }.start()
     }
+    // Try to process some messages
     inbox.process(dispatcher)
-    assert(inbox.isEmpty)
     inbox.stop()
+    // After `stop` is called, further messages will be dropped. However, while `stop` is called,
+    // some messages may be post to Inbox, so process them here.
     inbox.process(dispatcher)
     assert(inbox.isEmpty)
 
