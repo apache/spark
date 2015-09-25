@@ -42,10 +42,7 @@
  *         .setMaster("local")
  *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
  *         .startApplication();
- *       handle.stop();
- *       while (!handle.getState().isFinal()) {
- *         Thread.sleep(1000L);
- *       }
+ *       // Use handle API to monitor / control application.
  *     }
  *   }
  * }

@@ -161,7 +161,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     launcher.appResource = "/foo";
     launcher.appName = "MyApp";
     launcher.mainClass = "my.Class";
-    launcher.propertiesFile = dummyPropsFile.getAbsolutePath();
+    launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
     launcher.appArgs.add("foo");
     launcher.appArgs.add("bar");
     launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");

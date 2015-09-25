@@ -111,9 +111,10 @@ class ChildProcAppHandle implements SparkAppHandle {
     return secret;
   }
 
-  void setChildProc(Process childProc) {
+  void setChildProc(Process childProc, String loggerName) {
     this.childProc = childProc;
-    this.redirector = new OutputRedirector(childProc.getInputStream(), REDIRECTOR_FACTORY);
+    this.redirector = new OutputRedirector(childProc.getInputStream(), loggerName,
+      REDIRECTOR_FACTORY);
   }
 
   void setConnection(LauncherConnection connection) {

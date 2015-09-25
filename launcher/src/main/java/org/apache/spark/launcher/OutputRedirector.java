@@ -37,6 +37,10 @@ class OutputRedirector {
   private volatile boolean active;
 
   OutputRedirector(InputStream in, ThreadFactory tf) {
+    this(in, OutputRedirector.class.getName(), tf);
+  }
+
+  OutputRedirector(InputStream in, String loggerName, ThreadFactory tf) {
     this.active = true;
     this.reader = new BufferedReader(new InputStreamReader(in));
     this.thread = tf.newThread(new Runnable() {
@@ -45,7 +49,7 @@ class OutputRedirector {
         redirect();
       }
     });
-    this.sink = Logger.getLogger(getClass().getName());
+    this.sink = Logger.getLogger(loggerName);
     thread.start();
   }
 
