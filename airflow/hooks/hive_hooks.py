@@ -5,7 +5,6 @@ import csv
 import logging
 import re
 import subprocess
-import socket
 from tempfile import NamedTemporaryFile
 
 
@@ -19,7 +18,7 @@ from airflow.utils import AirflowException
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils import TemporaryDirectory
 from airflow.configuration import conf
-
+import airflow.security.utils
 
 class HiveCliHook(BaseHook):
     """
@@ -69,9 +68,11 @@ class HiveCliHook(BaseHook):
 
                 if self.use_beeline:
                     hive_bin = 'beeline'
-                    if conf.get('security','enabled'):
+                    if conf.get('security', 'enabled'):
                         template = conn.extra_dejson.get('principal',"hive/_HOST@EXAMPLE.COM")
-                        template = template.replace("_HOST", socket.getfqdn())
+                        template = airflow.security.utils.replace_hostname_pattern(
+                            airflow.security.utils.get_components(template)
+                        )
 
                         proxy_user = ""
                         if conn.extra_dejson.get('proxy_user') == "login" and conn.login:
@@ -122,7 +123,6 @@ class HiveCliHook(BaseHook):
 
                 return stdout
 
-
     def test_hql(self, hql):
         """
         Test an hql statement using the hive cli and EXPLAIN
@@ -164,8 +164,7 @@ class HiveCliHook(BaseHook):
                         context = '\n'.join(query.split('\n')[begin:end])
                         logging.info("Context :\n {0}".format(context))
                 else:
-                    logging.info("SUCCESS")               
-
+                    logging.info("SUCCESS")
 
     def load_file(
             self,
