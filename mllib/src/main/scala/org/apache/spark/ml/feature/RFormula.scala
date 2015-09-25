@@ -239,7 +239,7 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
 }
 
 /**
- * Utility transformer that rewrites Vector attributes names via prefix replacement. For example,
+ * Utility transformer that rewrites Vector attribute names via prefix replacement. For example,
  * it can rewrite attribute names starting with 'foo_' to start with 'bar_' instead.
  *
  * @param vectorCol name of the vector column to rewrite.
