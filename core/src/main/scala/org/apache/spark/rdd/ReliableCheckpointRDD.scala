@@ -32,7 +32,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * An RDD that reads from checkpoint files previously written to reliable storage.
  */
 private[spark] class ReliableCheckpointRDD[T: ClassTag](
-    @transient sc: SparkContext,
+    sc: SparkContext,
     val checkpointPath: String)
   extends CheckpointRDD[T](sc) {
 
@@ -144,7 +144,9 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       } else {
         // Some other copy of this task must've finished before us and renamed it
         logInfo(s"Final output path $finalOutputPath already exists; not overwriting it")
-        fs.delete(tempOutputPath, false)
+        if (!fs.delete(tempOutputPath, false)) {
+          logWarning(s"Error deleting ${tempOutputPath}")
+        }
       }
     }
   }

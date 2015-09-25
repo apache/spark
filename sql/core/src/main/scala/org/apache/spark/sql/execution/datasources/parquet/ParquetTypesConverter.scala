@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.IOException
+import java.util.{Collections, Arrays}
 
-import scala.collection.JavaConversions._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -107,7 +107,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     ParquetFileWriter.writeMetadataFile(
       conf,
       path,
-      new Footer(path, new ParquetMetadata(metaData, Nil)) :: Nil)
+      Arrays.asList(new Footer(path, new ParquetMetadata(metaData, Collections.emptyList()))))
   }
 
   /**
@@ -123,7 +123,11 @@ private[parquet] object ParquetTypesConverter extends Logging {
       throw new IllegalArgumentException("Unable to read Parquet metadata: path is null")
     }
     val job = new Job()
-    val conf = configuration.getOrElse(ContextUtil.getConfiguration(job))
+    val conf = {
+      // scalastyle:off jobcontext
+      configuration.getOrElse(ContextUtil.getConfiguration(job))
+      // scalastyle:on jobcontext
+    }
     val fs: FileSystem = origPath.getFileSystem(conf)
     if (fs == null) {
       throw new IllegalArgumentException(s"Incorrectly formatted Parquet metadata path $origPath")

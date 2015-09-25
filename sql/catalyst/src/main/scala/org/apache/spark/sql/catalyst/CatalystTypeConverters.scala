@@ -138,8 +138,13 @@ object CatalystTypeConverters {
 
   private case class UDTConverter(
       udt: UserDefinedType[_]) extends CatalystTypeConverter[Any, Any, Any] {
+    // toCatalyst (it calls toCatalystImpl) will do null check.
     override def toCatalystImpl(scalaValue: Any): Any = udt.serialize(scalaValue)
-    override def toScala(catalystValue: Any): Any = udt.deserialize(catalystValue)
+
+    override def toScala(catalystValue: Any): Any = {
+      if (catalystValue == null) null else udt.deserialize(catalystValue)
+    }
+
     override def toScalaImpl(row: InternalRow, column: Int): Any =
       toScala(row.get(column, udt.sqlType))
   }
@@ -329,7 +334,10 @@ object CatalystTypeConverters {
         null
       }
     }
-    override def toScala(catalystValue: Decimal): JavaBigDecimal = catalystValue.toJavaBigDecimal
+    override def toScala(catalystValue: Decimal): JavaBigDecimal = {
+      if (catalystValue == null) null
+      else catalystValue.toJavaBigDecimal
+    }
     override def toScalaImpl(row: InternalRow, column: Int): JavaBigDecimal =
       row.getDecimal(column, dataType.precision, dataType.scale).toJavaBigDecimal
   }

@@ -22,7 +22,7 @@ import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.concurrent.duration._
@@ -111,8 +111,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * this does not necessarily need to be the same version of Hive that is used internally by
    * Spark SQL for execution.
    */
-  protected[hive] def hiveMetastoreVersion: String =
-    getConf(HIVE_METASTORE_VERSION, hiveExecutionVersion)
+  protected[hive] def hiveMetastoreVersion: String = getConf(HIVE_METASTORE_VERSION)
 
   /**
    * The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
@@ -171,11 +170,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
    *  - allow SQL11 keywords to be used as identifiers
    */
-  private[sql] def defaultOverides() = {
+  private[sql] def defaultOverrides() = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
   }
 
-  defaultOverides()
+  defaultOverrides()
 
   /**
    * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.
@@ -190,11 +189,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     // into the isolated client loader
     val metadataConf = new HiveConf()
 
-    val defaltWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
-    logInfo("defalt warehouse location is " + defaltWarehouseLocation)
+    val defaultWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
+    logInfo("default warehouse location is " + defaultWarehouseLocation)
 
     // `configure` goes second to override other settings.
-    val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap ++ configure
+    val allConfig = metadataConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configure
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (hiveExecutionVersion != hiveMetastoreVersion) {
@@ -202,7 +201,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
           "Builtin jars can only be used when hive execution version == hive metastore version. " +
           s"Execution: ${hiveExecutionVersion} != Metastore: ${hiveMetastoreVersion}. " +
           "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
-          s"or change $HIVE_METASTORE_VERSION to $hiveExecutionVersion.")
+          s"or change ${HIVE_METASTORE_VERSION.key} to $hiveExecutionVersion.")
       }
 
       // We recursively find all jars in the class loader chain,
@@ -292,12 +291,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     catalog.invalidateTable(tableIdent)
   }
 
@@ -312,7 +311,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    */
   @Experimental
   def analyze(tableName: String) {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent.toSeq))
 
     relation match {
@@ -606,7 +605,11 @@ private[hive] object HiveContext {
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
-  val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
+  val HIVE_METASTORE_VERSION = stringConf("spark.sql.hive.metastore.version",
+    defaultValue = Some(hiveExecutionVersion),
+    doc = "Version of the Hive metastore. Available options are " +
+        s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
+
   val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
     defaultValue = Some("builtin"),
     doc = s"""

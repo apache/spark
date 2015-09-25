@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
  * is written to the local, ephemeral block storage that lives in each executor. This is useful
  * for use cases where RDDs build up long lineages that need to be truncated often (e.g. GraphX).
  */
-private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
+private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient private val rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
   /**

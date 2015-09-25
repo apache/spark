@@ -24,10 +24,9 @@ setOldClass("jobj")
 
 #' @title S4 class that represents a DataFrame column
 #' @description The column class supports unary, binary operations on DataFrame columns
-
 #' @rdname column
 #'
-#' @param jc reference to JVM DataFrame column
+#' @slot jc reference to JVM DataFrame column
 #' @export
 setClass("Column",
          slots = list(jc = "jobj"))
@@ -46,6 +45,7 @@ col <- function(x) {
 }
 
 #' @rdname show
+#' @name show
 setMethod("show", "Column",
           function(object) {
             cat("Column", callJMethod(object@jc, "toString"), "\n")
@@ -122,8 +122,11 @@ createMethods()
 #' alias
 #'
 #' Set a new name for a column
-
-#' @rdname column
+#'
+#' @rdname alias
+#' @name alias
+#' @family colum_func
+#' @export
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
@@ -138,7 +141,9 @@ setMethod("alias",
 #'
 #' An expression that returns a substring.
 #'
-#' @rdname column
+#' @rdname substr
+#' @name substr
+#' @family colum_func
 #'
 #' @param start starting position
 #' @param stop ending position
@@ -152,7 +157,9 @@ setMethod("substr", signature(x = "Column"),
 #'
 #' Test if the column is between the lower bound and upper bound, inclusive.
 #'
-#' @rdname column
+#' @rdname between
+#' @name between
+#' @family colum_func
 #'
 #' @param bounds lower and upper bounds
 setMethod("between", signature(x = "Column"),
@@ -167,10 +174,11 @@ setMethod("between", signature(x = "Column"),
 
 #' Casts the column to a different data type.
 #'
-#' @rdname column
+#' @rdname cast
+#' @name cast
+#' @family colum_func
 #'
-#' @examples
-#' \dontrun{
+#' @examples \dontrun{
 #'   cast(df$age, "string")
 #'   cast(df$name, list(type="array", elementType="byte", containsNull = TRUE))
 #' }
@@ -190,17 +198,20 @@ setMethod("cast",
 
 #' Match a column with given values.
 #'
-#' @rdname column
+#' @rdname match
+#' @name %in%
+#' @aliases %in%
 #' @return a matched values as a result of comparing with given values.
+#' @export
+#' @examples
 #' \dontrun{
-#'   filter(df, "age in (10, 30)")
-#'   where(df, df$age %in% c(10, 30))
+#' filter(df, "age in (10, 30)")
+#' where(df, df$age %in% c(10, 30))
 #' }
 setMethod("%in%",
           signature(x = "Column"),
           function(x, table) {
-            table <- listToSeq(as.list(table))
-            jc <- callJMethod(x@jc, "in", table)
+            jc <- callJMethod(x@jc, "in", as.list(table))
             return(column(jc))
           })
 
@@ -209,7 +220,10 @@ setMethod("%in%",
 #' If values in the specified column are null, returns the value. 
 #' Can be used in conjunction with `when` to specify a default value for expressions.
 #'
-#' @rdname column
+#' @rdname otherwise
+#' @name otherwise
+#' @family colum_func
+#' @export
 setMethod("otherwise",
           signature(x = "Column", value = "ANY"),
           function(x, value) {

@@ -19,12 +19,13 @@ package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.{Failure, Success}
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 
@@ -128,7 +129,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   }
 
   def getPendingTimes(): Seq[Time] = {
-    jobSets.keySet.toSeq
+    jobSets.asScala.keys.toSeq
   }
 
   def reportError(msg: String, e: Throwable) {
@@ -165,22 +166,22 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   }
 
   private def handleJobCompletion(job: Job) {
+    val jobSet = jobSets.get(job.time)
+    jobSet.handleJobCompletion(job)
+    logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
+    if (jobSet.hasCompleted) {
+      jobSets.remove(jobSet.time)
+      jobGenerator.onBatchCompletion(jobSet.time)
+      logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
+        jobSet.totalDelay / 1000.0, jobSet.time.toString,
+        jobSet.processingDelay / 1000.0
+      ))
+      listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
+    }
     job.result match {
-      case Success(_) =>
-        val jobSet = jobSets.get(job.time)
-        jobSet.handleJobCompletion(job)
-        logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
-        if (jobSet.hasCompleted) {
-          jobSets.remove(jobSet.time)
-          jobGenerator.onBatchCompletion(jobSet.time)
-          logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
-            jobSet.totalDelay / 1000.0, jobSet.time.toString,
-            jobSet.processingDelay / 1000.0
-          ))
-          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
-        }
       case Failure(e) =>
         reportError("Error running job " + job, e)
+      case _ =>
     }
   }
 
@@ -190,10 +191,20 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   }
 
   private class JobHandler(job: Job) extends Runnable with Logging {
+    import JobScheduler._
+
     def run() {
-      ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString)
-      ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString)
       try {
+        val formattedTime = UIUtils.formatBatchTime(
+          job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
+        val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"
+        val batchLinkText = s"[output operation ${job.outputOpId}, batch time ${formattedTime}]"
+
+        ssc.sc.setJobDescription(
+          s"""Streaming job from <a href="$batchUrl">$batchLinkText</a>""")
+        ssc.sc.setLocalProperty(BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString)
+        ssc.sc.setLocalProperty(OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString)
+
         // We need to assign `eventLoop` to a temp variable. Otherwise, because
         // `JobScheduler.stop(false)` may set `eventLoop` to null when this method is running, then
         // it's possible that when `post` is called, `eventLoop` happens to null.
