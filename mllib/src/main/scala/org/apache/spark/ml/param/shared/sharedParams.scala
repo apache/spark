@@ -357,4 +357,17 @@ private[ml] trait HasWeightCol extends Params {
   /** @group getParam */
   final def getWeightCol: String = $(weightCol)
 }
+
+/**
+ * Trait for the solver algorithm for optimization.
+ */
+private[ml] trait HasSolver extends Params {
+  /**
+   * Param for solver algorithm. If this is not set or empty, we select the solver algorithm automatically.
+   */
+  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.")
+
+  /** @group getParam */
+  final def getSolver: String = $(solver)
+}
 // scalastyle:on

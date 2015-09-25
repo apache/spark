@@ -43,7 +43,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
-    with HasFitIntercept with HasStandardization with HasWeightCol
+    with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
 
 /**
  * Class that represents an instance of weighted data point with label and features.
@@ -141,6 +141,17 @@ class LinearRegression(override val uid: String)
   def setWeightCol(value: String): this.type = set(weightCol, value)
   setDefault(weightCol -> "")
 
+  /**
+   * Set the solver algorithm for optimization.
+   * In case of linear regression, this can be "l-bfgs", "normal" and "auto".
+   * The default value is "auto" which means that the solver algorithm is
+   * selected automatically.
+   * @param value
+   * @return
+   */
+  def setSolver(value: String): this.type = set(solver, value)
+  setDefault(solver -> "auto")
+
   override protected def train(dataset: DataFrame): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist instances.
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
@@ -170,7 +181,8 @@ class LinearRegression(override val uid: String)
     val yMean = ySummarizer.mean(0)
     val yStd = math.sqrt(ySummarizer.variance(0))
 
-    if ($(elasticNetParam) == 0.0 && numFeatures <= 4096) {
+    if ($(solver) != "l-bfgs" && ($(solver) == "normal" ||
+      ($(elasticNetParam) == 0.0 && numFeatures <= 4096))) {
       // In case of feature size is small, WeightedLeastSquares can train more efficiently
       // because it requires one pass through to the data. (SPARK-10668)
       val instances: RDD[WeightedLeastSquares.Instance] = dataset.select(
@@ -184,7 +196,16 @@ class LinearRegression(override val uid: String)
       val model = optimizer.fit(instances)
       // When it is trained by WeightedLeastSquares, training summary does not
       // attached returned model.
-      return new LinearRegressionModel(uid, model.coefficients, model.intercept)
+      val lrModel = new LinearRegressionModel(uid, model.coefficients, model.intercept)
+      // WeightedLeastSquares does not run through iterations. So it does not generate
+      // an objective history.
+      val trainingSummary = new LinearRegressionTrainingSummary(
+        lrModel.transform(dataset),
+        $(predictionCol),
+        $(labelCol),
+        $(featuresCol),
+        Array(0D))
+      return copyValues(lrModel.setSummary(trainingSummary))
     }
 
     // If the yStd is zero, then the intercept is yMean with zero weights;
@@ -217,8 +238,8 @@ class LinearRegression(override val uid: String)
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
       $(standardization), featuresStd, featuresMean, effectiveL2RegParam)
-
-    val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
+    val optimizer = if ($(solver) == "l-bfgs" || $(elasticNetParam) == 0.0
+      || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
     } else {
       def effectiveL1RegFun = (index: Int) => {
