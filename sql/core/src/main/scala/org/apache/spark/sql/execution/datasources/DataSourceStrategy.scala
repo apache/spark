@@ -349,15 +349,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   protected[sql] def selectFilters(filters: Seq[Expression]) = {
     def isCastable(a: Attribute, l: Literal): Boolean = {
       (l.dataType, a.dataType) match {
-        case (from: DecimalType, to: NumericType) =>
-          // As downcasting decimal to decimal, it returns null.
-          val maybeCastedValue = Option(Cast(Cast(l, to), from).eval())
-          maybeCastedValue.exists(
-            _.asInstanceOf[Decimal].compare(l.value.asInstanceOf[Decimal]) == 0)
+        // It is not allowed for [[Decimal]] to compare to other types except [[Decimal]].
         case (from: NumericType, to: NumericType) =>
-          Cast(l, to).eval() == l.value
-        case (from: NumericType, to: StringType) => false
-        case (from: DataType, to: DataType) => Option(Cast(l, to).eval()).isDefined
+          Option(Cast(l, to).eval()).exists(_ == l.value)
+        case _ => false
       }
     }
 

@@ -503,9 +503,6 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     checkPushedFilter(s"select * from decimals where A > ${Int.MaxValue.toLong + 1L}", "")
     checkPushedFilter("select * from decimals where A > 1000.010001", "")
 
-    checkPushedFilter("select * from timetypes where B > '1998-09-10'", "WHERE B > 1998-09-10")
-    checkPushedFilter("select * from timetypes where B > 'abcd'", "")
-
     checkPushedFilter("select * from flttypes where A <= 1", "WHERE A <= 1.0")
     checkPushedFilter("select * from flttypes where A <= '1.01'", "WHERE A <= 1.01")
     checkPushedFilter(s"select * from flttypes where A <= '${Double.MaxValue}'",
