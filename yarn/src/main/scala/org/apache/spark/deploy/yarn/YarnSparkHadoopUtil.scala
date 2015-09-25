@@ -39,7 +39,7 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.util.{IntParam, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Contains util methods to interact with Hadoop from spark.
