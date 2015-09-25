@@ -386,7 +386,7 @@ class SparkHadoopUtil extends Logging {
 object SparkHadoopUtil {
 
   private lazy val hadoop = new SparkHadoopUtil
-  private lazy val yarn = try{
+  private lazy val yarn = try {
     Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
       .newInstance()
       .asInstanceOf[SparkHadoopUtil]
