@@ -1564,7 +1564,7 @@ class DataFrame private[sql](
    */
   def toJSON: RDD[String] = {
     val rowSchema = this.schema
-    this.mapPartitions { iter =>
+    queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
