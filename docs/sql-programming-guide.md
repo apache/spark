@@ -1347,10 +1347,10 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td>depends</td>
   <td>
     The default SQL dialect to use. This is an experimental configuration.
-	For SQLContext, only one option, which is <code>sql</code> by default;
-	For HiveContext, the value can be either <code>sql</code> or <code>hive</code> (<code>hive</code> by default);
-	This configuration is great helpful	for SQL Parser developers, to test the SQL Parser functionalities by 
-	querying the tables in Hive metastore; and also can be the full class name of the Plug-able Spark SQL Parser.
+    For SQLContext, only one option, which is <code>sql</code> by default;
+    For HiveContext, the value can be either <code>sql</code> or <code>hive</code> (<code>hive</code> by default);
+    This configuration is great helpful for SQL Parser developers, to test the SQL Parser functionalities by
+    querying the tables in Hive metastore; and also can be the full class name of the Plug-able Spark SQL Parser.
   </td>
 </tr>
 <tr>
