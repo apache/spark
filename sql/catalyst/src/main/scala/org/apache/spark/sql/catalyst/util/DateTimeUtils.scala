@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{TimeZone, Calendar}
+import javax.xml.bind.DatatypeConverter
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -109,30 +110,22 @@ object DateTimeUtils {
   }
 
   def stringToTime(s: String): java.util.Date = {
-    if (!s.contains('T')) {
+    var indexOfGMT = s.indexOf("GMT");
+    if (indexOfGMT != -1) {
+      // ISO8601 with a weird time zone specifier (2000-01-01T00:00GMT+01:00)
+      val s0 = s.substring(0, indexOfGMT)
+      val s1 = s.substring(indexOfGMT + 3)
+      // Mapped to 2000-01-01T00:00+01:00
+      stringToTime(s0 + s1)
+    } else if (!s.contains('T')) {
       // JDBC escape string
       if (s.contains(' ')) {
         Timestamp.valueOf(s)
       } else {
         Date.valueOf(s)
       }
-    } else if (s.endsWith("Z")) {
-      // this is zero timezone of ISO8601
-      stringToTime(s.substring(0, s.length - 1) + "GMT-00:00")
-    } else if (s.indexOf("GMT") == -1) {
-      // timezone with ISO8601
-      val inset = "+00.00".length
-      val s0 = s.substring(0, s.length - inset)
-      val s1 = s.substring(s.length - inset, s.length)
-      if (s0.substring(s0.lastIndexOf(':')).contains('.')) {
-        stringToTime(s0 + "GMT" + s1)
-      } else {
-        stringToTime(s0 + ".0GMT" + s1)
-      }
     } else {
-      // ISO8601 with GMT insert
-      val ISO8601GMT: SimpleDateFormat = new SimpleDateFormat( "yyyy-MM-dd'T'HH:mm:ss.SSSz" )
-      ISO8601GMT.parse(s)
+      DatatypeConverter.parseDateTime(s).getTime()
     }
   }
 

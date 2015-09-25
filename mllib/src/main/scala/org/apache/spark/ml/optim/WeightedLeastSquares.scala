@@ -193,7 +193,6 @@ private[ml] object WeightedLeastSquares {
       val ak = a.size
       if (!initialized) {
         init(ak)
-        initialized = true
       }
       assert(ak == k, s"Dimension mismatch. Expect vectors of size $k but got $ak.")
       count += 1L

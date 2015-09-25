@@ -24,6 +24,7 @@ import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JM
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
+import scala.util.control.NonFatal
 
 import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.conf.Configuration
@@ -38,7 +39,6 @@ import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
-import scala.util.control.NonFatal
 
 private[spark] class PythonRDD(
     parent: RDD[_],
@@ -61,11 +61,39 @@ private[spark] class PythonRDD(
     if (preservePartitoning) firstParent.partitioner else None
   }
 
+  val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
+
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+    val runner = new PythonRunner(
+      command, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator,
+      bufferSize, reuse_worker)
+    runner.compute(firstParent.iterator(split, context), split.index, context)
+  }
+}
+
+
+/**
+ * A helper class to run Python UDFs in Spark.
+ */
+private[spark] class PythonRunner(
+    command: Array[Byte],
+    envVars: JMap[String, String],
+    pythonIncludes: JList[String],
+    pythonExec: String,
+    pythonVer: String,
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
+    accumulator: Accumulator[JList[Array[Byte]]],
+    bufferSize: Int,
+    reuse_worker: Boolean)
+  extends Logging {
+
+  def compute(
+      inputIterator: Iterator[_],
+      partitionIndex: Int,
+      context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
-    val localdir = env.blockManager.diskBlockManager.localDirs.map(
-      f => f.getPath()).mkString(",")
+    val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuse_worker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
@@ -75,7 +103,7 @@ private[spark] class PythonRDD(
     @volatile var released = false
 
     // Start a thread to feed the process input from our parent's iterator
-    val writerThread = new WriterThread(env, worker, split, context)
+    val writerThread = new WriterThread(env, worker, inputIterator, partitionIndex, context)
 
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
@@ -183,13 +211,16 @@ private[spark] class PythonRDD(
     new InterruptibleIterator(context, stdoutIterator)
   }
 
-  val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
-
   /**
    * The thread responsible for writing the data from the PythonRDD's parent iterator to the
    * Python process.
    */
-  class WriterThread(env: SparkEnv, worker: Socket, split: Partition, context: TaskContext)
+  class WriterThread(
+      env: SparkEnv,
+      worker: Socket,
+      inputIterator: Iterator[_],
+      partitionIndex: Int,
+      context: TaskContext)
     extends Thread(s"stdout writer for $pythonExec") {
 
     @volatile private var _exception: Exception = null
@@ -211,11 +242,11 @@ private[spark] class PythonRDD(
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
         // Partition index
-        dataOut.writeInt(split.index)
+        dataOut.writeInt(partitionIndex)
         // Python version of driver
         PythonRDD.writeUTF(pythonVer, dataOut)
         // sparkFilesDir
-        PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
+        PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
         // Python includes (*.zip and *.egg files)
         dataOut.writeInt(pythonIncludes.size())
         for (include <- pythonIncludes.asScala) {
@@ -246,7 +277,7 @@ private[spark] class PythonRDD(
         dataOut.writeInt(command.length)
         dataOut.write(command)
         // Data values
-        PythonRDD.writeIteratorToStream(firstParent.iterator(split, context), dataOut)
+        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
         dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()
@@ -327,7 +358,8 @@ private[spark] object PythonRDD extends Logging {
 
   // remember the broadcasts sent to each worker
   private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
-  private def getWorkerBroadcasts(worker: Socket) = {
+
+  def getWorkerBroadcasts(worker: Socket): mutable.Set[Long] = {
     synchronized {
       workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
     }
@@ -601,7 +633,7 @@ private[spark] object PythonRDD extends Logging {
    *
    * The thread will terminate after all the data are sent or any exceptions happen.
    */
-  private def serveIterator[T](items: Iterator[T], threadName: String): Int = {
+  def serveIterator[T](items: Iterator[T], threadName: String): Int = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 3 seconds
     serverSocket.setSoTimeout(3000)
@@ -839,7 +871,8 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
  * write the data into disk after deserialization, then Python can read it from disks.
  */
 // scalastyle:off no.finalize
-private[spark] class PythonBroadcast(@transient var path: String) extends Serializable {
+private[spark] class PythonBroadcast(@transient var path: String) extends Serializable
+  with Logging {
 
   /**
    * Read data from disks, then copy it to `out`
@@ -875,7 +908,9 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     if (!path.isEmpty) {
       val file = new File(path)
       if (file.exists()) {
-        file.delete()
+        if (!file.delete()) {
+          logWarning(s"Error deleting ${file.getPath}")
+        }
       }
     }
   }
