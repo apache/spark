@@ -182,6 +182,8 @@ private[sql] class OrcRelation(
 
   override def needConversion: Boolean = false
 
+  override def outputNeedConversion: Boolean = false
+
   override def equals(other: Any): Boolean = other match {
     case that: OrcRelation =>
       paths.toSet == that.paths.toSet &&

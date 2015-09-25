@@ -66,8 +66,6 @@ case class AllDataTypesScan(
 
   override def schema: StructType = userSpecifiedSchema
 
-  override def needConversion: Boolean = true
-
   override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
       Row(

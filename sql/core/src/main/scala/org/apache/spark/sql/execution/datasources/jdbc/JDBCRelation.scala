@@ -88,6 +88,8 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
+  override val outputNeedConversion: Boolean = false
+
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {

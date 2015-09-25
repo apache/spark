@@ -225,7 +225,6 @@ abstract class BaseRelation {
    *  java.lang.String -> UTF8String
    *  java.lang.Decimal -> Decimal
    *
-   * If `needConversion` is `false`, buildScan() should return an [[RDD]] of [[InternalRow]]
    *
    * Note: The internal representation is not stable across releases and thus data sources outside
    * of Spark SQL should leave this as true.
@@ -233,6 +232,20 @@ abstract class BaseRelation {
    * @since 1.4.0
    */
   def needConversion: Boolean = true
+
+  /**
+   * Indicates if the results of a scan need to be converted from a [[Row]] to an [[InternalRow]].
+   *
+   * If `outputNeedConversion` is `true`, the scanned results will be converted later in
+   * `DataSourceStrategy` from an [[RDD]] of [[Row]] to [[RDD]] of [[InternalRow]].
+   *
+   * Note: The internal representation is not stable across releases and thus data sources outside
+   * of Spark SQL should leave this as true.
+   *
+   * @since 1.6.0
+   */
+
+  def outputNeedConversion: Boolean = true
 }
 
 /**
@@ -622,22 +635,20 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    *
    * @since 1.4.0
    */
-  // TODO Tries to eliminate the extra Catalyst-to-Scala conversion when `needConversion` is true
-  //
-  // PR #7626 separated `Row` and `InternalRow` completely.  One of the consequences is that we can
-  // no longer treat an `InternalRow` containing Catalyst values as a `Row`.  Thus we have to
-  // introduce another row value conversion for data sources whose `needConversion` is true.
   def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
     val codegenEnabled = this.codegenEnabled
     val needConversion = this.needConversion
+    val outputNeedConversion = this.outputNeedConversion
 
     val requiredOutput = requiredColumns.map { col =>
       val field = dataSchema(col)
       BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
     }.toSeq
 
+    // buildScan will rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
+    // So rdd here could actually be RDD[InternalRow] or RDD[Row]
     val rdd: RDD[Row] = buildScan(inputFiles)
     val converted: RDD[InternalRow] =
       if (needConversion) {
@@ -658,7 +669,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         rows.map(r => mutableProjection(r))
       }
 
-      if (needConversion) {
+      if (outputNeedConversion) {
         val requiredSchema = StructType(requiredColumns.map(dataSchema(_)))
         val toScala = CatalystTypeConverters.createToScalaConverter(requiredSchema)
         projectedRows.map(toScala(_).asInstanceOf[Row])
