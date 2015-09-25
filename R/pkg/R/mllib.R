@@ -41,7 +41,8 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
 #' df <- createDataFrame(sqlContext, iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df)
+#' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
+#' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
           function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0) {
