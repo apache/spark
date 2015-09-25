@@ -179,9 +179,19 @@ class LinearRegression(override val uid: String)
       val intercept = yMean
 
       val model = new LinearRegressionModel(uid, weights, intercept)
+      // Handle possible missing or invalid prediction columns
+      val predictionColOpt = get(predictionCol).orElse(getDefault(predictionCol)).filter(_ != "")
+      val (summaryModel, predictionColName) = predictionColOpt match {
+        case Some(p) => (model, p)
+        case None => {
+          val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+          (copyValues(model).setPredictionCol(predictionColName), predictionColName)
+        }
+      }
+
       val trainingSummary = new LinearRegressionTrainingSummary(
-        model.transform(dataset),
-        $(predictionCol),
+        summaryModel.transform(dataset),
+        predictionColName,
         $(labelCol),
         $(featuresCol),
         Array(0D))
@@ -331,7 +341,16 @@ class LinearRegressionModel private[ml] (
    */
   // TODO: decide on a good name before exposing to public API
   private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
-    new LinearRegressionSummary(transform(dataset), $(predictionCol), $(labelCol))
+    // Handle possible missing or invalid prediction columns
+    val predictionColOpt = get(predictionCol).orElse(getDefault(predictionCol)).filter(_ != "")
+    val (summaryModel, predictionColName) = predictionColOpt match {
+      case Some(p) => (this, p)
+      case None => {
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        (copyValues(this).setPredictionCol(predictionColName), predictionColName)
+      }
+    }
+    new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName, $(labelCol))
   }
 
   override protected def predict(features: Vector): Double = {
