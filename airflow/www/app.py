@@ -14,6 +14,7 @@ import os
 import socket
 import sys
 import time
+import traceback
 
 from flask._compat import PY2
 from flask import (
@@ -716,6 +717,11 @@ class Airflow(BaseView):
     @app.errorhandler(404)
     def circles(self):
         return render_template('airflow/circles.html'), 404
+
+    @app.errorhandler(500)
+    def show_traceback(self):
+        return render_template(
+            'airflow/traceback.html', info=traceback.format_exc()), 500
 
     @expose('/sandbox')
     @login_required
