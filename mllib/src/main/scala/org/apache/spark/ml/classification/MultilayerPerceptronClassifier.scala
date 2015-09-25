@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
@@ -179,7 +181,16 @@ class MultilayerPerceptronClassificationModel private[ml] (
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable {
 
+  override val numFeatures: Int = layers.head
+
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)
+
+  /**
+   * Returns layers in a Java List.
+   */
+  private[ml] def javaLayers: java.util.List[Int] = {
+    layers.toList.asJava
+  }
 
   /**
    * Predict label for the given features.

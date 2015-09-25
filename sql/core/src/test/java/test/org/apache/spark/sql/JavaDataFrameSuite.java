@@ -37,6 +37,7 @@ import org.apache.spark.sql.*;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -61,7 +62,7 @@ public class JavaDataFrameSuite {
   @Test
   public void testExecution() {
     DataFrame df = context.table("testData").filter("key = 1");
-    Assert.assertEquals(df.select("key").collect()[0].get(0), 1);
+    Assert.assertEquals(1, df.select("key").collect()[0].get(0));
   }
 
   /**
@@ -90,6 +91,7 @@ public class JavaDataFrameSuite {
     df.groupBy().mean("key");
     df.groupBy().max("key");
     df.groupBy().min("key");
+    df.groupBy().stddev("key");
     df.groupBy().sum("key");
 
     // Varargs in column expressions
@@ -119,7 +121,7 @@ public class JavaDataFrameSuite {
 
   public static class Bean implements Serializable {
     private double a = 0.0;
-    private Integer[] b = new Integer[]{0, 1};
+    private Integer[] b = { 0, 1 };
     private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
     private List<String> d = Arrays.asList("floppy", "disk");
 
@@ -161,7 +163,7 @@ public class JavaDataFrameSuite {
       schema.apply("d"));
     Row first = df.select("a", "b", "c", "d").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
-    // Now Java lists and maps are converetd to Scala Seq's and Map's. Once we get a Seq below,
+    // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
     Seq<Integer> result = first.getAs(1);
     Assert.assertEquals(bean.getB().length, result.length());
@@ -180,7 +182,17 @@ public class JavaDataFrameSuite {
     }
   }
 
-  private static Comparator<Row> CrosstabRowComparator = new Comparator<Row>() {
+  @Test
+  public void testCreateDataFromFromList() {
+    StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
+    List<Row> rows = Arrays.asList(RowFactory.create(0));
+    DataFrame df = context.createDataFrame(rows, schema);
+    Row[] result = df.collect();
+    Assert.assertEquals(1, result.length);
+  }
+
+  private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
+    @Override
     public int compare(Row row1, Row row2) {
       String item1 = row1.getString(0);
       String item2 = row2.getString(0);
@@ -193,16 +205,16 @@ public class JavaDataFrameSuite {
     DataFrame df = context.table("testData2");
     DataFrame crosstab = df.stat().crosstab("a", "b");
     String[] columnNames = crosstab.schema().fieldNames();
-    Assert.assertEquals(columnNames[0], "a_b");
-    Assert.assertEquals(columnNames[1], "1");
-    Assert.assertEquals(columnNames[2], "2");
+    Assert.assertEquals("a_b", columnNames[0]);
+    Assert.assertEquals("1", columnNames[1]);
+    Assert.assertEquals("2", columnNames[2]);
     Row[] rows = crosstab.collect();
-    Arrays.sort(rows, CrosstabRowComparator);
+    Arrays.sort(rows, crosstabRowComparator);
     Integer count = 1;
     for (Row row : rows) {
       Assert.assertEquals(row.get(0).toString(), count.toString());
-      Assert.assertEquals(row.getLong(1), 1L);
-      Assert.assertEquals(row.getLong(2), 1L);
+      Assert.assertEquals(1L, row.getLong(1));
+      Assert.assertEquals(1L, row.getLong(2));
       count++;
     }
   }
@@ -210,7 +222,7 @@ public class JavaDataFrameSuite {
   @Test
   public void testFrequentItems() {
     DataFrame df = context.table("testData2");
-    String[] cols = new String[]{"a"};
+    String[] cols = {"a"};
     DataFrame results = df.stat().freqItems(cols, 0.2);
     Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
   }
@@ -219,14 +231,14 @@ public class JavaDataFrameSuite {
   public void testCorrelation() {
     DataFrame df = context.table("testData2");
     Double pearsonCorr = df.stat().corr("a", "b", "pearson");
-    Assert.assertTrue(Math.abs(pearsonCorr) < 1e-6);
+    Assert.assertTrue(Math.abs(pearsonCorr) < 1.0e-6);
   }
 
   @Test
   public void testCovariance() {
     DataFrame df = context.table("testData2");
     Double result = df.stat().cov("a", "b");
-    Assert.assertTrue(Math.abs(result) < 1e-6);
+    Assert.assertTrue(Math.abs(result) < 1.0e-6);
   }
 
   @Test
@@ -234,7 +246,7 @@ public class JavaDataFrameSuite {
     DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
-    Row[] expected = new Row[] {RowFactory.create(0, 5), RowFactory.create(1, 8)};
+    Row[] expected = {RowFactory.create(0, 5), RowFactory.create(1, 8)};
     Assert.assertArrayEquals(expected, actual);
   }
 }

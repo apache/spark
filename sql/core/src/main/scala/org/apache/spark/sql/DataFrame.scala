@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -114,7 +114,7 @@ private[sql] object DataFrame {
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution) extends Serializable {
+    @DeveloperApi @transient val queryExecution: QueryExecution) extends Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
@@ -320,9 +320,8 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def explain(extended: Boolean): Unit = {
-    ExplainCommand(
-      queryExecution.logical,
-      extended = extended).queryExecution.executedPlan.executeCollect().map {
+    val explain = ExplainCommand(queryExecution.logical, extended = extended)
+    explain.queryExecution.executedPlan.executeCollect().foreach {
       // scalastyle:off println
       r => println(r.getString(0))
       // scalastyle:on println
@@ -484,6 +483,26 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def join(right: DataFrame, usingColumns: Seq[String]): DataFrame = {
+    join(right, usingColumns, "inner")
+  }
+
+  /**
+   * Equi-join with another [[DataFrame]] using the given columns.
+   *
+   * Different from other join functions, the join columns will only appear once in the output,
+   * i.e. similar to SQL's `JOIN USING` syntax.
+   *
+   * Note that if you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def join(right: DataFrame, usingColumns: Seq[String], joinType: String): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
@@ -502,7 +521,7 @@ class DataFrame private[sql](
       Join(
         joined.left,
         joined.right,
-        joinType = Inner,
+        joinType = JoinType(joinType),
         condition)
     )
   }
@@ -720,7 +739,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map { expr =>
-      Column(new SqlParser().parseExpression(expr))
+      Column(SqlParser.parseExpression(expr))
     }: _*)
   }
 
@@ -745,7 +764,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def filter(conditionExpr: String): DataFrame = {
-    filter(Column(new SqlParser().parseExpression(conditionExpr)))
+    filter(Column(SqlParser.parseExpression(conditionExpr)))
   }
 
   /**
@@ -769,7 +788,7 @@ class DataFrame private[sql](
    * @since 1.5.0
    */
   def where(conditionExpr: String): DataFrame = {
-    filter(Column(new SqlParser().parseExpression(conditionExpr)))
+    filter(Column(SqlParser.parseExpression(conditionExpr)))
   }
 
   /**
@@ -1288,15 +1307,11 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def describe(cols: String*): DataFrame = {
 
-    // TODO: Add stddev as an expression, and remove it from here.
-    def stddevExpr(expr: Expression): Expression =
-      Sqrt(Subtract(Average(Multiply(expr, expr)), Multiply(Average(expr), Average(expr))))
-
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
       "count" -> Count,
       "mean" -> Average,
-      "stddev" -> stddevExpr,
+      "stddev" -> Stddev,
       "min" -> Min,
       "max" -> Max)
 

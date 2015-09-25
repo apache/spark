@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.PhysicalRDD
+
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -337,5 +339,19 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
       sqlContext.uncacheTable("t2")
       assert((accsSize - 2) == Accumulators.originals.size)
     }
+  }
+
+  test("SPARK-10327 Cache Table is not working while subquery has alias in its project list") {
+    sparkContext.parallelize((1, 1) :: (2, 2) :: Nil)
+      .toDF("key", "value").selectExpr("key", "value", "key+1").registerTempTable("abc")
+    sqlContext.cacheTable("abc")
+
+    val sparkPlan = sql(
+      """select a.key, b.key, c.key from
+        |abc a join abc b on a.key=b.key
+        |join abc c on a.key=c.key""".stripMargin).queryExecution.sparkPlan
+
+    assert(sparkPlan.collect { case e: InMemoryColumnarTableScan => e }.size === 3)
+    assert(sparkPlan.collect { case e: PhysicalRDD => e }.size === 0)
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 import scala.collection.Map
 
@@ -72,6 +73,38 @@ private[sql] object JacksonGenerator {
             valWriter(field.dataType, v)
         }
         gen.writeEndObject()
+
+      // For UDT, udt.serialize will produce SQL types. So, we need the following three cases.
+      case (ArrayType(ty, _), v: ArrayData) =>
+        gen.writeStartArray()
+        v.foreach(ty, (_, value) => valWriter(ty, value))
+        gen.writeEndArray()
+
+      case (MapType(kt, vt, _), v: MapData) =>
+        gen.writeStartObject()
+        v.foreach(kt, vt, { (k, v) =>
+          gen.writeFieldName(k.toString)
+          valWriter(vt, v)
+        })
+        gen.writeEndObject()
+
+      case (StructType(ty), v: InternalRow) =>
+        gen.writeStartObject()
+        var i = 0
+        while (i < ty.length) {
+          val field = ty(i)
+          val value = v.get(i, field.dataType)
+          if (value != null) {
+            gen.writeFieldName(field.name)
+            valWriter(field.dataType, value)
+          }
+          i += 1
+        }
+        gen.writeEndObject()
+
+      case (dt, v) =>
+        sys.error(
+          s"Failed to convert value $v (class of ${v.getClass}}) with the type of $dt to JSON.")
     }
 
     valWriter(rowSchema, row)
@@ -89,7 +122,7 @@ private[sql] object JacksonGenerator {
     def valWriter: (DataType, Any) => Unit = {
       case (_, null) | (NullType, _) => gen.writeNull()
       case (StringType, v) => gen.writeString(v.toString)
-      case (TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
+      case (TimestampType, v: Long) => gen.writeString(DateTimeUtils.toJavaTimestamp(v).toString)
       case (IntegerType, v: Int) => gen.writeNumber(v)
       case (ShortType, v: Short) => gen.writeNumber(v)
       case (FloatType, v: Float) => gen.writeNumber(v)
@@ -99,8 +132,12 @@ private[sql] object JacksonGenerator {
       case (ByteType, v: Byte) => gen.writeNumber(v.toInt)
       case (BinaryType, v: Array[Byte]) => gen.writeBinary(v)
       case (BooleanType, v: Boolean) => gen.writeBoolean(v)
-      case (DateType, v) => gen.writeString(v.toString)
-      case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, udt.serialize(v))
+      case (DateType, v: Int) => gen.writeString(DateTimeUtils.toJavaDate(v).toString)
+      // For UDT values, they should be in the SQL type's corresponding value type.
+      // We should not see values in the user-defined class at here.
+      // For example, VectorUDT's SQL type is an array of double. So, we should expect that v is
+      // an ArrayData at here, instead of a Vector.
+      case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, v)
 
       case (ArrayType(ty, _), v: ArrayData) =>
         gen.writeStartArray()
@@ -128,6 +165,10 @@ private[sql] object JacksonGenerator {
           i += 1
         }
         gen.writeEndObject()
+
+      case (dt, v) =>
+        sys.error(
+          s"Failed to convert value $v (class of ${v.getClass}}) with the type of $dt to JSON.")
     }
 
     valWriter(rowSchema, row)

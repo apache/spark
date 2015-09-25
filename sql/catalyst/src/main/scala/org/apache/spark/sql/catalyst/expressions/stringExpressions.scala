@@ -255,7 +255,7 @@ object StringTranslate {
     val dict = new HashMap[Character, Character]()
     var i = 0
     while (i < matching.length()) {
-      val rep = if (i < replace.length()) replace.charAt(i) else '\0'
+      val rep = if (i < replace.length()) replace.charAt(i) else '\u0000'
       if (null == dict.get(matching.charAt(i))) {
         dict.put(matching.charAt(i), rep)
       }
