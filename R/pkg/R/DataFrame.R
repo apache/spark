@@ -1848,3 +1848,64 @@ setMethod("crosstab",
             sct <- callJMethod(statFunctions, "crosstab", col1, col2)
             collect(dataFrame(sct))
           })
+
+#' Sort
+#'
+#' Sort a DataFrame by the specified column(s).
+#'
+#' @param x A DataFrame to be sorted.
+#' @param by A character column indicating the field to sort on
+#' @param decreasing Orderings for each sorting column
+#' @param ... Additional sorting fields
+#' @return A DataFrame where elements are sorted by input sorting columns.
+#' @rdname sort
+#' @name sort
+#' @aliases orderby
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' sort(df, TRUE, "col1","col2")
+#' sort(df, decreasing=TRUE, "col1")
+#' sort(df, decreasing=c(TRUE,FALSE), "col1","col2")
+#' }
+setMethod("sort",
+          signature(x = "DataFrame", decreasing="logical", col="character"),
+          function(x, decreasing, col, ...) {
+
+            # all sorting columns
+            by = c(col, ...)
+
+            # in case only 1 boolean argument is specified, it will be used for all columns
+            if (length(decreasing) == 1){
+              decreasing <- rep(decreasing,length(by))
+            } else if (length(decreasing) != length(by)){
+              stop("Arguments 'by' and 'decreasing' must have the same length")
+            }
+
+            # creates a string array by replacing TRUE/FALSE correspondingly by "desc"/"asc"
+            sortOrder <- ifelse (decreasing==TRUE, "desc", ifelse (decreasing==FALSE, "asc", decreasing))
+
+            # concatenates dataframe with the column names, example: c("x$Species", "x$Petal_Width")
+            colDFConcat <- paste("x", by, sep = "$")
+
+            # embraces columns with order order- asc/desc, example: c("asc(x$Species)", "desc(x$Petal_Length)" )
+            colDFOrderConcat <- paste(sortOrder, "(", colDFConcat, ")", collapse = ",")
+
+            # concatenates all ordered columns to a list, example: "list(asc(x$Species), desc(x$Petal_Length))"
+            colDFOrderConcatList <- paste("list(", colDFOrderConcat, ")", collapse = "")
+
+            # builds columns of type Column, example: [[1]] Column Species ASC
+            #                                         [[2]] Column Petal_Length DESC
+            resCols <- eval(parse(t=colDFOrderConcatList))
+            jcols <- lapply(resCols, function(c) {
+              c@jc
+            })
+
+            sdf <- callJMethod(x@sdf, "sort", jcols)
+
+            dataFrame(sdf)
+          })
