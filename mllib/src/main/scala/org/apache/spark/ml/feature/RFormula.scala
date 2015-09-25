@@ -85,15 +85,10 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
     val encoderStages = ArrayBuffer[PipelineStage]()
 
-    val groupPrefixes = mutable.Map[String, String]()
+    val prefixesToRewrite = mutable.Map[String, String]()
     val tempColumns = ArrayBuffer[String]()
-    val takenNames = mutable.Set(dataset.columns: _*)
-    def tmpColumn(prefix: String): String = {
-      var col = prefix
-      while (takenNames.contains(col)) {
-        col += "_"
-      }
-      takenNames.add(col)
+    def tmpColumn(category: String): String = {
+      val col = Identifiable.randomUID(category)
       tempColumns += col
       col
     }
@@ -102,7 +97,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val indexed: Map[String, String] = resolvedFormula.terms.flatten.distinct.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
-          val indexCol = tmpColumn(term + "_stridx")
+          val indexCol = tmpColumn("stridx")
           encoderStages += new StringIndexer()
             .setInputCol(term)
             .setOutputCol(indexCol)
@@ -115,27 +110,27 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     // Then we handle one-hot encoding and interactions between terms.
     val encodedTerms = resolvedFormula.terms.map {
       case Seq(term) if dataset.schema(term).dataType == StringType =>
-        val encodedCol = tmpColumn(term + "_onehot")
+        val encodedCol = tmpColumn("onehot")
         encoderStages += new OneHotEncoder()
           .setInputCol(indexed(term))
           .setOutputCol(encodedCol)
-        groupPrefixes(encodedCol) = term + "_"
+        prefixesToRewrite(encodedCol + "_") = term + "_"
         encodedCol
       case Seq(term) =>
         term
       case terms =>
-        val interactionCol = tmpColumn("interaction_" + terms.hashCode)
+        val interactionCol = tmpColumn("interaction")
         encoderStages += new Interaction()
           .setInputCols(terms.map(indexed).toArray)
           .setOutputCol(interactionCol)
-        groupPrefixes(interactionCol) = ""
+        prefixesToRewrite(interactionCol + "_") = ""
         interactionCol
     }
 
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
-    encoderStages += new VectorAttrRewriter($(featuresCol), groupPrefixes.toMap)
+    encoderStages += new VectorAttributeRewriter($(featuresCol), prefixesToRewrite.toMap)
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
@@ -244,19 +239,43 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
 }
 
 /**
- * Utility transformer that rewrites the attributes of a vector.
+ * Utility transformer that rewrites Vector attributes names via prefix replacement. For example,
+ * it can rewrite attribute names starting with 'foo_' to start with 'bar_' instead.
+ *
+ * @param vectorCol name of the vector column to rewrite.
+ * @param prefixesToRewrite the map of string prefixes to their replacement values. Each attribute
+ *                          name defined in vectorCol will be checked against the keys of this
+ *                          map. When a key prefixes a name, the matching prefix will be replaced
+ *                          by the value in the map.
  */
-private class VectorAttrRewriter(
+private class VectorAttributeRewriter(
     vectorCol: String,
-    groupPrefixes: Map[String, String])
+    prefixesToRewrite: Map[String, String])
   extends Transformer {
 
   override val uid = Identifiable.randomUID("vectorAttrRewriter")
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val attrs = AttributeGroup.fromStructField(dataset.schema(vectorCol))
-    val rewrittenCol = dataset.col(vectorCol).as(vectorCol, attrs.toMetadata())
+    val metadata = {
+      val group = AttributeGroup.fromStructField(dataset.schema(vectorCol))
+      val attrs = group.attributes.get.map { attr =>
+        if (attr.name.isDefined) {
+          val name = attr.name.get
+          val replacement = prefixesToRewrite.filter { case (k, _) => name.startsWith(k) }
+          if (replacement.nonEmpty) {
+            val (k, v) = replacement.headOption.get
+            attr.withName(v + name.stripPrefix(k))
+          } else {
+            attr
+          }
+        } else {
+          attr
+        }
+      }
+      new AttributeGroup(vectorCol, attrs).toMetadata()
+    }
     val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
+    val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
     dataset.select((otherCols :+ rewrittenCol): _*)
   }
 
@@ -266,5 +285,5 @@ private class VectorAttrRewriter(
       schema.fields.filter(_.name == vectorCol))
   }
 
-  override def copy(extra: ParamMap): VectorAttrRewriter = defaultCopy(extra)
+  override def copy(extra: ParamMap): VectorAttributeRewriter = defaultCopy(extra)
 }
