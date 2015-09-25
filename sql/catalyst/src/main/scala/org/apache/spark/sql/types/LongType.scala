@@ -46,6 +46,19 @@ class LongType private() extends IntegralType {
   override def simpleString: String = "bigint"
 
   private[spark] override def asNullable: LongType = this
+
+  override def cast(d: Double): InternalType = d.toLong
+
+  override def cast(f: Float): InternalType = f.toLong
+
+  override def cast(l: Long): InternalType = l
+
+  override def cast(i: Int): InternalType = i.toLong
+
+  override def cast(s: Short): InternalType = s.toLong
+
+  override def cast(b: Byte): InternalType = b.toLong
+
 }
 
 

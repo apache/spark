@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -52,42 +54,29 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param f The math function.
  * @param name The short name of the function
  */
-abstract class UnaryMathExpression[T <: DataType](
-  f: Double => Any, name: String, returnType: T = DoubleType)
+abstract class UnaryMathExpression[T <: NumericType](
+  f: Double => Double, name: String)(implicit ttag: TypeTag[T])
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType)
-  override def dataType: T = returnType
+  override val dataType: NumericType = NumericType.toType(ttag)
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
   protected override def nullSafeEval(input: Any): Any = {
-    f(input.asInstanceOf[Double])
+    dataType.cast(f(input.asInstanceOf[Double]))
   }
 
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
-  override final def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, codeBuilder(ctx, ev))
-  }
-
-  protected def codeBuilder(ctx: CodeGenContext, ev: GeneratedExpressionCode): (String) => String =
-    c => s"java.lang.Math.${funcName}($c)"
-}
-
-// for floor and ceil which returns bigint instead of double
-abstract class UnaryMathExpressionWithBigIntRet(f: Double => Double, name: String)
-  extends UnaryMathExpression(f(_).toLong, name, LongType) {
-
-  protected override def codeBuilder(
-    ctx: CodeGenContext, ev: GeneratedExpressionCode): (String) => String = {
-    c => "(long)" + super.codeBuilder(ctx, ev)(c)
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"(${dataType.typeName})java.lang.Math.${funcName}($c)")
   }
 }
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
-    extends UnaryMathExpression(f, name) {
+    extends UnaryMathExpression[DoubleType](f, name) {
 
   // values less than or equal to yAsymptote eval to null in Hive, instead of NaN or -Infinity
   protected val yAsymptote: Double = 0.0
@@ -97,9 +86,8 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
     if (d <= yAsymptote) null else f(d)
   }
 
-  protected override def codeBuilder(
-    ctx: CodeGenContext, ev: GeneratedExpressionCode): (String) => String = {
-    c =>
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
@@ -107,6 +95,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
           ${ev.primitive} = java.lang.Math.${funcName}($c);
         }
       """
+    )
   }
 }
 
@@ -158,19 +147,19 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
+case class Acos(child: Expression) extends UnaryMathExpression[DoubleType](math.acos, "ACOS")
 
-case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
+case class Asin(child: Expression) extends UnaryMathExpression[DoubleType](math.asin, "ASIN")
 
-case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
+case class Atan(child: Expression) extends UnaryMathExpression[DoubleType](math.atan, "ATAN")
 
-case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
+case class Cbrt(child: Expression) extends UnaryMathExpression[DoubleType](math.cbrt, "CBRT")
 
-case class Ceil(child: Expression) extends UnaryMathExpressionWithBigIntRet(math.ceil, "CEIL")
+case class Ceil(child: Expression) extends UnaryMathExpression[LongType](math.ceil, "CEIL")
 
-case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
+case class Cos(child: Expression) extends UnaryMathExpression[DoubleType](math.cos, "COS")
 
-case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
+case class Cosh(child: Expression) extends UnaryMathExpression[DoubleType](math.cosh, "COSH")
 
 /**
  * Convert a num from one base to another
@@ -205,11 +194,11 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
   }
 }
 
-case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
+case class Exp(child: Expression) extends UnaryMathExpression[DoubleType](math.exp, "EXP")
 
-case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
+case class Expm1(child: Expression) extends UnaryMathExpression[DoubleType](math.expm1, "EXPM1")
 
-case class Floor(child: Expression) extends UnaryMathExpressionWithBigIntRet(math.floor, "FLOOR")
+case class Floor(child: Expression) extends UnaryMathExpression[LongType](math.floor, "FLOOR")
 
 object Factorial {
 
@@ -278,9 +267,8 @@ case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
 
 case class Log2(child: Expression)
   extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
-  protected override def codeBuilder(
-    ctx: CodeGenContext, ev: GeneratedExpressionCode): (String) => String = {
-    c =>
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
@@ -288,6 +276,7 @@ case class Log2(child: Expression)
           ${ev.primitive} = java.lang.Math.log($c) / java.lang.Math.log(2);
         }
       """
+    )
   }
 }
 
@@ -297,27 +286,29 @@ case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1
   protected override val yAsymptote: Double = -1.0
 }
 
-case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
+case class Rint(child: Expression) extends UnaryMathExpression[DoubleType](math.rint, "ROUND") {
   override def funcName: String = "rint"
 }
 
-case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
+case class Signum(child: Expression) extends UnaryMathExpression[DoubleType](math.signum, "SIGNUM")
 
-case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
+case class Sin(child: Expression) extends UnaryMathExpression[DoubleType](math.sin, "SIN")
 
-case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
+case class Sinh(child: Expression) extends UnaryMathExpression[DoubleType](math.sinh, "SINH")
 
-case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
+case class Sqrt(child: Expression) extends UnaryMathExpression[DoubleType](math.sqrt, "SQRT")
 
-case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
+case class Tan(child: Expression) extends UnaryMathExpression[DoubleType](math.tan, "TAN")
 
-case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
+case class Tanh(child: Expression) extends UnaryMathExpression[DoubleType](math.tanh, "TANH")
 
-case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES") {
+case class ToDegrees(child: Expression)
+  extends UnaryMathExpression[DoubleType](math.toDegrees, "DEGREES") {
   override def funcName: String = "toDegrees"
 }
 
-case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
+case class ToRadians(child: Expression)
+  extends UnaryMathExpression[DoubleType](math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
 }
 
