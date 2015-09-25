@@ -156,6 +156,9 @@ object SparkBuild extends PomBuild {
 
     javacOptions in Compile ++= Seq("-encoding", "UTF-8"),
 
+    // This option is needed to suppress warnings from sun.misc.Unsafe usage
+    javacOptions in Compile += "-XDignore.symbol.file",
+
     // Implements -Xfatal-warnings, ignoring deprecation warnings.
     // Code snippet taken from https://issues.scala-lang.org/browse/SI-8410.
     compile in Compile := {
@@ -202,12 +205,9 @@ object SparkBuild extends PomBuild {
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
   allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, unsafe).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
-
-  /* Unsafe settings */
-  enable(Unsafe.settings)(unsafe)
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -267,13 +267,6 @@ object SparkBuild extends PomBuild {
     } ++ Seq[Project](OldDeps.project)
   }
 
-}
-
-object Unsafe {
-  lazy val settings = Seq(
-    // This option is needed to suppress warnings from sun.misc.Unsafe usage
-    javacOptions in Compile += "-XDignore.symbol.file"
-  )
 }
 
 object Flume {
