@@ -147,9 +147,8 @@ class StringIndexerModel (
       }
     }
 
-    val outputColName = $(outputCol)
     val metadata = NominalAttribute.defaultAttr
-      .withName(outputColName).withValues(labels).toMetadata()
+      .withName($(inputCol)).withValues(labels).toMetadata()
     // If we are skipping invalid records, filter them out.
     val filteredDataset = (getHandleInvalid) match {
       case "skip" => {
@@ -161,7 +160,7 @@ class StringIndexerModel (
       case _ => dataset
     }
     filteredDataset.select(col("*"),
-      indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
+      indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {
