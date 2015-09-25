@@ -1226,7 +1226,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-10741: Sort on Aggregate using parquet") {
     withTable("test10741") {
-      sql("CREATE TABLE test10741(c1 STRING, c2 INT) STORED AS PARQUET")
+      withTempTable("src") {
+        Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF().registerTempTable("src")
+        sql("CREATE TABLE test10741(c1 STRING, c2 INT) STORED AS PARQUET AS SELECT * FROM src")
+      }
 
       checkAnswer(sql(
         """
@@ -1234,7 +1237,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |FROM test10741
           |GROUP BY c1
           |HAVING (AVG(c2) > 5) ORDER BY c1
-        """.stripMargin), Nil)
+        """.stripMargin), Row("a", 7.0) :: Row("b", 6.0) :: Nil)
 
       checkAnswer(sql(
         """
@@ -1242,7 +1245,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |FROM test10741
           |GROUP BY c1
           |ORDER BY AVG(c2)
-        """.stripMargin), Nil)
+        """.stripMargin), Row("b", 6.0) :: Row("a", 7.0) :: Nil)
     }
   }
 }

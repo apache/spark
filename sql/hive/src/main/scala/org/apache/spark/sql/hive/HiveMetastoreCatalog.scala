@@ -555,7 +555,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
       plan transformUp {
         // Write path
-        case i @ InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
+        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
           // Inserting into partitioned table is not supported in Parquet data source (yet).
           if !r.hiveQlTable.isPartitioned && hive.convertMetastoreParquet &&
             r.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
@@ -563,7 +563,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           InsertIntoTable(parquetRelation, partition, child, overwrite, ifNotExists)
 
         // Write path
-        case i @ InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
+        case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
           // Inserting into partitioned table is not supported in Parquet data source (yet).
           if !r.hiveQlTable.isPartitioned && hive.convertMetastoreParquet &&
             r.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
