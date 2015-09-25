@@ -419,7 +419,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private var _partitionSpec: PartitionSpec = _
 
   private class FileStatusCache {
-    var sourcePath = Seq.empty[Path]
+    @transient
+    var sourcePath = Seq.empty[Path]  //just  advisory information
     var leafFiles = mutable.Map.empty[Path, FileStatus]
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
