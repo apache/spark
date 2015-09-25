@@ -17,6 +17,9 @@
 
 package org.apache.spark.unsafe.memory;
 
+import org.apache.spark.annotation.Private;
+
+@Private
 public interface MemoryAllocator {
 
   /**

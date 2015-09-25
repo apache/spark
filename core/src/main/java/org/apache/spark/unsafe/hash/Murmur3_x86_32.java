@@ -17,11 +17,13 @@
 
 package org.apache.spark.unsafe.hash;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.Platform;
 
 /**
  * 32-bit Murmur3 hasher.  This is based on Guava's Murmur3_32HashFunction.
  */
+@Private
 public final class Murmur3_x86_32 {
   private static final int C1 = 0xcc9e2d51;
   private static final int C2 = 0x1b873593;

@@ -23,10 +23,13 @@ import java.util.LinkedList;
 import java.util.Map;
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * Manages memory for an executor. Individual operators / tasks allocate memory through
  * {@link TaskMemoryManager} objects, which obtain their memory from ExecutorMemoryManager.
  */
+@Private
 public class ExecutorMemoryManager {
 
   /**

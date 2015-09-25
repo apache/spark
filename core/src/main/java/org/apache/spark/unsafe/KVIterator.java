@@ -19,6 +19,9 @@ package org.apache.spark.unsafe;
 
 import java.io.IOException;
 
+import org.apache.spark.annotation.Private;
+
+@Private
 public abstract class KVIterator<K, V> {
 
   public abstract boolean next() throws IOException;

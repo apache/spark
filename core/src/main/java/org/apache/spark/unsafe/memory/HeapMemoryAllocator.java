@@ -17,9 +17,12 @@
 
 package org.apache.spark.unsafe.memory;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * A simple {@link MemoryAllocator} that can allocate up to 16GB using a JVM long primitive array.
  */
+@Private
 public class HeapMemoryAllocator implements MemoryAllocator {
 
   @Override

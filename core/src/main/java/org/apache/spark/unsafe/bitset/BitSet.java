@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.bitset;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
@@ -25,6 +26,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  *
  * Each bit occupies exactly one bit of storage.
  */
+@Private
 public final class BitSet {
 
   /** A long array for the bits. */

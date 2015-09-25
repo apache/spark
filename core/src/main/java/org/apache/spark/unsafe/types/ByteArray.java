@@ -17,8 +17,10 @@
 
 package org.apache.spark.unsafe.types;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.Platform;
 
+@Private
 public class ByteArray {
 
   /**

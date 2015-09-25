@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.array;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
@@ -27,6 +28,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  *   <li>has no bound checking, and thus can crash the JVM process when assert is turned off</li>
  * </ul>
  */
+@Private
 public final class LongArray {
 
   // This is a long so that we perform long multiplications when computing offsets.

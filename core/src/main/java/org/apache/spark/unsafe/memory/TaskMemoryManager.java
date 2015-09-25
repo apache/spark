@@ -23,6 +23,8 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * Manages the memory allocated by an individual task.
  * <p>
@@ -44,6 +46,7 @@ import org.slf4j.LoggerFactory;
  * maximum size of a long[] array, allowing us to address 8192 * 2^32 * 8 bytes, which is
  * approximately 35 terabytes of memory.
  */
+@Private
 public class TaskMemoryManager {
 
   private final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);

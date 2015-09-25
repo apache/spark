@@ -23,6 +23,7 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 
@@ -37,6 +38,7 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
+@Private
 public final class UTF8String implements Comparable<UTF8String>, Externalizable {
 
   // These are only updated by readExternal()

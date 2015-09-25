@@ -19,10 +19,13 @@ package org.apache.spark.unsafe.memory;
 
 import javax.annotation.Nullable;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * A memory location. Tracked either by a memory address (with off-heap allocation),
  * or by an offset from a JVM object (in-heap allocation).
  */
+@Private
 public class MemoryLocation {
 
   @Nullable

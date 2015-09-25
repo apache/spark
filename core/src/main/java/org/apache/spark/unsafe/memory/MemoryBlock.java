@@ -19,11 +19,13 @@ package org.apache.spark.unsafe.memory;
 
 import javax.annotation.Nullable;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.Platform;
 
 /**
  * A consecutive block of memory, starting at a {@link MemoryLocation} with a fixed size.
  */
+@Private
 public class MemoryBlock extends MemoryLocation {
 
   private final long length;

@@ -17,9 +17,12 @@
 
 package org.apache.spark.unsafe.map;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * Interface that defines how we can grow the size of a hash map when it is over a threshold.
  */
+@Private
 public interface HashMapGrowthStrategy {
 
   int nextCapacity(int currentCapacity);

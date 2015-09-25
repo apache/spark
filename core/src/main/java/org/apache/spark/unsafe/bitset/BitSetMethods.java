@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.bitset;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.Platform;
 
 /**
@@ -26,6 +27,7 @@ import org.apache.spark.unsafe.Platform;
  *
  * Each bit occupies exactly one bit of storage.
  */
+@Private
 public final class BitSetMethods {
 
   private static final long WORD_SIZE = 8;

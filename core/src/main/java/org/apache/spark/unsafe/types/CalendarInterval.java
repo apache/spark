@@ -21,9 +21,12 @@ import java.io.Serializable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * The internal representation of interval type.
  */
+@Private
 public final class CalendarInterval implements Serializable {
   public static final long MICROS_PER_MILLI = 1000L;
   public static final long MICROS_PER_SECOND = MICROS_PER_MILLI * 1000;

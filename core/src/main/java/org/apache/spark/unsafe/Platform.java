@@ -21,6 +21,9 @@ import java.lang.reflect.Field;
 
 import sun.misc.Unsafe;
 
+import org.apache.spark.annotation.Private;
+
+@Private
 public final class Platform {
 
   private static final Unsafe _UNSAFE;
