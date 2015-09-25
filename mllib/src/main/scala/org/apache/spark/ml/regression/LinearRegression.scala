@@ -267,9 +267,19 @@ class LinearRegression(override val uid: String)
     if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LinearRegressionModel(uid, weights, intercept))
+    // Handle possible missing or invalid prediction columns
+    val predictionColOpt = get(predictionCol).orElse(getDefault(predictionCol)).filter(_ != "")
+    val (summaryModel, predictionColName) = predictionColOpt match {
+      case Some(p) => (model, p)
+      case None => {
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        (copyValues(model).setPredictionCol(predictionColName), predictionColName)
+      }
+    }
+
     val trainingSummary = new LinearRegressionTrainingSummary(
-      model.transform(dataset),
-      $(predictionCol),
+      summaryModel.transform(dataset),
+      predictionColName,
       $(labelCol),
       $(featuresCol),
       objectiveHistory)
