@@ -62,7 +62,30 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation))
         if t.partitionSpec.partitionColumns.nonEmpty =>
-      val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
+      // We divide the filter expressions into 3 parts
+      val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
+      val filterMap = filters.groupBy { f =>
+        // TODO this is case-senstive
+        val referencedColumnNames = f.references.map(_.name).toSet
+        if (referencedColumnNames.subsetOf(partitionColumnNames)) {
+          // Only reference the partition key
+          0
+        } else if (referencedColumnNames.intersect(partitionColumnNames).isEmpty) {
+          // Not reference any partition key at all. can be push down
+          1
+        } else {
+          // Reference both partition key and attributes
+          2
+        }
+      }
+      // Only prunning the partition keys
+      val partitionFilters = filterMap.getOrElse(0, Nil)
+      // Only pushes down predicates that do not reference partition keys.
+      val pushedFilters = filterMap.getOrElse(1, Nil)
+      // Predicates with both partition keys and attributes
+      val combineFilters = filterMap.getOrElse(2, Nil)
+
+      val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
       logInfo {
         val total = t.partitionSpec.partitions.length
@@ -71,21 +94,16 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
       }
 
-      // Only pushes down predicates that do not reference partition columns.
-      val pushedFilters = {
-        val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
-        filters.filter { f =>
-          val referencedColumnNames = f.references.map(_.name).toSet
-          referencedColumnNames.intersect(partitionColumnNames).isEmpty
-        }
-      }
-
-      buildPartitionedTableScan(
+      val scan = buildPartitionedTableScan(
         l,
         projects,
         pushedFilters,
         t.partitionSpec.partitionColumns,
-        selectedPartitions) :: Nil
+        selectedPartitions)
+
+      combineFilters
+        .reduceLeftOption(expressions.And)
+        .map(execution.Filter(_, scan)).getOrElse(scan) :: Nil
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation)) =>
