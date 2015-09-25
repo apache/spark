@@ -175,14 +175,14 @@ setMethod("isLocal",
 #'}
 setMethod("showDF",
           signature(x = "DataFrame"),
-          function(x, numRows = 20, truncate = TRUE) {
+          function(x, numRows = .sparkREnv$MAX_NUMBER_OF_ROWS_TO_DISPLAY, truncate = TRUE) {
             s <- callJMethod(x@sdf, "showString", numToInt(numRows), truncate)
             cat(s)
           })
 
 #' show
 #'
-#' Print the DataFrame column names and types
+#' Print the fist N number of DataFrame rows. N is defined in 'MAX_NUMBER_OF_ROWS_TO_DISPLAY' environment variable
 #'
 #' @param x A SparkSQL DataFrame
 #'
@@ -199,11 +199,9 @@ setMethod("showDF",
 #'}
 setMethod("show", "DataFrame",
           function(object) {
-            cols <- lapply(dtypes(object), function(l) {
-              paste(l, collapse = ":")
-            })
-            s <- paste(cols, collapse = ", ")
-            cat(paste("DataFrame[", s, "]\n", sep = ""))
+            # calls showDF, later showDF can be removed and we can move its logic to show, similar to what R does
+            # In order to see the structure of a DataFrame we can use str() function
+            showDF(object)
           })
 
 #' DataTypes
