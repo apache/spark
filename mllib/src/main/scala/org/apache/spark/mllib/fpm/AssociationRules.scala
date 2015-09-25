@@ -143,9 +143,6 @@ object AssociationRules {
       consequent.toList.asJava
     }
 
-    /**
-     * @return [antecedent] => [consequent]: [confidence]
-     */
     override def toString = {
       s"${antecedent.mkString("{", ",", "}")} => ${consequent.mkString("{", ",", "}")}: ${confidence}"
     }
