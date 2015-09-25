@@ -428,8 +428,12 @@ class StandaloneDynamicAllocationSuite
    * don't wait for executors to register. Otherwise the tests will take much longer to run.
    */
   private def getExecutorIds(sc: SparkContext): Seq[String] = {
-    assert(master.idToApp.contains(sc.applicationId))
-    master.idToApp(sc.applicationId).executors.keys.map(_.toString).toSeq
+    val apps = getApplications()
+    val app = getApplications().find(_.id == sc.applicationId)
+    assert(app.isDefined)
+    // Although executors is transient, master is in the same process so the message won't be
+    // serialized and it's safe here.
+    app.get.executors.keys.map(_.toString).toSeq
   }
 
   /**
