@@ -51,7 +51,7 @@ test_that("dot minus and intercept vs native glm", {
 
 test_that("summary coefficients match with native glm", {
   training <- createDataFrame(sqlContext, iris)
-  stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training, alpha = 0.3))
+  stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training, solver = "l-bfgs"))
   coefs <- as.vector(stats$coefficients)
   rCoefs <- as.vector(coef(glm(Sepal.Width ~ Sepal.Length + Species, data = iris)))
   expect_true(all(abs(rCoefs - coefs) < 1e-6))
