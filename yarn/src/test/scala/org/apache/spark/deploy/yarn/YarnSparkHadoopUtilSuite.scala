@@ -236,10 +236,13 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
   }
 
   test("check different hadoop utils based on env variable") {
-    System.setProperty("SPARK_YARN_MODE", "true")
-    assert(SparkHadoopUtil.get.getClass.getSimpleName === "YarnSparkHadoopUtil")
-    System.setProperty("SPARK_YARN_MODE", "false")
-    assert(SparkHadoopUtil.get.getClass.getSimpleName === "SparkHadoopUtil")
-    System.clearProperty("SPARK_YARN_MODE")
+    try {
+      System.setProperty("SPARK_YARN_MODE", "true")
+      assert(SparkHadoopUtil.get.getClass === classOf[YarnSparkHadoopUtil])
+      System.setProperty("SPARK_YARN_MODE", "false")
+      assert(SparkHadoopUtil.get.getClass === classOf[SparkHadoopUtil])
+    } finally {
+      System.clearProperty("SPARK_YARN_MODE")
+    }
   }
 }
