@@ -80,7 +80,41 @@ public class SparkSubmitCommandBuilderSuite {
     assertTrue("Driver -Xms should be configured.", cmd.contains("-Xms42g"));
     assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx42g"));
     assertTrue("Command should contain user-defined conf.",
-      Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
+            Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
+  }
+
+
+  @Test
+  public void testClientCliParser() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+            parser.MASTER,
+            "yarn-cluster",
+            parser.DRIVER_MEMORY,
+            "42g",
+            parser.DRIVER_CLASS_PATH,
+            "/driverCp",
+            parser.DRIVER_JAVA_OPTIONS,
+            "extraJavaOpt",
+            parser.CLIENT_MEMORY,
+            "32g",
+            parser.CLIENT_CLASS_PATH,
+            "/clientCp",
+            parser.CLIENT_JAVA_OPTIONS,
+            "extraClientOpt",
+            parser.CONF,
+            "spark.randomOption=foo",
+            parser.CONF,
+            SparkLauncher.CLIENT_EXTRA_LIBRARY_PATH + "=/clientLibPath");
+    Map<String, String> env = new HashMap<String, String>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+
+    assertTrue(findInStringList(env.get(CommandBuilderUtils.getLibPathEnvName()),
+            File.pathSeparator, "/clientLibPath"));
+    assertTrue(findInStringList(findArgValue(cmd, "-cp"), File.pathSeparator, "/clientCp"));
+    assertTrue("Client -Xms should be configured.", cmd.contains("-Xms32g"));
+    assertTrue("Client -Xmx should be configured.", cmd.contains("-Xmx32g"));
+    assertTrue("Command should contain user-defined conf.",
+            Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
   }
 
   @Test
@@ -168,6 +202,10 @@ public class SparkSubmitCommandBuilderSuite {
     launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
     launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
     launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
+    launcher.conf.put(SparkLauncher.CLIENT_MEMORY, "2g");
+    launcher.conf.put(SparkLauncher.CLIENT_EXTRA_CLASSPATH, "/client");
+    launcher.conf.put(SparkLauncher.CLIENT_EXTRA_JAVA_OPTIONS, "-Dclient -XX:MaxPermSize=128m");
+    launcher.conf.put(SparkLauncher.CLIENT_EXTRA_LIBRARY_PATH, "/lib/native");
     launcher.conf.put("spark.foo", "foo");
 
     Map<String, String> env = new HashMap<String, String>();
@@ -179,14 +217,8 @@ public class SparkSubmitCommandBuilderSuite {
       assertTrue("Driver -Xms should be configured.", cmd.contains("-Xms1g"));
       assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx1g"));
     } else {
-      boolean found = false;
-      for (String arg : cmd) {
-        if (arg.startsWith("-Xms") || arg.startsWith("-Xmx")) {
-          found = true;
-          break;
-        }
-      }
-      assertFalse("Memory arguments should not be set.", found);
+      assertTrue("Client -Xms should be configured.", cmd.contains("-Xms2g"));
+      assertTrue("Client -Xmx should be configured.", cmd.contains("-Xmx2g"));
     }
 
     for (String arg : cmd) {
@@ -194,7 +226,7 @@ public class SparkSubmitCommandBuilderSuite {
         if (isDriver) {
           assertEquals("-XX:MaxPermSize=256m", arg);
         } else {
-          assertEquals("-XX:MaxPermSize=256m", arg);
+          assertEquals("-XX:MaxPermSize=128m", arg);
         }
       }
     }
@@ -203,7 +235,7 @@ public class SparkSubmitCommandBuilderSuite {
     if (isDriver) {
       assertTrue("Driver classpath should contain provided entry.", contains("/driver", cp));
     } else {
-      assertFalse("Driver classpath should not be in command.", contains("/driver", cp));
+      assertTrue("Client classpath should contain provided entry.", contains("/client", cp));
     }
 
     String libPath = env.get(CommandBuilderUtils.getLibPathEnvName());
@@ -212,8 +244,9 @@ public class SparkSubmitCommandBuilderSuite {
       assertTrue("Native library path should contain provided entry.",
         contains("/native", libPath.split(Pattern.quote(File.pathSeparator))));
     } else {
-      assertNull("Native library should not be set.", libPath);
-    }
+      assertNotNull("Native library path should be set.", libPath);
+      assertTrue("Native library path should contain provided entry.",
+              contains("/lib/native", libPath.split(Pattern.quote(File.pathSeparator))));    }
 
     // Checks below are the same for both driver and non-driver mode.
     assertEquals(dummyPropsFile.getAbsolutePath(), findArgValue(cmd, parser.PROPERTIES_FILE));

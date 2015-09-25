@@ -47,6 +47,15 @@ public class SparkLauncher {
   /** Configuration key for the driver native library path. */
   public static final String DRIVER_EXTRA_LIBRARY_PATH = "spark.driver.extraLibraryPath";
 
+  /** Configuration key for the client memory. */
+  public static final String CLIENT_MEMORY = "spark.client.memory";
+  /** Configuration key for the client class path. */
+  public static final String CLIENT_EXTRA_CLASSPATH = "spark.client.extraClassPath";
+  /** Configuration key for the client VM options. */
+  public static final String CLIENT_EXTRA_JAVA_OPTIONS = "spark.client.extraJavaOptions";
+  /** Configuration key for the client native library path. */
+  public static final String CLIENT_EXTRA_LIBRARY_PATH = "spark.client.extraLibraryPath";
+
   /** Configuration key for the executor memory. */
   public static final String EXECUTOR_MEMORY = "spark.executor.memory";
   /** Configuration key for the executor class path. */
