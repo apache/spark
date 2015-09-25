@@ -30,6 +30,7 @@ import org.scalatest.Matchers
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
 
@@ -235,15 +236,10 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
   }
 
   test("check different hadoop utils based on env variable") {
-    import org.apache.spark.deploy.SparkHadoopUtil
     System.setProperty("SPARK_YARN_MODE", "true")
-    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
+    assert(SparkHadoopUtil.get.getClass.getSimpleName === "YarnSparkHadoopUtil")
     System.setProperty("SPARK_YARN_MODE", "false")
-    val caught = intercept[java.lang.ClassCastException] {
-      SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
-    }
-    assert(caught.getMessage === "org.apache.spark.deploy.SparkHadoopUtil cannot be cast to " +
-      "org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+    assert(SparkHadoopUtil.get.getClass.getSimpleName === "SparkHadoopUtil")
     System.clearProperty("SPARK_YARN_MODE")
   }
 }
