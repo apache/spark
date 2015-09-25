@@ -349,7 +349,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   protected[sql] def selectFilters(filters: Seq[Expression]) = {
     def isCastable(a: Attribute, l: Literal): Boolean = {
       (l.dataType, a.dataType) match {
-        // It is not allowed for [[Decimal]] to compare to other types except [[Decimal]].
+        // It always return false when [[Decimal]] compares to other types except [[Decimal]].
         case (from: NumericType, to: NumericType) =>
           Option(Cast(l, to).eval()).exists(_ == l.value)
         case _ => false
