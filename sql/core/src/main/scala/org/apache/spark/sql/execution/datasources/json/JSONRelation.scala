@@ -77,7 +77,7 @@ private[sql] class JSONRelation(
     }
   }
 
-  override val inputNeedConversion: Boolean = false
+  override val needConversion: Boolean = false
 
   override val outputNeedConversion: Boolean = false
 

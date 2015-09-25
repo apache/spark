@@ -206,7 +206,7 @@ private[sql] class ParquetRelation(
   }
 
   // Parquet data source always uses Catalyst internal representations.
-  override val inputNeedConversion: Boolean = false
+  override val needConversion: Boolean = false
 
   override val outputNeedConversion: Boolean = false
 

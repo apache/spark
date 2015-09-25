@@ -180,7 +180,7 @@ private[sql] class OrcRelation(
       paths.head, Some(sqlContext.sparkContext.hadoopConfiguration))
   }
 
-  override def inputNeedConversion: Boolean = false
+  override def needConversion: Boolean = false
 
   override def outputNeedConversion: Boolean = false
 

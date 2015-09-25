@@ -229,19 +229,20 @@ abstract class BaseRelation {
    * Note: The internal representation is not stable across releases and thus data sources outside
    * of Spark SQL should leave this as true.
    *
-   * @since 1.5.0
+   * @since 1.4.0
    */
-  def inputNeedConversion: Boolean = true
+  def needConversion: Boolean = true
 
   /**
-   * Whether does it need to convert scan results to [[Row]] instead of [[InternalRow]].
+   * Indicates if the results of a scan need to be converted from a [[Row]] to an [[InternalRow]].
    *
-   * If `outputNeedConversion` is `false`, buildScan() will return an [[RDD]] of [[InternalRow]]
+   * If `outputNeedConversion` is `true`, the scanned results will be converted later in
+   * `DataSourceStrategy` from an [[RDD]] of [[Row]] to [[RDD]] of [[InternalRow]].
    *
    * Note: The internal representation is not stable across releases and thus data sources outside
    * of Spark SQL should leave this as true.
    *
-   * @since 1.5.0
+   * @since 1.6.0
    */
 
   def outputNeedConversion: Boolean = true
@@ -638,7 +639,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
     val codegenEnabled = this.codegenEnabled
-    val inputNeedConversion = this.inputNeedConversion
+    val needConversion = this.needConversion
     val outputNeedConversion = this.outputNeedConversion
 
     val requiredOutput = requiredColumns.map { col =>
@@ -650,7 +651,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     // So rdd here could actually be RDD[InternalRow] or RDD[Row]
     val rdd: RDD[Row] = buildScan(inputFiles)
     val converted: RDD[InternalRow] =
-      if (inputNeedConversion) {
+      if (needConversion) {
         RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
       } else {
         rdd.asInstanceOf[RDD[InternalRow]]

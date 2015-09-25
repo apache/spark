@@ -86,7 +86,7 @@ private[sql] case class JDBCRelation(
   with PrunedFilteredScan
   with InsertableRelation {
 
-  override val inputNeedConversion: Boolean = false
+  override val needConversion: Boolean = false
 
   override val outputNeedConversion: Boolean = false
 
