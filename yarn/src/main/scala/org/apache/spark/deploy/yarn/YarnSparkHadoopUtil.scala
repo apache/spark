@@ -315,7 +315,10 @@ object YarnSparkHadoopUtil {
     classPathSeparatorField.get(null).asInstanceOf[String]
   }
 
-  /** Get the initial target number of executors depends on dynamic allocation is enabled or not */
+  /**
+   * Getting the initial target number of executors depends on whether dynamic allocation is
+   * enabled.
+   */
   def getInitialTargetExecutorNumber(conf: SparkConf): Int = {
     if (Utils.isDynamicAllocationEnabled(conf)) {
       val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
@@ -328,11 +331,8 @@ object YarnSparkHadoopUtil {
 
       initialNumExecutors
     } else {
-      val targetNumExecutors = if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
-        IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES")).get
-      } else {
-        DEFAULT_NUMBER_EXECUTORS
-      }
+      val targetNumExecutors =
+        sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(DEFAULT_NUMBER_EXECUTORS)
       // System property can override environment variable.
       conf.getInt("spark.executor.instances", targetNumExecutors)
     }
