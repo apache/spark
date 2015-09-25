@@ -32,7 +32,7 @@ private[spark] class YarnClusterSchedulerBackend(
 
   override def start() {
     super.start()
-    totalExpectedExecutors = YarnSparkHadoopUtil.getTargetExecutorNumber(sc.conf)
+    totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sc.conf)
   }
 
   override def applicationId(): String =
