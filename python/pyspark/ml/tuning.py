@@ -254,6 +254,7 @@ class CrossValidator(Estimator):
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
@@ -290,6 +291,7 @@ class CrossValidatorModel(Model):
         and some extra params. This copies the underlying bestModel,
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """

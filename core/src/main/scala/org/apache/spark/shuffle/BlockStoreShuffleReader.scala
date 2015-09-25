@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.hash
+package org.apache.spark.shuffle
 
 import org.apache.spark._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
-private[spark] class HashShuffleReader[K, C](
+private[spark] class BlockStoreShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
     endPartition: Int,

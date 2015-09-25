@@ -164,6 +164,7 @@ class Params(Identifiable):
         a flat param map, where the latter value is used if there exist
         conflicts, i.e., with ordering: default param values <
         user-supplied values < extra.
+
         :param extra: extra param values
         :return: merged param map
         """
@@ -182,6 +183,7 @@ class Params(Identifiable):
         embedded and extra parameters over and returns the copy.
         Subclasses should override this method if the default approach
         is not sufficient.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
@@ -201,6 +203,7 @@ class Params(Identifiable):
     def _resolveParam(self, param):
         """
         Resolves a param and validates the ownership.
+
         :param param: param name or the param instance, which must
                       belong to this Params instance
         :return: resolved param instance
@@ -243,6 +246,7 @@ class Params(Identifiable):
         """
         Copies param values from this instance to another instance for
         params shared by them.
+
         :param to: the target instance
         :param extra: extra params to be copied
         :return: the target instance with param values copied
