@@ -44,12 +44,13 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' model <- glm(Sepal_Length ~ Sepal_Width, df)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0, solver = "auto") {
-            family <- match.arg(family)
-            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
+            solver = "auto") {
+              family <- match.arg(family)
+              model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                  "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
                                  alpha, solver)
-            return(new("PipelineModel", model = model))
+              return(new("PipelineModel", model = model))
           })
 
 #' Make predictions from a model
