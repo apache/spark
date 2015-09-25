@@ -185,6 +185,9 @@ sparkR.init <- function(
   # Seconds resolution is good enough for this purpose, so use ints
   assign(".scStartTime", as.integer(Sys.time()), envir = .sparkREnv)
 
+  # The maximum number of rows to display for example when show is called
+  assign("MAX_NUMBER_OF_ROWS_TO_DISPLAY", 50, .sparkREnv)
+
   assign(
     ".sparkRjsc",
     callJStatic(
