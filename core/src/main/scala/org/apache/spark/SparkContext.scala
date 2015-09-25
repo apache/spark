@@ -1757,8 +1757,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       SparkEnv.set(null)
     }
     SparkContext.clearActiveContext()
-    // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
     logInfo("Successfully stopped SparkContext")
   }
 
