@@ -76,9 +76,9 @@ public class UTF8StringSuite {
 
     byte[] buf1 = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     byte[] buf2 = {1, 2, 3};
-    UTF8String str1 = UTF8String.fromBytes(buf1, 0, 3);
-    UTF8String str2 = UTF8String.fromBytes(buf1, 0, 8);
-    UTF8String str3 = UTF8String.fromBytes(buf2);
+    UTF8String str1 = fromBytes(buf1, 0, 3);
+    UTF8String str2 = fromBytes(buf1, 0, 8);
+    UTF8String str3 = fromBytes(buf2);
     assertTrue(str1.getPrefix() - str2.getPrefix() < 0);
     assertEquals(str1.getPrefix(), str3.getPrefix());
   }
