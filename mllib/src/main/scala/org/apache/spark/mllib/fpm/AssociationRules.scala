@@ -146,9 +146,8 @@ object AssociationRules {
     /**
      * @return [antecedent] => [consequent]: [confidence]
      */
-    @Since("1.6.0")
     override def toString = {
-      s"${javaAntecedent} => ${javaConsequent}: ${confidence}"
+      s"${antecedent.mkString("{", ",", "}")} => ${consequent.mkString("{", ",", "}")}: ${confidence}"
     }
   }
 }
