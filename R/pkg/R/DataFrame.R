@@ -1883,7 +1883,7 @@ setMethod("sort",
             if (length(decreasing) == 1){
               decreasing <- rep(decreasing,length(by))
             } else if (length(decreasing) != length(by)){
-              stop("Arguments 'by' and 'decreasing' must have the same length")
+              stop("Arguments 'col' and 'decreasing' must have the same length")
             }
 
             # creates a string array by replacing TRUE/FALSE correspondingly by "desc"/"asc"
