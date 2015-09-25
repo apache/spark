@@ -1335,7 +1335,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
 </tr>
 <tr>
   <td><code>spark.sql.caseSensitive</code></td>
-  <td>false or true</td>
+  <td>depends</td>
   <td>
     Whether the query analyzer should be case sensitive or not.
 	For HiveContext, the default value is false;
@@ -1344,12 +1344,13 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
 </tr>
 <tr>
   <td><code>spark.sql.dialect</code></td>
-  <td>sql or hive</td>
+  <td>depends</td>
   <td>
     The default SQL dialect to use. This is an experimental configuration.
-	For SQLContext, only one option, which is "sql";
-	For HiveContext, the value can be either "sql" or "hive" (default); This configuration is great helpful
-	for SQL Parser developers, to test the SQL Parser functionalities by querying the tables in Hive metastore.
+	For SQLContext, only one option, which is <code>sql</code> by default;
+	For HiveContext, the value can be either <code>sql</code> or <code>hive</code> (<code>hive</code> by default);
+	This configuration is great helpful	for SQL Parser developers, to test the SQL Parser functionalities by 
+	querying the tables in Hive metastore; and also can be the full class name of the Plug-able Spark SQL Parser.
   </td>
 </tr>
 <tr>
