@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.{PairRDDFunctions, RDD}
 import org.apache.spark.streaming.{Duration, Time}
 import scala.reflect.ClassTag
@@ -38,6 +39,12 @@ class TransformedDStream[U: ClassTag] (
 
   override def compute(validTime: Time): Option[RDD[U]] = {
     val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
-    Option(transformFunc(parentRDDs, validTime))
+    val transformedRDD = transformFunc(parentRDDs, validTime)
+    if (transformedRDD == null) {
+      throw new SparkException("Transform function return null instead of an RDD; " + 
+          "this should be avoided . You can return an empty RDD using RDD.empty " + 
+          "if you dont want to return anything.")
+    }
+    Some(transformedRDD)
   }
 }

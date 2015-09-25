@@ -212,16 +212,17 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
   
   test("transform with NULL") {
-    val input = Seq(1 to 4, Seq(), 5 to 8, 9 to 12)
-    testOperation(
-      input,
-      (r: DStream[Int]) => r.transform(rdd => {if (rdd != null && !rdd.isEmpty()) rdd.map(_.toString) else null}),   // RDD.map in transform
-      input.filter(!_.isEmpty).map(_.map(_.toString)),
-      4, 
-      false
-    )
+    val input = Seq(1 to 4)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (r: DStream[Int]) => r.transform(rdd => null.asInstanceOf[RDD[Int]]),
+        Seq(Seq()),
+        1, 
+        false
+      )
+    }
   }
-
 
   test("transformWith") {
     val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
