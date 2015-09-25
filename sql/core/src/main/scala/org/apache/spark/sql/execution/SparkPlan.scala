@@ -340,6 +340,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val inputs = buildingFragment.inputs
     val currentTerminalNode = buildingFragment.currentTerminalNode
     println("currentTerminalNode " + currentTerminalNode)
+    val function = {
+      (iterators: Array[Iterator[InternalRow]]) =>
+        var i = 0
+        while (i < inputs.length) {
+          inputs(i).iteratorScan.withIterator(iterators(i))
+          i += 1
+        }
+        currentTerminalNode.prepare()
+        currentTerminalNode.open()
+        CompletionIterator[InternalRow, Iterator[InternalRow]](
+          currentTerminalNode.asIterator,
+          currentTerminalNode.close())
+    }
+    val rdds = inputs.map(_.rdd)
+    val fragment = new CoPartitionedRDD(sqlContext.sparkContext, function, rdds)
+    /*
     val fragment = inputs.length match {
       case 1 =>
         inputs(0).rdd.mapPartitions { iter =>
@@ -372,7 +388,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         }
       case n =>
         sys.error(s"A fragment with $n inputs is not supported.")
-    }
+    }*/
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       fragment
     }
