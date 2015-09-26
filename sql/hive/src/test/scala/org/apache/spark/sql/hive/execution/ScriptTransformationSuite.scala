@@ -38,6 +38,8 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     outputSerdeClass = None,
     inputSerdeProps = Seq.empty,
     outputSerdeProps = Seq.empty,
+    recordReaderClass = None,
+    recordWriterClass = None,
     schemaLess = false
   )
 
