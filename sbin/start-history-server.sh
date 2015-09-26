@@ -31,9 +31,9 @@ sbin="`cd "$sbin"; pwd`"
 . "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 if [ $# != 0 ] && [[ ! "$1" == \-* ]]; then
-    echo "Using command line arguments for setting the log directory is deprecated. Please "
-    echo "set the spark.history.fs.logDirectory configuration option instead."
-    export SPARK_HISTORY_OPTS="$SPARK_HISTORY_OPTS -Dspark.history.fs.logDirectory=$1"
+  echo "Using command line arguments for setting the log directory is deprecated. Please "
+  echo "set the spark.history.fs.logDirectory configuration option instead."
+  export SPARK_HISTORY_OPTS="$SPARK_HISTORY_OPTS -Dspark.history.fs.logDirectory=$1"
 fi
 
 exec "$sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1 $@
