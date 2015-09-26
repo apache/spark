@@ -63,6 +63,10 @@ setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 # @export
 setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
+# @rdname statfunctions.cor
+# @export
+setGeneric("cor", function(x, col1, col2, ...) { standardGeneric("cor") })
+
 # @rdname distinct
 # @export
 setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })

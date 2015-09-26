@@ -1848,3 +1848,30 @@ setMethod("crosstab",
             sct <- callJMethod(statFunctions, "crosstab", col1, col2)
             collect(dataFrame(sct))
           })
+
+#' cor
+#'
+#' Computes correlation coefficient between two columns
+#'
+#' @param col1 name of the first column.
+#' @param col2 name of the second column.
+#' @param method the method used to compute coefficients. Currently only pearson's coefficient is supported.
+#'                The default value is pearson
+#' @return correlation coefficient based on an input method between two input columns.
+#'
+#' @rdname statfunctions.cor
+#' @name cor
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' cor = cor(df, "col1", "col2", "pearson")
+#' cor = cor(df, "col1", "col2")
+#' }
+setMethod("cor",
+          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          function(x, col1, col2, method="pearson") {
+            statFunctions <- callJMethod(x@sdf, "stat")
+            sct <- callJMethod(statFunctions, "corr", col1, col2, method)
+            sct
+          })
