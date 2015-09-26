@@ -18,7 +18,7 @@ package org.apache.spark.deploy.history
 
 import java.io.File
 
-import com.google.common.base.Charsets._
+import java.nio.charset.StandardCharsets._
 import com.google.common.io.Files
 import org.apache.spark._
 import org.apache.spark.util.Utils
@@ -58,7 +58,7 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
         .filter { case (k, v) => k.startsWith("spark.")}
         .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
       val hsa = new HistoryServerArguments(conf, argStrings)
-      assert(conf.getBoolean("spark.test.CustomPropertyA", false) === true)
+      assert(conf.getBoolean("spark.test.CustomPropertyA", false))
       assert(conf.getInt("spark.test.DefaultPropertyB", 1) === 3)
     } finally {
       Utils.deleteRecursively(tmpDir)

@@ -61,7 +61,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       |Usage: HistoryServer [options]
       |
       |Options:
-      |  --dir DIR (-d DIR)          Sets spark.history.fs.logDirectory,deprecated use conf instead
+      |  --dir DIR (-d DIR)          Deprecated; set spark.history.fs.logDirectory directly
       |  --properties-file FILE      Path to a custom Spark properties file.
       |                              Default is conf/spark-defaults.conf.
       |
