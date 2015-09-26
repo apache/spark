@@ -119,7 +119,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - udf on boolean column") {
     withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
-      def booleanToInt = (x: Boolean) => if (x) 10 else 20
+      def booleanToInt: Boolean => Int = (x: Boolean) => if (x) 10 else 20
       sqlContext.udf.register("booleanToInt", booleanToInt)
 
       val udf = ScalaUDF(booleanToInt, IntegerType, Seq('_1.expr))
@@ -158,7 +158,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - udf on int column") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
-      def intToString = (x: Integer) => (x - 1).toString
+      def intToString: Integer => String = (x: Integer) => (x - 1).toString
       sqlContext.udf.register("intToString", intToString)
 
       val udf = ScalaUDF(intToString, StringType, Seq('_1.expr))
@@ -199,7 +199,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - udf on long column") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toLong)))) { implicit df =>
-      def longToString = (x: Long) => (x * 10).toString
+      def longToString: Long => String = (x: Long) => (x * 10).toString
       sqlContext.udf.register("longToString", longToString)
 
       val udf = ScalaUDF(longToString, StringType, Seq('_1.expr))
@@ -240,7 +240,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - udf on float column") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toFloat)))) { implicit df =>
-      def floatToString = (x: Float) => (x + 10.1).toString
+      def floatToString: Float => String = (x: Float) => (x + 10.1).toString
       sqlContext.udf.register("floatToString", floatToString)
 
       val udf = ScalaUDF(floatToString, StringType, Seq('_1.expr))
@@ -281,7 +281,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - udf on double column") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toDouble)))) { implicit df =>
-      def doubleToString = (x: Double) => (x * 100.1).toString
+      def doubleToString: Double => String = (x: Double) => (x * 100.1).toString
       sqlContext.udf.register("doubleToString", doubleToString)
 
       val udf = ScalaUDF(doubleToString, StringType, Seq('_1.expr))
@@ -326,7 +326,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toString)))) { implicit df =>
       // Because this UDF will be used in pushdown and Spark Filter,
       // the parameter could be a Binary or String
-      def stringToInt = (x: AnyRef) => {
+      def stringToInt: AnyRef => Int = (x: AnyRef) => {
         if (x.isInstanceOf[Binary]) {
           val str = x.asInstanceOf[Binary].toStringUsingUTF8()
           str.toInt
@@ -388,7 +388,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.b)))) { implicit df =>
       // Because this UDF will be used in pushdown and Spark Filter,
       // the parameter could be a Binary or Array[Bytes]
-      def binaryToInt = (x: AnyRef) => {
+      def binaryToInt: AnyRef => Int = (x: AnyRef) => {
         if (x.isInstanceOf[Binary]) {
           val str = x.asInstanceOf[Binary].toStringUsingUTF8()
           str.toInt
