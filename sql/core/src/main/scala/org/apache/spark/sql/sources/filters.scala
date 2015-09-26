@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.catalyst.expressions.ScalaUDF
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the filters that we can push down to the data sources.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -35,6 +37,14 @@ abstract class Filter
  * @since 1.3.0
  */
 case class EqualTo(attribute: String, value: Any) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the attribute evaluates to a value with `udf`
+ * equal to `value`.
+ *
+ * @since 1.6.0
+ */
+case class UDFEqualTo(attribute: String, udf: ScalaUDF, value: Any) extends Filter
 
 /**
  * Performs equality comparison, similar to [[EqualTo]]. However, this differs from [[EqualTo]]

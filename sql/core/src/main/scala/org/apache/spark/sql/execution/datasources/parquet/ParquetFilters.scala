@@ -33,8 +33,21 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
+
 private[sql] object ParquetFilters {
   val PARQUET_FILTER_DATA = "org.apache.spark.sql.parquet.row.filter"
+
+  case class ParquetEqUDP[T <: Comparable[T], U <: Comparable[U]](udf: AnyRef, v: U)
+      extends UserDefinedPredicate[T] with Serializable {
+    private val f = udf.asInstanceOf[(T) => U]
+
+    override def keep(value: T): Boolean = {
+      f(value) == v
+    }
+
+    override def canDrop(statistics: Statistics[T]): Boolean = false
+    override def inverseCanDrop(statistics: Statistics[T]): Boolean = false
+  }
 
   case class SetInFilter[T <: Comparable[T]](
     valueSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
@@ -69,6 +82,177 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+  }
+
+  private val makeUDFEq: PartialFunction[DataType, (String, ScalaUDF, Any) => FilterPredicate] = {
+    case BooleanType =>
+      (n: String, udf: ScalaUDF, v: Any) =>
+        val udp = v match {
+          case x: Boolean =>
+            ParquetEqUDP[java.lang.Boolean, java.lang.Boolean](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Boolean])
+          case x: Integer =>
+            ParquetEqUDP[java.lang.Boolean, java.lang.Integer](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Integer])
+          case x: Long =>
+            ParquetEqUDP[java.lang.Boolean, java.lang.Long](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Long])
+          case x: Float =>
+            ParquetEqUDP[java.lang.Boolean, java.lang.Float](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Float])
+          case x: Double =>
+            ParquetEqUDP[java.lang.Boolean, java.lang.Double](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Double])
+          case x: String =>
+            ParquetEqUDP[java.lang.Boolean, java.lang.String](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.String])
+        }
+        FilterApi.userDefined(booleanColumn(n), udp)
+
+    case IntegerType =>
+      (n: String, udf: ScalaUDF, v: Any) =>
+        val udp = v match {
+          case x: Boolean =>
+            ParquetEqUDP[java.lang.Integer, java.lang.Boolean](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Boolean])
+          case x: Integer =>
+            ParquetEqUDP[java.lang.Integer, java.lang.Integer](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Integer])
+          case x: Long =>
+            ParquetEqUDP[java.lang.Integer, java.lang.Long](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Long])
+          case x: Float =>
+            ParquetEqUDP[java.lang.Integer, java.lang.Float](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Float])
+          case x: Double =>
+            ParquetEqUDP[java.lang.Integer, java.lang.Double](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Double])
+          case x: String =>
+            ParquetEqUDP[java.lang.Integer, java.lang.String](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.String])
+        }
+        FilterApi.userDefined(intColumn(n), udp)
+
+    case LongType =>
+      (n: String, udf: ScalaUDF, v: Any) =>
+        val udp = v match {
+          case x: Boolean =>
+            ParquetEqUDP[java.lang.Long, java.lang.Boolean](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Boolean])
+          case x: Integer =>
+            ParquetEqUDP[java.lang.Long, java.lang.Integer](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Integer])
+          case x: Long =>
+            ParquetEqUDP[java.lang.Long, java.lang.Long](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Long])
+          case x: Float =>
+            ParquetEqUDP[java.lang.Long, java.lang.Float](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Float])
+          case x: Double =>
+            ParquetEqUDP[java.lang.Long, java.lang.Double](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Double])
+          case x: String =>
+            ParquetEqUDP[java.lang.Long, java.lang.String](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.String])
+        }
+        FilterApi.userDefined(longColumn(n), udp)
+
+    case FloatType =>
+      (n: String, udf: ScalaUDF, v: Any) =>
+        val udp = v match {
+          case x: Boolean =>
+            ParquetEqUDP[java.lang.Float, java.lang.Boolean](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Boolean])
+          case x: Integer =>
+            ParquetEqUDP[java.lang.Float, java.lang.Integer](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Integer])
+          case x: Long =>
+            ParquetEqUDP[java.lang.Float, java.lang.Long](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Long])
+          case x: Float =>
+            ParquetEqUDP[java.lang.Float, java.lang.Float](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Float])
+          case x: Double =>
+            ParquetEqUDP[java.lang.Float, java.lang.Double](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Double])
+          case x: String =>
+            ParquetEqUDP[java.lang.Float, java.lang.String](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.String])
+        }
+        FilterApi.userDefined(floatColumn(n), udp)
+
+    case DoubleType =>
+      (n: String, udf: ScalaUDF, v: Any) =>
+        val udp = v match {
+          case x: Boolean =>
+            ParquetEqUDP[java.lang.Double, java.lang.Boolean](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Boolean])
+          case x: Integer =>
+            ParquetEqUDP[java.lang.Double, java.lang.Integer](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Integer])
+          case x: Long =>
+            ParquetEqUDP[java.lang.Double, java.lang.Long](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Long])
+          case x: Float =>
+            ParquetEqUDP[java.lang.Double, java.lang.Float](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Float])
+          case x: Double =>
+            ParquetEqUDP[java.lang.Double, java.lang.Double](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.Double])
+          case x: String =>
+            ParquetEqUDP[java.lang.Double, java.lang.String](udf.exportedFunc(),
+              v.asInstanceOf[java.lang.String])
+        }
+        FilterApi.userDefined(doubleColumn(n), udp)
+
+    case StringType =>
+      (n: String, udf: ScalaUDF, v: Any) =>
+        val udp = v match {
+          case x: Boolean =>
+            ParquetEqUDP[Binary, java.lang.Boolean](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Boolean])
+          case x: Integer =>
+            ParquetEqUDP[Binary, java.lang.Integer](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Integer])
+          case x: Long =>
+            ParquetEqUDP[Binary, java.lang.Long](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Long])
+          case x: Float =>
+            ParquetEqUDP[Binary, java.lang.Float](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Float])
+          case x: Double =>
+            ParquetEqUDP[Binary, java.lang.Double](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Double])
+          case x: String =>
+            ParquetEqUDP[Binary, java.lang.String](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.String])
+        }
+        FilterApi.userDefined(binaryColumn(n), udp)
+
+    case BinaryType =>
+      (n: String, udf: ScalaUDF, v: Any) =>
+        val udp = v match {
+          case x: Boolean =>
+            ParquetEqUDP[Binary, java.lang.Boolean](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Boolean])
+          case x: Integer =>
+            ParquetEqUDP[Binary, java.lang.Integer](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Integer])
+          case x: Long =>
+            ParquetEqUDP[Binary, java.lang.Long](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Long])
+          case x: Float =>
+            ParquetEqUDP[Binary, java.lang.Float](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Float])
+          case x: Double =>
+            ParquetEqUDP[Binary, java.lang.Double](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.Double])
+          case x: String =>
+            ParquetEqUDP[Binary, java.lang.String](udf.exportedFunc(false),
+              v.asInstanceOf[java.lang.String])
+        }
+        FilterApi.userDefined(binaryColumn(n), udp)
+
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -218,6 +402,10 @@ private[sql] object ParquetFilters {
 
       case sources.EqualTo(name, value) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
+
+      case sources.UDFEqualTo(name, udf, value) =>
+        makeUDFEq.lift(dataTypeOf(name)).map(_(name, udf, value))
+
       case sources.Not(sources.EqualTo(name, value)) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 

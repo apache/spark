@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.filter2.predicate.Operators._
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -26,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -115,6 +117,19 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  test("filter pushdown - udf on boolean column") {
+    withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
+      def booleanToInt = (x: Boolean) => if (x) 10 else 20
+      sqlContext.udf.register("booleanToInt", booleanToInt)
+
+      val udf = ScalaUDF(booleanToInt, IntegerType, Seq('_1.expr))
+      checkFilterPredicate(EqualTo(udf, Literal(10)),
+        classOf[UserDefinedByInstance[_, _]], true)
+      checkFilterPredicate(EqualTo(udf, Literal(20)),
+        classOf[UserDefinedByInstance[_, _]], false)
+    }
+  }
+
   test("filter pushdown - integer") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
@@ -138,6 +153,21 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
       checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+    }
+  }
+
+  test("filter pushdown - udf on int column") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
+      def intToString = (x: Integer) => (x - 1).toString
+      sqlContext.udf.register("intToString", intToString)
+
+      val udf = ScalaUDF(intToString, StringType, Seq('_1.expr))
+      checkFilterPredicate(EqualTo(udf, Literal("1")),
+        classOf[UserDefinedByInstance[_, _]], 2)
+      checkFilterPredicate(EqualTo(udf, Literal("2")),
+        classOf[UserDefinedByInstance[_, _]], 3)
+      checkFilterPredicate(EqualTo(udf, Literal("5")),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
     }
   }
 
@@ -167,6 +197,21 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  test("filter pushdown - udf on long column") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toLong)))) { implicit df =>
+      def longToString = (x: Long) => (x * 10).toString
+      sqlContext.udf.register("longToString", longToString)
+
+      val udf = ScalaUDF(longToString, StringType, Seq('_1.expr))
+      checkFilterPredicate(EqualTo(udf, Literal("10")),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(EqualTo(udf, Literal("40")),
+        classOf[UserDefinedByInstance[_, _]], 4)
+      checkFilterPredicate(EqualTo(udf, Literal("50")),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+    }
+  }
+
   test("filter pushdown - float") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toFloat)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
@@ -190,6 +235,21 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
       checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+    }
+  }
+
+  test("filter pushdown - udf on float column") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toFloat)))) { implicit df =>
+      def floatToString = (x: Float) => (x + 10.1).toString
+      sqlContext.udf.register("floatToString", floatToString)
+
+      val udf = ScalaUDF(floatToString, StringType, Seq('_1.expr))
+      checkFilterPredicate(EqualTo(udf, Literal("11.1")),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(EqualTo(udf, Literal("14.1")),
+        classOf[UserDefinedByInstance[_, _]], 4)
+      checkFilterPredicate(EqualTo(udf, Literal("15.1")),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
     }
   }
 
@@ -219,6 +279,21 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  test("filter pushdown - udf on double column") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toDouble)))) { implicit df =>
+      def doubleToString = (x: Double) => (x * 100.1).toString
+      sqlContext.udf.register("doubleToString", doubleToString)
+
+      val udf = ScalaUDF(doubleToString, StringType, Seq('_1.expr))
+      checkFilterPredicate(EqualTo(udf, Literal("100.1")),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(EqualTo(udf, Literal("400.4")),
+        classOf[UserDefinedByInstance[_, _]], 4)
+      checkFilterPredicate(EqualTo(udf, Literal("500.5")),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+    }
+  }
+
   test("filter pushdown - string") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
@@ -244,6 +319,30 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       checkFilterPredicate(!('_1 < "4"), classOf[GtEq[_]], "4")
       checkFilterPredicate('_1 < "2" || '_1 > "3", classOf[Operators.Or], Seq(Row("1"), Row("4")))
+    }
+  }
+
+  test("filter pushdown - udf on string column") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toString)))) { implicit df =>
+      // Because this UDF will be used in pushdown and Spark Filter,
+      // the parameter could be a Binary or String
+      def stringToInt = (x: AnyRef) => {
+        if (x.isInstanceOf[Binary]) {
+          val str = x.asInstanceOf[Binary].toStringUsingUTF8()
+          str.toInt
+        } else {
+          x.asInstanceOf[String].toInt
+        }
+      }
+      sqlContext.udf.register("stringToInt", stringToInt)
+
+      val udf = ScalaUDF(stringToInt, IntegerType, Seq('_1.expr))
+      checkFilterPredicate(EqualTo(udf, Literal(1)),
+        classOf[UserDefinedByInstance[_, _]], "1")
+      checkFilterPredicate(EqualTo(udf, Literal(4)),
+        classOf[UserDefinedByInstance[_, _]], "4")
+      checkFilterPredicate(EqualTo(udf, Literal(5)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
     }
   }
 
@@ -278,6 +377,34 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       checkBinaryFilterPredicate(!('_1 < 4.b), classOf[GtEq[_]], 4.b)
       checkBinaryFilterPredicate(
         '_1 < 2.b || '_1 > 3.b, classOf[Operators.Or], Seq(Row(1.b), Row(4.b)))
+    }
+  }
+
+  test("filter pushdown - udf on binary column") {
+    implicit class IntToBinary(int: Int) {
+      def b: Array[Byte] = int.toString.getBytes("UTF-8")
+    }
+
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.b)))) { implicit df =>
+      // Because this UDF will be used in pushdown and Spark Filter,
+      // the parameter could be a Binary or Array[Bytes]
+      def binaryToInt = (x: AnyRef) => {
+        if (x.isInstanceOf[Binary]) {
+          val str = x.asInstanceOf[Binary].toStringUsingUTF8()
+          str.toInt
+        } else {
+          new String(x.asInstanceOf[Array[Byte]]).toInt
+        }
+      }
+      sqlContext.udf.register("binaryToInt", binaryToInt)
+
+      val udf = ScalaUDF(binaryToInt, IntegerType, Seq('_1.expr))
+      checkFilterPredicate(EqualTo(udf, Literal(1)),
+        classOf[UserDefinedByInstance[_, _]], 1.b)
+      checkFilterPredicate(EqualTo(udf, Literal(4)),
+        classOf[UserDefinedByInstance[_, _]], 4.b)
+      checkFilterPredicate(EqualTo(udf, Literal(5)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
     }
   }
 
