@@ -171,8 +171,8 @@ class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
     dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md)).headOption
   }
 
-  override def getJDBCType(dt: DataType): Option[JdbcType] = {
-    dialects.flatMap(_.getJDBCType(dt)).headOption
+  override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
+    dialects.flatMap(_.getJDBCType(dt, md)).headOption
   }
 }
 
