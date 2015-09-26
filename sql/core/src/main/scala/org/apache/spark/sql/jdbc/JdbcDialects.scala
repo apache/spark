@@ -133,12 +133,10 @@ object JdbcDialects {
 
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
-<<<<<<< HEAD
+  registerDialect(DB2Dialect)
+  registerDialect(MsSqlServerDialect)
   registerDialect(OracleDialect)
   registerDialect(NetezzaDialect)
-=======
-  registerDialect(DB2Dialect)
->>>>>>> upstream/master
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -244,9 +242,7 @@ case object MySQLDialect extends JdbcDialect {
  */
 @DeveloperApi
 case object DB2Dialect extends JdbcDialect {
-
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:db2")
-
   override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
     case BooleanType => Some(JdbcType("CHAR(1)", java.sql.Types.CHAR))
@@ -256,13 +252,27 @@ case object DB2Dialect extends JdbcDialect {
 
 /**
  * :: DeveloperApi ::
+ * Default Microsoft SQL Server dialect, mapping the datetimeoffset types to a String on read.
+ */
+@DeveloperApi
+case object MsSqlServerDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
+  override def getCatalystType(
+                                sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (typeName.contains("datetimeoffset")) {
+      // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
+      Some(StringType)
+    } else None
+  }
+}
+
+/**
+ * :: DeveloperApi ::
 * Default Oracle dialect, mapping string/boolean on write to valid Oracle types.
 */
 @DeveloperApi
 case object OracleDialect extends JdbcDialect {
-
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
-
   override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
     if (dt == StringType && md.contains("maxlength")) {
       Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.CHAR))
@@ -280,9 +290,7 @@ case object OracleDialect extends JdbcDialect {
  */
 @DeveloperApi
 case object NetezzaDialect extends JdbcDialect {
-
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:netezza")
-
   override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
     if (dt == StringType && md.contains("maxlength")) {
       Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.CHAR))
