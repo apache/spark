@@ -37,7 +37,7 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
 
       // We are inserting into an InsertableRelation or HadoopFsRelation.
       case i @ InsertIntoTable(
-      l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation), _, child, _, _) => {
+      l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _), _, child, _, _) => {
         // First, make sure the data to be inserted have the same number of fields with the
         // schema of the relation.
         if (l.output.size != child.output.size) {
@@ -84,14 +84,14 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case i @ logical.InsertIntoTable(
-        l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite, ifNotExists) =>
+        l @ LogicalRelation(t: InsertableRelation, _), partition, query, overwrite, ifNotExists) =>
         // Right now, we do not support insert into a data source table with partition specs.
         if (partition.nonEmpty) {
           failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
         } else {
           // Get all input data source relations of the query.
           val srcRelations = query.collect {
-            case LogicalRelation(src: BaseRelation) => src
+            case LogicalRelation(src: BaseRelation, _) => src
           }
           if (srcRelations.contains(t)) {
             failAnalysis(
@@ -102,7 +102,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         }
 
       case logical.InsertIntoTable(
-        LogicalRelation(r: HadoopFsRelation), part, query, overwrite, _) =>
+        LogicalRelation(r: HadoopFsRelation, _), part, query, overwrite, _) =>
         // We need to make sure the partition columns specified by users do match partition
         // columns of the relation.
         val existingPartitionColumns = r.partitionColumns.fieldNames.toSet
@@ -120,7 +120,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
 
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
-          case LogicalRelation(src: BaseRelation) => src
+          case LogicalRelation(src: BaseRelation, _) => src
         }
         if (srcRelations.contains(r)) {
           failAnalysis(
@@ -148,10 +148,10 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           EliminateSubQueries(catalog.lookupRelation(tableIdent.toSeq)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
-            case l @ LogicalRelation(dest: BaseRelation) =>
+            case l @ LogicalRelation(dest: BaseRelation, _) =>
               // Get all input data source relations of the query.
               val srcRelations = query.collect {
-                case LogicalRelation(src: BaseRelation) => src
+                case LogicalRelation(src: BaseRelation, _) => src
               }
               if (srcRelations.contains(dest)) {
                 failAnalysis(
