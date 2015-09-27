@@ -1491,6 +1491,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.streaming.stopGracefullyOnShutdown</code></td>
+  <td>false</td>
+  <td>
+    If <code>true</code>, Spark shuts down the <code>StreamingContext</code> gracefully on JVM 
+    shutdown rather than immediately.
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.kafka.maxRatePerPartition</code></td>
   <td>not set</td>
   <td>
