@@ -18,7 +18,7 @@ from airflow.utils import AirflowException
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils import TemporaryDirectory
 from airflow.configuration import conf
-import airflow.security.utils
+import airflow.security.utils as utils
 
 class HiveCliHook(BaseHook):
     """
@@ -70,9 +70,7 @@ class HiveCliHook(BaseHook):
                     hive_bin = 'beeline'
                     if conf.get('security', 'enabled'):
                         template = conn.extra_dejson.get('principal',"hive/_HOST@EXAMPLE.COM")
-                        template = airflow.security.utils.replace_hostname_pattern(
-                            airflow.security.utils.get_components(template)
-                        )
+                        template = utils.replace_hostname_pattern(utils.get_components(template))
 
                         proxy_user = ""
                         if conn.extra_dejson.get('proxy_user') == "login" and conn.login:
