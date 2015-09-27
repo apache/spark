@@ -610,6 +610,11 @@ private[hive] object HiveContext {
     doc = "Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
 
+  val HIVE_EXECUTION_VERSION = stringConf(
+    key = "spark.sql.hive.version",
+    defaultValue = Some(hiveExecutionVersion),
+    doc = "Version of Hive used internally by Spark SQL.")
+
   val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
     defaultValue = Some("builtin"),
     doc = s"""
