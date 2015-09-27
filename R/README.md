@@ -64,6 +64,5 @@ The `./bin/spark-submit` and `./bin/sparkR` can also be used to submit jobs to Y
 ```
 export YARN_CONF_DIR=/etc/hadoop/conf
 ./bin/spark-submit --master yarn --deploy-mode client examples/src/main/r/dataframe.R
-OR
-./bin/spark-submit --master yarn examples/src/main/r/dataframe.R
+
 ```

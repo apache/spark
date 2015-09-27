@@ -18,7 +18,7 @@ Spark application's configuration (driver, executors, and the AM when running in
 
 There are two deploy modes that can be used to launch Spark applications on YARN. In `cluster` mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In `client` mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 
-Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn` and to specify the deployment `--deploy-mode` can be either `client` or `cluster`.
+Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn` and `--deploy-mode` can be `client` or `cluster` to select the YARN deployment mode.
 To launch a Spark application in YARN in `cluster` mode:
 
    `$ ./bin/spark-submit --class path.to.your.Class --master yarn --deploy-mode cluster [options] <app jar> [app options]`
@@ -37,13 +37,10 @@ For example:
 
 The above example starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Debugging your Application" section below for how to see driver and executor logs.
 
-To launch a Spark application in `client` mode, do the same, but replace `cluster` with `client` in the --deploy-mode.  
+To launch a Spark application in `client` mode, do the same, but replace `cluster` with `client` in the `--deploy-mode` argument.  
 To run spark-shell:
 
-    $ ./bin/spark-shell --master yarn --deploy-mode client
-    
-The alternative to launching a Spark application on YARN is to set deployment mode for the YARN master in the `--master` itself.   
-`--master` can be `yarn-client` or `yarn-cluster`       
+    $ ./bin/spark-shell --master yarn --deploy-mode client     
 
 For example:
 
@@ -403,6 +400,6 @@ If you need a reference to the proper location to put log files in the YARN so t
 # Important notes
 
 - Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
-- In `yarn-cluster`, the local directories used by the Spark executors and the Spark driver will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored. In `yarn-client` mode, the Spark executors will use the local directories configured for YARN while the Spark driver will use those defined in `spark.local.dir`. This is because the Spark driver does not run on the YARN cluster in `yarn-client` mode, only the Spark executors do.
+- In yarn-cluster, the local directories used by the Spark executors and the Spark driver will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored. In yarn-client mode, the Spark executors will use the local directories configured for YARN while the Spark driver will use those defined in `spark.local.dir`. This is because the Spark driver does not run on the YARN cluster in yarn-client mode, only the Spark executors do.
 - The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named localtest.txt into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `yarn-cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.
