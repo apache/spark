@@ -211,4 +211,11 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     // Drop the cache.
     cached.unpersist()
   }
+
+  test("SPARK-10859: Predicates pushed to InMemoryColumnarTableScan are not evaluated correctly") {
+    val data = sqlContext.range(10).selectExpr("id", "cast(id as string) as s")
+    data.cache()
+    assert(data.count() === 10)
+    assert(data.filter($"s" === "3").count() === 1)
+  }
 }
