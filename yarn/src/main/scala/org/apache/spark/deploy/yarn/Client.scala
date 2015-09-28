@@ -95,7 +95,6 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
-<<<<<<< HEAD
   private var appId: ApplicationId = null
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
