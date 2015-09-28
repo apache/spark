@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.util.Utils.bytesToString
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.{MapPartitionsWithPreparationRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,7 +41,9 @@ case class TungstenAggregate(
 
   override private[sql] lazy val metrics = Map(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
+    "numBytesUsed" ->
+      SQLMetrics.createLongMetric(sparkContext, "number of bytes used", bytesToString))
 
   override def outputsUnsafeRows: Boolean = true
 
@@ -70,6 +73,7 @@ case class TungstenAggregate(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
+    val numBytesUsed = longMetric("numBytesUsed")
 
     /**
      * Set up the underlying unsafe data structures used before computing the parent partition.
@@ -87,7 +91,8 @@ case class TungstenAggregate(
         child.output,
         testFallbackStartsAt,
         numInputRows,
-        numOutputRows)
+        numOutputRows,
+        numBytesUsed)
     }
 
     /** Compute a partition using the iterator already set up previously. */

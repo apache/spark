@@ -330,7 +330,8 @@ private[ui] class SQLExecutionUIData(
 private[ui] case class SQLPlanMetric(
     name: String,
     accumulatorId: Long,
-    metricParam: SQLMetricParam[SQLMetricValue[Any], Any])
+    metricParam: SQLMetricParam[SQLMetricValue[Any], Any],
+    stringValue: Any => String)
 
 /**
  * Store all accumulatorUpdates for all tasks in a Spark stage.

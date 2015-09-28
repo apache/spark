@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
+import org.apache.spark.util.Utils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 
@@ -63,7 +64,8 @@ private[sql] object SparkPlanGraph {
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
       SQLPlanMetric(metric.name.getOrElse(key), metric.id,
-        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
+        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]],
+        metric.stringValue.asInstanceOf[Any => String])
     }
     val node = SparkPlanGraphNode(
       nodeIdGenerator.getAndIncrement(), plan.nodeName, plan.simpleString, metrics)
@@ -91,7 +93,7 @@ private[ui] case class SparkPlanGraphNode(
     val values = {
       for (metric <- metrics;
            value <- metricsValue.get(metric.accumulatorId)) yield {
-        metric.name + ": " + value
+        metric.name + ": " + metric.stringValue(value)
       }
     }
     val label = if (values.isEmpty) {

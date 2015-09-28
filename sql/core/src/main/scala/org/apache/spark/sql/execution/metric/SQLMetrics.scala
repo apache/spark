@@ -26,7 +26,7 @@ import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
  * An implementation of SQLMetric should override `+=` and `add` to avoid boxing.
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
-    name: String, val param: SQLMetricParam[R, T])
+    name: String, val param: SQLMetricParam[R, T], val stringValue: T => String)
   extends Accumulable[R, T](param.zero, param, Some(name), true)
 
 /**
@@ -81,8 +81,8 @@ private[sql] class IntSQLMetricValue(private var _value: Int) extends SQLMetricV
  * A specialized long Accumulable to avoid boxing and unboxing when using Accumulator's
  * `+=` and `add`.
  */
-private[sql] class LongSQLMetric private[metric](name: String)
-  extends SQLMetric[LongSQLMetricValue, Long](name, LongSQLMetricParam) {
+private[sql] class LongSQLMetric private[metric](name: String, stringValue: Long => String)
+  extends SQLMetric[LongSQLMetricValue, Long](name, LongSQLMetricParam, stringValue) {
 
   override def +=(term: Long): Unit = {
     localValue.add(term)
@@ -107,8 +107,11 @@ private object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue, Lon
 
 private[sql] object SQLMetrics {
 
-  def createLongMetric(sc: SparkContext, name: String): LongSQLMetric = {
-    val acc = new LongSQLMetric(name)
+  def createLongMetric(
+     sc: SparkContext,
+     name: String,
+     stringValue: Long => String = _.toString): LongSQLMetric = {
+    val acc = new LongSQLMetric(name, stringValue)
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }
@@ -117,5 +120,5 @@ private[sql] object SQLMetrics {
    * A metric that its value will be ignored. Use this one when we need a metric parameter but don't
    * care about the value.
    */
-  val nullLongMetric = new LongSQLMetric("null")
+  val nullLongMetric = new LongSQLMetric("null", _.toString)
 }

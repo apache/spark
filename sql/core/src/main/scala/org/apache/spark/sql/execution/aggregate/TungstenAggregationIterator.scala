@@ -84,7 +84,8 @@ class TungstenAggregationIterator(
     originalInputAttributes: Seq[Attribute],
     testFallbackStartsAt: Option[Int],
     numInputRows: LongSQLMetric,
-    numOutputRows: LongSQLMetric)
+    numOutputRows: LongSQLMetric,
+    numBytesUsed: LongSQLMetric)
   extends Iterator[UnsafeRow] with Logging {
 
   // The parent partition iterator, to be initialized later in `start`
@@ -694,6 +695,7 @@ class TungstenAggregationIterator(
         val mapMemory = hashMap.getPeakMemoryUsedBytes
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
         val peakMemory = Math.max(mapMemory, sorterMemory)
+        numBytesUsed += peakMemory
         TaskContext.get().internalMetricsToAccumulators(
           InternalAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemory)
       }

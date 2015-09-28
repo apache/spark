@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.util.Utils.bytesToString
 import org.apache.spark.rdd.{MapPartitionsWithPreparationRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
@@ -93,9 +95,14 @@ case class TungstenSort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  override private[sql] lazy val metrics = Map(
+    "numBytesUsed" ->
+      SQLMetrics.createLongMetric(sparkContext, "number of bytes used", bytesToString))
+
   protected override def doExecute(): RDD[InternalRow] = {
     val schema = child.schema
     val childOutput = child.output
+    val numBytesUsed = longMetric("numBytesUsed")
 
     /**
      * Set up the sorter in each partition before computing the parent partition.
@@ -132,6 +139,7 @@ case class TungstenSort(
         sorter: UnsafeExternalRowSorter,
         parentIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val sortedIterator = sorter.sort(parentIterator.asInstanceOf[Iterator[UnsafeRow]])
+      numBytesUsed += sorter.getPeakMemoryUsage
       taskContext.internalMetricsToAccumulators(
         InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
       sortedIterator
