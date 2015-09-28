@@ -1863,8 +1863,8 @@ setMethod("crosstab",
 #' irisDF <- createDataFrame(sqlContext, iris)
 #' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
 #' }
-setMethod(f = "as.data.frame",
-          signature = "DataFrame",
+setMethod("as.data.frame",
+          signature(x = "DataFrame"),
           function(x, ...) {
             # Check if additional parameters have been passed
             if (length(list(...)) > 0) {
