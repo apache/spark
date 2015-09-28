@@ -450,8 +450,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
 
   test("DB2Dialect type mapping") {
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
-    assert(db2Dialect.getJDBCType(StringType,null).map(_.databaseTypeDefinition).get == "CLOB")
-    assert(db2Dialect.getJDBCType(BooleanType,null).map(_.databaseTypeDefinition).get == "CHAR(1)")
+    assert(db2Dialect.getJDBCType(StringType, null).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(db2Dialect.getJDBCType(BooleanType, null).map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 
   test("table exists query by jdbc dialect") {
