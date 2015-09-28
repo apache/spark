@@ -15,30 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.map;
+package org.apache.spark.unsafe.memory;
 
 import org.apache.spark.annotation.Private;
 
-/**
- * Interface that defines how we can grow the size of a hash map when it is over a threshold.
- */
 @Private
-public interface HashMapGrowthStrategy {
-
-  int nextCapacity(int currentCapacity);
+public interface MemoryAllocator {
 
   /**
-   * Double the size of the hash map every time.
+   * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed
+   * to be zeroed out (call `zero()` on the result if this is necessary).
    */
-  HashMapGrowthStrategy DOUBLING = new Doubling();
+  MemoryBlock allocate(long size) throws OutOfMemoryError;
 
-  class Doubling implements HashMapGrowthStrategy {
-    @Override
-    public int nextCapacity(int currentCapacity) {
-      assert (currentCapacity > 0);
-      // Guard against overflow
-      return (currentCapacity * 2 > 0) ? (currentCapacity * 2) : Integer.MAX_VALUE;
-    }
-  }
+  void free(MemoryBlock memory);
 
+  MemoryAllocator UNSAFE = new UnsafeMemoryAllocator();
+
+  MemoryAllocator HEAP = new HeapMemoryAllocator();
 }

@@ -15,30 +15,43 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.map;
+package org.apache.spark.unsafe.memory;
+
+import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Private;
 
 /**
- * Interface that defines how we can grow the size of a hash map when it is over a threshold.
+ * A memory location. Tracked either by a memory address (with off-heap allocation),
+ * or by an offset from a JVM object (in-heap allocation).
  */
 @Private
-public interface HashMapGrowthStrategy {
+public class MemoryLocation {
 
-  int nextCapacity(int currentCapacity);
+  @Nullable
+  Object obj;
 
-  /**
-   * Double the size of the hash map every time.
-   */
-  HashMapGrowthStrategy DOUBLING = new Doubling();
+  long offset;
 
-  class Doubling implements HashMapGrowthStrategy {
-    @Override
-    public int nextCapacity(int currentCapacity) {
-      assert (currentCapacity > 0);
-      // Guard against overflow
-      return (currentCapacity * 2 > 0) ? (currentCapacity * 2) : Integer.MAX_VALUE;
-    }
+  public MemoryLocation(@Nullable Object obj, long offset) {
+    this.obj = obj;
+    this.offset = offset;
   }
 
+  public MemoryLocation() {
+    this(null, 0);
+  }
+
+  public void setObjAndOffset(Object newObj, long newOffset) {
+    this.obj = newObj;
+    this.offset = newOffset;
+  }
+
+  public final Object getBaseObject() {
+    return obj;
+  }
+
+  public final long getBaseOffset() {
+    return offset;
+  }
 }

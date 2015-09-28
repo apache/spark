@@ -26,6 +26,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -55,6 +56,7 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
  * is consistent with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
  * so we can pass records from this map directly into the sorter to sort records in place.
  */
+@Private
 public final class BytesToBytesMap {
 
   private final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
