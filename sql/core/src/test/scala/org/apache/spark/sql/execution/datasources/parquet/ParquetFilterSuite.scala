@@ -324,16 +324,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - udf on string column") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toString)))) { implicit df =>
-      // Because this UDF will be used in pushdown and Spark Filter,
-      // the parameter could be a Binary or String
-      def stringToInt: AnyRef => Int = (x: AnyRef) => {
-        if (x.isInstanceOf[Binary]) {
-          val str = x.asInstanceOf[Binary].toStringUsingUTF8()
-          str.toInt
-        } else {
-          x.asInstanceOf[String].toInt
-        }
-      }
+      def stringToInt: String => Int = (x: String) => x.toInt
       sqlContext.udf.register("stringToInt", stringToInt)
 
       val udf = ScalaUDF(stringToInt, IntegerType, Seq('_1.expr))
@@ -386,16 +377,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
 
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.b)))) { implicit df =>
-      // Because this UDF will be used in pushdown and Spark Filter,
-      // the parameter could be a Binary or Array[Bytes]
-      def binaryToInt: AnyRef => Int = (x: AnyRef) => {
-        if (x.isInstanceOf[Binary]) {
-          val str = x.asInstanceOf[Binary].toStringUsingUTF8()
-          str.toInt
-        } else {
-          new String(x.asInstanceOf[Array[Byte]]).toInt
-        }
-      }
+      def binaryToInt: Array[Byte] => Int = (x: Array[Byte]) => new String(x).toInt
       sqlContext.udf.register("binaryToInt", binaryToInt)
 
       val udf = ScalaUDF(binaryToInt, IntegerType, Seq('_1.expr))
