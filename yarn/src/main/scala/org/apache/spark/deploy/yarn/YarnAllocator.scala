@@ -89,11 +89,7 @@ private[yarn] class YarnAllocator(
   @volatile private var numExecutorsFailed = 0
 
   @volatile private var targetNumExecutors =
-    if (Utils.isDynamicAllocationEnabled(sparkConf)) {
-      sparkConf.getInt("spark.dynamicAllocation.initialExecutors", 0)
-    } else {
-      sparkConf.getInt("spark.executor.instances", YarnSparkHadoopUtil.DEFAULT_NUMBER_EXECUTORS)
-    }
+    YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
