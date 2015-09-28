@@ -258,7 +258,7 @@ case object DB2Dialect extends JdbcDialect {
 case object MsSqlServerDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
   override def getCatalystType(
-                                sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (typeName.contains("datetimeoffset")) {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
       Some(StringType)
@@ -275,7 +275,7 @@ case object OracleDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
   override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
     if (dt == StringType && md.contains("maxlength")) {
-      Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.CHAR))
+      Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.VARCHAR))
     } else if (dt == StringType ) {
       Some(JdbcType("CLOB", java.sql.Types.CLOB))
     } else if (dt == BooleanType ) {
@@ -293,9 +293,9 @@ case object NetezzaDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:netezza")
   override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
     if (dt == StringType && md.contains("maxlength")) {
-      Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.CHAR))
+      Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.VARCHAR))
     } else if (dt == StringType ) {
-      Some(JdbcType("VARCHAR(255)", java.sql.Types.CHAR))
+      Some(JdbcType("VARCHAR(255)", java.sql.Types.VARCHAR))
     } else if (dt == BinaryType ) {
       Some(JdbcType("BYTEINT", java.sql.Types.BINARY))
     } else if (dt == BooleanType ) {
