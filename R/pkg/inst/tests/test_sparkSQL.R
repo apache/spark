@@ -1327,11 +1327,16 @@ test_that("SQL error message is returned from JVM", {
   expect_equal(grepl("Table Not Found: blah", retError), TRUE)
 })
 
+irisDF <- createDataFrame(sqlContext, iris)
+
 test_that("Method as.data.frame as a synonym for collect()", {
-  irisDF <- createDataFrame(sqlContext, iris)
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
+})
+
+test_that("Method coltypes() to get R's data types of a DataFrame", {
+  expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
 })
 
 unlink(parquetPath)

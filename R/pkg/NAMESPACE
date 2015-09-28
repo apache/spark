@@ -249,3 +249,4 @@ export("structField",
        "print.structType")
 
 export("as.data.frame")
+export("coltypes")
