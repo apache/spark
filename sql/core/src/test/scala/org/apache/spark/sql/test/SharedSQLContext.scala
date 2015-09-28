@@ -23,7 +23,7 @@ import org.apache.spark.sql.SQLContext
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSQLContext]].
  */
-private[sql] trait SharedSQLContext extends SQLTestUtils {
+trait SharedSQLContext extends SQLTestUtils {
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -36,9 +36,7 @@ private[sql] trait SharedSQLContext extends SQLTestUtils {
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
-  protected def ctx: TestSQLContext = _ctx
-  protected def sqlContext: TestSQLContext = _ctx
-  protected override def _sqlContext: SQLContext = _ctx
+  protected def sqlContext: SQLContext = _ctx
 
   /**
    * Initialize the [[TestSQLContext]].
@@ -64,5 +62,4 @@ private[sql] trait SharedSQLContext extends SQLTestUtils {
       super.afterAll()
     }
   }
-
 }

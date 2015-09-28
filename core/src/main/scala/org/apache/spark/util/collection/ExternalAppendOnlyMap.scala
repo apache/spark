@@ -208,7 +208,9 @@ class ExternalAppendOnlyMap[K, V, C](
           writer.revertPartialWritesAndClose()
         }
         if (file.exists()) {
-          file.delete()
+          if (!file.delete()) {
+            logWarning(s"Error deleting ${file}")
+          }
         }
       }
     }
@@ -489,7 +491,9 @@ class ExternalAppendOnlyMap[K, V, C](
         fileStream = null
       }
       if (file.exists()) {
-        file.delete()
+        if (!file.delete()) {
+          logWarning(s"Error deleting ${file}")
+        }
       }
     }
 

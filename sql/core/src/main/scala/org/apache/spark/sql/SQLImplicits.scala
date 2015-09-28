@@ -34,23 +34,13 @@ private[sql] abstract class SQLImplicits {
   protected def _sqlContext: SQLContext
 
   /**
-   * Converts $"col name" into an [[Column]].
-   * @since 1.3.0
-   */
-  implicit class StringToColumn(val sc: StringContext) {
-    def $(args: Any*): ColumnName = {
-      new ColumnName(sc.s(args: _*))
-    }
-  }
-
-  /**
    * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
    * @since 1.3.0
    */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
   /**
-   * Creates a DataFrame from an RDD of case classes or tuples.
+   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    * @since 1.3.0
    */
   implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {

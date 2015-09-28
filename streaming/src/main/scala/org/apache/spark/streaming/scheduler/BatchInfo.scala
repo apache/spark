@@ -39,6 +39,8 @@ case class BatchInfo(
     processingEndTime: Option[Long]
   ) {
 
+  private var _failureReasons: Map[Int, String] = Map.empty
+
   @deprecated("Use streamIdToInputInfo instead", "1.5.0")
   def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
 
@@ -67,4 +69,12 @@ case class BatchInfo(
    * The number of recorders received by the receivers in this batch.
    */
   def numRecords: Long = streamIdToInputInfo.values.map(_.numRecords).sum
+
+  /** Set the failure reasons corresponding to every output ops in the batch */
+  private[streaming] def setFailureReason(reasons: Map[Int, String]): Unit = {
+    _failureReasons = reasons
+  }
+
+  /** Failure reasons corresponding to every output ops in the batch */
+  private[streaming] def failureReasons = _failureReasons
 }

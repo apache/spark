@@ -16,12 +16,12 @@
  */
 
 // scalastyle:off println
+// scalastyle:off jobcontext
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
+import java.util.Arrays
 import java.util.SortedMap
-
-import scala.collection.JavaConversions._
 
 import org.apache.cassandra.db.IColumn
 import org.apache.cassandra.hadoop.ColumnFamilyOutputFormat
@@ -32,7 +32,6 @@ import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 
 /*
  * This example demonstrates using Spark with Cassandra with the New Hadoop API and Cassandra
@@ -118,7 +117,7 @@ object CassandraTest {
 
         val outputkey = ByteBufferUtil.bytes(word + "-COUNT-" + System.currentTimeMillis)
 
-        val mutations: java.util.List[Mutation] = new Mutation() :: new Mutation() :: Nil
+        val mutations = Arrays.asList(new Mutation(), new Mutation())
         mutations.get(0).setColumn_or_supercolumn(new ColumnOrSuperColumn())
         mutations.get(0).column_or_supercolumn.setColumn(colWord)
         mutations.get(1).setColumn_or_supercolumn(new ColumnOrSuperColumn())
@@ -132,6 +131,7 @@ object CassandraTest {
   }
 }
 // scalastyle:on println
+// scalastyle:on jobcontext
 
 /*
 create keyspace casDemo;

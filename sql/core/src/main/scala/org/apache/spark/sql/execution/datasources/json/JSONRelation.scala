@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -80,7 +81,7 @@ private[sql] class JSONRelation(
 
   private def createBaseRdd(inputPaths: Array[FileStatus]): RDD[String] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = job.getConfiguration
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
     val paths = inputPaths.map(_.getPath)
 
@@ -109,15 +110,6 @@ private[sql] class JSONRelation(
     checkConstraints(jsonSchema)
 
     jsonSchema
-  }
-
-  override private[sql] def buildScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
-    refresh()
-    super.buildScan(requiredColumns, filters, inputPaths, broadcastedConf)
   }
 
   override def buildScan(
@@ -178,8 +170,10 @@ private[json] class JsonOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
-        val split = context.getTaskAttemptID.getTaskID.getId
+        val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+        val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+        val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
       }
     }.getRecordWriter(context)
@@ -188,7 +182,7 @@ private[json] class JsonOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    JacksonGenerator(dataSchema, gen, row)
+    JacksonGenerator(dataSchema, gen)(row)
     gen.flush()
 
     result.set(writer.toString)
