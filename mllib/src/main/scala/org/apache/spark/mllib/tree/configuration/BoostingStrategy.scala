@@ -37,10 +37,10 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  * @param validationTol validationTol is a condition which decides iteration termination when
  *                      runWithValidation is used.
  *                      The end of iteration is decided based on below logic:
- *                      If the current loss on the training set is > 0.01, the diff
+ *                      If the current loss on the validation set is > 0.01, the diff
  *                      of validation error is compared to relative tolerance which is
- *                      validationTol * (current loss on the training set).
- *                      If the current loss on the training set is <= 0.01, the diff
+ *                      validationTol * (current loss on the validation set).
+ *                      If the current loss on the validation set is <= 0.01, the diff
  *                      of validation error is compared to absolute tolerance which is
  *                      validationTol * 0.01.
  *                      Ignored when
