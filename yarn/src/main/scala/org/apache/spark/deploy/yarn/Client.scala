@@ -86,7 +86,11 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
-  def stop(): Unit = yarnClient.stop()
+  def stop(): Unit = {
+    yarnClient.stop()
+    // Unset YARN mode system env variable, to allow switching between cluster types.
+    System.clearProperty("SPARK_YARN_MODE")
+  }
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
