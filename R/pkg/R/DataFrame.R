@@ -1873,11 +1873,11 @@ setMethod("crosstab",
 #' sort(df, decreasing=c(TRUE,FALSE), "col1","col2")
 #' }
 setMethod("sort",
-          signature(x = "DataFrame", decreasing="logical", col="character"),
-          function(x, decreasing, col, ...) {
+          signature(x = "DataFrame"),
+          function(x, decreasing=FALSE, col, ...) {
 
             # all sorting columns
-            by = c(col, ...)
+            by <- c(col, ...)
 
             # in case only 1 boolean argument is specified, it will be used for all columns
             if (length(decreasing) == 1){
@@ -1887,15 +1887,18 @@ setMethod("sort",
             }
 
             # creates a string array by replacing TRUE/FALSE correspondingly by "desc"/"asc"
-            sortOrder <- ifelse (decreasing==TRUE, "desc", ifelse (decreasing==FALSE, "asc", decreasing))
+            sortOrder <- ifelse (decreasing == FALSE, "asc", decreasing)
+            sortOrder <- ifelse (decreasing == TRUE, "desc", sortOrder)
 
             # concatenates dataframe with the column names, example: c("x$Species", "x$Petal_Width")
             colDFConcat <- paste("x", by, sep = "$")
 
-            # embraces columns with order order- asc/desc, example: c("asc(x$Species)", "desc(x$Petal_Length)" )
+            # embraces columns with order - asc/desc
+            # example: c("asc(x$Species)", "desc(x$Petal_Length)" )
             colDFOrderConcat <- paste(sortOrder, "(", colDFConcat, ")", collapse = ",")
 
-            # concatenates all ordered columns to a list, example: "list(asc(x$Species), desc(x$Petal_Length))"
+            # concatenates all ordered columns to a list
+            # example: "list(asc(x$Species), desc(x$Petal_Length))"
             colDFOrderConcatList <- paste("list(", colDFOrderConcat, ")", collapse = "")
 
             # builds columns of type Column, example: [[1]] Column Species ASC

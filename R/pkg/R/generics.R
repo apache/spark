@@ -986,4 +986,4 @@ setGeneric("rbind", signature = "...")
 
 #' @rdname sort
 #' @export
-setGeneric("sort", function(x, decreasing, col, ...) { standardGeneric("sort") })
+setGeneric("sort")
