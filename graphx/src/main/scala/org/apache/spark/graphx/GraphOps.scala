@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.SparkException
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
 import org.apache.spark.graphx.lib._
@@ -360,6 +359,59 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
     Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
+  }
+
+  /**
+   * An additional functionality for [[GraphOps.pregel)]] using `aggregateMessages`
+   *
+   * Only the parameter `sendMsg` is different from [[GraphOps.pregel]].
+   *
+   * @example for `sendMsg`:
+   * {{{
+   *  private def sendMessage(ctx: EdgeContext[VD, ED, A): Unit = {
+   *    //logic code defined by yourself.
+   *    ctx.sendToDst(aMsg1)
+   *    ctx.sendToSrc(aMsg2)
+   *  }
+   * }}}
+   *
+   * @tparam A the Pregel message type
+   * @param graph the input graph.
+   * @param initialMsg the message each vertex will receive at the on
+   * the first iteration
+   * @param maxIterations the maximum number of iterations to run for
+   *
+   * @param tripletFields which fields should be included in the [[EdgeContext]]
+   * passed to the `sendMsg` function. If not all fields are needed,
+   * specifying this can improve performance.
+   *
+   * @param vprog the user-defined vertex program which runs on each
+   * vertex and receives the inbound message and computes a new vertex
+   * value.  On the first iteration the vertex program is invoked on
+   * all vertices and is passed the default message.  On subsequent
+   * iterations the vertex program is only invoked on those vertices
+   * that receive messages.
+   *
+   * @param sendMsg a user supplied function that is applied to out
+   * edges of vertices that received messages in the current
+   * iteration
+   *
+   * @param mergeMsg a user supplied function that takes two incoming
+   * messages of type A and merges them into a single message of type
+   * A.  ''This function must be commutative and associative and
+   * ideally the size of A should not increase.''
+   *
+   * @return the resulting graph at the end of the computation
+   */
+  def pregel2[A: ClassTag](graph: Graph[VD, ED],
+      initialMsg: A,
+      maxIterations: Int = Int.MaxValue,
+      tripletFields: TripletFields = TripletFields.All)
+      (vprog: (VertexId, VD, A) => VD,
+        sendMsg: EdgeContext[VD, ED, A] => Unit,
+        mergeMsg: (A, A) => A)
+    : Graph[VD, ED] = {
+    Pregel.apply2(graph, initialMsg, maxIterations, tripletFields)(vprog, sendMsg, mergeMsg)
   }
 
   /**
