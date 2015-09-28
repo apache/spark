@@ -95,6 +95,7 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
+<<<<<<< HEAD
   private var appId: ApplicationId = null
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
@@ -104,6 +105,8 @@ private[spark] class Client(
   def stop(): Unit = {
     launcherBackend.close()
     yarnClient.stop()
+    // Unset YARN mode system env variable, to allow switching between cluster types.
+    System.clearProperty("SPARK_YARN_MODE")
   }
 
   /**
