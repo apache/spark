@@ -1887,23 +1887,17 @@ setMethod("coltypes",
             # TODO: This may be moved as a global parameter
             # These are the supported data types and how they map to
             # R's data types
-            DATA_TYPES <- c("string"="character", 
+            DATA_TYPES <- c("string"="character",
                             "double"="numeric",
-                            "int"="integer", 
-                            "long"="integer", 
+                            "int"="integer",
+                            "long"="integer",
                             "boolean"="long"
             )
-            
-            # Get the data types of the DataFrame
-            #types <- as.character(lapply(schema(object)$fields(), function(f) {
-            #  c(f$dataType.simpleString())
-            #}
-            
+
             # Get the data types of the DataFrame by invoking dtypes() function.
             # Some post-processing is needed.
             types <- as.character(t(as.data.frame(dtypes(x))[2, ]))
-            
+
             # Map Spark data types into R's data types
             as.character(DATA_TYPES[types])
-            
           })
