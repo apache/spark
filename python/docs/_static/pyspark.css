@@ -1,0 +1,90 @@
+/*
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+*/
+
+body {
+    background-color: #ffffff;
+}
+
+div.sphinxsidebar {
+    width: 274px;
+}
+
+div.bodywrapper {
+    margin: 0 0 0 274px;
+}
+
+div.sphinxsidebar ul {
+    margin-right: 10px;
+}
+
+div.sphinxsidebar li a {
+    word-break: break-all;
+}
+
+span.pys-tag {
+    font-size: 11px;
+    font-weight: bold;
+    margin: 0 0 0 2px;
+    padding: 1px 3px 1px 3px;
+    -moz-border-radius: 3px;
+    -webkit-border-radius: 3px;
+    border-radius: 3px;
+    text-align: center;
+    text-decoration: none;
+}
+
+span.pys-tag-experimental {
+    background-color: rgb(37, 112, 128);
+    color: rgb(255, 255, 255);
+}
+
+span.pys-tag-deprecated {
+    background-color: rgb(238, 238, 238);
+    color: rgb(62, 67, 73);
+}
+
+div.pys-note-experimental {
+    background-color: rgb(88, 151, 165);
+    border-color: rgb(59, 115, 127);
+    color: rgb(255, 255, 255);
+}
+
+div.pys-note-deprecated {
+}
+
+.hasTooltip {
+    position:relative;
+}
+.hasTooltip span {
+    display:none;
+}
+
+.hasTooltip:hover span.tooltip {
+    display: inline-block;
+    -moz-border-radius: 2px;
+    -webkit-border-radius: 2px;
+    border-radius: 2px;
+    background-color: rgb(250, 250, 250);
+    color: rgb(68, 68, 68);
+    font-weight: normal;
+    box-shadow: 1px 1px 3px rgb(127, 127, 127);
+    position: absolute;
+    padding: 0 3px 0 3px;
+    top: 1.3em;
+    left: 14px;
+    z-index: 9999
+}
