@@ -296,7 +296,7 @@ case object OracleDialect extends JdbcDialect {
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.VARCHAR && typeName.equals("VARCHAR")) {
-      //Save varchar size to metadata
+      // Save varchar size to metadata
       md.putLong("maxlength", size)
       Some(LongType)
     } else None
@@ -323,7 +323,7 @@ case object NetezzaDialect extends JdbcDialect {
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.VARCHAR && typeName.equals("VARCHAR")) {
-      //Save varchar size to metadata
+      // Save varchar size to metadata
       md.putLong("maxlength", size)
       Some(LongType)
     } else None
