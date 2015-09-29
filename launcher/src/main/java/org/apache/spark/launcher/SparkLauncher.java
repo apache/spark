@@ -377,8 +377,8 @@ public class SparkLauncher {
    * can be defined by setting {@link #CHILD_PROCESS_LOGGER_NAME} in the app's configuration. If
    * that option is not set, the code will try to derive a name from the application's name or
    * main class / script file. If those cannot be determined, an internal, unique name will be
-   * used. In all cases, the logger name will start with "spark.launcher", to fit more easily
-   * into the configuration of commonly-used logging systems.
+   * used. In all cases, the logger name will start with "org.apache.spark.launcher.app", to fit
+   * more easily into the configuration of commonly-used logging systems.
    *
    * @since 1.6.0
    * @param listeners Listeners to add to the handle before the app is launched.
@@ -408,7 +408,8 @@ public class SparkLauncher {
       }
     }
 
-    String loggerName = String.format("spark.launcher.%s", appName);
+    String loggerPrefix = getClass().getPackage().getName();
+    String loggerName = String.format("%s.app.%s", loggerPrefix, appName);
     ProcessBuilder pb = createBuilder().redirectErrorStream(true);
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
       String.valueOf(LauncherServer.getServerInstance().getPort()));
