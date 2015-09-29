@@ -162,6 +162,8 @@ package object dsl {
     def stddev(e: Expression): Expression = Stddev(e)
     def stddev_pop(e: Expression): Expression = StddevPop(e)
     def stddev_samp(e: Expression): Expression = StddevSamp(e)
+    def collect_list(e: Expression): Expression = CollectList(e)
+    def collect_set(e: Expression): Expression = CollectSet(e)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?

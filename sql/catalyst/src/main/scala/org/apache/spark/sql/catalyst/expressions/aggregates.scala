@@ -256,6 +256,71 @@ case class CollectHashSetFunction(
   }
 }
 
+case class CollectSet(child: Expression) extends UnaryExpression with PartialAggregate1 {
+
+  override def nullable: Boolean = false
+  override def dataType: DataType = new ArrayType(child.dataType, false)
+  override def newInstance(): CollectSetFunction = new CollectSetFunction(child, this)
+
+  override def asPartial: SplitEvaluation = {
+    val partialSet = Alias(CollectHashSet(child :: Nil), "PartialSets")()
+    SplitEvaluation(
+      CombineSetsArr(partialSet.toAttribute, this),
+      partialSet :: Nil)
+  }
+}
+
+case class CollectSetFunction(expr: Expression, base: AggregateExpression1)
+    extends AggregateFunction1 {
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new OpenHashSet[Any]()
+
+  override def update(input: InternalRow): Unit = {
+    val evaluatedExpr = expr.eval(input)
+    if (evaluatedExpr != null) {
+      seen.add(evaluatedExpr)
+    }
+  }
+
+  override def eval(input: InternalRow): Any = seen
+}
+
+case class CombineSetsArr(inputSet: Expression, base: Expression) extends AggregateExpression1 {
+  def this() = this(null, null)
+
+  override def children: Seq[Expression] = inputSet :: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = base.dataType
+  override def toString: String = s"Combine($inputSet)"
+  override def newInstance(): CombineSetsArrFunction = {
+    new CombineSetsArrFunction(inputSet, this)
+  }
+}
+
+case class CombineSetsArrFunction(
+    @transient inputSet: Expression,
+    @transient base: AggregateExpression1)
+  extends AggregateFunction1 {
+
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new OpenHashSet[Any]()
+
+  override def update(input: InternalRow): Unit = {
+    val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
+    val inputIterator = inputSetEval.iterator
+    while (inputIterator.hasNext) {
+      seen.add(inputIterator.next)
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val casted = seen.asInstanceOf[OpenHashSet[InternalRow]]
+    Literal.create(casted.iterator.map(f => f.get(0, null)).toSeq, base.dataType).eval(null)
+  }
+}
+
 case class CombineSetsAndCount(inputSet: Expression) extends AggregateExpression1 {
   def this() = this(null)
 
@@ -936,3 +1001,9 @@ case class StddevFunction(
     }
   }
 }
+
+case class CollectList(child: Expression) extends UnaryExpression with AggregateExpression {
+  override def nullable: Boolean = false
+  override def dataType: DataType = new ArrayType(child.dataType, false)
+}
+

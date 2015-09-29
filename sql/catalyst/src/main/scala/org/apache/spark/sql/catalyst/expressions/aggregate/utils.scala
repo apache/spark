@@ -61,6 +61,18 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = true)
 
+        case expressions.CollectList(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.CollectList(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case expressions.CollectSet(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.CollectList(child),
+            mode = aggregate.Complete,
+            isDistinct = true)
+
         case expressions.First(child) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.First(child),
