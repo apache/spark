@@ -345,7 +345,7 @@ private[spark] class ApplicationMaster(
             if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
               finish(FinalApplicationStatus.FAILED,
                 ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-                "Max number of executor failures reached")
+                s"Max number of executor failures ($maxNumExecutorFailures) reached")
             } else {
               logDebug("Sending progress")
               allocator.allocateResources()
