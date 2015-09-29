@@ -22,10 +22,11 @@ from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
 
 
-__all__ = ['DecisionTreeRegressor', 'DecisionTreeRegressionModel', 'GBTRegressor',
-           'GBTRegressionModel', 'LinearRegression', 'LinearRegressionModel',
-           'RandomForestRegressor', 'RandomForestRegressionModel',
-           'AFTSurvivalRegression', 'AFTSurvivalRegressionModel']
+__all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
+           'DecisionTreeRegressor', 'DecisionTreeRegressionModel',
+           'GBTRegressor', 'GBTRegressionModel',
+           'LinearRegression', 'LinearRegressionModel',
+           'RandomForestRegressor', 'RandomForestRegressionModel']
 
 
 @inherit_doc
@@ -609,13 +610,16 @@ class GBTRegressionModel(TreeEnsembleModels):
     .. versionadded:: 1.4.0
     """
 
+
 @inherit_doc
 class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             HasFitIntercept, HasMaxIter, HasTol):
     """
-    `https://en.wikipedia.org/wiki/Accelerated_failure_time_model`
-    Fit a parametric survival regression model named accelerated failure time (AFT) model
-    based on the Weibull distribution of the survival time.
+    Accelerated Failure Time(AFT) Model Survival Regression
+
+    Fit a parametric AFT survival regression model based on the Weibull distribution
+    of the survival time.
+    see also, `https://en.wikipedia.org/wiki/Accelerated_failure_time_model`
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
@@ -637,37 +641,43 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
     # a placeholder to make it appear in the generated doc
     censorCol = Param(Params._dummy(), "censorCol",
-                      "censor column name")
+                      "censor column name. The value of this column could be 0 or 1. " +
+                      "If the value is 1, it means the event has occurred i.e. " +
+                      "uncensored; otherwise censored.")
     quantileProbabilities = \
         Param(Params._dummy(), "quantileProbabilities",
-              "quantile probabilities array" +
-              ", array is not empty and every probability is in range [0,1]")
+              "quantile probabilities array. Values of the quantile probabilities array " +
+              "should be in the range [0, 1] and the array should be non-empty.")
     quantilesCol = Param(Params._dummy(), "quantilesCol",
-                         "quantiles column name")
+                         "quantiles column name. This column will output quantiles of " +
+                         "corresponding quantileProbabilities if it is set.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                 quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-                 quantilesCol=None):
+                 quantileProbabilities=None, quantilesCol=None):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                 quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-                 quantilesCol=None):
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
+                 quantileProbabilities=None, quantilesCol=None):
         """
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
-        self.censorCol = \
-            Param(self,  "censorCol",
-                  "censor column name")
+        #: Param for censor column name
+        self.censorCol = Param(self,  "censorCol",
+                               "censor column name. The value of this column could be 0 or 1. " +
+                               "If the value is 1, it means the event has occurred i.e. " +
+                               "uncensored; otherwise censored.")
+        #: Param for quantile probabilities array
         self.quantileProbabilities = \
             Param(self, "quantileProbabilities",
-                  "quantile probabilities array" +
-                  ", array is not empty and every probability is in range [0,1]")
+                  "quantile probabilities array. Values of the quantile probabilities array " +
+                  "should be in the range [0, 1] and the array should be non-empty.")
+        #: Param for quantiles column name
         self.quantilesCol = Param(self, "quantilesCol",
-                                  "quantiles column name")
+                                  "quantiles column name. This column will output quantiles of " +
+                                  "corresponding quantileProbabilities if it is set.")
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99])
         kwargs = self.__init__._input_kwargs
@@ -676,14 +686,12 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     @keyword_only
     @since("1.6.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                 quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-                 quantilesCol=None):
+                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
+                  quantileProbabilities=None, quantilesCol=None):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                 quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-                 quantilesCol=None):
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
+                  quantileProbabilities=None, quantilesCol=None):
         """
         kwargs = self.__init__._input_kwargs
         return self._set(**kwargs)
@@ -735,7 +743,6 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         Gets the value of quantilesCol or its default value.
         """
         return self.getOrDefault(self.quantilesCol)
-
 
 
 class AFTSurvivalRegressionModel(JavaModel):
