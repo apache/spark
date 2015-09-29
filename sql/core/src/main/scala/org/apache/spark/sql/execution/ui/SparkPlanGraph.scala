@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.spark.util.Utils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 
@@ -34,7 +33,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 private[ui] case class SparkPlanGraph(
     nodes: Seq[SparkPlanGraphNode], edges: Seq[SparkPlanGraphEdge]) {
 
-  def makeDotFile(metrics: Map[Long, Any]): String = {
+  def makeDotFile(metrics: Map[Long, String]): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
     nodes.foreach(node => dotFile.append(node.makeDotNode(metrics) + "\n"))
@@ -64,8 +63,7 @@ private[sql] object SparkPlanGraph {
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
       SQLPlanMetric(metric.name.getOrElse(key), metric.id,
-        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]],
-        metric.stringValue.asInstanceOf[Any => String])
+        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
     }
     val node = SparkPlanGraphNode(
       nodeIdGenerator.getAndIncrement(), plan.nodeName, plan.simpleString, metrics)
@@ -89,11 +87,11 @@ private[sql] object SparkPlanGraph {
 private[ui] case class SparkPlanGraphNode(
     id: Long, name: String, desc: String, metrics: Seq[SQLPlanMetric]) {
 
-  def makeDotNode(metricsValue: Map[Long, Any]): String = {
+  def makeDotNode(metricsValue: Map[Long, String]): String = {
     val values = {
       for (metric <- metrics;
            value <- metricsValue.get(metric.accumulatorId)) yield {
-        metric.name + ": " + metric.stringValue(value)
+        metric.name + ": " + value
       }
     }
     val label = if (values.isEmpty) {
