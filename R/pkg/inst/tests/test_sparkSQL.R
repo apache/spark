@@ -1007,6 +1007,12 @@ test_that("sort() on a DataFrame", {
 
   sorted4 <- sort(df, FALSE, "name")
   expect_equal(collect(sorted4)[2,"age"], 19)
+
+  sorted5 <- sort(df, col=asc(df$age))
+  expect_equal(collect(sorted5)[1,2], "Michael")
+
+  sorted6 <- sort(df, col=list(desc(df$age), asc(df$name)))
+  expect_equal(collect(sorted6)[1,2], "Andy")
 })
 
 test_that("filter() on a DataFrame", {
