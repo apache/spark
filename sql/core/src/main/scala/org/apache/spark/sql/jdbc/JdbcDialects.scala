@@ -293,6 +293,15 @@ case object MsSqlServerDialect extends JdbcDialect {
 @DeveloperApi
 case object OracleDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (sqlType == Types.VARCHAR && typeName.equals("VARCHAR")) {
+      //Save varchar size to metadata
+      md.putLong("maxlength", size)
+      Some(LongType)
+    } else None
+  }
+
   override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
     if (dt == StringType && md.contains("maxlength")) {
       Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.VARCHAR))
@@ -311,6 +320,15 @@ case object OracleDialect extends JdbcDialect {
 @DeveloperApi
 case object NetezzaDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:netezza")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (sqlType == Types.VARCHAR && typeName.equals("VARCHAR")) {
+      //Save varchar size to metadata
+      md.putLong("maxlength", size)
+      Some(LongType)
+    } else None
+  }
+
   override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
     if (dt == StringType && md.contains("maxlength")) {
       Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.VARCHAR))
