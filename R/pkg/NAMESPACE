@@ -24,7 +24,6 @@ exportClasses("DataFrame")
 
 exportMethods("arrange",
               "cache",
-              "col",
               "collect",
               "columns",
               "count",

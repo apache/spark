@@ -395,11 +395,6 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
-#' @rdname select
-#' @export
-#' This generic method is shared by DataFrame.col and sql.functions.col
-setGeneric("col", function(x, ...) { standardGeneric("col") })
-
 #' @rdname schema
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
