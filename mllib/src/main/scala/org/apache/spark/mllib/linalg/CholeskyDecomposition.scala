@@ -33,7 +33,7 @@ private[spark] object CholeskyDecomposition {
    * The input arguments are modified in-place to store the factorization and the solution.
    * @param A the upper triangular part of A
    * @param bx right-hand side
-   * @return the solution vector
+   * @return the solution array
    */
   private[spark] def solve(A: Array[Double], bx: Array[Double]): Array[Double] = {
     val k = bx.size
