@@ -1189,6 +1189,16 @@ class Row(tuple):
     <Row(name, age)>
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
+
+    Some special column names such as aggregated column count, should
+    work properly.
+
+    >>> from pyspark.sql import Row
+    >>> rdd = sc.parallelize([1, 2, 1, 3])
+    >>> df = sqlContext.createDataFrame(rdd.map(lambda x: Row(id = x)))
+    >>> df = df.groupby("id").count()
+    >>> df.map(lambda x: x.count).collect()
+    [2, 1, 1]
     """
 
     def __new__(self, *args, **kwargs):
