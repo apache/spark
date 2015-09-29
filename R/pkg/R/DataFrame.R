@@ -1877,12 +1877,12 @@ setMethod("crosstab",
 #' }
 setMethod("sort",
           signature(x = "DataFrame"),
-          function(x, decreasing, col, ...) {
+          function(x, decreasing=FALSE, col, ...) {
 
             # all sorting columns
             by <- c(col, ...)
             if (length(decreasing) == 1){
-              # in case only 1 boolean argument - decreasing value is specified, 
+              # in case only 1 boolean argument - decreasing value is specified,
               # it will be used for all columns
               decreasing <- rep(decreasing,length(by))
             } else if (length(decreasing) != length(by)){
