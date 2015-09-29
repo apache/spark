@@ -408,10 +408,14 @@ class CheckpointSuite extends TestSuiteBase {
 
     ssc = new StreamingContext(checkpointDir)
     ssc.start()
-    val outputNew = advanceTimeWithRealDelay(ssc, 2)
 
     eventually(timeout(10.seconds)) {
       assert(RateTestReceiver.getActive().nonEmpty)
+    }
+
+    advanceTimeWithRealDelay(ssc, 2)
+
+    eventually(timeout(10.seconds)) {
       assert(RateTestReceiver.getActive().get.getDefaultBlockGeneratorRateLimit() === 200)
     }
     ssc.stop()

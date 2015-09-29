@@ -115,7 +115,7 @@ object RandomForestRegressor {
 final class RandomForestRegressionModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
-    val numFeatures: Int)
+    override val numFeatures: Int)
   extends PredictionModel[Vector, RandomForestRegressionModel]
   with TreeEnsembleModel with Serializable {
 
@@ -187,13 +187,14 @@ private[ml] object RandomForestRegressionModel {
   def fromOld(
       oldModel: OldRandomForestModel,
       parent: RandomForestRegressor,
-      categoricalFeatures: Map[Int, Int]): RandomForestRegressionModel = {
+      categoricalFeatures: Map[Int, Int],
+      numFeatures: Int = -1): RandomForestRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestRegressionModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
       // parent for each tree is null since there is no good way to set this.
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
-    new RandomForestRegressionModel(parent.uid, newTrees, -1)
+    new RandomForestRegressionModel(parent.uid, newTrees, numFeatures)
   }
 }

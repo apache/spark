@@ -142,11 +142,7 @@ public class JavaDataFrameSuite {
     }
   }
 
-  @Test
-  public void testCreateDataFrameFromJavaBeans() {
-    Bean bean = new Bean();
-    JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
-    DataFrame df = context.createDataFrame(rdd, Bean.class);
+  void validateDataFrameWithBeans(Bean bean, DataFrame df) {
     StructType schema = df.schema();
     Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
       schema.apply("a"));
@@ -180,6 +176,22 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < d.length(); i++) {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
+  }
+
+  @Test
+  public void testCreateDataFrameFromLocalJavaBeans() {
+    Bean bean = new Bean();
+    List<Bean> data = Arrays.asList(bean);
+    DataFrame df = context.createDataFrame(data, Bean.class);
+    validateDataFrameWithBeans(bean, df);
+  }
+
+  @Test
+  public void testCreateDataFrameFromJavaBeans() {
+    Bean bean = new Bean();
+    JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
+    DataFrame df = context.createDataFrame(rdd, Bean.class);
+    validateDataFrameWithBeans(bean, df);
   }
 
   @Test
