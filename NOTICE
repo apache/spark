@@ -572,3 +572,38 @@ Copyright 2009-2013 The Apache Software Foundation
 
 Apache Avro IPC
 Copyright 2009-2013 The Apache Software Foundation
+
+
+Vis.js
+Copyright 2010-2015 Almende B.V.
+
+Vis.js is dual licensed under both
+
+  * The Apache 2.0 License
+    http://www.apache.org/licenses/LICENSE-2.0
+
+    and
+
+  * The MIT License
+    http://opensource.org/licenses/MIT
+
+Vis.js may be distributed under either license.
+
+
+Vis.js uses and redistributes the following third-party libraries:
+
+- component-emitter
+  https://github.com/component/emitter
+  The MIT License
+
+- hammer.js
+  http://hammerjs.github.io/
+  The MIT License
+
+- moment.js
+  http://momentjs.com/
+  The MIT License
+
+- keycharm
+  https://github.com/AlexDM0/keycharm
+  The MIT License
