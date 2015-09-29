@@ -359,6 +359,7 @@ def _hack_namedtuple(cls):
     def __reduce__(self):
         return (_restore, (name, fields, tuple(self)))
     cls.__reduce__ = __reduce__
+    cls._is_namedtuple_ = True
     return cls
 
 

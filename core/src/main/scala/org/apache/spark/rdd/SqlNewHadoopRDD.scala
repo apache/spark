@@ -86,7 +86,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
     if (isDriverSide) {
       initDriverSideJobFuncOpt.map(f => f(job))
     }
-    job.getConfiguration
+    SparkHadoopUtil.get.getConfigurationFromJobContext(job)
   }
 
   private val jobTrackerId: String = {

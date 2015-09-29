@@ -28,12 +28,15 @@ The algorithm combines Term Frequency (TF) counts with the [hashing trick](http:
 **IDF**: `IDF` is an `Estimator` which fits on a dataset and produces an `IDFModel`.  The `IDFModel` takes feature vectors (generally created from `HashingTF`) and scales each column.  Intuitively, it down-weights columns which appear frequently in a corpus.
 
 Please refer to the [MLlib user guide on TF-IDF](mllib-feature-extraction.html#tf-idf) for more details on Term Frequency and Inverse Document Frequency.
-For API details, refer to the [HashingTF API docs](api/scala/index.html#org.apache.spark.ml.feature.HashingTF) and the [IDF API docs](api/scala/index.html#org.apache.spark.ml.feature.IDF).
 
 In the following code segment, we start with a set of sentences.  We split each sentence into words using `Tokenizer`.  For each sentence (bag of words), we use `HashingTF` to hash the sentence into a feature vector.  We use `IDF` to rescale the feature vectors; this generally improves performance when using text as features.  Our feature vectors could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [HashingTF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.HashingTF) and
+the [IDF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IDF) for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
 
@@ -54,6 +57,10 @@ rescaledData.select("features", "label").take(3).foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [HashingTF Java docs](api/java/org/apache/spark/ml/feature/HashingTF.html) and the
+[IDF Java docs](api/java/org/apache/spark/ml/feature/IDF.html) for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -100,6 +107,10 @@ for (Row r : rescaledData.select("features", "label").take(3)) {
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [HashingTF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.HashingTF) and
+the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import HashingTF, IDF, Tokenizer
 
@@ -123,12 +134,21 @@ for features_label in rescaledData.select("features", "label").take(3):
 
 ## Word2Vec
 
-`Word2Vec` is an `Estimator` which takes sequences of words that represents documents and trains a `Word2VecModel`. The model is a `Map(String, Vector)` essentially, which maps each word to an unique fix-sized vector. The `Word2VecModel` transforms each documents into a vector using the average of all words in the document, which aims to other computations of documents such as similarity calculation consequencely. Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more details on Word2Vec.
+`Word2Vec` is an `Estimator` which takes sequences of words representing documents and trains a
+`Word2VecModel`. The model maps each word to a unique fixed-size vector. The `Word2VecModel`
+transforms each document into a vector using the average of all words in the document; this vector
+can then be used for as features for prediction, document similarity calculations, etc.
+Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more
+details.
 
-Word2Vec is implemented in [Word2Vec](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec). In the following code segment, we start with a set of documents, each of them is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
+In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [Word2Vec Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.Word2Vec
 
@@ -152,6 +172,10 @@ result.select("result").take(3).foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Word2Vec Java docs](api/java/org/apache/spark/ml/feature/Word2Vec.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -192,6 +216,10 @@ for (Row r: result.select("result").take(3)) {
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Word2Vec Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Word2Vec)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import Word2Vec
 
@@ -250,9 +278,11 @@ each vector represents the token counts of the document over the vocabulary.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-More details can be found in the API docs for
-[CountVectorizer](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizer) and
-[CountVectorizerModel](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel).
+
+Refer to the [CountVectorizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizer)
+and the [CountVectorizerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.CountVectorizer
 import org.apache.spark.mllib.util.CountVectorizerModel
@@ -280,9 +310,11 @@ cvModel.transform(df).select("features").show()
 </div>
 
 <div data-lang="java" markdown="1">
-More details can be found in the API docs for
-[CountVectorizer](api/java/org/apache/spark/ml/feature/CountVectorizer.html) and
-[CountVectorizerModel](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html).
+
+Refer to the [CountVectorizer Java docs](api/java/org/apache/spark/ml/feature/CountVectorizer.html)
+and the [CountVectorizerModel Java docs](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html)
+for more details on the API.
+
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.CountVectorizer;
@@ -334,6 +366,11 @@ cvModel.transform(df).show();
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [Tokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
+and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.{Tokenizer, RegexTokenizer}
 
@@ -356,6 +393,11 @@ regexTokenized.select("words", "label").take(3).foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Tokenizer Java docs](api/java/org/apache/spark/ml/feature/Tokenizer.html)
+and the [RegexTokenizer Java docs](api/java/org/apache/spark/ml/feature/RegexTokenizer.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -397,6 +439,11 @@ RegexTokenizer regexTokenizer = new RegexTokenizer()
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Tokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Tokenizer) and
+the the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import Tokenizer, RegexTokenizer
 
@@ -426,7 +473,8 @@ words from the input sequences. The list of stopwords is specified by
 the `stopWords` parameter.  We provide [a list of stop
 words](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) by
 default, accessible by calling `getStopWords` on a newly instantiated
-`StopWordsRemover` instance.
+`StopWordsRemover` instance. A boolean parameter `caseSensitive` indicates
+if the matches should be case sensitive (false by default).
 
 **Examples**
 
@@ -456,10 +504,8 @@ filtered out.
 
 <div data-lang="scala" markdown="1">
 
-[`StopWordsRemover`](api/scala/index.html#org.apache.spark.ml.feature.StopWordsRemover)
-takes an input column name, an output column name, a list of stop words,
-and a boolean indicating if the matches should be case sensitive (false
-by default).
+Refer to the [StopWordsRemover Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StopWordsRemover)
+for more details on the API.
 
 {% highlight scala %}
 import org.apache.spark.ml.feature.StopWordsRemover
@@ -478,10 +524,8 @@ remover.transform(dataSet).show()
 
 <div data-lang="java" markdown="1">
 
-[`StopWordsRemover`](api/java/org/apache/spark/ml/feature/StopWordsRemover.html)
-takes an input column name, an output column name, a list of stop words,
-and a boolean indicating if the matches should be case sensitive (false
-by default).
+Refer to the [StopWordsRemover Java docs](api/java/org/apache/spark/ml/feature/StopWordsRemover.html)
+for more details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -514,10 +558,9 @@ remover.transform(dataset).show();
 </div>
 
 <div data-lang="python" markdown="1">
-[`StopWordsRemover`](api/python/pyspark.ml.html#pyspark.ml.feature.StopWordsRemover)
-takes an input column name, an output column name, a list of stop words,
-and a boolean indicating if the matches should be case sensitive (false
-by default).
+
+Refer to the [StopWordsRemover Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StopWordsRemover)
+for more details on the API.
 
 {% highlight python %}
 from pyspark.ml.feature import StopWordsRemover
@@ -543,7 +586,8 @@ An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (t
 
 <div data-lang="scala" markdown="1">
 
-[`NGram`](api/scala/index.html#org.apache.spark.ml.feature.NGram) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+Refer to the [NGram Scala docs](api/scala/index.html#org.apache.spark.ml.feature.NGram)
+for more details on the API.
 
 {% highlight scala %}
 import org.apache.spark.ml.feature.NGram
@@ -562,7 +606,8 @@ ngramDataFrame.take(3).map(_.getAs[Stream[String]]("ngrams").toList).foreach(pri
 
 <div data-lang="java" markdown="1">
 
-[`NGram`](api/java/org/apache/spark/ml/feature/NGram.html) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+Refer to the [NGram Java docs](api/java/org/apache/spark/ml/feature/NGram.html)
+for more details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -600,7 +645,8 @@ for (Row r : ngramDataFrame.select("ngrams", "label").take(3)) {
 
 <div data-lang="python" markdown="1">
 
-[`NGram`](api/python/pyspark.ml.html#pyspark.ml.feature.NGram) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+Refer to the [NGram Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.NGram)
+for more details on the API.
 
 {% highlight python %}
 from pyspark.ml.feature import NGram
@@ -621,12 +667,16 @@ for ngrams_label in ngramDataFrame.select("ngrams", "label").take(3):
 
 ## Binarizer
 
-Binarization is the process of thresholding numerical features to binary features. As some probabilistic estimators make assumption that the input data is distributed according to [Bernoulli distribution](http://en.wikipedia.org/wiki/Bernoulli_distribution), a binarizer is useful for pre-processing the input data with continuous numerical features.
+Binarization is the process of thresholding numerical features to binary (0/1) features.
 
-A simple [Binarizer](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) class provides this functionality. Besides the common parameters of `inputCol` and `outputCol`, `Binarizer` has the parameter `threshold` used for binarizing continuous numerical features. The features greater than the threshold, will be binarized to 1.0. The features equal to or less than the threshold, will be binarized to 0.0. The example below shows how to binarize numerical features.
+`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold` for binarization. Feature values greater than the threshold are binarized to 1.0; values equal to or less than the threshold are binarized to 0.0.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [Binarizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Binarizer)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.Binarizer
 import org.apache.spark.sql.DataFrame
@@ -650,6 +700,10 @@ binarizedFeatures.collect().foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [Binarizer Java docs](api/java/org/apache/spark/ml/feature/Binarizer.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -687,6 +741,10 @@ for (Row r : binarizedFeatures.collect()) {
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [Binarizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Binarizer)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import Binarizer
 
@@ -710,7 +768,10 @@ for binarized_feature, in binarizedFeatures.collect():
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-See the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.feature.PCA) for API details.
+
+Refer to the [PCA Scala docs](api/scala/index.html#org.apache.spark.ml.feature.PCA)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.PCA
 import org.apache.spark.mllib.linalg.Vectors
@@ -733,7 +794,10 @@ result.show()
 </div>
 
 <div data-lang="java" markdown="1">
-See the [Java API documentation](api/java/org/apache/spark/ml/feature/PCA.html) for API details.
+
+Refer to the [PCA Java docs](api/java/org/apache/spark/ml/feature/PCA.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -773,7 +837,10 @@ result.show();
 </div>
 
 <div data-lang="python" markdown="1">
-See the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.feature.PCA) for API details.
+
+Refer to the [PCA Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.PCA)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import PCA
 from pyspark.mllib.linalg import Vectors
@@ -796,6 +863,10 @@ result.show(truncate=False)
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [PolynomialExpansion Scala docs](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.PolynomialExpansion
 import org.apache.spark.mllib.linalg.Vectors
@@ -816,6 +887,10 @@ polyDF.select("polyFeatures").take(3).foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [PolynomialExpansion Java docs](api/java/org/apache/spark/ml/feature/PolynomialExpansion.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -856,6 +931,10 @@ for (Row r : row) {
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [PolynomialExpansion Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.PolynomialExpansion)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import PolynomialExpansion
 from pyspark.mllib.linalg import Vectors
@@ -889,6 +968,10 @@ $0$th DCT coefficient and _not_ the $N/2$th).
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [DCT Scala docs](api/scala/index.html#org.apache.spark.ml.feature.DCT)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.DCT
 import org.apache.spark.mllib.linalg.Vectors
@@ -908,6 +991,10 @@ dctDf.select("featuresDCT").show(3)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [DCT Java docs](api/java/org/apache/spark/ml/feature/DCT.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -992,8 +1079,8 @@ index `2`.
 
 <div data-lang="scala" markdown="1">
 
-[`StringIndexer`](api/scala/index.html#org.apache.spark.ml.feature.StringIndexer) takes an input
-column name and an output column name.
+Refer to the [StringIndexer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StringIndexer)
+for more details on the API.
 
 {% highlight scala %}
 import org.apache.spark.ml.feature.StringIndexer
@@ -1010,8 +1097,9 @@ indexed.show()
 </div>
 
 <div data-lang="java" markdown="1">
-[`StringIndexer`](api/java/org/apache/spark/ml/feature/StringIndexer.html) takes an input column
-name and an output column name.
+
+Refer to the [StringIndexer Java docs](api/java/org/apache/spark/ml/feature/StringIndexer.html)
+for more details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -1048,8 +1136,8 @@ indexed.show();
 
 <div data-lang="python" markdown="1">
 
-[`StringIndexer`](api/python/pyspark.ml.html#pyspark.ml.feature.StringIndexer) takes an input
-column name and an output column name.
+Refer to the [StringIndexer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StringIndexer)
+for more details on the API.
 
 {% highlight python %}
 from pyspark.ml.feature import StringIndexer
@@ -1070,6 +1158,10 @@ indexed.show()
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [OneHotEncoder Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoder)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer}
 
@@ -1096,6 +1188,10 @@ encoded.select("id", "categoryVec").foreach(println)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [OneHotEncoder Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoder.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -1138,6 +1234,10 @@ DataFrame encoded = encoder.transform(indexed);
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [OneHotEncoder Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoder)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import OneHotEncoder, StringIndexer
 
@@ -1171,12 +1271,14 @@ It can both automatically decide which features are categorical and convert orig
 
 Indexing categorical features allows algorithms such as Decision Trees and Tree Ensembles to treat categorical features appropriately, improving performance.
 
-Please refer to the [VectorIndexer API docs](api/scala/index.html#org.apache.spark.ml.feature.VectorIndexer) for more details.
-
 In the example below, we read in a dataset of labeled points and then use `VectorIndexer` to decide which features should be treated as categorical.  We transform the categorical feature values to their indices.  This transformed data could then be passed to algorithms such as `DecisionTreeRegressor` that handle categorical features.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [VectorIndexer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorIndexer)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.VectorIndexer
 
@@ -1197,6 +1299,10 @@ val indexedData = indexerModel.transform(data)
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [VectorIndexer Java docs](api/java/org/apache/spark/ml/feature/VectorIndexer.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Map;
 
@@ -1224,6 +1330,10 @@ DataFrame indexedData = indexerModel.transform(data);
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [VectorIndexer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorIndexer)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import VectorIndexer
 
@@ -1247,6 +1357,10 @@ The following example demonstrates how to load a dataset in libsvm format and th
 
 <div class="codetabs">
 <div data-lang="scala">
+
+Refer to the [Normalizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Normalizer)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.Normalizer
 
@@ -1266,6 +1380,10 @@ val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.Positi
 </div>
 
 <div data-lang="java">
+
+Refer to the [Normalizer Java docs](api/java/org/apache/spark/ml/feature/Normalizer.html)
+for more details on the API.
+
 {% highlight java %}
 import org.apache.spark.ml.feature.Normalizer;
 import org.apache.spark.sql.DataFrame;
@@ -1287,6 +1405,10 @@ DataFrame lInfNormData =
 </div>
 
 <div data-lang="python">
+
+Refer to the [Normalizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Normalizer)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import Normalizer
 
@@ -1315,14 +1437,14 @@ lInfNormData = normalizer.transform(dataFrame, {normalizer.p: float("inf")})
 
 Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
 
-More details can be found in the API docs for
-[StandardScaler](api/scala/index.html#org.apache.spark.ml.feature.StandardScaler) and
-[StandardScalerModel](api/scala/index.html#org.apache.spark.ml.feature.StandardScalerModel).
-
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
 
 <div class="codetabs">
 <div data-lang="scala">
+
+Refer to the [StandardScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StandardScaler)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.StandardScaler
 
@@ -1343,6 +1465,10 @@ val scaledData = scalerModel.transform(dataFrame)
 </div>
 
 <div data-lang="java">
+
+Refer to the [StandardScaler Java docs](api/java/org/apache/spark/ml/feature/StandardScaler.html)
+for more details on the API.
+
 {% highlight java %}
 import org.apache.spark.ml.feature.StandardScaler;
 import org.apache.spark.ml.feature.StandardScalerModel;
@@ -1365,6 +1491,10 @@ DataFrame scaledData = scalerModel.transform(dataFrame);
 </div>
 
 <div data-lang="python">
+
+Refer to the [StandardScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StandardScaler)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import StandardScaler
 
@@ -1403,9 +1533,11 @@ The following example demonstrates how to load a dataset in libsvm format and th
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-More details can be found in the API docs for
-[MinMaxScaler](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
-[MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
+
+Refer to the [MinMaxScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler)
+and the [MinMaxScalerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.MinMaxScaler
 
@@ -1424,9 +1556,11 @@ val scaledData = scalerModel.transform(dataFrame)
 </div>
 
 <div data-lang="java" markdown="1">
-More details can be found in the API docs for
-[MinMaxScaler](api/java/org/apache/spark/ml/feature/MinMaxScaler.html) and
-[MinMaxScalerModel](api/java/org/apache/spark/ml/feature/MinMaxScalerModel.html).
+
+Refer to the [MinMaxScaler Java docs](api/java/org/apache/spark/ml/feature/MinMaxScaler.html)
+and the [MinMaxScalerModel Java docs](api/java/org/apache/spark/ml/feature/MinMaxScalerModel.html)
+for more details on the API.
+
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.MinMaxScaler;
@@ -1464,6 +1598,10 @@ The following example demonstrates how to bucketize a column of `Double`s into a
 
 <div class="codetabs">
 <div data-lang="scala">
+
+Refer to the [Bucketizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.Bucketizer
 import org.apache.spark.sql.DataFrame
@@ -1484,6 +1622,10 @@ val bucketedData = bucketizer.transform(dataFrame)
 </div>
 
 <div data-lang="java">
+
+Refer to the [Bucketizer Java docs](api/java/org/apache/spark/ml/feature/Bucketizer.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -1519,6 +1661,10 @@ DataFrame bucketedData = bucketizer.transform(dataFrame);
 </div>
 
 <div data-lang="python">
+
+Refer to the [Bucketizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Bucketizer)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import Bucketizer
 
@@ -1555,14 +1701,14 @@ v_N
   \end{pmatrix}
 \]`
 
-[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.ml.feature.ElementwiseProduct) takes the following parameter:
-
-* `scalingVec`: the transforming vector.
-
 This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
+Refer to the [ElementwiseProduct Scala docs](api/scala/index.html#org.apache.spark.ml.feature.ElementwiseProduct)
+for more details on the API.
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.ElementwiseProduct
 import org.apache.spark.mllib.linalg.Vectors
@@ -1585,6 +1731,10 @@ transformer.transform(dataFrame).show()
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [ElementwiseProduct Java docs](api/java/org/apache/spark/ml/feature/ElementwiseProduct.html)
+for more details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 
@@ -1623,6 +1773,10 @@ transformer.transform(dataFrame).show();
 </div>
 
 <div data-lang="python" markdown="1">
+
+Refer to the [ElementwiseProduct Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ElementwiseProduct)
+for more details on the API.
+
 {% highlight python %}
 from pyspark.ml.feature import ElementwiseProduct
 from pyspark.mllib.linalg import Vectors
@@ -1676,8 +1830,8 @@ output column to `features`, after transformation we should get the following Da
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`VectorAssembler`](api/scala/index.html#org.apache.spark.ml.feature.VectorAssembler) takes an array
-of input column names and an output column name.
+Refer to the [VectorAssembler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorAssembler)
+for more details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vectors
@@ -1696,8 +1850,8 @@ println(output.select("features", "clicked").first())
 
 <div data-lang="java" markdown="1">
 
-[`VectorAssembler`](api/java/org/apache/spark/ml/feature/VectorAssembler.html) takes an array
-of input column names and an output column name.
+Refer to the [VectorAssembler Java docs](api/java/org/apache/spark/ml/feature/VectorAssembler.html)
+for more details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -1733,8 +1887,8 @@ System.out.println(output.select("features", "clicked").first());
 
 <div data-lang="python" markdown="1">
 
-[`VectorAssembler`](api/python/pyspark.ml.html#pyspark.ml.feature.VectorAssembler) takes a list
-of input column names and an output column name.
+Refer to the [VectorAssembler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorAssembler)
+for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.linalg import Vectors
@@ -1810,8 +1964,8 @@ Suppose also that we have a potential input attributes for the `userFeatures`, i
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`VectorSlicer`](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer) takes an input
-column name with specified indices or names and an output column name.
+Refer to the [VectorSlicer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer)
+for more details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vectors
@@ -1844,8 +1998,8 @@ println(output.select("userFeatures", "features").first())
 
 <div data-lang="java" markdown="1">
 
-[`VectorSlicer`](api/java/org/apache/spark/ml/feature/VectorSlicer.html) takes an input column name
-with specified indices or names and an output column name.
+Refer to the [VectorSlicer Java docs](api/java/org/apache/spark/ml/feature/VectorSlicer.html)
+for more details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -1915,7 +2069,8 @@ id | country | hour | clicked | features         | label
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`RFormula`](api/scala/index.html#org.apache.spark.ml.feature.RFormula) takes an R formula string, and optional parameters for the names of its output columns.
+Refer to the [RFormula Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RFormula)
+for more details on the API.
 
 {% highlight scala %}
 import org.apache.spark.ml.feature.RFormula
@@ -1936,7 +2091,8 @@ output.select("features", "label").show()
 
 <div data-lang="java" markdown="1">
 
-[`RFormula`](api/java/org/apache/spark/ml/feature/RFormula.html) takes an R formula string, and optional parameters for the names of its output columns.
+Refer to the [RFormula Java docs](api/java/org/apache/spark/ml/feature/RFormula.html)
+for more details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -1974,7 +2130,8 @@ output.select("features", "label").show();
 
 <div data-lang="python" markdown="1">
 
-[`RFormula`](api/python/pyspark.ml.html#pyspark.ml.feature.RFormula) takes an R formula string, and optional parameters for the names of its output columns.
+Refer to the [RFormula Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RFormula)
+for more details on the API.
 
 {% highlight python %}
 from pyspark.ml.feature import RFormula
