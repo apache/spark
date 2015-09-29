@@ -357,9 +357,10 @@ class RowMatrix @Since("1.0.0") (
     var alpha = 0.0
     while (i < n) {
       alpha = m / m1 * mean(i)
-      j = 0
+      j = i
       while (j < n) {
         G(i, j) = G(i, j) / m1 - alpha * mean(j)
+        G(j, i) = G(i, j)
         j += 1
       }
       i += 1
