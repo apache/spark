@@ -407,10 +407,10 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
-    assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db") == OracleDialect)
-    assert(JdbcDialects.get("jdbc:netezza://127.0.0.1/db") == NetezzaDialect)
     assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
+    assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db") == OracleDialect)
+    assert(JdbcDialects.get("jdbc:netezza://127.0.0.1/db") == NetezzaDialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
