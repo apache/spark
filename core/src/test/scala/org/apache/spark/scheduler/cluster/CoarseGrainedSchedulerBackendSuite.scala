@@ -19,7 +19,6 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
@@ -27,7 +26,6 @@ import org.apache.spark.scheduler.{SparkListenerTaskStart, SparkListener}
 import org.apache.spark.util.{AkkaUtils, SerializableBuffer}
 
 class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
-  import CoarseGrainedSchedulerBackendSuite._
 
   test("serialized task larger than akka frame size") {
     val conf = new SparkConf
@@ -56,33 +54,24 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     taskTracker.taskSet.clear()
 
     val backend = sc.schedulerBackend
-    val executors = {
-      val method = backend.getClass.getSuperclass.getDeclaredMethod(
-        "org$apache$spark$scheduler$cluster$CoarseGrainedSchedulerBackend$$executorDataMap"
-      )
-      method.setAccessible(true)
-      method.invoke(backend).asInstanceOf[mutable.HashMap[String, ExecutorData]]
-    }.keySet
+    val executors = backend.asInstanceOf[CoarseGrainedSchedulerBackend].executorDataMap.keySet
 
     // There should be two executors in running
     assert(executors.size === 2)
 
-    val preemptedExecutors = {
-      val method = backend.getClass.getSuperclass.getDeclaredMethod("preemptedExecutorIDs")
-      method.setAccessible(true)
-      method.invoke(backend).asInstanceOf[mutable.HashSet[String]]
-    }
+    val preemptedExecutors =
+      backend.asInstanceOf[CoarseGrainedSchedulerBackend].preemptedExecutorIDs
 
     // There should be no preempted executors when initialized
-    assert(preemptedExecutors.size === 0)
+    assert(preemptedExecutors.get().size === 0)
     sc.parallelize(1 to 100, 10).collect()
     assert(taskTracker.taskSet.size() === 10)
     assert(taskTracker.taskSet.values().asScala.toSet === Set("0", "1"))
     taskTracker.taskSet.clear()
 
     // Add executor "1" as a preempted executor
-    preemptedExecutors.add("1")
-    assert(preemptedExecutors === Set("1"))
+    preemptedExecutors.getAndSet(Set("1"))
+    assert(preemptedExecutors.get() === Set("1"))
     sc.parallelize(1 to 100, 10).collect()
     assert(taskTracker.taskSet.size() === 10)
     // All the tasks should be only scheduled on executor "0"
@@ -90,18 +79,16 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     taskTracker.taskSet.clear()
 
     // Clear the preempted executors
-    preemptedExecutors.clear()
-    assert(preemptedExecutors === Set.empty)
+    preemptedExecutors.getAndSet(Set.empty)
+    assert(preemptedExecutors.get() === Set.empty)
     sc.parallelize(1 to 100, 10).collect()
     assert(taskTracker.taskSet.size() === 10)
     // All the tasks will be scheduled on executor "0" and "1"
     assert(taskTracker.taskSet.values().asScala.toSet === Set("0", "1"))
     taskTracker.taskSet.clear()
   }
-}
 
-private object CoarseGrainedSchedulerBackendSuite {
-  class TaskStateTracker extends SparkListener {
+  private class TaskStateTracker extends SparkListener {
     val taskSet = new ConcurrentHashMap[Long, String]()
 
     override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {

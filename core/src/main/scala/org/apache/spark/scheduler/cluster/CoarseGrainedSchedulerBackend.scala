@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -57,7 +57,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.getTimeAsMs("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s")
   val createTime = System.currentTimeMillis()
 
-  private val executorDataMap = new HashMap[String, ExecutorData]
+  // Visible for testing
+  private[spark] val executorDataMap = new HashMap[String, ExecutorData]
 
   // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
@@ -74,9 +75,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected var localityAwareTasks = 0
 
   // Executor IDs which will be preempted by cluster manager, this variable reflects cluster
-  // manager's preference at that time, will be changed time to time.
-  protected val preemptedExecutorIDs = new HashSet[String]
-
+  // manager's preference at that time, will be changed time to time. Visible for testing.
+  private[spark] var preemptedExecutorIDs = new AtomicReference[Set[String]](Set.empty)
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -462,9 +462,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Executor ids which will possibly be preempted by cluster manager.
    * @return A set of executor IDs
    */
-  protected def preemptedExecutors: Set[String] = synchronized {
-    preemptedExecutorIDs.toSet
-  }
+  private def preemptedExecutors: Set[String] = preemptedExecutorIDs.get()
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
