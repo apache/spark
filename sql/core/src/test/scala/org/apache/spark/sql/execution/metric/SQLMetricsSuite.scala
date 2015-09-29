@@ -455,7 +455,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("CartesianProduct metrics") {
+  test("CartesianProduct metrics with SPARK-9066, adjust rdd order") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.registerTempTable("testDataForJoin")
     withTempTable("testDataForJoin") {
@@ -466,7 +466,25 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       testSparkPlanMetrics(df, 1, Map(
         1L -> ("CartesianProduct", Map(
           "number of left rows" -> 12L, // left needs to be scanned twice
-          "number of right rows" -> 12L, // right is read 6 times
+          "number of right rows" -> 4L, // right is read 4 times, actually it is left
+          "number of output rows" -> 12L)))
+      )
+    }
+  }
+
+  test("CartesianProduct metrics with SPARK-9066, keep rdd order") {
+    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    testDataForJoin.registerTempTable("testDataForJoin")
+    withTempTable("testDataForJoin") {
+      // Assume the execution plan is
+      // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
+
+      val df = sqlContext.sql(
+        "SELECT * FROM testDataForJoin JOIN testData2")
+      testSparkPlanMetrics(df, 1, Map(
+        1L -> ("CartesianProduct", Map(
+          "number of left rows" -> 4L, // left needs to be scanned twice
+          "number of right rows" -> 12L, // right is read 12 times
           "number of output rows" -> 12L)))
       )
     }

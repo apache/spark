@@ -276,7 +276,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object CartesianProduct extends Strategy {
     def getSmallSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
-      if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+      if (right.statistics.sizeInBytes < left.statistics.sizeInBytes) {
         joins.BuildRight
       } else {
         joins.BuildLeft
