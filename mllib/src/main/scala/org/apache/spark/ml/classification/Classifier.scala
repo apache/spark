@@ -129,7 +129,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /**
    * Predict label for the given features.
-   * This method can used to implement [[transform()]] and output [[predictionCol]].
+   * This method can be used to implement [[transform()]] and output [[predictionCol]].
    *
    * This default implementation for classification predicts the index of the maximum value
    * from [[predictRaw()]].

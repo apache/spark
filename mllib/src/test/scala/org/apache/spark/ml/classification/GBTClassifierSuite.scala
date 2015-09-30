@@ -81,20 +81,21 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("prediction on single instance") {
-    val gbt = new GBTClassifier()
+    val trainer = new GBTClassifier()
       .setMaxDepth(2)
       .setSubsamplingRate(1.0)
       .setLossType("logistic")
       .setMaxIter(10)
       .setStepSize(1.0)
 
-    val newData: DataFrame = TreeTests.setMetadata(data, Map.empty[Int, Int], numClasses = 2)
-    val newModel = gbt.fit(newData)
+    val df: DataFrame = TreeTests.setMetadata(data, Map.empty[Int, Int], numClasses = 2)
+    val model = trainer.fit(df)
 
-    newModel.transform(newData).select(gbt.getFeaturesCol, gbt.getPredictionCol).collect().foreach {
-      case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== newModel.predict(features) relTol 1E-5)
-    }
+    model.transform(df).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
+      .foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+      }
   }
 
   test("Checkpointing") {

@@ -867,4 +867,15 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
 
   }
+
+  test("prediction on single instance") {
+    val trainer = new LogisticRegression
+    val model = trainer.fit(binaryDataset)
+
+    model.transform(binaryDataset).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
+      .foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+      }
+  }
 }

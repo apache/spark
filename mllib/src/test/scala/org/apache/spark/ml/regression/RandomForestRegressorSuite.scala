@@ -20,13 +20,14 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Row, DataFrame}
 
 /**
  * Test suite for [[RandomForestRegressor]].
@@ -99,6 +100,25 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val importances = model.featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
+  }
+
+  test("prediction on single instance") {
+    val trainer = new RandomForestRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(3)
+      .setNumTrees(3)
+      .setFeatureSubsetStrategy("all")
+      .setSubsamplingRate(1.0)
+      .setSeed(123)
+
+    val df: DataFrame = TreeTests.setMetadata(orderedLabeledPoints50_1000, Map.empty[Int, Int], 0)
+    val model = trainer.fit(df)
+
+    model.transform(df).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
+      .foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+      }
   }
 
   /////////////////////////////////////////////////////////////////////////////
