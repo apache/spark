@@ -1848,3 +1848,56 @@ setMethod("crosstab",
             sct <- callJMethod(statFunctions, "crosstab", col1, col2)
             collect(dataFrame(sct))
           })
+
+
+#' This function downloads the contents of a DataFrame into an R's data.frame.
+#' Since data.frames are held in memory, ensure that you have enough memory
+#' in your system to accommodate the contents.
+#' 
+#' @title Download data from a DataFrame into a data.frame
+#' @param x a DataFrame
+#' @return a data.frame
+#' @rdname as.data.frame
+#' @examples \dontrun{
+#' 
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
+#' }
+setMethod("as.data.frame",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            # Check if additional parameters have been passed
+            if (length(list(...)) > 0) {
+              stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
+            }
+            collect(x)
+          }
+)
+
+#' Returns the column types of a DataFrame.
+#' 
+#' @name coltypes
+#' @title Get column types of a DataFrame
+#' @param x (DataFrame)
+#' @return value (character) A character vector with the column types of the given DataFrame
+#' @rdname coltypes
+setMethod("coltypes",
+          signature(x = "DataFrame"),
+          function(x) {
+            # TODO: This may be moved as a global parameter
+            # These are the supported data types and how they map to
+            # R's data types
+            DATA_TYPES <- c("string"="character",
+                            "double"="numeric",
+                            "int"="integer",
+                            "long"="integer",
+                            "boolean"="long"
+            )
+
+            # Get the data types of the DataFrame by invoking dtypes() function.
+            # Some post-processing is needed.
+            types <- as.character(t(as.data.frame(dtypes(x))[2, ]))
+
+            # Map Spark data types into R's data types
+            as.character(DATA_TYPES[types])
+          })

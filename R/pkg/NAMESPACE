@@ -247,3 +247,6 @@ export("structField",
        "structType.jobj",
        "structType.structField",
        "print.structType")
+
+export("as.data.frame")
+export("coltypes")
