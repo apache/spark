@@ -244,6 +244,7 @@ class LinearRegression(override val uid: String)
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
       $(standardization), featuresStd, featuresMean, effectiveL2RegParam)
+
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
     } else {

@@ -163,7 +163,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       /*
          Then again with the data with no intercept:
          > weightsWithoutIntercept
-         3 x 1 sparse Matrix of class "dgCMatrix"
+          3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
          (Intercept)           .
          as.numeric.data3.V2. 4.70011
@@ -205,7 +205,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
            standardize=FALSE))
          > weights
-         3 x 1 sparse Matrix of class "dgCMatrix"
+          3 x 1 sparse Matrix of class "dgCMatrix"
                                   s0
          (Intercept)         6.416948
          as.numeric.data.V2. 3.893869
@@ -287,13 +287,13 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val model2 = trainer2.fit(dataset)
 
       /*
-        weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3))
-        > weights
-         3 x 1 sparse Matrix of class "dgCMatrix"
-                                  s0
-        (Intercept)         5.269376
-        as.numeric.data.V2. 3.736216
-        as.numeric.data.V3. 5.712356)
+         weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3))
+         > weights
+          3 x 1 sparse Matrix of class "dgCMatrix"
+                                   s0
+         (Intercept)         5.269376
+         as.numeric.data.V2. 3.736216
+         as.numeric.data.V3. 5.712356)
        */
       val interceptR1 = 5.269376
       val weightsR1 = Vectors.dense(3.736216, 5.712356)
@@ -302,14 +302,14 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(model1.weights ~= weightsR1 relTol 1E-3)
 
       /*
-        weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
-          standardize=FALSE))
-        > weights
-         3 x 1 sparse Matrix of class "dgCMatrix"
-                                  s0
-        (Intercept)         5.791109
-        as.numeric.data.V2. 3.435466
-        as.numeric.data.V3. 5.910406
+         weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
+           standardize=FALSE))
+         > weights
+          3 x 1 sparse Matrix of class "dgCMatrix"
+                                   s0
+         (Intercept)         5.791109
+         as.numeric.data.V2. 3.435466
+         as.numeric.data.V3. 5.910406
        */
       val interceptR2 = 5.791109
       val weightsR2 = Vectors.dense(3.435466, 5.910406)
@@ -341,10 +341,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          > weights
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-       (Intercept)         .
-       as.numeric.data.V2. 5.522875
-       as.numeric.data.V3. 4.214502
-     */
+         (Intercept)         .
+         as.numeric.data.V2. 5.522875
+         as.numeric.data.V3. 4.214502
+       */
       val interceptR1 = 0.0
       val weightsR1 = Vectors.dense(5.522875, 4.214502)
 
@@ -401,14 +401,14 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(model1.weights ~= weightsR1 relTol 1E-3)
 
       /*
-        weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
-         standardize=FALSE))
-        > weights
-         3 x 1 sparse Matrix of class "dgCMatrix"
-                                  s0
-        (Intercept)         6.114723
-        as.numeric.data.V2. 3.409937
-        as.numeric.data.V3. 6.146531
+         weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
+           standardize=FALSE))
+         > weights
+          3 x 1 sparse Matrix of class "dgCMatrix"
+                                   s0
+         (Intercept)         6.114723
+         as.numeric.data.V2. 3.409937
+         as.numeric.data.V3. 6.146531
        */
       val interceptR2 = 6.114723
       val weightsR2 = Vectors.dense(3.409937, 6.146531)
@@ -455,7 +455,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            intercept=FALSE, standardize=FALSE))
          > weights
           3 x 1 sparse Matrix of class "dgCMatrix"
-                                  s0
+                                   s0
          (Intercept)         .
          as.numeric.data.V2. 5.477988
          as.numeric.data.V3. 4.297622
