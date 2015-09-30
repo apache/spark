@@ -960,11 +960,6 @@ private[spark] object SparkSubmitUtils {
             ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
             new File(alternateIvyCache, "jars")
           }
-        // scalastyle:off println
-        printStream.println(
-          s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
-        printStream.println(s"The jars for the packages stored in: $packagesDirectory")
-        // scalastyle:on println
         // create a pattern matcher
         ivySettings.addMatcher(new GlobPatternMatcher)
         // create the dependency resolvers
@@ -980,11 +975,12 @@ private[spark] object SparkSubmitUtils {
         // Turn downloading and logging off for testing
         if (isTest) {
           resolveOptions.setDownload(false)
-          resolveOptions.setLog(LogOptions.LOG_QUIET)
-          retrieveOptions.setLog(LogOptions.LOG_QUIET)
         } else {
           resolveOptions.setDownload(true)
         }
+
+        resolveOptions.setLog(LogOptions.LOG_QUIET)
+        retrieveOptions.setLog(LogOptions.LOG_QUIET)
 
         // A Module descriptor must be specified. Entries are dummy strings
         val md = getModuleDescriptor
