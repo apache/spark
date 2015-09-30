@@ -45,7 +45,7 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
     assert(conf.get("spark.history.fs.logDirectory").equals("src/test/resources/spark-events1"))
   }
 
-  test("First Param can be directory directly") {
+  test("Directory Param can also be set directly") {
     val argStrings = Array("src/test/resources/spark-events2")
     val hsa = new HistoryServerArguments(conf, argStrings)
     assert(conf.get("spark.history.fs.logDirectory").equals("src/test/resources/spark-events2"))
