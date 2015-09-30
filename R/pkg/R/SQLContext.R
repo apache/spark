@@ -149,6 +149,26 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
   dataFrame(sdf)
 }
 
+#' Create a DataFrame from an RDD
+#'
+#' Converts an RDD to a DataFrame by infer the types.
+#'
+#' @param sqlContext A SQLContext
+#' @param data An RDD or list or data.frame
+#' @param schema a list of column names or named list (StructType), optional
+#' @return an DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+#' df <- as.DataFrame(sqlContext, rdd)
+#' }
+as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0){
+  createDataFrame(sqlContext, data, schema, samplingRatio)
+}
+
 # toDF
 #
 # Converts an RDD to a DataFrame by infer the types.
