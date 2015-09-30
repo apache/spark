@@ -168,8 +168,8 @@ class LinearRegression(override val uid: String)
       // because it requires one pass through to the data. (SPARK-10668)
       val instances: RDD[WeightedLeastSquares.Instance] = dataset.select(
         col($(labelCol)), w, col($(featuresCol))).map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          WeightedLeastSquares.Instance(weight, features, label)
+          case Row(label: Double, weight: Double, features: Vector) =>
+            WeightedLeastSquares.Instance(weight, features, label)
       }
 
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
