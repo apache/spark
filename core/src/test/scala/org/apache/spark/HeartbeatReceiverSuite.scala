@@ -20,6 +20,8 @@ package org.apache.spark
 import java.util.concurrent.{ExecutorService, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
@@ -96,8 +98,8 @@ class HeartbeatReceiverSuite
 
   test("normal heartbeat") {
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId2, null))
+    addExecutorAndVerify(executorId1)
+    addExecutorAndVerify(executorId2)
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     triggerHeartbeat(executorId2, executorShouldReregister = false)
     val trackedExecutors = heartbeatReceiver.invokePrivate(_executorLastSeen())
@@ -107,7 +109,7 @@ class HeartbeatReceiverSuite
   }
 
   test("reregister if scheduler is not ready yet") {
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
+    addExecutorAndVerify(executorId1)
     // Task scheduler is not set yet in HeartbeatReceiver, so executors should reregister
     triggerHeartbeat(executorId1, executorShouldReregister = true)
   }
@@ -121,10 +123,10 @@ class HeartbeatReceiverSuite
 
   test("reregister if heartbeat from removed executor") {
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId2, null))
+    addExecutorAndVerify(executorId1)
+    addExecutorAndVerify(executorId2)
     // Remove the second executor but not the first
-    heartbeatReceiver.onExecutorRemoved(SparkListenerExecutorRemoved(0, executorId2, "bad boy"))
+    removeExecutorAndVerify(executorId2)
     // Now trigger the heartbeats
     // A heartbeat from the second executor should require reregistering
     triggerHeartbeat(executorId1, executorShouldReregister = false)
@@ -138,8 +140,8 @@ class HeartbeatReceiverSuite
   test("expire dead hosts") {
     val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId2, null))
+    addExecutorAndVerify(executorId1)
+    addExecutorAndVerify(executorId2)
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     triggerHeartbeat(executorId2, executorShouldReregister = false)
     // Advance the clock and only trigger a heartbeat for the first executor
@@ -175,8 +177,8 @@ class HeartbeatReceiverSuite
     fakeSchedulerBackend.driverEndpoint.askWithRetry[RegisteredExecutor.type](
       RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "dummy:4040", 0, Map.empty))
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
-    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId2, null))
+    addExecutorAndVerify(executorId1)
+    addExecutorAndVerify(executorId2)
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     triggerHeartbeat(executorId2, executorShouldReregister = false)
 
@@ -220,6 +222,20 @@ class HeartbeatReceiverSuite
       verify(scheduler).executorHeartbeatReceived(
         Matchers.eq(executorId), Matchers.eq(Array(1L -> metrics)), Matchers.eq(blockManagerId))
     }
+  }
+
+  private def addExecutorAndVerify(executorId: String): Unit = {
+    assert(
+      heartbeatReceiver.addExecutor(executorId).map { f =>
+        Await.result(f, 10.seconds)
+      } === Some(true))
+  }
+
+  private def removeExecutorAndVerify(executorId: String): Unit = {
+    assert(
+      heartbeatReceiver.removeExecutor(executorId).map { f =>
+        Await.result(f, 10.seconds)
+      } === Some(true))
   }
 
 }
