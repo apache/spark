@@ -146,10 +146,15 @@ class KMeans(object):
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
               seed=None, initializationSteps=5, epsilon=1e-4, initialModel = None):
         """Train a k-means clustering model."""
-        if not isinstance(initialModel, KMeansModel):
-            raise Exception('Python KMeansModel expected for initialModel parameter')
-        model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode, seed, initializationSteps, epsilon, [_convert_to_vector(c) for c in initialModel.clusterCenters])
+        if initialModel is None:
+            model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
+                                  runs, initializationMode, seed, initializationSteps, epsilon)
+        else:
+            if not isinstance(initialModel, KMeansModel):
+                raise Exception('Python KMeansModel expected for initialModel parameter')
+            model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
+                              runs, initializationMode, seed, initializationSteps, epsilon,
+                              [_convert_to_vector(c) for c in initialModel.clusterCenters])
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
 
