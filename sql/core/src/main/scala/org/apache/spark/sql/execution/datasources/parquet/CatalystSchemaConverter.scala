@@ -567,9 +567,9 @@ private[parquet] object CatalystSchemaConverter {
     }
   }
 
-  val MAX_PRECISION_FOR_INT32 = maxPrecisionForBytes(4)
+  val MAX_PRECISION_FOR_INT32 = maxPrecisionForBytes(4) /* 9 */
 
-  val MAX_PRECISION_FOR_INT64 = maxPrecisionForBytes(8)
+  val MAX_PRECISION_FOR_INT64 = maxPrecisionForBytes(8) /* 18 */
 
   // Max precision of a decimal value stored in `numBytes` bytes
   def maxPrecisionForBytes(numBytes: Int): Int = {
