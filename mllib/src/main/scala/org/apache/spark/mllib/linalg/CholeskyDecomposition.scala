@@ -21,7 +21,6 @@ import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
 
 /**
- * :: Experimental ::
  * Compute Cholesky decomposition.
  */
 private[spark] object CholeskyDecomposition {

@@ -22,7 +22,6 @@ import com.github.fommil.netlib.ARPACK
 import org.netlib.util.{intW, doubleW}
 
 /**
- * :: Experimental ::
  * Compute eigen-decomposition.
  */
 private[mllib] object EigenValueDecomposition {
