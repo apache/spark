@@ -754,56 +754,55 @@ private class LogisticAggregator(
    * @return This LogisticAggregator object.
    */
   def add(instance: Instance): this.type = {
-    instance match {
-      case Instance(label, weight, features) =>
-        require(dim == features.size, s"Dimensions mismatch when adding new instance." +
-          s" Expecting $dim but got ${features.size}.")
-        require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+    instance match { case Instance(label, weight, features) =>
+      require(dim == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $dim but got ${features.size}.")
+      require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
 
-        if (weight == 0.0) return this
+      if (weight == 0.0) return this
 
-        val localCoefficientsArray = coefficientsArray
-        val localGradientSumArray = gradientSumArray
+      val localCoefficientsArray = coefficientsArray
+      val localGradientSumArray = gradientSumArray
 
-        numClasses match {
-          case 2 =>
-            // For Binary Logistic Regression.
-            val margin = - {
-              var sum = 0.0
-              features.foreachActive { (index, value) =>
-                if (featuresStd(index) != 0.0 && value != 0.0) {
-                  sum += localCoefficientsArray(index) * (value / featuresStd(index))
-                }
-              }
-              sum + {
-                if (fitIntercept) localCoefficientsArray(dim) else 0.0
-              }
-            }
-
-            val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
-
+      numClasses match {
+        case 2 =>
+          // For Binary Logistic Regression.
+          val margin = - {
+            var sum = 0.0
             features.foreachActive { (index, value) =>
               if (featuresStd(index) != 0.0 && value != 0.0) {
-                localGradientSumArray(index) += multiplier * (value / featuresStd(index))
+                sum += localCoefficientsArray(index) * (value / featuresStd(index))
               }
             }
-
-            if (fitIntercept) {
-              localGradientSumArray(dim) += multiplier
+            sum + {
+              if (fitIntercept) localCoefficientsArray(dim) else 0.0
             }
+          }
 
-            if (label > 0) {
-              // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
-              lossSum += weight * MLUtils.log1pExp(margin)
-            } else {
-              lossSum += weight * (MLUtils.log1pExp(margin) - margin)
+          val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
+
+          features.foreachActive { (index, value) =>
+            if (featuresStd(index) != 0.0 && value != 0.0) {
+              localGradientSumArray(index) += multiplier * (value / featuresStd(index))
             }
-          case _ =>
-            new NotImplementedError("LogisticRegression with ElasticNet in ML package " +
-              "only supports binary classification for now.")
-        }
-        weightSum += weight
-        this
+          }
+
+          if (fitIntercept) {
+            localGradientSumArray(dim) += multiplier
+          }
+
+          if (label > 0) {
+            // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
+            lossSum += weight * MLUtils.log1pExp(margin)
+          } else {
+            lossSum += weight * (MLUtils.log1pExp(margin) - margin)
+          }
+        case _ =>
+          new NotImplementedError("LogisticRegression with ElasticNet in ML package " +
+            "only supports binary classification for now.")
+      }
+      weightSum += weight
+      this
     }
   }
 

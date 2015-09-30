@@ -545,29 +545,28 @@ private class LeastSquaresAggregator(
    * @return This LeastSquaresAggregator object.
    */
   def add(instance: Instance): this.type = {
-    instance match {
-      case Instance(label, weight, features) =>
-        require(dim == features.size, s"Dimensions mismatch when adding new sample." +
-          s" Expecting $dim but got ${features.size}.")
-        require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+    instance match { case Instance(label, weight, features) =>
+      require(dim == features.size, s"Dimensions mismatch when adding new sample." +
+        s" Expecting $dim but got ${features.size}.")
+      require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
 
-        if (weight == 0.0) return this
+      if (weight == 0.0) return this
 
-        val diff = dot(features, effectiveCoefficientsVector) - label / labelStd + offset
+      val diff = dot(features, effectiveCoefficientsVector) - label / labelStd + offset
 
-        if (diff != 0) {
-          val localGradientSumArray = gradientSumArray
-          features.foreachActive { (index, value) =>
-            if (featuresStd(index) != 0.0 && value != 0.0) {
-              localGradientSumArray(index) += weight * diff * value / featuresStd(index)
-            }
+      if (diff != 0) {
+        val localGradientSumArray = gradientSumArray
+        features.foreachActive { (index, value) =>
+          if (featuresStd(index) != 0.0 && value != 0.0) {
+            localGradientSumArray(index) += weight * diff * value / featuresStd(index)
           }
-          lossSum += weight * diff * diff / 2.0
         }
+        lossSum += weight * diff * diff / 2.0
+      }
 
-        totalCnt += 1
-        weightSum += weight
-        this
+      totalCnt += 1
+      weightSum += weight
+      this
     }
   }
 
