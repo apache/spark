@@ -86,6 +86,7 @@ private[spark] class YarnClientSchedulerBackend(
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
         ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
         ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
+        ("--priority", "SPARK_YARN_PRIORITY", "spark.yarn.priority"),
         ("--py-files", null, "spark.submit.pyFiles")
       )
     // Warn against the following deprecated environment variables: env var -> suggestion
