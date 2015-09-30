@@ -35,6 +35,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
   FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
@@ -440,6 +441,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _conf.set("spark.externalBlockStore.folderName", externalBlockStoreFolderName)
 
+    var principal: String = null
+    var keytab: String = null
+
+    if (master.startsWith("yarn")) {
+      if (_conf.contains("spark.yarn.principal") && _conf.contains("spark.yarn.keytab")) {
+        principal = _conf.get("spark.yarn.principal")
+        keytab = _conf.get("spark.yarn.keytab")
+      }
+    }
+
     if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
@@ -568,6 +579,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         None
       }
     _cleaner.foreach(_.start())
+
+    if (null != principal && UserGroupInformation.isSecurityEnabled) {
+      UserGroupInformation.loginUserFromKeytab(principal, keytab)
+      logInfo("Successfully logged into the KDC in SparkContext.")
+    }
 
     setupAndStartListenerBus()
     postEnvironmentUpdate()
