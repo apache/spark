@@ -615,11 +615,12 @@ class GBTRegressionModel(TreeEnsembleModels):
 class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             HasFitIntercept, HasMaxIter, HasTol):
     """
-    Accelerated Failure Time(AFT) Model Survival Regression
+    Accelerated Failure Time (AFT) Model Survival Regression
 
     Fit a parametric AFT survival regression model based on the Weibull distribution
     of the survival time.
-    see also, `https://en.wikipedia.org/wiki/Accelerated_failure_time_model`
+
+    .. seealso:: `AFT Model <https://en.wikipedia.org/wiki/Accelerated_failure_time_model>`_
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
@@ -659,7 +660,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
-                 quantileProbabilities=None, quantilesCol=None):
+                 quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
+                 quantilesCol=None):
         """
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -691,7 +693,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
-                  quantileProbabilities=None, quantilesCol=None):
+                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
+                  quantilesCol=None):
         """
         kwargs = self.__init__._input_kwargs
         return self._set(**kwargs)
