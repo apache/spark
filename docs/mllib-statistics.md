@@ -521,7 +521,7 @@ val sc: SparkContext = ...
 
 // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
 // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-val u = normalRDD(sc, 1000000L, 10)
+val u = RandomRDDs.normalRDD(sc, 1000000L, 10)
 // Apply a transform to get a random double RDD following `N(1, 4)`.
 val v = u.map(x => 1.0 + 2.0 * x)
 {% endhighlight %}
@@ -542,7 +542,7 @@ JavaSparkContext jsc = ...
 
 // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
 // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-JavaDoubleRDD u = normalJavaRDD(jsc, 1000000L, 10);
+JavaDoubleRDD u = RandomRDDs.normalJavaRDD(jsc, 1000000L, 10);
 // Apply a transform to get a random double RDD following `N(1, 4)`.
 JavaDoubleRDD v = u.map(
   new Function<Double, Double>() {
