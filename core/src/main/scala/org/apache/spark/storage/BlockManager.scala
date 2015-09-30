@@ -1268,7 +1268,7 @@ private[spark] object BlockManager extends Logging {
   private val ID_GENERATOR = new IdGenerator
 
   /** Return the total amount of storage memory available. */
-  private def getMaxMemory(conf: SparkConf): Long = {
+  private[spark] def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong

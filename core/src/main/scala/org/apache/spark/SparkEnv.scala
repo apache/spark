@@ -69,6 +69,8 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
+    // TODO: unify these *MemoryManager classes
+    val memoryManager: MemoryManager,
     val shuffleMemoryManager: ShuffleMemoryManager,
     val executorMemoryManager: ExecutorMemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
@@ -323,6 +325,7 @@ object SparkEnv extends Logging {
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
+    val memoryManager = new StaticMemoryManager(conf)
     val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)
 
     val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
@@ -407,6 +410,7 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
+      memoryManager,
       shuffleMemoryManager,
       executorMemoryManager,
       outputCommitCoordinator,

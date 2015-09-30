@@ -158,7 +158,7 @@ private[spark] object ShuffleMemoryManager {
    * of the memory pool and a safety factor since collections can sometimes grow bigger than
    * the size we target before we estimate their sizes again.
    */
-  private def getMaxMemory(conf: SparkConf): Long = {
+  private[spark] def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
