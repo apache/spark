@@ -716,7 +716,8 @@ class Airflow(BaseView):
 
     @app.errorhandler(404)
     def circles(self):
-        return render_template('airflow/circles.html'), 404
+        return render_template(
+            'airflow/circles.html', hostname=socket.gethostname()), 404
 
     @app.errorhandler(500)
     def show_traceback(self):
