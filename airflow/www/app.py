@@ -968,12 +968,26 @@ class Airflow(BaseView):
 
                 return response
         elif action == 'success':
+            MAX_PERIODS = 1000
+
             # Flagging tasks as successful
             session = settings.Session()
             task_ids = [task_id]
             end_date = ((dag.latest_execution_date or datetime.now())
                         if future else execution_date)
-            start_date = dag.default_args['start_date'] if past else execution_date
+
+            if 'start_date' in dag.default_args:
+                start_date = dag.default_args['start_date']
+            elif dag.start_date:
+                start_date = dag.start_date
+            else:
+                start_date = execution_date
+
+            if execution_date < start_date or end_date < start_date:
+                flash("Selected date before DAG start date",'error')
+                return redirect(origin)
+
+            start_date = execution_date if not past else start_date
 
             if downstream:
                 task_ids += [
@@ -990,6 +1004,11 @@ class Airflow(BaseView):
                 TI.execution_date.in_(dates),
                 TI.task_id.in_(task_ids)).all()
             tasks = list(product(task_ids, dates))
+
+            if len(tasks) > MAX_PERIODS:
+                flash("Too many tasks at once (>{0})".format(
+                    MAX_PERIODS), 'error')
+                return redirect(origin)
 
             if confirmed:
 
