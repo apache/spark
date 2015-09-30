@@ -184,6 +184,7 @@ object FunctionRegistry {
     expression[FormatNumber]("format_number"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
+    expression[JsonTuple]("json_tuple"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[Length]("length"),
