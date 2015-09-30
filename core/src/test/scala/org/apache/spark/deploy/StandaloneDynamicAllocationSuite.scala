@@ -369,6 +369,35 @@ class StandaloneDynamicAllocationSuite
     assert(apps.head.getExecutorLimit === 1)
   }
 
+test("the pending replacement executors should not be lost (SPARK-10515)") {
+  sc = new SparkContext(appConf)
+  val appId = sc.applicationId
+  eventually(timeout(10.seconds), interval(10.millis)) {
+    val apps = getApplications()
+    assert(apps.size === 1)
+    assert(apps.head.id === appId)
+    assert(apps.head.executors.size === 2)
+    assert(apps.head.getExecutorLimit === Int.MaxValue)
+  }
+  // sync executors between the Master and the driver, needed because
+  // the driver refuses to kill executors it does not know about
+  syncExecutors(sc)
+   val executors = getExecutorIds(sc)
+   assert(executors.size === 2)
+
+   // kill executor,and replace it
+   assert(sc.killAndReplaceExecutor(executors.head))
+   assert(master.apps.head.executors.size === 2)
+
+   assert(sc.killExecutor(executors.head))
+   assert(master.apps.head.executors.size === 2)
+   assert(master.apps.head.getExecutorLimit === 2)
+
+   assert(sc.killExecutor(executors(1)))
+   assert(master.apps.head.executors.size === 1)
+   assert(master.apps.head.getExecutorLimit === 1)
+  }
+
   // ===============================
   // | Utility methods for testing |
   // ===============================
