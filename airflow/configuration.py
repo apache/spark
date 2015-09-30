@@ -1,6 +1,5 @@
 from future import standard_library
 standard_library.install_aliases()
-from past.builtins import basestring
 from builtins import str
 from configparser import ConfigParser
 import errno
@@ -30,8 +29,6 @@ def expand_env_var(env_var):
     `expandvars` and `expanduser` until interpolation stops having
     any effect.
     """
-    if not isinstance(env_var, basestring):
-        return env_var
     while True:
         interpolated = os.path.expanduser(os.path.expandvars(str(env_var)))
         if interpolated == env_var:
