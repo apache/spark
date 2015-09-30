@@ -430,16 +430,25 @@ case class JsonTuple(children: Seq[Expression])
 
   private def copyCurrentStructure(generator: JsonGenerator, parser: JsonParser): Unit = {
     parser.getCurrentToken match {
+      // if the user requests a string field it needs to be returned without enclosing
+      // quotes which is accomplished via JsonGenerator.writeRaw instead of JsonGenerator.write
       case JsonToken.VALUE_STRING if parser.hasTextCharacters =>
+        // slight optimization to avoid allocating a String instance, though the characters
+        // still have to be decoded... Jackson doesn't have a way to access the raw bytes
         generator.writeRaw(parser.getTextCharacters, parser.getTextOffset, parser.getTextLength)
 
       case JsonToken.VALUE_STRING =>
+        // the normal String case, pass it through to the output without enclosing quotes
         generator.writeRaw(parser.getText)
 
       case JsonToken.VALUE_NULL =>
+        // a special case that needs to be handled outside of this method.
+        // if a requested field is null, the result must be null. the easiest
+        // way to achieve this is just by ignoring null tokens entirely
         throw new IllegalStateException("Do not attempt to copy a null field")
 
       case _ =>
+        // handle other types including objects, arrays, booleans and numbers
         generator.copyCurrentStructure(parser)
     }
   }
