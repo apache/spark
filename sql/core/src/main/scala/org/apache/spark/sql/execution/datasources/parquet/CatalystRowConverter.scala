@@ -302,7 +302,13 @@ private[parquet] class CatalystRowConverter(
     }
 
     override def addBinary(value: Binary): Unit = {
-      updater.set(UTF8String.fromBytes(value.getBytes))
+      // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here we
+      // are using `Binary.toByteBuffer.array()` to steal the underlying byte array without copying
+      // it.
+      val buffer = value.toByteBuffer
+      val offset = buffer.position()
+      val numBytes = buffer.limit() - buffer.position()
+      updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
     }
   }
 
@@ -332,24 +338,30 @@ private[parquet] class CatalystRowConverter(
     private def toDecimal(value: Binary): Decimal = {
       val precision = decimalType.precision
       val scale = decimalType.scale
-      val bytes = value.getBytes
 
       if (precision <= CatalystSchemaConverter.MAX_PRECISION_FOR_INT64) {
-        // Constructs a `Decimal` with an unscaled `Long` value if possible.
-        var unscaled = 0L
-        var i = 0
+        // Constructs a `Decimal` with an unscaled `Long` value if possible.  The underlying
+        // `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here we are using
+        // `Binary.toByteBuffer.array()` to steal the underlying byte array without copying it.
+        val buffer = value.toByteBuffer
+        val bytes = buffer.array()
+        val start = buffer.position()
+        val end = buffer.limit()
 
-        while (i < bytes.length) {
+        var unscaled = 0L
+        var i = start
+
+        while (i < end) {
           unscaled = (unscaled << 8) | (bytes(i) & 0xff)
           i += 1
         }
 
-        val bits = 8 * bytes.length
+        val bits = 8 * (end - start)
         unscaled = (unscaled << (64 - bits)) >> (64 - bits)
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
-        Decimal(new BigDecimal(new BigInteger(bytes), scale), precision, scale)
+        Decimal(new BigDecimal(new BigInteger(value.getBytes), scale), precision, scale)
       }
     }
   }
