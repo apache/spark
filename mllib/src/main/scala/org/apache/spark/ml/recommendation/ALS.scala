@@ -365,8 +365,6 @@ object ALS extends Logging {
   /** Cholesky solver for least square problems. */
   private[recommendation] class CholeskySolver extends LeastSquaresNESolver {
 
-    private val upper = "U"
-
     /**
      * Solves a least squares problem with L2 regularization:
      *

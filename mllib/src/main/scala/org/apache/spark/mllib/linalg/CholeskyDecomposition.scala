@@ -18,14 +18,12 @@
 package org.apache.spark.mllib.linalg
 
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
-import org.apache.spark.annotation.Experimental
 import org.netlib.util.intW
 
 /**
  * :: Experimental ::
  * Compute Cholesky decomposition.
  */
-@Experimental
 private[spark] object CholeskyDecomposition {
 
   /**
@@ -35,7 +33,7 @@ private[spark] object CholeskyDecomposition {
    * @param bx right-hand side
    * @return the solution array
    */
-  private[spark] def solve(A: Array[Double], bx: Array[Double]): Array[Double] = {
+  def solve(A: Array[Double], bx: Array[Double]): Array[Double] = {
     val k = bx.size
     val info = new intW(0)
     lapack.dppsv("U", k, 1, A, bx, k, info)

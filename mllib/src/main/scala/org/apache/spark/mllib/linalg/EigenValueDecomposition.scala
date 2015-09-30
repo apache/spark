@@ -21,13 +21,10 @@ import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 import com.github.fommil.netlib.ARPACK
 import org.netlib.util.{intW, doubleW}
 
-import org.apache.spark.annotation.Experimental
-
 /**
  * :: Experimental ::
  * Compute eigen-decomposition.
  */
-@Experimental
 private[mllib] object EigenValueDecomposition {
   /**
    * Compute the leading k eigenvalues and eigenvectors on a symmetric square matrix using ARPACK.
@@ -46,7 +43,7 @@ private[mllib] object EigenValueDecomposition {
    *       for more details). The maximum number of Arnoldi update iterations is set to 300 in this
    *       function.
    */
-  private[mllib] def symmetricEigs(
+  def symmetricEigs(
       mul: BDV[Double] => BDV[Double],
       n: Int,
       k: Int,
