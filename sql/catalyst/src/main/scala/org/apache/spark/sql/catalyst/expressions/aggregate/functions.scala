@@ -308,67 +308,63 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
   override val evaluateExpression = Cast(currentSum, resultType)
 }
 
+// scalastyle:off
 /**
- * HyperLogLog++ is a state of the art cardinality estimation algorithm.
- *
+ * HyperLogLog++ (HLL++) is a state of the art cardinality estimation algorithm. This class
+ * implements the dense version of the HLL++ algorithm as an Aggregate Function.
  *
  * This implementation has been based on the following papers:
- * Papers:
+ * HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm
  * http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
  *
- * HyperLogLog in Practice: Algorithmic Engineering of a State of
- * The Art Cardinality Estimation Algorithm
+ * HyperLogLog in Practice: Algorithmic Engineering of a State of The Art Cardinality Estimation
+ * Algorithm
+ * http://static.googleusercontent.com/external_content/untrusted_dlcp/research.google.com/en/us/pubs/archive/40671.pdf
  *
+ * Appendix to HyperLogLog in Practice: Algorithmic Engineering of a State of the Art Cardinality
+ * Estimation Algorithm
  * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
  *
- * This implementation has been based on the following implementations:
- * Note on provenance
- * - Clearspring:
- * - Aggregage Knowledge:
- * - Algebird:
- *
- * Note on naming: Tried to match the paper.
- *
- *
- * @param child
- * @param relativeSD
+ * @param child to estimate the cardinality of.
+ * @param relativeSD the maximum estimation error allowed.
  */
+// scalastyle:on
 case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     extends AggregateFunction2 {
   import HyperLogLogPlusPlus._
 
   /**
-   * HLL++ uses 'b' bits for addressing. The more addressing bits we use, the more accurate the
-   * algorithm will be, and the more memory it will require. The 'b' value is based on the accuracy
-   * requested.
+   * HLL++ uses 'p' bits for addressing. The more addressing bits we use, the more precise the
+   * algorithm will be, and the more memory it will require. The 'p' value is based on the relative
+   * error requested.
    *
-   * HLL++ requires that we use at least 4 bits of addressing space (a minimum accuracy of 27%).
+   * HLL++ requires that we use at least 4 bits of addressing space (a minimum precision of 27%).
    *
-   * TODO we currently round down to the nearest integer. This means accuracy is typically worse
-   * than the user expects.
+   * This method rounds up to the nearest integer. This means that the error is always equal to or
+   * lower than the requested error. Use the <code>trueRsd</code> method to get the actual RSD
+   * value.
    */
-  private[this] val b = {
-    (2.0d * Math.log(1.106d / relativeSD) / Math.log(2.0d)).toInt
-  }
-  require(b >= 4, "HLL++ requires at least 4 bits for addressing. " +
-    "Use a higher accuracy, at least 27%.")
+  private[this] val p = Math.ceil(2.0d * Math.log(1.106d / relativeSD) / Math.log(2.0d)).toInt
+
+  require(p >= 4, "HLL++ requires at least 4 bits for addressing. " +
+    "Use a lower error, at most 27%.")
 
   /**
-   * Shift used to extract the 'j' (the register) value from the hashed value.
+   * Shift used to extract the index of the register from the hashed value.
    *
    * This assumes the use of 64-bit hashcodes.
    */
-  private[this] val jShift = JLong.SIZE - b
+  private[this] val idxShift = JLong.SIZE - p
 
   /**
    * Value to pad the 'w' value with before the number of leading zeros is determined.
    */
-  private[this] val wPadding = 1L << (b - 1)
+  private[this] val wPadding = 1L << (p - 1)
 
   /**
    * The number of registers used.
    */
-  private[this] val m = 1 << b
+  private[this] val m = 1 << p
 
   /**
    * The pre-calculated combination of: alpha * m * m
@@ -376,7 +372,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    * 'alpha' corrects the raw cardinality estimate 'Z'. See the FlFuGaMe07 paper for its
    * derivation.
    */
-  private[this] val alphaM2 = b match {
+  private[this] val alphaM2 = p match {
     case 4 => 0.673d * m * m
     case 5 => 0.697d * m * m
     case 6 => 0.709d * m * m
@@ -390,10 +386,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    * We only store whole registers per word in order to prevent overly complex bitwise operations.
    * In practice this means we only use 60 out of 64 bits.
    */
-  private[this] val numWords = m / REGISTERS_PER_WORD match {
-    case x if m % REGISTERS_PER_WORD == 0 => x
-    case x => x + 1
-  }
+  private[this] val numWords = m / REGISTERS_PER_WORD + 1
 
   def children: Seq[Expression] = Seq(child)
 
@@ -422,9 +415,9 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
   }
 
   /**
-   * Update the HLL buffer.
+   * Update the HLL++ buffer.
    *
-   * Variable names in the paper match variable names in the code.
+   * Variable names in the HLL++ paper match variable names in the code.
    */
   def update(buffer: MutableRow, input: InternalRow): Unit = {
     val v = child.eval(input)
@@ -432,23 +425,23 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
       // Create the hashed value 'x'.
       val x = MurmurHash.hash64(v)
 
-      // Determine which register 'j' we are going to use.
-      val j = (x >>> jShift).toInt
+      // Determine the index of the register we are going to use.
+      val idx = (x >>> idxShift).toInt
 
       // Determine the number of leading zeros in the remaining bits 'w'.
-      val pw = JLong.numberOfLeadingZeros((x << b) | wPadding) + 1L
+      val pw = JLong.numberOfLeadingZeros((x << p) | wPadding) + 1L
 
       // Get the word containing the register we are interested in.
-      val wordOffset = j / REGISTERS_PER_WORD
+      val wordOffset = idx / REGISTERS_PER_WORD
       val word = buffer.getLong(mutableBufferOffset + wordOffset)
 
       // Extract the M[J] register value from the word.
-      val shift = REGISTER_SIZE * (j - (wordOffset * REGISTERS_PER_WORD))
+      val shift = REGISTER_SIZE * (idx - (wordOffset * REGISTERS_PER_WORD))
       val mask = REGISTER_WORD_MASK << shift
-      val Mj = (word & mask) >>> shift
+      val Midx = (word & mask) >>> shift
 
       // Assign the maximum number of leading zeros to the register.
-      if (pw > Mj) {
+      if (pw > Midx) {
         buffer.setLong(mutableBufferOffset + wordOffset, (word & ~mask) | (pw << shift))
       }
     }
@@ -459,7 +452,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    * maximum number of leading zeros for each register.
    */
   def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    var j = 0
+    var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
       val word1 = buffer1.getLong(mutableBufferOffset + wordOffset)
@@ -467,11 +460,11 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
       var word = 0L
       var i = 0
       var mask = REGISTER_WORD_MASK
-      while (j < m && i < REGISTERS_PER_WORD) {
+      while (idx < m && i < REGISTERS_PER_WORD) {
         word |= Math.max(word1 & mask, word2 & mask)
         mask <<= REGISTER_SIZE
         i += 1
-        j += 1
+        idx += 1
       }
       buffer1.setLong(mutableBufferOffset + wordOffset, word)
       wordOffset += 1
@@ -484,7 +477,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    * paper).
    */
   def estimateBias(e: Double): Double = {
-    val estimates = RAW_ESTIMATE_DATA(b - 4)
+    val estimates = RAW_ESTIMATE_DATA(p - 4)
     val numEstimates = estimates.length
 
     // The estimates are sorted so we can use a binary search to find the index of the
@@ -511,7 +504,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     }
 
     // Calculate the sum of the biases in low-high interval.
-    val biases = BIAS_DATA(b - 4)
+    val biases = BIAS_DATA(p - 4)
     var i = low
     var biasSum = 0.0
     while (i < high) {
@@ -526,27 +519,27 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
   /**
    * Compute the HyperLogLog estimate.
    *
-   * Variable names in the paper match variable names in the code.
+   * Variable names in the HLL++ paper match variable names in the code.
    */
   def eval(buffer: InternalRow): Any = {
-    // Compute the indicator value 'z' and count the number of zeros 'V'.
+    // Compute the inverse of indicator value 'z' and count the number of zeros 'V'.
     var zInverse = 0.0d
     var V = 0.0d
-    var j = 0
+    var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
       val word = buffer.getLong(mutableBufferOffset + wordOffset)
       var i = 0
       var shift = 0
-      while (j < m && i < REGISTERS_PER_WORD) {
-        val Mj = (word >>> shift) & REGISTER_WORD_MASK
-        zInverse += 1.0 / (1 << Mj)
-        if (Mj == 0) {
+      while (idx < m && i < REGISTERS_PER_WORD) {
+        val Midx = (word >>> shift) & REGISTER_WORD_MASK
+        zInverse += 1.0 / (1 << Midx)
+        if (Midx == 0) {
           V += 1.0d
         }
         shift += REGISTER_SIZE
         i += 1
-        j += 1
+        idx += 1
       }
       wordOffset += 1
     }
@@ -556,7 +549,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     // val E = alphaM2 * Z
     @inline
     def EBiasCorrected = alphaM2 / zInverse match {
-      case e if b < 19 && e < 5.0d * m => e - estimateBias(e)
+      case e if p < 19 && e < 5.0d * m => e - estimateBias(e)
       case e => e
     }
 
@@ -564,7 +557,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     val estimate = if (V > 0) {
       // Use linear counting for small cardinality estimates.
       val H = m * Math.log(m / V)
-      if (H <= THRESHOLDS(b - 4)) {
+      if (H <= THRESHOLDS(p - 4)) {
         H
       } else {
         EBiasCorrected
@@ -577,14 +570,24 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     Math.round(estimate)
   }
 
+  /**
+   * The <code>rsd</code> of HLL++ is always equal to or better than the <code>rsd</code> requested.
+   * This method returns the <code>rsd</code> this instance actually guarantees.
+   *
+   * @return the actual <code>rsd</code>.
+   */
   def trueRsd: Double = 1.04 / math.sqrt(m)
 }
 
+// scalastyle:off
 /**
  * Constants used in the implementation of the HyperLogLogPlusPlus aggregate function.
  *
- * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen
+ * See the Appendix to HyperLogLog in Practice: Algorithmic Engineering of a State of the Art
+ * Cardinality (https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen)
+ * for more information.
  */
+// scalastyle:on
 object HyperLogLogPlusPlus {
   /**
    * The size of a word used for storing registers: 64 Bits.
@@ -620,12 +623,13 @@ object HyperLogLogPlusPlus {
   // scalastyle:off
 
   /**
-   * Cardinality thresholds which decide if we the linear counting or the regular algorithm.
+   * Thresholds which decide if the linear counting or the regular algorithm is used.
    */
   val THRESHOLDS = Array[Double](10, 20, 40, 80, 220, 400, 900, 1800, 3100, 6500, 15500, 20000, 50000, 120000, 350000)
 
   /**
-   *
+   * Lookup table used to find the (index of the) bias correction for a given precision (exact)
+   * and estimate (nearest).
    */
   val RAW_ESTIMATE_DATA = Array(
     // precision 4
@@ -661,7 +665,7 @@ object HyperLogLogPlusPlus {
   )
 
   /**
-   *
+   * Bias corrections given a precision and the index of the raw estimate table.
    */
   val BIAS_DATA = Array(
     // precision 4
