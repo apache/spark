@@ -45,6 +45,12 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
     assert(conf.get("spark.history.fs.logDirectory").equals("src/test/resources/spark-events1"))
   }
 
+  test("First Param can be directory directly") {
+    val argStrings = Array("src/test/resources/spark-events2")
+    val hsa = new HistoryServerArguments(conf, argStrings)
+    assert(conf.get("spark.history.fs.logDirectory").equals("src/test/resources/spark-events2"))
+  }
+
   test("Properties File Arguments Parsing --properties-file") {
     val tmpDir = Utils.createTempDir()
     val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
@@ -64,4 +70,5 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
       Utils.deleteRecursively(tmpDir)
     }
   }
+
 }

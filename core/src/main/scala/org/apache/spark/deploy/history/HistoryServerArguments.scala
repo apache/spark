@@ -30,6 +30,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
   parse(args.toList)
 
   private def parse(args: List[String]): Unit = {
+
     args match {
       case ("--dir" | "-d") :: value :: tail =>
         logWarning("Setting log directory through the command line is deprecated as of " +
@@ -48,7 +49,11 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       case Nil =>
 
       case _ =>
-        printUsageAndExit(1)
+        logWarning("Setting log directory through the command line is deprecated as of " +
+          "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
+        conf.set("spark.history.fs.logDirectory", args.head)
+        System.setProperty("spark.history.fs.logDirectory", args.head )
+
     }
   }
 
