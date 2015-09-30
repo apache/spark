@@ -364,68 +364,80 @@ case class JsonTuple(children: Seq[Expression])
   }
 
   override def eval(input: InternalRow): InternalRow = {
-    try {
-      val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
-      if (json == null) {
-        return nullRow
-      }
+    val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
+    if (json == null) {
+      return nullRow
+    }
 
+    try {
       val parser = jsonFactory.createParser(json.getBytes)
 
-      // only objects are supported
-      if (parser.nextToken() != JsonToken.START_OBJECT) {
-        return nullRow
+      try {
+        parseRow(parser, input)
+      } finally {
+        parser.close()
       }
-
-      // evaluate the field names as String rather than UTF8String to
-      // optimize lookups from the json token, which is also a String
-      val fieldNames = if (constantFields == fieldExpressions.length) {
-        // typically the user will provide the field names as foldable expressions
-        // so we can use the cached copy
-        foldableFieldNames
-      } else if (constantFields == 0) {
-        // none are foldable so all field names need to be evaluated from the input row
-        fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
-      } else {
-        // if there is a mix of constant and non-constant expressions
-        // prefer the cached copy when available
-        foldableFieldNames.zip(fieldExpressions).map {
-          case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
-          case (fieldName, _) => fieldName
-        }
-      }
-
-      val row = Array.ofDim[Any](fieldNames.length)
-
-      // start reading through the token stream, looking for any requested field names
-      while (parser.nextToken() != JsonToken.END_OBJECT) {
-        if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
-          // check to see if this field is desired in the output
-          val idx = fieldNames.indexOf(parser.getCurrentName)
-          if (idx >= 0) {
-            // it is, copy the child tree to the correct location in the output row
-            val output = new ByteArrayOutputStream()
-
-            // write the output directly to UTF8 encoded byte array
-            val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
-            if (parser.nextToken() != JsonToken.VALUE_NULL) {
-              copyCurrentStructure(generator, parser)
-              generator.close()
-
-              row(idx) = UTF8String.fromBytes(output.toByteArray)
-            }
-          }
-        }
-
-        // always skip children, it's cheap enough to do even if copyCurrentStructure was called
-        parser.skipChildren()
-      }
-
-      new GenericInternalRow(row)
     } catch {
       case _: JsonProcessingException =>
         nullRow
     }
+  }
+
+  private def parseRow(parser: JsonParser, input: InternalRow): InternalRow = {
+    // only objects are supported
+    if (parser.nextToken() != JsonToken.START_OBJECT) {
+      return nullRow
+    }
+
+    // evaluate the field names as String rather than UTF8String to
+    // optimize lookups from the json token, which is also a String
+    val fieldNames = if (constantFields == fieldExpressions.length) {
+      // typically the user will provide the field names as foldable expressions
+      // so we can use the cached copy
+      foldableFieldNames
+    } else if (constantFields == 0) {
+      // none are foldable so all field names need to be evaluated from the input row
+      fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
+    } else {
+      // if there is a mix of constant and non-constant expressions
+      // prefer the cached copy when available
+      foldableFieldNames.zip(fieldExpressions).map {
+        case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
+        case (fieldName, _) => fieldName
+      }
+    }
+
+    val row = Array.ofDim[Any](fieldNames.length)
+
+    // start reading through the token stream, looking for any requested field names
+    while (parser.nextToken() != JsonToken.END_OBJECT) {
+      if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
+        // check to see if this field is desired in the output
+        val idx = fieldNames.indexOf(parser.getCurrentName)
+        if (idx >= 0) {
+          // it is, copy the child tree to the correct location in the output row
+          val output = new ByteArrayOutputStream()
+
+          // write the output directly to UTF8 encoded byte array
+          if (parser.nextToken() != JsonToken.VALUE_NULL) {
+            val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
+
+            try {
+              copyCurrentStructure(generator, parser)
+            } finally {
+              generator.close()
+            }
+
+            row(idx) = UTF8String.fromBytes(output.toByteArray)
+          }
+        }
+      }
+
+      // always skip children, it's cheap enough to do even if copyCurrentStructure was called
+      parser.skipChildren()
+    }
+
+    new GenericInternalRow(row)
   }
 
   private def copyCurrentStructure(generator: JsonGenerator, parser: JsonParser): Unit = {
