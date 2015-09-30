@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.util.concurrent.{ExecutorService, TimeUnit}
 
+import scala.collection.Map
 import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -102,7 +103,7 @@ class HeartbeatReceiverSuite
     addExecutorAndVerify(executorId2)
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     triggerHeartbeat(executorId2, executorShouldReregister = false)
-    val trackedExecutors = heartbeatReceiver.invokePrivate(_executorLastSeen())
+    val trackedExecutors = getTrackedExecutors
     assert(trackedExecutors.size === 2)
     assert(trackedExecutors.contains(executorId1))
     assert(trackedExecutors.contains(executorId2))
@@ -118,7 +119,7 @@ class HeartbeatReceiverSuite
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
     // Received heartbeat from unknown executor, so we ask it to re-register
     triggerHeartbeat(executorId1, executorShouldReregister = true)
-    assert(heartbeatReceiver.invokePrivate(_executorLastSeen()).isEmpty)
+    assert(getTrackedExecutors.isEmpty)
   }
 
   test("reregister if heartbeat from removed executor") {
@@ -131,7 +132,7 @@ class HeartbeatReceiverSuite
     // A heartbeat from the second executor should require reregistering
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     triggerHeartbeat(executorId2, executorShouldReregister = true)
-    val trackedExecutors = heartbeatReceiver.invokePrivate(_executorLastSeen())
+    val trackedExecutors = getTrackedExecutors
     assert(trackedExecutors.size === 1)
     assert(trackedExecutors.contains(executorId1))
     assert(!trackedExecutors.contains(executorId2))
@@ -151,7 +152,7 @@ class HeartbeatReceiverSuite
     heartbeatReceiverRef.askWithRetry[Boolean](ExpireDeadHosts)
     // Only the second executor should be expired as a dead host
     verify(scheduler).executorLost(Matchers.eq(executorId2), any())
-    val trackedExecutors = heartbeatReceiver.invokePrivate(_executorLastSeen())
+    val trackedExecutors = getTrackedExecutors
     assert(trackedExecutors.size === 1)
     assert(trackedExecutors.contains(executorId1))
     assert(!trackedExecutors.contains(executorId2))
@@ -238,6 +239,12 @@ class HeartbeatReceiverSuite
       } === Some(true))
   }
 
+  private def getTrackedExecutors: Map[String, Long] = {
+    // We may receive undesired SparkListenerExecutorAdded from LocalBackend, so exclude it from
+    // the map. See SPARK-10800.
+    heartbeatReceiver.invokePrivate(_executorLastSeen()).
+      filterKeys(_ != SparkContext.DRIVER_IDENTIFIER)
+  }
 }
 
 // TODO: use these classes to add end-to-end tests for dynamic allocation!

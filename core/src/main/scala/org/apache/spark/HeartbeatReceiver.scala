@@ -26,7 +26,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler._
-import org.apache.spark.util._
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -62,12 +62,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     this(sc, new SystemClock)
   }
 
-  if (clock.isInstanceOf[SystemClock]) {
-    sc.addSparkListener(this)
-  } else {
-    // We are in HeartbeatReceiverSuite. So don't add HeartbeatReceiver to SparkContext to avoid
-    // receiving undesired events (SPARK-10058).
-  }
+  sc.addSparkListener(this)
 
   override val rpcEnv: RpcEnv = sc.env.rpcEnv
 
