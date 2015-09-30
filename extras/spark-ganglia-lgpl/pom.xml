@@ -32,6 +32,7 @@
 
   <properties>
     <sbt.project.name>ganglia-lgpl</sbt.project.name>
+    <scalastyle.config.location>${project.basedir}/../../scalastyle-config.xml</scalastyle.config.location>
   </properties>
 
   <dependencies>

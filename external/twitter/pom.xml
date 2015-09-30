@@ -29,6 +29,7 @@
   <artifactId>spark-streaming-twitter_2.10</artifactId>
   <properties>
     <sbt.project.name>streaming-twitter</sbt.project.name>
+    <scalastyle.config.location>${project.basedir}/../../scalastyle-config.xml</scalastyle.config.location>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project External Twitter</name>

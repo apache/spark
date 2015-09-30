@@ -28,6 +28,7 @@
   <artifactId>spark-tools_2.10</artifactId>
   <properties>
     <sbt.project.name>tools</sbt.project.name>
+    <scalastyle.config.location>${project.basedir}/../scalastyle-config.xml</scalastyle.config.location>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Tools</name>

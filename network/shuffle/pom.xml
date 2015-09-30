@@ -33,6 +33,7 @@
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-shuffle</sbt.project.name>
+    <scalastyle.config.location>${project.basedir}/../../scalastyle-config.xml</scalastyle.config.location>
   </properties>
 
   <dependencies>

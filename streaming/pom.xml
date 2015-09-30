@@ -29,6 +29,7 @@
   <artifactId>spark-streaming_2.10</artifactId>
   <properties>
     <sbt.project.name>streaming</sbt.project.name>
+    <scalastyle.config.location>${project.basedir}/../scalastyle-config.xml</scalastyle.config.location>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Streaming</name>
