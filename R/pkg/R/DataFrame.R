@@ -1900,10 +1900,5 @@ setMethod("sort",
               }
             })
 
-            jcols <- lapply(columns, function(c) {
-              c@jc
-            })
-            sdf <- callJMethod(x@sdf, "sort", jcols)
-
-            dataFrame(sdf)
+            do.call("arrange", c(x, columns))
           })
