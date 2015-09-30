@@ -628,6 +628,10 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
+    >>> model.predict(Vectors.dense(6.3))
+    1.0
+    >>> model.predictQuantiles(Vectors.dense(6.3))
+    DenseVector([0.0101, 0.0513, 0.1054, 0.2877, 0.6931, 1.3863, 2.3026, 2.9957, 4.6052])
     >>> model.transform(df).show()
     +-----+---------+------+----------+
     |label| features|censor|prediction|
@@ -696,8 +700,12 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
                   quantilesCol=None):
         """
-        kwargs = self.__init__._input_kwargs
-        return self._set(**kwargs)
+        kwargs = self.setParams._input_kwargs
+        if quantileProbabilities is None:
+            return self._set(**kwargs).setQuantileProbabilities([0.01, 0.05, 0.1, 0.25, 0.5,
+                                                                 0.75, 0.9, 0.95, 0.99])
+        else:
+            return self._set(**kwargs)
 
     def _create_model(self, java_model):
         return AFTSurvivalRegressionModel(java_model)
@@ -754,6 +762,19 @@ class AFTSurvivalRegressionModel(JavaModel):
 
     .. versionadded:: 1.6.0
     """
+
+    def predictQuantiles(self, features):
+        """
+        Predicted Quantiles
+        """
+        return self._call_java("predictQuantiles", features)
+
+    def predict(self, features):
+        """
+        Predicted value
+        """
+        return self._call_java("predict", features)
+
 
 if __name__ == "__main__":
     import doctest
