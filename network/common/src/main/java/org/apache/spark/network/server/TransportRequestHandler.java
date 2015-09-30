@@ -71,7 +71,6 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   @Override
   public void exceptionCaught(Throwable cause) {
-    rpcHandler.exceptionCaught(cause, reverseClient);
   }
 
   @Override
