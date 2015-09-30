@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, analysis}
+import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow, analysis}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
@@ -62,6 +62,6 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     case _ => false
   }
 
-  override lazy val statistics =
+  protected override def computeStats(conf: CatalystConf): Statistics =
     Statistics(sizeInBytes = output.map(_.dataType.defaultSize).sum * data.length)
 }

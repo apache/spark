@@ -19,6 +19,14 @@ package org.apache.spark.sql.catalyst
 
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
+  def getConf(key: String): Option[String] = None
+  def getOrElse(key: String, defaultValue: String): String = getConf(key).getOrElse(defaultValue)
+}
+
+object CatalystConf {
+  val JOIN_SELECTION_FACTOR = "spark.sql.join.selectionFactor"
+  val EXCEPT_SELECTION_FACTOR = "spark.sql.except.selectionFactor"
+  val INTERSECT_SELECTION_FACTOR = "spark.sql.intersect.selectionFactor"
 }
 
 /**

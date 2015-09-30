@@ -279,7 +279,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
     sqlContext.table("testData").queryExecution.withCachedData.collect {
       case cached: InMemoryRelation =>
         val actualSizeInBytes = (1 to 100).map(i => INT.defaultSize + i.toString.length + 4).sum
-        assert(cached.statistics.sizeInBytes === actualSizeInBytes)
+        assert(cached.statistics().sizeInBytes === actualSizeInBytes)
     }
   }
 

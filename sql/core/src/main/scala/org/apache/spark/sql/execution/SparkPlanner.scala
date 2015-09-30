@@ -27,11 +27,13 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
   val sparkContext: SparkContext = sqlContext.sparkContext
 
-  def codegenEnabled: Boolean = sqlContext.conf.codegenEnabled
+  def conf: SQLConf = sqlContext.conf
 
-  def unsafeEnabled: Boolean = sqlContext.conf.unsafeEnabled
+  def codegenEnabled: Boolean = conf.codegenEnabled
 
-  def numPartitions: Int = sqlContext.conf.numShufflePartitions
+  def unsafeEnabled: Boolean = conf.unsafeEnabled
+
+  def numPartitions: Int = conf.numShufflePartitions
 
   def strategies: Seq[Strategy] =
     sqlContext.experimental.extraStrategies ++ (
