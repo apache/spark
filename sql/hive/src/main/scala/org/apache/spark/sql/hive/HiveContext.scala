@@ -55,9 +55,11 @@ import org.apache.spark.{Logging, SparkContext}
 /**
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
  */
-private[hive] class HiveQLDialect extends ParserDialect {
+private[hive] class HiveQLDialect(sqlContext: HiveContext) extends ParserDialect {
   override def parse(sqlText: String): LogicalPlan = {
-    HiveQl.parseSql(sqlText)
+    sqlContext.executionHive.withHiveState {
+      HiveQl.parseSql(sqlText)
+    }
   }
 }
 
@@ -513,10 +515,18 @@ class HiveContext private[hive](
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
-  override protected[sql] def dialectClassName = if (conf.dialect == "hiveql") {
+  protected[sql] override def dialectClassName = if (conf.dialect == "hiveql") {
     classOf[HiveQLDialect].getCanonicalName
   } else {
     super.dialectClassName
+  }
+
+  protected[sql] override def getSQLDialect(): ParserDialect = {
+    if (conf.dialect == "hiveql") {
+      new HiveQLDialect(this)
+    } else {
+      super.getSQLDialect()
+    }
   }
 
   @transient
@@ -541,13 +551,6 @@ class HiveContext private[hive](
       CartesianProduct,
       BroadcastNestedLoopJoin
     )
-  }
-
-  override def sql(sql: String): DataFrame = {
-    // This is need for current_database()
-    metadataHive.withHiveState {
-      super.sql(sql)
-    }
   }
 
   protected[hive] def runSqlHive(sql: String): Seq[String] = {

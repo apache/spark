@@ -151,8 +151,6 @@ private[hive] class IsolatedClientLoader(
 
   /** The classloader that is used to load an isolated version of Hive. */
   private[hive] var classLoader: ClassLoader = if (isolationOn) {
-    baseClassLoader
-  } else {
     new URLClassLoader(allJars, rootClassLoader) {
       val cache = new java.util.concurrent.ConcurrentHashMap[String, Class[_]]
 
@@ -194,6 +192,8 @@ private[hive] class IsolatedClientLoader(
         }
       }
     }
+  } else {
+    baseClassLoader
   }
 
   private[hive] def addJar(path: String): Unit = synchronized {
