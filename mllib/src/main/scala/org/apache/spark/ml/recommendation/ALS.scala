@@ -315,17 +315,12 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
 
   override def fit(dataset: DataFrame): ALSModel = {
     import dataset.sqlContext.implicits._
-    val ratings = if ($(ratingCol) != "") {
-      dataset.select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType),
-        col($(ratingCol)).cast(FloatType)).map { row =>
-          Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
+    val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
+    val ratings = dataset
+      .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
+      .map { row =>
+        Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
-    } else {
-      dataset.select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType))
-        .map { row =>
-          Rating(row.getInt(0), row.getInt(1), 1)
-      }
-    }
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
