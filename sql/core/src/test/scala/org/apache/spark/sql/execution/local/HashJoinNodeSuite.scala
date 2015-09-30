@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Expression}
+import org.apache.spark.sql.execution.joins.{HashedRelation, BuildLeft, BuildRight, BuildSide}
 
 
 class HashJoinNodeSuite extends LocalNodeTest {
@@ -31,6 +32,40 @@ class HashJoinNodeSuite extends LocalNodeTest {
     buildSides.foreach { buildSide =>
       testJoin(unsafeAndCodegen, buildSide)
     }
+  }
+
+  /**
+   * Builds a [[HashedRelation]] based on a resolved `buildKeys`
+   * and a resolved `buildNode`.
+   */
+  private def buildHashedRelation(
+      conf: SQLConf,
+      buildKeys: Seq[Expression],
+      buildNode: LocalNode): HashedRelation = {
+
+    // Check if we are in the Unsafe mode.
+    val isUnsafeMode =
+      conf.codegenEnabled &&
+        conf.unsafeEnabled &&
+        UnsafeProjection.canSupport(buildKeys)
+
+    // Create projection used for extracting keys
+    val buildSideKeyGenerator =
+      if (isUnsafeMode) {
+        UnsafeProjection.create(buildKeys, buildNode.output)
+      } else {
+        buildNode.newMutableProjection(buildKeys, buildNode.output)()
+      }
+
+    // Setup the node.
+    buildNode.prepare()
+    buildNode.open()
+    // Build the HashedRelation
+    val hashedRelation = HashedRelation(buildNode, buildSideKeyGenerator)
+    // Close the node.
+    buildNode.close()
+
+    hashedRelation
   }
 
   /**
@@ -52,8 +87,28 @@ class HashJoinNodeSuite extends LocalNodeTest {
       val leftNode = new DummyNode(joinNameAttributes, leftInput)
       val rightNode = new DummyNode(joinNicknameAttributes, rightInput)
       val makeNode = (node1: LocalNode, node2: LocalNode) => {
-        resolveExpressions(new HashJoinNode(
-          conf, Seq('id1), Seq('id2), buildSide, node1, node2))
+        val leftKeys = Seq('id1.attr)
+        val rightKeys = Seq('id2.attr)
+        // Figure out the build side and stream side.
+        val (buildNode, buildKeys, streamedNode, streamedKeys) = buildSide match {
+          case BuildLeft => (node1, leftKeys, node2, rightKeys)
+          case BuildRight => (node2, rightKeys, node1, leftKeys)
+        }
+        // Resolve the expressions of the build side and then create a HashedRelation.
+        val resolvedBuildNode = resolveExpressions(buildNode)
+        val resolvedBuildKeys = resolveExpressions(buildKeys, resolvedBuildNode)
+        val hashedRelation = buildHashedRelation(conf, resolvedBuildKeys, resolvedBuildNode)
+
+        // Build the HashJoinNode.
+        val hashJoinNode =
+          HashJoinNode(
+            conf,
+            streamedKeys,
+            streamedNode,
+            buildSide,
+            resolvedBuildNode.output,
+            hashedRelation)
+        resolveExpressions(hashJoinNode)
       }
       val makeUnsafeNode = if (unsafeAndCodegen) wrapForUnsafe(makeNode) else makeNode
       val hashJoinNode = makeUnsafeNode(leftNode, rightNode)

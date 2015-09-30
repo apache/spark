@@ -107,7 +107,7 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
     result
   }
 
-  protected def newProjection(
+  protected[sql] def newProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): Projection = {
     log.debug(
@@ -129,7 +129,7 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
     }
   }
 
-  protected def newMutableProjection(
+  protected[sql] def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(
@@ -151,7 +151,7 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
     }
   }
 
-  protected def newPredicate(
+  protected[sql] def newPredicate(
       expression: Expression,
       inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
     if (codegenEnabled) {

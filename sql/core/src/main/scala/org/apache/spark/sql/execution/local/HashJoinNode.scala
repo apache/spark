@@ -28,15 +28,21 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class HashJoinNode(
     conf: SQLConf,
-    leftKeys: Seq[Expression],
-    rightKeys: Seq[Expression],
+    streamedKeys: Seq[Expression],
+    streamedNode: LocalNode,
     buildSide: BuildSide,
-    left: LocalNode,
-    right: LocalNode) extends BinaryLocalNode(conf) {
+    buildOutput: Seq[Attribute],
+    hashedRelation: HashedRelation) extends UnaryLocalNode(conf) {
 
-  private[this] lazy val (buildNode, buildKeys, streamedNode, streamedKeys) = buildSide match {
-    case BuildLeft => (left, leftKeys, right, rightKeys)
-    case BuildRight => (right, rightKeys, left, leftKeys)
+  override val child = streamedNode
+
+  // Because we do not pass in the buildNode, we take the output of buildNode to
+  // create the inputSet properly.
+  override def inputSet: AttributeSet = AttributeSet(child.output ++ buildOutput)
+
+  override def output: Seq[Attribute] = buildSide match {
+    case BuildRight => streamedNode.output ++ buildOutput
+    case BuildLeft => buildOutput ++ streamedNode.output
   }
 
   private[this] var currentStreamedRow: InternalRow = _
@@ -46,23 +52,12 @@ case class HashJoinNode(
   private[this] var joinRow: JoinedRow = _
   private[this] var resultProjection: (InternalRow) => InternalRow = _
 
-  private[this] var hashed: HashedRelation = _
+  private[this] val hashed: HashedRelation = hashedRelation
   private[this] var joinKeys: Projection = _
 
-  override def output: Seq[Attribute] = left.output ++ right.output
 
   private[this] def isUnsafeMode: Boolean = {
-    (codegenEnabled && unsafeEnabled
-      && UnsafeProjection.canSupport(buildKeys)
-      && UnsafeProjection.canSupport(schema))
-  }
-
-  private[this] def buildSideKeyGenerator: Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(buildKeys, buildNode.output)
-    } else {
-      newMutableProjection(buildKeys, buildNode.output)()
-    }
+    (codegenEnabled && unsafeEnabled && UnsafeProjection.canSupport(schema))
   }
 
   private[this] def streamSideKeyGenerator: Projection = {
@@ -74,8 +69,6 @@ case class HashJoinNode(
   }
 
   override def open(): Unit = {
-    buildNode.open()
-    hashed = HashedRelation(buildNode, buildSideKeyGenerator)
     streamedNode.open()
     joinRow = new JoinedRow
     resultProjection = {
@@ -130,7 +123,6 @@ case class HashJoinNode(
   }
 
   override def close(): Unit = {
-    left.close()
-    right.close()
+    streamedNode.close()
   }
 }
