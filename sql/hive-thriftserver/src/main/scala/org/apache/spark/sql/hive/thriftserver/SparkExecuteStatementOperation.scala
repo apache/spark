@@ -26,7 +26,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
@@ -140,7 +139,6 @@ private[hive] class SparkExecuteStatementOperation(
     if (!runInBackground) {
       runInternal()
     } else {
-      val hiveConf = getConfigForOperation()
       val sparkServiceUGI = Utils.getUGI()
 
       // Runnable impl to call runInternal asynchronously,
@@ -148,8 +146,8 @@ private[hive] class SparkExecuteStatementOperation(
       val backgroundOperation = new Runnable() {
 
         override def run(): Unit = {
-          val doAsAction = new PrivilegedExceptionAction[Object]() {
-            override def run(): Object = {
+          val doAsAction = new PrivilegedExceptionAction[Unit]() {
+            override def run(): Unit = {
               try {
                 runInternal()
               } catch {
@@ -157,7 +155,6 @@ private[hive] class SparkExecuteStatementOperation(
                   setOperationException(e)
                   log.error("Error running hive query: ", e)
               }
-              return null
             }
           }
 
@@ -174,7 +171,7 @@ private[hive] class SparkExecuteStatementOperation(
       try {
         // This submit blocks if no background threads are available to run this operation
         val backgroundHandle =
-          getParentSession().getSessionManager().submitBackgroundOperation(backgroundOperation)
+          parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
@@ -193,6 +190,9 @@ private[hive] class SparkExecuteStatementOperation(
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
+    val executionHiveClassLoader =
+      hiveContext.executionHive.state.getConf.getClassLoader
+    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
     HiveThriftServer2.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
@@ -261,35 +261,5 @@ private[hive] class SparkExecuteStatementOperation(
         backgroundHandle.cancel(true)
       }
     }
-  }
-
-  /**
-   * If there are query specific settings to overlay, then create a copy of config
-   * There are two cases we need to clone the session config that's being passed to hive driver
-   * 1. Async query -
-   *    If the client changes a config setting, that shouldn't reflect in the execution
-   *    already underway
-   * 2. confOverlay -
-   *    The query specific settings should only be applied to the query config and not session
-   * @return new configuration
-   * @throws HiveSQLException
-   */
-  private def getConfigForOperation(): HiveConf = {
-    var sqlOperationConf = getParentSession().getHiveConf()
-    if (!getConfOverlay().isEmpty() || runInBackground) {
-      // clone the partent session config for this query
-      sqlOperationConf = new HiveConf(sqlOperationConf)
-
-      // apply overlay query specific settings, if any
-      getConfOverlay().asScala.foreach { case (k, v) =>
-        try {
-          sqlOperationConf.verifyAndSet(k, v)
-        } catch {
-          case e: IllegalArgumentException =>
-            throw new HiveSQLException("Error applying statement specific settings", e)
-        }
-      }
-    }
-    return sqlOperationConf
   }
 }

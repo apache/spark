@@ -103,10 +103,6 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
       }
     }.getOrElse(None))
   }
-
-  override def copy(): HiveFunctionRegistry = {
-    this
-  }
 }
 
 private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])

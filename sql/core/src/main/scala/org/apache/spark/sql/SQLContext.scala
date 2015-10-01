@@ -64,14 +64,17 @@ import org.apache.spark.util.Utils
 class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
     @transient protected[sql] val cacheManager: CacheManager)
-  extends org.apache.spark.Logging
-  with Serializable {
+  extends org.apache.spark.Logging with Serializable {
 
   self =>
 
   def this(sparkContext: SparkContext) = this(sparkContext, new CacheManager)
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
+  /**
+   * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
+   * registered functions, but share the same SparkContext and CacheManager.
+   */
   def newSession(): SQLContext = {
     new SQLContext(sparkContext, cacheManager)
   }
@@ -207,6 +210,9 @@ class SQLContext private[sql](
     conf.dialect
   }
 
+  /**
+   * Add a jar to SQLContext
+   */
   protected[sql] def addJar(path: String): Unit = {
     sparkContext.addJar(path)
   }
@@ -1230,7 +1236,7 @@ object SQLContext {
   }
 
   /**
-   * Clear the SQLContext for current thread
+   * Clear the active SQLContext for current thread
    */
   def clearActive(): Unit = {
     activeContexts.remove()

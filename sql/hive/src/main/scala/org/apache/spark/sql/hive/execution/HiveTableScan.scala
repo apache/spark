@@ -130,9 +130,7 @@ case class HiveTableScan(
   }
 
   protected override def doExecute(): RDD[InternalRow] = if (!relation.hiveQlTable.isPartitioned) {
-    sqlContext.asInstanceOf[HiveContext].executionHive.withHiveState {
-      hadoopReader.makeRDDForTable(relation.hiveQlTable)
-    }
+    hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
     hadoopReader.makeRDDForPartitionedTable(
       prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))

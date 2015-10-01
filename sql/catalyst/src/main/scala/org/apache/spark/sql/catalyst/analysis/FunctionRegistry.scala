@@ -44,8 +44,6 @@ trait FunctionRegistry {
 
   /* Get the class of the registered function by specified name. */
   def lookupFunction(name: String): Option[ExpressionInfo]
-
-  def copy(): FunctionRegistry
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -53,28 +51,40 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   private val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
-  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
-  : Unit = {
-    functionBuilders.put(name, (info, builder))
+  override def registerFunction(
+      name: String,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = {
+    synchronized {
+      functionBuilders.put(name, (info, builder))
+    }
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    val func = functionBuilders.get(name).map(_._2).getOrElse {
-      throw new AnalysisException(s"undefined function $name")
+    val func = synchronized {
+      functionBuilders.get(name).map(_._2).getOrElse {
+        throw new AnalysisException(s"undefined function $name")
+      }
     }
     func(children)
   }
 
-  override def listFunction(): Seq[String] = functionBuilders.iterator.map(_._1).toList.sorted
-
-  override def lookupFunction(name: String): Option[ExpressionInfo] = {
-    functionBuilders.get(name).map(_._1)
+  override def listFunction(): Seq[String] = synchronized {
+    functionBuilders.iterator.map(_._1).toList.sorted
   }
 
-  override def copy(): SimpleFunctionRegistry = {
+  override def lookupFunction(name: String): Option[ExpressionInfo] = {
+    synchronized {
+      functionBuilders.get(name).map(_._1)
+    }
+  }
+
+  def copy(): SimpleFunctionRegistry = {
     val registry = new SimpleFunctionRegistry
-    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+    synchronized {
+      functionBuilders.iterator.foreach { case (name, (info, builder)) =>
         registry.registerFunction(name, info, builder)
+      }
     }
     registry
   }
@@ -100,10 +110,6 @@ object EmptyFunctionRegistry extends FunctionRegistry {
 
   override def lookupFunction(name: String): Option[ExpressionInfo] = {
     throw new UnsupportedOperationException
-  }
-
-  override def copy(): FunctionRegistry = {
-    this
   }
 }
 
@@ -270,7 +276,7 @@ object FunctionRegistry {
     expression[InputFileName]("input_file_name")
   )
 
-  val builtin: FunctionRegistry = {
+  val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry
     expressions.foreach { case (name, (info, builder)) => fr.registerFunction(name, info, builder) }
     fr
