@@ -46,6 +46,18 @@ class ShortType private() extends IntegralType {
   override def simpleString: String = "smallint"
 
   private[spark] override def asNullable: ShortType = this
+  
+  override def cast(d: Double): InternalType = d.toShort
+
+  override def cast(f: Float): InternalType = f.toShort
+
+  override def cast(l: Long): InternalType = l.toShort
+
+  override def cast(i: Int): InternalType = i.toShort
+
+  override def cast(s: Short): InternalType = s
+
+  override def cast(b: Byte): InternalType = b.toShort
 }
 
 case object ShortType extends ShortType

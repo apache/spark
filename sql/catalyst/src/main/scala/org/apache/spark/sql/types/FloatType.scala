@@ -49,6 +49,18 @@ class FloatType private() extends FractionalType {
   override def defaultSize: Int = 4
 
   private[spark] override def asNullable: FloatType = this
+
+  override def cast(d: Double): InternalType = d.toFloat
+
+  override def cast(f: Float): InternalType = f
+
+  override def cast(l: Long): InternalType = l.toFloat
+
+  override def cast(i: Int): InternalType = i.toFloat
+
+  override def cast(s: Short): InternalType = s.toFloat
+
+  override def cast(b: Byte): InternalType = b.toFloat
 }
 
 case object FloatType extends FloatType

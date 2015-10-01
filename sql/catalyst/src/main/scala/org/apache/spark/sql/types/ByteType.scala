@@ -47,6 +47,18 @@ class ByteType private() extends IntegralType {
   override def simpleString: String = "tinyint"
 
   private[spark] override def asNullable: ByteType = this
+
+  override def cast(d: Double): InternalType = d.toByte
+
+  override def cast(f: Float): InternalType = f.toByte
+
+  override def cast(l: Long): InternalType = l.toByte
+
+  override def cast(i: Int): InternalType = i.toByte
+
+  override def cast(s: Short): InternalType = s.toByte
+
+  override def cast(b: Byte): InternalType = b
 }
 
 case object ByteType extends ByteType

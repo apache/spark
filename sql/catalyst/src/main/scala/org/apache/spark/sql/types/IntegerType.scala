@@ -47,6 +47,18 @@ class IntegerType private() extends IntegralType {
   override def simpleString: String = "int"
 
   private[spark] override def asNullable: IntegerType = this
+
+  override def cast(d: Double): InternalType = d.toInt
+
+  override def cast(f: Float): InternalType = f.toInt
+
+  override def cast(l: Long): InternalType = l.toInt
+
+  override def cast(i: Int): InternalType = i
+
+  override def cast(s: Short): InternalType = s.toInt
+
+  override def cast(b: Byte): InternalType = b.toInt
 }
 
 case object IntegerType extends IntegerType

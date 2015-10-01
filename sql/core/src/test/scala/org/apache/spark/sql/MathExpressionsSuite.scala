@@ -39,7 +39,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
 
   private def testOneToOneMathFunction[@specialized(Int, Long, Float, Double) T](
       c: Column => Column,
-      f: T => T): Unit = {
+      f: T => Any): Unit = {
     checkAnswer(
       doubleData.select(c('a)),
       (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T])))
@@ -165,7 +165,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("ceil and ceiling") {
-    testOneToOneMathFunction(ceil, math.ceil)
+    testOneToOneMathFunction(ceil, (x: Double) => math.ceil(x).toLong)
     checkAnswer(
       sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
       Row(0.0, 1.0, 2.0))
@@ -184,7 +184,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("floor") {
-    testOneToOneMathFunction(floor, math.floor)
+    testOneToOneMathFunction(floor, (x: Double) => math.floor(x).toLong)
   }
 
   test("factorial") {

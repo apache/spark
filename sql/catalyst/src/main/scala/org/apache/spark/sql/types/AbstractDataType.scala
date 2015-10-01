@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{TypeTag, runtimeMirror}
+import scala.reflect.runtime.universe._
 
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -147,6 +147,18 @@ abstract class NumericType extends AtomicType {
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer an no argument constructor and thus the JVM cannot serialize the object anymore.
   private[sql] val numeric: Numeric[InternalType]
+
+  def cast(d: Double): InternalType
+
+  def cast(f: Float): InternalType
+
+  def cast(l: Long): InternalType
+
+  def cast(i: Int): InternalType
+
+  def cast(s: Short): InternalType
+
+  def cast(b: Byte): InternalType
 }
 
 
@@ -165,6 +177,24 @@ private[sql] object NumericType extends AbstractDataType {
   override private[sql] def simpleString: String = "numeric"
 
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[NumericType]
+
+  def toType(ttag: TypeTag[_]): NumericType = {
+    ttag match {
+      case Byte => ByteType
+      case Short => ShortType
+      case Int => IntegerType
+      case Long => LongType
+      case Float => FloatType
+      case Double => DoubleType
+    }
+  }
+
+  val Byte    : TypeTag[ByteType]       = typeTag[ByteType]
+  val Short   : TypeTag[ShortType]      = typeTag[ShortType]
+  val Int     : TypeTag[IntegerType]    = typeTag[IntegerType]
+  val Long    : TypeTag[LongType]       = typeTag[LongType]
+  val Float   : TypeTag[FloatType]      = typeTag[FloatType]
+  val Double  : TypeTag[DoubleType]     = typeTag[DoubleType]
 }
 
 

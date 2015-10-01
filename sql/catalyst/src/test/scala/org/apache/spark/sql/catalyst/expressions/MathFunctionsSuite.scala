@@ -244,12 +244,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ceil") {
-    testUnary(Ceil, math.ceil)
+    testUnary(Ceil, (x: Double) => math.ceil(x).toLong)
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DoubleType)
   }
 
   test("floor") {
-    testUnary(Floor, math.floor)
+    testUnary(Floor, (x: Double) => math.floor(x).toLong)
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DoubleType)
   }
 

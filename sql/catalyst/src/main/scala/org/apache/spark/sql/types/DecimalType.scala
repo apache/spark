@@ -98,6 +98,18 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   override def simpleString: String = s"decimal($precision,$scale)"
 
   private[spark] override def asNullable: DecimalType = this
+
+  override def cast(d: Double): InternalType = throw new UnsupportedOperationException
+
+  override def cast(f: Float): InternalType = throw new UnsupportedOperationException
+
+  override def cast(l: Long): InternalType = throw new UnsupportedOperationException
+
+  override def cast(i: Int): InternalType = throw new UnsupportedOperationException
+
+  override def cast(s: Short): InternalType = throw new UnsupportedOperationException
+
+  override def cast(b: Byte): InternalType = throw new UnsupportedOperationException
 }
 
 

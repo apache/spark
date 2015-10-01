@@ -49,6 +49,18 @@ class DoubleType private() extends FractionalType {
   override def defaultSize: Int = 8
 
   private[spark] override def asNullable: DoubleType = this
+
+  override def cast(d: InternalType): InternalType = d
+
+  override def cast(f: Float): InternalType = f.toDouble
+
+  override def cast(l: Long): InternalType = l.toDouble
+
+  override def cast(i: Int): InternalType = i.toDouble
+
+  override def cast(s: Short): InternalType = s.toDouble
+
+  override def cast(b: Byte): InternalType = b.toDouble
 }
 
 case object DoubleType extends DoubleType
