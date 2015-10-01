@@ -105,6 +105,7 @@ object KinesisUtils {
    * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    */
+  // scalastyle:off
   def createStream[T](
       ssc: StreamingContext,
       kinesisAppName: String,
@@ -117,6 +118,7 @@ object KinesisUtils {
       messageHandler: Record => T,
       awsAccessKeyId: String,
       awsSecretKey: String): ReceiverInputDStream[T] = {
+    // scalastyle:on
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream(ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
@@ -333,6 +335,7 @@ object KinesisUtils {
    * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    */
+  // scalastyle:off
   def createStream[T](
       jssc: JavaStreamingContext,
       kinesisAppName: String,
@@ -345,6 +348,7 @@ object KinesisUtils {
       messageHandler: Function1[Record, T],
       awsAccessKeyId: String,
       awsSecretKey: String): JavaReceiverInputDStream[T] = {
+    // scalastyle:on
     createStream(jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel,
       messageHandler, awsAccessKeyId, awsSecretKey)
