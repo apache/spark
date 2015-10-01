@@ -273,16 +273,20 @@ class SchedulerJob(BaseJob):
             .all()
         )
 
-        current_run_date = datetime.now() - dag.schedule_interval
+        current_run_date = (datetime.now() -
+                            dag.schedule_interval).isoformat()[:10]
         blocking_tis = (
             session
             .query(TI)
             .filter(TI.state != State.SUCCESS)
             .filter(TI.execution_date == current_run_date)
-            .filter(TI.are_dependencies_met())
+            .filter(TI.dag_id == dag.dag_id)
             .all()
         )
-
+        for ti in blocking_tis:
+                ti.task = dag.get_task(ti.task_id)
+        blocking_tis = ([ti for ti in blocking_tis
+                        if ti.are_dependencies_met(main_session=session)])
         task_list = "\n".join([
             sla.task_id + ' on ' + sla.execution_date.isoformat()
             for sla in slas])
