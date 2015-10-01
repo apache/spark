@@ -37,9 +37,11 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   private lazy val nullDoubles =
     Seq(NullDoubles(1.0), NullDoubles(2.0), NullDoubles(3.0), NullDoubles(null)).toDF()
 
-  private def testOneToOneMathFunction[@specialized(Int, Long, Float, Double) T](
+  private def testOneToOneMathFunction[
+  @specialized(Int, Long, Float, Double) T,
+  @specialized(Int, Long, Float, Double) U](
       c: Column => Column,
-      f: T => T): Unit = {
+      f: T => U): Unit = {
     checkAnswer(
       doubleData.select(c('a)),
       (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T])))
@@ -165,10 +167,10 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("ceil and ceiling") {
-    testOneToOneMathFunction(ceil, math.ceil)
+    testOneToOneMathFunction(ceil, (d: Double) => math.ceil(d).toLong)
     checkAnswer(
       sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
-      Row(0.0, 1.0, 2.0))
+      Row(0L, 1L, 2L))
   }
 
   test("conv") {
@@ -184,7 +186,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("floor") {
-    testOneToOneMathFunction(floor, math.floor)
+    testOneToOneMathFunction(floor, (d: Double) => math.floor(d).toLong)
   }
 
   test("factorial") {
@@ -228,7 +230,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("signum / sign") {
-    testOneToOneMathFunction[Double](signum, math.signum)
+    testOneToOneMathFunction[Double, Double](signum, math.signum)
 
     checkAnswer(
       sql("SELECT sign(10), signum(-11)"),

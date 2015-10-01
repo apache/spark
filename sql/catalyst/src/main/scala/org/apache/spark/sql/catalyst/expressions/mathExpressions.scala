@@ -52,7 +52,7 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param f The math function.
  * @param name The short name of the function
  */
-abstract class UnaryMathExpression(f: Double => Double, name: String)
+abstract class UnaryMathExpression(val f: Double => Double, name: String)
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType)
@@ -152,7 +152,16 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
 
 case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
-case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL")
+case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
+  override def dataType: DataType = LongType
+  protected override def nullSafeEval(input: Any): Any = {
+    f(input.asInstanceOf[Double]).toLong
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+  }
+}
 
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
@@ -195,7 +204,16 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
-case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR")
+case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
+  override def dataType: DataType = LongType
+  protected override def nullSafeEval(input: Any): Any = {
+    f(input.asInstanceOf[Double]).toLong
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+  }
+}
 
 object Factorial {
 
