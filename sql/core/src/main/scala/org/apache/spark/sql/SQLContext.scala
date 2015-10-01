@@ -1224,7 +1224,11 @@ object SQLContext {
 
   private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
     INSTANTIATION_LOCK.synchronized {
-      lastInstantiatedContext.compareAndSet(null, sqlContext)
+      val old = lastInstantiatedContext.get()
+      // only update lastInstantiatedContext if it's not set or the old one is stopped.
+      if (old == null || old.sparkContext.stopped.get()) {
+        lastInstantiatedContext.set(sqlContext)
+      }
     }
   }
 
