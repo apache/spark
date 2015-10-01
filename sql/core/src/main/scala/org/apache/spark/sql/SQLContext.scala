@@ -30,6 +30,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListener}
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.errors.DialectException
@@ -1172,7 +1173,13 @@ class SQLContext private[sql](
   // Register a succesfully instantiatd context to the singleton. This should be at the end of
   // the class definition so that the singleton is updated only if there is no exception in the
   // construction of the instance.
-  SQLContext.setLastInstantiatedContext(self)
+  sparkContext.addSparkListener(new SparkListener{
+    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
+      SQLContext.clearTheInstantiatedContext(self)
+    }
+  })
+
+  SQLContext.setInstantiatedContext(self)
 }
 
 /**
@@ -1190,9 +1197,9 @@ object SQLContext {
     new InheritableThreadLocal[SQLContext]
 
   /**
-   * Reference to the last created SQLContext.
+   * Reference to the created SQLContext.
    */
-  @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
+  @transient private val instantiatedContext = new AtomicReference[SQLContext]()
 
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
@@ -1209,26 +1216,29 @@ object SQLContext {
     }
 
     INSTANTIATION_LOCK.synchronized {
-      if (lastInstantiatedContext.get() == null) {
+      val ctx = instantiatedContext.get()
+      if (ctx == null) {
         new SQLContext(sparkContext)
       }
-    }
-    lastInstantiatedContext.get()
-  }
-
-  private[sql] def clearLastInstantiatedContext(): Unit = {
-    INSTANTIATION_LOCK.synchronized {
-      lastInstantiatedContext.set(null)
+      ctx
     }
   }
 
-  private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
+  private[sql] def clearInstantiatedContext(): Unit = {
     INSTANTIATION_LOCK.synchronized {
-      val old = lastInstantiatedContext.get()
-      // only update lastInstantiatedContext if it's not set or the old one is stopped.
-      if (old == null || old.sparkContext.stopped.get()) {
-        lastInstantiatedContext.set(sqlContext)
-      }
+      instantiatedContext.set(null)
+    }
+  }
+
+  private[sql] def clearTheInstantiatedContext(sqlContext: SQLContext): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      instantiatedContext.compareAndSet(sqlContext, null)
+    }
+  }
+
+  private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      instantiatedContext.compareAndSet(null, sqlContext)
     }
   }
 

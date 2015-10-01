@@ -24,14 +24,14 @@ class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
 
   override def afterAll(): Unit = {
     try {
-      SQLContext.setLastInstantiatedContext(sqlContext)
+      SQLContext.setInstantiatedContext(sqlContext)
     } finally {
       super.afterAll()
     }
   }
 
   test("getOrCreate instantiates SQLContext") {
-    SQLContext.clearLastInstantiatedContext()
+    SQLContext.clearInstantiatedContext()
     val sqlContext = SQLContext.getOrCreate(sparkContext)
     assert(sqlContext != null, "SQLContext.getOrCreate returned null")
     assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
@@ -39,7 +39,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("getOrCreate gets last explicitly instantiated SQLContext") {
-    SQLContext.clearLastInstantiatedContext()
+    SQLContext.clearInstantiatedContext()
     val sqlContext = new SQLContext(sparkContext)
     assert(SQLContext.getOrCreate(sparkContext) != null,
       "SQLContext.getOrCreate after explicitly created SQLContext returned null")
@@ -48,7 +48,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("getOrCreate return the original SQLContext") {
-    SQLContext.clearLastInstantiatedContext()
+    SQLContext.clearInstantiatedContext()
     val sqlContext = new SQLContext(sparkContext)
     val newSession = sqlContext.newSession()
     assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
@@ -78,7 +78,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
     assert(!session2.tableNames().contains("test1"))
 
     // UDF should not be shared
-    def myadd(a: Int, b: Int) = a + b
+    def myadd(a: Int, b: Int): Int = a + b
     session1.udf.register[Int, Int, Int]("myadd", myadd)
     session1.sql("select myadd(1, 2)").explain()
     intercept[AnalysisException] {
