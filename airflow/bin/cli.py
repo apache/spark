@@ -71,7 +71,7 @@ def backfill(args):
             mark_success=args.mark_success,
             include_adhoc=args.include_adhoc,
             local=args.local,
-            donot_pickle=args.donot_pickle,
+            donot_pickle=(args.donot_pickle or conf.getboolean('core', 'donot_pickle')),
             ignore_dependencies=args.ignore_dependencies)
 
 
