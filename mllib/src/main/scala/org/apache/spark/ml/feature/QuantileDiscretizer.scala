@@ -17,10 +17,9 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.Logging
-
 import scala.collection.mutable
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
@@ -148,9 +147,8 @@ private[feature] object QuantileDiscretizer extends Logging {
   }
 
   /**
-   * Regulate split candidates to effective splits, such as adding positive/negative infinity in
-   * both sides, or using default split value in case of only ineffectiveness split candidates are
-   * found.
+   * Adjust split candidates to proper splits by: adding positive/negative infinity to both sides as
+   * needed, and adding a default split value of 0 if no good candidates are found.
    */
   def getSplits(candidates: Array[Double]): Array[Double] = {
     val effectiveValues = if (candidates.size != 0) {
