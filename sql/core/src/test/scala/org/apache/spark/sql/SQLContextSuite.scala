@@ -46,4 +46,43 @@ class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
     assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
       "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
   }
+
+  test("getOrCreate return the original SQLContext") {
+    SQLContext.clearLastInstantiatedContext()
+    val sqlContext = new SQLContext(sparkContext)
+    val newSession = sqlContext.newSession()
+    assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
+      "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
+    SQLContext.setActive(newSession)
+    assert(SQLContext.getOrCreate(sparkContext).eq(newSession),
+      "SQLContext.getOrCreate after explicitly setActive() did not return the active context")
+  }
+
+  test("Sessions of SQLContext") {
+    val sqlContext = SQLContext.getOrCreate(sparkContext)
+    val session1 = sqlContext.newSession()
+    val session2 = sqlContext.newSession()
+
+    // all have the default configurations
+    val key = SQLConf.SHUFFLE_PARTITIONS.key
+    assert(session1.getConf(key) === session2.getConf(key))
+    session1.setConf(key, "1")
+    session2.setConf(key, "2")
+    assert(session1.getConf(key) === "1")
+    assert(session2.getConf(key) === "2")
+
+    // temporary table should not be shared
+    val df = session1.range(10)
+    df.registerTempTable("test1")
+    assert(session1.tableNames().contains("test1"))
+    assert(!session2.tableNames().contains("test1"))
+
+    // UDF should not be shared
+    def myadd(a: Int, b: Int) = a + b
+    session1.udf.register[Int, Int, Int]("myadd", myadd)
+    session1.sql("select myadd(1, 2)").explain()
+    intercept[AnalysisException] {
+      session2.sql("select myadd(1, 2)").explain()
+    }
+  }
 }

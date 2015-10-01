@@ -100,8 +100,6 @@ private[hive] trait ClientInterface {
    */
   def runSqlHive(sql: String): Seq[String]
 
-  def withHiveState[A](f: => A): A
-
   def setOut(stream: PrintStream): Unit
   def setInfo(stream: PrintStream): Unit
   def setError(stream: PrintStream): Unit
@@ -175,10 +173,14 @@ private[hive] trait ClientInterface {
       holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit
 
-  /** Add a jar into classloader */
+  /** Add a jar into class loader */
   def addJar(path: String): Unit
 
+  /** Return a ClientInterface as new session, that will share the class loader and Hive client */
   def newSession(): ClientInterface
+
+  /** Run a function within Hive state (SessionState, HiveConf, Hive client and class loader) */
+  def withHiveState[A](f: => A): A
 
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
