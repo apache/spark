@@ -45,7 +45,8 @@ To run spark-shell:
 For example:
 
     $ ./bin/spark-submit --class org.apache.spark.examples.SparkPi \
-        --master yarn-cluster \
+        --master yarn \
+        --deploy-mode cluster \
         --num-executors 3 \
         --driver-memory 4g \
         --executor-memory 2g \
