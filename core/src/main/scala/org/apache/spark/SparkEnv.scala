@@ -326,7 +326,7 @@ object SparkEnv extends Logging {
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
     val memoryManager = new StaticMemoryManager(conf)
-    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)
+    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, memoryManager, numUsableCores)
 
     val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
 
@@ -337,8 +337,8 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
-      numUsableCores)
+      serializer, conf, memoryManager, mapOutputTracker, shuffleManager,
+      blockTransferService, securityManager, numUsableCores)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 

@@ -27,6 +27,16 @@ package org.apache.spark
 private[spark] abstract class MemoryManager {
 
   /**
+   * Total available memory for execution, in bytes.
+   */
+  def maxExecutionMemory: Long
+
+  /**
+   * Total available memory for storage, in bytes.
+   */
+  def maxStorageMemory: Long
+
+  /**
    * Acquire N bytes of memory for execution.
    * @return whether all N bytes are successfully granted.
    */

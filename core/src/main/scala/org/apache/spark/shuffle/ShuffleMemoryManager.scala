@@ -22,7 +22,7 @@ import scala.collection.mutable
 import com.google.common.annotations.VisibleForTesting
 
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.{Logging, SparkException, SparkConf, TaskContext}
+import org.apache.spark._
 
 /**
  * Allocates a pool of memory to tasks for use in shuffle operations. Each disk-spilling
@@ -40,16 +40,17 @@ import org.apache.spark.{Logging, SparkException, SparkConf, TaskContext}
  *
  * Use `ShuffleMemoryManager.create()` factory method to create a new instance.
  *
- * @param maxMemory total amount of memory available for execution, in bytes.
+ * @param memoryManager the interface through which this manager acquires execution memory
  * @param pageSizeBytes number of bytes for each page, by default.
  */
 private[spark]
 class ShuffleMemoryManager protected (
-    val maxMemory: Long,
+    memoryManager: MemoryManager,
     val pageSizeBytes: Long)
   extends Logging {
 
   private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
+  private val maxMemory = memoryManager.maxExecutionMemory
 
   private def currentTaskAttemptId(): Long = {
     // In case this is called on the driver, return an invalid task attempt id.
@@ -138,30 +139,28 @@ class ShuffleMemoryManager protected (
 
 private[spark] object ShuffleMemoryManager {
 
-  def create(conf: SparkConf, numCores: Int): ShuffleMemoryManager = {
-    val maxMemory = ShuffleMemoryManager.getMaxMemory(conf)
+  def create(
+      conf: SparkConf,
+      memoryManager: MemoryManager,
+      numCores: Int): ShuffleMemoryManager = {
+    val maxMemory = memoryManager.maxExecutionMemory
     val pageSize = ShuffleMemoryManager.getPageSize(conf, maxMemory, numCores)
-    new ShuffleMemoryManager(maxMemory, pageSize)
+    new ShuffleMemoryManager(memoryManager, pageSize)
   }
 
+  /**
+   * Create a dummy [[ShuffleMemoryManager]] with the specified capacity and page size.
+   */
   def create(maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
-    new ShuffleMemoryManager(maxMemory, pageSizeBytes)
+    val memoryManager = new StaticMemoryManager {
+      override def maxExecutionMemory: Long = maxMemory
+    }
+    new ShuffleMemoryManager(memoryManager, pageSizeBytes)
   }
 
   @VisibleForTesting
   def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
-    new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
-  }
-
-  /**
-   * Figure out the shuffle memory limit from a SparkConf. We currently have both a fraction
-   * of the memory pool and a safety factor since collections can sometimes grow bigger than
-   * the size we target before we estimate their sizes again.
-   */
-  private[spark] def getMaxMemory(conf: SparkConf): Long = {
-    val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
-    val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+    create(maxMemory, 4 * 1024 * 1024)
   }
 
   /**

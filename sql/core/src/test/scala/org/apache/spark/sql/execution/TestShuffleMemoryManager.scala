@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.MemoryManager
 import org.apache.spark.shuffle.ShuffleMemoryManager
 
 /**
  * A [[ShuffleMemoryManager]] that can be controlled to run out of memory.
  */
-class TestShuffleMemoryManager extends ShuffleMemoryManager(Long.MaxValue, 4 * 1024 * 1024) {
+class TestShuffleMemoryManager
+  extends ShuffleMemoryManager(new GrantEverythingMemoryManager, 4 * 1024 * 1024) {
   private var oom = false
 
   override def tryToAcquire(numBytes: Long): Long = {
@@ -48,4 +50,13 @@ class TestShuffleMemoryManager extends ShuffleMemoryManager(Long.MaxValue, 4 * 1
   def markAsOutOfMemory(): Unit = {
     oom = true
   }
+}
+
+private class GrantEverythingMemoryManager extends MemoryManager {
+  override def maxExecutionMemory: Long = Long.MaxValue
+  override def maxStorageMemory: Long = Long.MaxValue
+  override def acquireExecutionMemory(numBytes: Long): Boolean = true
+  override def acquireStorageMemory(numBytes: Long): Boolean = true
+  override def releaseExecutionMemory(numBytes: Long): Unit = { }
+  override def releaseStorageMemory(numBytes: Long): Unit = { }
 }

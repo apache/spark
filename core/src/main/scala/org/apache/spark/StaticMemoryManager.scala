@@ -17,9 +17,6 @@
 
 package org.apache.spark
 
-import org.apache.spark.shuffle.ShuffleMemoryManager
-import org.apache.spark.storage.BlockManager
-
 
 /**
  * A [[MemoryManager]] that statically partitions the heap space into disjoint regions.
@@ -28,18 +25,28 @@ import org.apache.spark.storage.BlockManager
  * `spark.shuffle.memoryFraction` and `spark.storage.memoryFraction` respectively. The two
  * regions are cleanly separated such that neither usage can borrow memory from the other.
  */
-private[spark] class StaticMemoryManager(conf: SparkConf) extends MemoryManager {
-  private val maxExecutionMemory = ShuffleMemoryManager.getMaxMemory(conf)
-  private val maxStorageMemory = BlockManager.getMaxMemory(conf)
+private[spark] class StaticMemoryManager(conf: SparkConf = new SparkConf) extends MemoryManager {
+  private val _maxExecutionMemory: Long = StaticMemoryManager.getMaxExecutionMemory(conf)
+  private val _maxStorageMemory: Long = StaticMemoryManager.getMaxStorageMemory(conf)
   @volatile private var executionMemoryUsed: Long = 0
   @volatile private var storageMemoryUsed: Long = 0
+
+  /**
+   * Total available memory for execution, in bytes.
+   */
+  override def maxExecutionMemory: Long = _maxExecutionMemory
+
+  /**
+   * Total available memory for storage, in bytes.
+   */
+  override def maxStorageMemory: Long = _maxStorageMemory
 
   /**
    * Acquire N bytes of memory for execution.
    * @return whether all N bytes are successfully granted.
    */
   override def acquireExecutionMemory(numBytes: Long): Boolean = {
-    if (executionMemoryUsed + numBytes <= maxExecutionMemory) {
+    if (executionMemoryUsed + numBytes <= _maxExecutionMemory) {
       executionMemoryUsed += numBytes
       true
     } else {
@@ -52,7 +59,7 @@ private[spark] class StaticMemoryManager(conf: SparkConf) extends MemoryManager 
    * @return whether all N bytes are successfully granted.
    */
   override def acquireStorageMemory(numBytes: Long): Boolean = {
-    if (storageMemoryUsed + numBytes <= maxStorageMemory) {
+    if (storageMemoryUsed + numBytes <= _maxStorageMemory) {
       storageMemoryUsed += numBytes
       true
     } else {
@@ -72,6 +79,29 @@ private[spark] class StaticMemoryManager(conf: SparkConf) extends MemoryManager 
    */
   override def releaseStorageMemory(numBytes: Long): Unit = {
     storageMemoryUsed -= numBytes
+  }
+
+}
+
+private object StaticMemoryManager {
+
+  /**
+   * Return the total amount of memory available for the storage region, in bytes.
+   */
+  private def getMaxStorageMemory(conf: SparkConf): Long = {
+    val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
+    val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
+    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+  }
+
+
+  /**
+   * Return the total amount of memory available for the execution region, in bytes.
+   */
+  private def getMaxExecutionMemory(conf: SparkConf): Long = {
+    val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
+    val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
+    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
 
 }
