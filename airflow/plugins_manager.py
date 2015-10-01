@@ -49,7 +49,8 @@ for root, dirs, files in os.walk(plugins_folder, followlinks=True):
                 os.path.split(filepath)[-1])
             if file_ext != '.py':
                 continue
-            m = imp.load_source(mod_name, filepath)
+            namespace = root.replace('/', '__') + '_' + mod_name
+            m = imp.load_source(namespace, filepath)
             for obj in list(m.__dict__.values()):
                 if (
                         inspect.isclass(obj) and
