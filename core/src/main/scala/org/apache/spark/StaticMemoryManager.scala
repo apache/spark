@@ -25,11 +25,19 @@ package org.apache.spark
  * `spark.shuffle.memoryFraction` and `spark.storage.memoryFraction` respectively. The two
  * regions are cleanly separated such that neither usage can borrow memory from the other.
  */
-private[spark] class StaticMemoryManager(conf: SparkConf = new SparkConf) extends MemoryManager {
+private[spark] class StaticMemoryManager(conf: SparkConf = new SparkConf)
+  extends MemoryManager with Logging {
+
   private val _maxExecutionMemory: Long = StaticMemoryManager.getMaxExecutionMemory(conf)
   private val _maxStorageMemory: Long = StaticMemoryManager.getMaxStorageMemory(conf)
-  @volatile private var executionMemoryUsed: Long = 0
-  @volatile private var storageMemoryUsed: Long = 0
+  private val executionMemoryLock = new Object
+  private val storageMemoryLock = new Object
+
+  // All accesses must be synchronized on `executionMemoryLock`
+  private var executionMemoryUsed: Long = 0
+
+  // All accesses must be synchronized on `storageMemoryLock`
+  private var storageMemoryUsed: Long = 0
 
   /**
    * Total available memory for execution, in bytes.
@@ -43,27 +51,27 @@ private[spark] class StaticMemoryManager(conf: SparkConf = new SparkConf) extend
 
   /**
    * Acquire N bytes of memory for execution.
-   * @return whether all N bytes are successfully granted.
+   * @return whether the number bytes successfully granted (<= N).
    */
-  override def acquireExecutionMemory(numBytes: Long): Boolean = {
-    if (executionMemoryUsed + numBytes <= _maxExecutionMemory) {
-      executionMemoryUsed += numBytes
-      true
-    } else {
-      false
+  override def acquireExecutionMemory(numBytes: Long): Long = {
+    executionMemoryLock.synchronized {
+      assert(_maxExecutionMemory >= executionMemoryUsed)
+      val bytesToGrant = math.min(numBytes, _maxExecutionMemory - executionMemoryUsed)
+      executionMemoryUsed += bytesToGrant
+      bytesToGrant
     }
   }
 
   /**
    * Acquire N bytes of memory for storage.
-   * @return whether all N bytes are successfully granted.
+   * @return whether the number bytes successfully granted (<= N).
    */
-  override def acquireStorageMemory(numBytes: Long): Boolean = {
-    if (storageMemoryUsed + numBytes <= _maxStorageMemory) {
-      storageMemoryUsed += numBytes
-      true
-    } else {
-      false
+  override def acquireStorageMemory(numBytes: Long): Long = {
+    storageMemoryLock.synchronized {
+      assert(_maxStorageMemory >= storageMemoryUsed)
+      val bytesToGrant = math.min(numBytes, _maxStorageMemory - storageMemoryUsed)
+      storageMemoryUsed += bytesToGrant
+      bytesToGrant
     }
   }
 
@@ -71,17 +79,34 @@ private[spark] class StaticMemoryManager(conf: SparkConf = new SparkConf) extend
    * Release N bytes of execution memory.
    */
   override def releaseExecutionMemory(numBytes: Long): Unit = {
-    executionMemoryUsed -= numBytes
+    executionMemoryLock.synchronized {
+      if (numBytes > executionMemoryUsed) {
+        logWarning(s"Attempted to release $numBytes bytes of execution " +
+          s"memory when we only have $executionMemoryUsed bytes")
+        executionMemoryUsed = 0
+      } else {
+        executionMemoryUsed -= numBytes
+      }
+    }
   }
 
   /**
    * Release N bytes of storage memory.
    */
   override def releaseStorageMemory(numBytes: Long): Unit = {
-    storageMemoryUsed -= numBytes
+    storageMemoryLock.synchronized {
+      if (numBytes > storageMemoryUsed) {
+        logWarning(s"Attempted to release $numBytes bytes of storage " +
+          s"memory when we only have $storageMemoryUsed bytes")
+        storageMemoryUsed = 0
+      } else {
+        storageMemoryUsed -= numBytes
+      }
+    }
   }
 
 }
+
 
 private object StaticMemoryManager {
 

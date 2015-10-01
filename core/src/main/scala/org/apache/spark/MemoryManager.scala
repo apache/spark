@@ -38,15 +38,15 @@ private[spark] abstract class MemoryManager {
 
   /**
    * Acquire N bytes of memory for execution.
-   * @return whether all N bytes are successfully granted.
+   * @return whether the number bytes successfully granted (<= N).
    */
-  def acquireExecutionMemory(numBytes: Long): Boolean
+  def acquireExecutionMemory(numBytes: Long): Long
 
   /**
    * Acquire N bytes of memory for storage.
-   * @return whether all N bytes are successfully granted.
+   * @return whether the number bytes successfully granted (<= N).
    */
-  def acquireStorageMemory(numBytes: Long): Boolean
+  def acquireStorageMemory(numBytes: Long): Long
 
   /**
    * Release N bytes of execution memory.

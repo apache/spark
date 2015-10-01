@@ -55,8 +55,8 @@ class TestShuffleMemoryManager
 private class GrantEverythingMemoryManager extends MemoryManager {
   override def maxExecutionMemory: Long = Long.MaxValue
   override def maxStorageMemory: Long = Long.MaxValue
-  override def acquireExecutionMemory(numBytes: Long): Boolean = true
-  override def acquireStorageMemory(numBytes: Long): Boolean = true
+  override def acquireExecutionMemory(numBytes: Long): Long = numBytes
+  override def acquireStorageMemory(numBytes: Long): Long = numBytes
   override def releaseExecutionMemory(numBytes: Long): Unit = { }
   override def releaseStorageMemory(numBytes: Long): Unit = { }
 }
