@@ -575,7 +575,7 @@ def get_parser():
     parser_worker = subparsers.add_parser('worker', help=ht)
     parser_worker.add_argument(
         "-q", "--queues",
-        help="Comma delimited list of queues to cater serve",
+        help="Comma delimited list of queues to serve",
         default=conf.get('celery', 'DEFAULT_QUEUE'))
     parser_worker.set_defaults(func=worker)
 
