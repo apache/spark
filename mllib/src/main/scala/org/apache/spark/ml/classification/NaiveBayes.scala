@@ -73,10 +73,13 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
  * The input feature values must be nonnegative.
  */
 @Experimental
-class NaiveBayes(override val uid: String)
+@Since("1.5.0")
+class NaiveBayes(
+    @Since("1.5.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("nb"))
 
   /**
@@ -84,6 +87,7 @@ class NaiveBayes(override val uid: String)
    * Default is 1.0.
    * @group setParam
    */
+  @Since("1.5.0")
   def setSmoothing(value: Double): this.type = set(smoothing, value)
   setDefault(smoothing -> 1.0)
 
@@ -93,6 +97,7 @@ class NaiveBayes(override val uid: String)
    * Default is "multinomial"
    * @group setParam
    */
+  @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
   setDefault(modelType -> OldNaiveBayes.Multinomial)
 
@@ -102,6 +107,7 @@ class NaiveBayes(override val uid: String)
     NaiveBayesModel.fromOld(oldModel, this)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayes = defaultCopy(extra)
 }
 
@@ -120,8 +126,9 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
  *              by D (number of features)
  */
 @Experimental
+@Since("1.5.0")
 class NaiveBayesModel private[ml] (
-    override val uid: String,
+    @Since("1.5.0") override val uid: String,
     val pi: Vector,
     val theta: Matrix)
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
@@ -206,10 +213,12 @@ class NaiveBayesModel private[ml] (
     }
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayesModel = {
     copyValues(new NaiveBayesModel(uid, pi, theta).setParent(this.parent), extra)
   }
 
+  @Since("1.5.0")
   override def toString: String = {
     s"NaiveBayesModel (uid=$uid) with ${pi.size} classes"
   }

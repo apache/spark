@@ -155,10 +155,13 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
  * in the future.
  */
 @Experimental
-class LogisticRegression(override val uid: String)
+@Since("1.4.0")
+class LogisticRegression(
+    @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams with DefaultParamsWritable with Logging {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("logreg"))
 
   /**
@@ -166,6 +169,7 @@ class LogisticRegression(override val uid: String)
    * Default is 0.0.
    * @group setParam
    */
+  @Since("1.4.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
   setDefault(regParam -> 0.0)
 
@@ -176,6 +180,7 @@ class LogisticRegression(override val uid: String)
    * Default is 0.0 which is an L2 penalty.
    * @group setParam
    */
+  @Since("1.4.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
   setDefault(elasticNetParam -> 0.0)
 
@@ -184,6 +189,7 @@ class LogisticRegression(override val uid: String)
    * Default is 100.
    * @group setParam
    */
+  @Since("1.2.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   setDefault(maxIter -> 100)
 
@@ -193,6 +199,7 @@ class LogisticRegression(override val uid: String)
    * Default is 1E-6.
    * @group setParam
    */
+  @Since("1.4.0")
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
@@ -201,6 +208,7 @@ class LogisticRegression(override val uid: String)
    * Default is true.
    * @group setParam
    */
+  @Since("1.4.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
 
@@ -213,11 +221,14 @@ class LogisticRegression(override val uid: String)
    * Default is true.
    * @group setParam
    */
+  @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
   setDefault(standardization -> true)
 
+  @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
+  @Since("1.5.0")
   override def getThreshold: Double = super.getThreshold
 
   /**
@@ -229,8 +240,10 @@ class LogisticRegression(override val uid: String)
   def setWeightCol(value: String): this.type = set(weightCol, value)
   setDefault(weightCol -> "")
 
+  @Since("1.5.0")
   override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
 
+  @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
@@ -384,6 +397,7 @@ class LogisticRegression(override val uid: String)
     model.setSummary(logRegSummary)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
 
@@ -397,8 +411,9 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
  * Model produced by [[LogisticRegression]].
  */
 @Experimental
+@Since("1.4.0")
 class LogisticRegressionModel private[ml] (
-    override val uid: String,
+    @Since("1.4.0") override val uid: String,
     val coefficients: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
@@ -407,12 +422,16 @@ class LogisticRegressionModel private[ml] (
   @deprecated("Use coefficients instead.", "1.6.0")
   def weights: Vector = coefficients
 
+  @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
+  @Since("1.5.0")
   override def getThreshold: Double = super.getThreshold
 
+  @Since("1.5.0")
   override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
 
+  @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
@@ -436,6 +455,7 @@ class LogisticRegressionModel private[ml] (
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
+  @Since("1.5.0")
   def summary: LogisticRegressionTrainingSummary = trainingSummary match {
     case Some(summ) => summ
     case None =>
@@ -451,6 +471,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   /** Indicates whether a training summary exists for this model instance. */
+  @Since("1.5.0")
   def hasSummary: Boolean = trainingSummary.isDefined
 
   /**
@@ -493,6 +514,7 @@ class LogisticRegressionModel private[ml] (
     Vectors.dense(-m, m)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): LogisticRegressionModel = {
     val newModel = copyValues(new LogisticRegressionModel(uid, coefficients, intercept), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
@@ -710,6 +732,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Experimental
+@Since("1.5.0")
 class BinaryLogisticRegressionTrainingSummary private[classification] (
     predictions: DataFrame,
     probabilityCol: String,
@@ -731,11 +754,13 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */
 @Experimental
+@Since("1.5.0")
 class BinaryLogisticRegressionSummary private[classification] (
     @transient override val predictions: DataFrame,
-    override val probabilityCol: String,
-    override val labelCol: String,
-    override val featuresCol: String) extends LogisticRegressionSummary {
+    @Since("1.5.0") override val probabilityCol: String,
+    @Since("1.5.0") override val labelCol: String,
+    @Since("1.6.0") override val featuresCol: String) extends LogisticRegressionSummary {
+
 
   private val sqlContext = predictions.sqlContext
   import sqlContext.implicits._

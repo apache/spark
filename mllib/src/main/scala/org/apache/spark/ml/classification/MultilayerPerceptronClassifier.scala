@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
 import org.apache.spark.ml.param.{IntParam, ParamValidators, IntArrayParam, ParamMap}
@@ -104,19 +104,23 @@ private object LabelConverter {
  * Each layer has sigmoid activation function, output layer has softmax.
  * Number of inputs has to be equal to the size of feature vectors.
  * Number of outputs has to be equal to the total number of labels.
- *
  */
 @Experimental
-class MultilayerPerceptronClassifier(override val uid: String)
+@Since("1.5.0")
+class MultilayerPerceptronClassifier(
+    @Since("1.5.0") override val uid: String)
   extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("mlpc"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setLayers(value: Array[Int]): this.type = set(layers, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
   /**
@@ -124,6 +128,7 @@ class MultilayerPerceptronClassifier(override val uid: String)
    * Default is 100.
    * @group setParam
    */
+  @Since("1.5.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /**
@@ -132,14 +137,17 @@ class MultilayerPerceptronClassifier(override val uid: String)
    * Default is 1E-4.
    * @group setParam
    */
+  @Since("1.5.0")
   def setTol(value: Double): this.type = set(tol, value)
 
   /**
    * Set the seed for weights initialization.
    * @group setParam
    */
+  @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
   /**
@@ -174,8 +182,9 @@ class MultilayerPerceptronClassifier(override val uid: String)
  * @return prediction model
  */
 @Experimental
+@Since("1.5.0")
 class MultilayerPerceptronClassificationModel private[ml] (
-    override val uid: String,
+    @Since("1.5.0") override val uid: String,
     val layers: Array[Int],
     val weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
@@ -200,6 +209,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
     LabelConverter.decodeLabel(mlpModel.predict(features))
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
     copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
   }
