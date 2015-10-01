@@ -1162,6 +1162,8 @@ object Client extends Logging {
       userClassPath.foreach { x =>
         addFileToClasspath(sparkConf, x, null, env)
       }
+      // add the users application jar if its distributed through dist cache
+      addFileToClasspath(sparkConf, null, APP_JAR, env)
     }
     addFileToClasspath(sparkConf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
