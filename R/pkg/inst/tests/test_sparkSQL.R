@@ -92,17 +92,28 @@ test_that("structType and structField", {
 test_that("create DataFrame from RDD", {
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
   df <- createDataFrame(sqlContext, rdd, list("a", "b"))
+  dfAsDF <- as.DataFrame(sqlContext, rdd, list("a", "b"))
   expect_is(df, "DataFrame")
+  expect_is(dfAsDF, "DataFrame")
   expect_equal(count(df), 10)
+  expect_equal(count(dfAsDF), 10)
   expect_equal(nrow(df), 10)
+  expect_equal(nrow(dfAsDF), 10)
   expect_equal(ncol(df), 2)
+  expect_equal(ncol(dfAsDF), 2)
   expect_equal(dim(df), c(10, 2))
+  expect_equal(dim(dfAsDF), c(10, 2))
   expect_equal(columns(df), c("a", "b"))
+  expect_equal(columns(dfAsDF), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
+  expect_equal(dtypes(dfAsDF), list(c("a", "int"), c("b", "string")))
 
   df <- createDataFrame(sqlContext, rdd)
+  dfAsDF <- as.DataFrame(sqlContext, rdd)
   expect_is(df, "DataFrame")
+  expect_is(dfAsDF, "DataFrame")
   expect_equal(columns(df), c("_1", "_2"))
+  expect_equal(columns(dfAsDF), c("_1", "_2"))
 
   schema <- structType(structField(x = "a", type = "integer", nullable = TRUE),
                         structField(x = "b", type = "string", nullable = TRUE))
@@ -133,9 +144,13 @@ test_that("create DataFrame from RDD", {
   schema <- structType(structField("name", "string"), structField("age", "integer"),
                        structField("height", "float"))
   df2 <- createDataFrame(sqlContext, df.toRDD, schema)
+  df2AsDF <- as.DataFrame(sqlContext, df.toRDD, schema)
   expect_equal(columns(df2), c("name", "age", "height"))
+  expect_equal(columns(df2AsDF), c("name", "age", "height"))
   expect_equal(dtypes(df2), list(c("name", "string"), c("age", "int"), c("height", "float")))
+  expect_equal(dtypes(df2AsDF), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(collect(where(df2, df2$name == "Bob")), c("Bob", 16, 176.5))
+  expect_equal(collect(where(df2AsDF, df2$name == "Bob")), c("Bob", 16, 176.5))
 
   localDF <- data.frame(name=c("John", "Smith", "Sarah"),
                         age=c(19, 23, 18),
