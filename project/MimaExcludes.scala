@@ -78,6 +78,10 @@ object MimaExcludes {
           "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.clearLastInstantiatedContext"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.setLastInstantiatedContext"),
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.sql.SQLContext$SQLSession"),
         ProblemFilters.exclude[MissingMethodProblem](
