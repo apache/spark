@@ -138,7 +138,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
  *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
- * @param child the QueryPlan
+ * @param child the SparkPlan
  */
 @DeveloperApi
 case class Sample(
@@ -204,7 +204,7 @@ case class Limit(limit: Int, child: SparkPlan)
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def executeCollect(): Array[Row] = child.executeTake(limit)
+  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val rdd: RDD[_ <: Product2[Boolean, InternalRow]] = if (sortBasedShuffleOn) {
@@ -258,9 +258,8 @@ case class TakeOrderedAndProject(
     projection.map(data.map(_)).getOrElse(data)
   }
 
-  override def executeCollect(): Array[Row] = {
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    collectData().map(converter(_).asInstanceOf[Row])
+  override def executeCollect(): Array[InternalRow] = {
+    collectData()
   }
 
   // TODO: Terminal split should be implemented differently from non-terminal split.

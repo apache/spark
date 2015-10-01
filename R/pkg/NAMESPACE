@@ -69,9 +69,11 @@ exportMethods("arrange",
               "selectExpr",
               "show",
               "showDF",
+              "subset",
               "summarize",
               "summary",
               "take",
+              "transform",
               "unionAll",
               "unique",
               "unpersist",
@@ -245,3 +247,5 @@ export("structField",
        "structType.jobj",
        "structType.structField",
        "print.structType")
+
+export("as.data.frame")

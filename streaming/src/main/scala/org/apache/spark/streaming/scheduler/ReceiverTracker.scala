@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
-import org.apache.spark.util.{ThreadUtils, SerializableConfiguration}
+import org.apache.spark.util.{Utils, ThreadUtils, SerializableConfiguration}
 
 
 /** Enumeration to identify current state of a Receiver */
@@ -291,7 +291,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         ReceiverTrackingInfo(
           streamId, ReceiverState.INACTIVE, None, None, None, None, Some(errorInfo))
     }
-    receiverTrackingInfos -= streamId
+    receiverTrackingInfos(streamId) = newReceiverTrackingInfo
     listenerBus.post(StreamingListenerReceiverStopped(newReceiverTrackingInfo.toReceiverInfo))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
@@ -483,7 +483,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(true)
       // Local messages
       case AllReceiverIds =>
-        context.reply(receiverTrackingInfos.keys.toSeq)
+        context.reply(receiverTrackingInfos.filter(_._2.state != ReceiverState.INACTIVE).keys.toSeq)
       case StopAllReceivers =>
         assert(isTrackerStopping || isTrackerStopped)
         stopReceivers()
@@ -554,6 +554,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           ssc.sc.makeRDD(Seq(receiver -> scheduledExecutors))
         }
       receiverRDD.setName(s"Receiver $receiverId")
+      ssc.sparkContext.setJobDescription(s"Streaming job running receiver $receiverId")
+      ssc.sparkContext.setCallSite(Option(ssc.getStartSite()).getOrElse(Utils.getCallSite()))
+
       val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](
         receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ())
       // We will keep restarting the receiver job until ReceiverTracker is stopped
