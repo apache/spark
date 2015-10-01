@@ -127,6 +127,16 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         classOf[UserDefinedByInstance[_, _]], true)
       checkFilterPredicate(EqualTo(udf, Literal(20)),
         classOf[UserDefinedByInstance[_, _]], false)
+
+      checkFilterPredicate(LessThan(udf, Literal(15)),
+        classOf[UserDefinedByInstance[_, _]], true)
+      checkFilterPredicate(LessThanOrEqual(udf, Literal(10)),
+        classOf[UserDefinedByInstance[_, _]], true)
+
+      checkFilterPredicate(GreaterThan(udf, Literal(15)),
+        classOf[UserDefinedByInstance[_, _]], false)
+      checkFilterPredicate(GreaterThanOrEqual(udf, Literal(20)),
+        classOf[UserDefinedByInstance[_, _]], false)
     }
   }
 
@@ -168,6 +178,39 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         classOf[UserDefinedByInstance[_, _]], 3)
       checkFilterPredicate(EqualTo(udf, Literal("5")),
         classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      def intPlus10: Integer => Integer = (x: Integer) => x + 10
+      sqlContext.udf.register("intPlus10", intPlus10)
+
+      val udf2 = ScalaUDF(intPlus10, IntegerType, Seq('_1.expr))
+
+      checkFilterPredicate(LessThan(udf2, Literal(12)),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(LessThan(udf2, Literal(13)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(LessThan(udf2, Literal(15)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(11)),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(12)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(14)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+
+      checkFilterPredicate(GreaterThan(udf2, Literal(12)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3), Row(4)))
+      checkFilterPredicate(GreaterThan(udf2, Literal(13)),
+        classOf[UserDefinedByInstance[_, _]], 4)
+      checkFilterPredicate(GreaterThan(udf2, Literal(15)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(11)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(12)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(2), Row(3), Row(4)))
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(14)),
+        classOf[UserDefinedByInstance[_, _]], 4)
     }
   }
 
@@ -209,6 +252,43 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         classOf[UserDefinedByInstance[_, _]], 4)
       checkFilterPredicate(EqualTo(udf, Literal("50")),
         classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      def longMutiply10: Long => Long = (x: Long) => x * 10
+      sqlContext.udf.register("longMutiply10", longMutiply10)
+
+      val udf2 = ScalaUDF(longMutiply10, LongType, Seq('_1.expr))
+
+      checkFilterPredicate(LessThan(udf2, Literal(10)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+      checkFilterPredicate(LessThan(udf2, Literal(15)),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(LessThan(udf2, Literal(25)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(LessThan(udf2, Literal(35)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3)))
+      checkFilterPredicate(LessThan(udf2, Literal(45)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(10)),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(20)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(30)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3)))
+
+      checkFilterPredicate(GreaterThan(udf2, Literal(20)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3), Row(4)))
+      checkFilterPredicate(GreaterThan(udf2, Literal(30)),
+        classOf[UserDefinedByInstance[_, _]], 4)
+      checkFilterPredicate(GreaterThan(udf2, Literal(40)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(10)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(20)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(2), Row(3), Row(4)))
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(40)),
+        classOf[UserDefinedByInstance[_, _]], 4)
     }
   }
 
@@ -250,6 +330,43 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         classOf[UserDefinedByInstance[_, _]], 4)
       checkFilterPredicate(EqualTo(udf, Literal("15.1")),
         classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      def floatMutiply10: Float => Float = (x: Float) => x * 10.0f
+      sqlContext.udf.register("floatMutiply10", floatMutiply10)
+
+      val udf2 = ScalaUDF(floatMutiply10, FloatType, Seq('_1.expr))
+
+      checkFilterPredicate(LessThan(udf2, Literal(10.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+      checkFilterPredicate(LessThan(udf2, Literal(15.0f)),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(LessThan(udf2, Literal(25.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(LessThan(udf2, Literal(35.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3)))
+      checkFilterPredicate(LessThan(udf2, Literal(45.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(10.0f)),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(20.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(30.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3)))
+
+      checkFilterPredicate(GreaterThan(udf2, Literal(20.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3), Row(4)))
+      checkFilterPredicate(GreaterThan(udf2, Literal(30.0f)),
+        classOf[UserDefinedByInstance[_, _]], 4)
+      checkFilterPredicate(GreaterThan(udf2, Literal(40.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(10.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(20.0f)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(2), Row(3), Row(4)))
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(40.0f)),
+        classOf[UserDefinedByInstance[_, _]], 4)
     }
   }
 
@@ -291,6 +408,43 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         classOf[UserDefinedByInstance[_, _]], 4)
       checkFilterPredicate(EqualTo(udf, Literal("500.5")),
         classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      def doubleMutiply10: Double => Double = (x: Double) => x * 10.0
+      sqlContext.udf.register("doubleMutiply10", doubleMutiply10)
+
+      val udf2 = ScalaUDF(doubleMutiply10, DoubleType, Seq('_1.expr))
+
+      checkFilterPredicate(LessThan(udf2, Literal(10.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+      checkFilterPredicate(LessThan(udf2, Literal(15.0)),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(LessThan(udf2, Literal(25.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(LessThan(udf2, Literal(35.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3)))
+      checkFilterPredicate(LessThan(udf2, Literal(45.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(10.0)),
+        classOf[UserDefinedByInstance[_, _]], 1)
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(20.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(LessThanOrEqual(udf2, Literal(30.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3)))
+
+      checkFilterPredicate(GreaterThan(udf2, Literal(20.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3), Row(4)))
+      checkFilterPredicate(GreaterThan(udf2, Literal(30.0)),
+        classOf[UserDefinedByInstance[_, _]], 4)
+      checkFilterPredicate(GreaterThan(udf2, Literal(40.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(10.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2), Row(3), Row(4)))
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(20.0)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(2), Row(3), Row(4)))
+      checkFilterPredicate(GreaterThanOrEqual(udf2, Literal(40.0)),
+        classOf[UserDefinedByInstance[_, _]], 4)
     }
   }
 
@@ -334,6 +488,38 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         classOf[UserDefinedByInstance[_, _]], "4")
       checkFilterPredicate(EqualTo(udf, Literal(5)),
         classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      checkFilterPredicate(LessThan(udf, Literal(1)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+      checkFilterPredicate(LessThan(udf, Literal(2)),
+        classOf[UserDefinedByInstance[_, _]], "1")
+      checkFilterPredicate(LessThan(udf, Literal(3)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("1"), Row("2")))
+      checkFilterPredicate(LessThan(udf, Literal(4)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("1"), Row("2"), Row("3")))
+      checkFilterPredicate(LessThan(udf, Literal(5)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("1"), Row("2"), Row("3"), Row("4")))
+
+      checkFilterPredicate(LessThanOrEqual(udf, Literal(1)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("1")))
+      checkFilterPredicate(LessThanOrEqual(udf, Literal(2)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("1"), Row("2")))
+      checkFilterPredicate(LessThanOrEqual(udf, Literal(3)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("1"), Row("2"), Row("3")))
+
+      checkFilterPredicate(GreaterThan(udf, Literal(2)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("3"), Row("4")))
+      checkFilterPredicate(GreaterThan(udf, Literal(3)),
+        classOf[UserDefinedByInstance[_, _]], "4")
+      checkFilterPredicate(GreaterThan(udf, Literal(4)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      checkFilterPredicate(GreaterThanOrEqual(udf, Literal(1)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("1"), Row("2"), Row("3"), Row("4")))
+      checkFilterPredicate(GreaterThanOrEqual(udf, Literal(2)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("2"), Row("3"), Row("4")))
+      checkFilterPredicate(GreaterThanOrEqual(udf, Literal(4)),
+        classOf[UserDefinedByInstance[_, _]], "4")
     }
   }
 
@@ -387,6 +573,38 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         classOf[UserDefinedByInstance[_, _]], 4.b)
       checkFilterPredicate(EqualTo(udf, Literal(5)),
         classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      checkFilterPredicate(LessThan(udf, Literal(1)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+      checkFilterPredicate(LessThan(udf, Literal(2)),
+        classOf[UserDefinedByInstance[_, _]], 1.b)
+      checkFilterPredicate(LessThan(udf, Literal(3)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.b), Row(2.b)))
+      checkFilterPredicate(LessThan(udf, Literal(4)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.b), Row(2.b), Row(3.b)))
+      checkFilterPredicate(LessThan(udf, Literal(5)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.b), Row(2.b), Row(3.b), Row(4.b)))
+
+      checkFilterPredicate(LessThanOrEqual(udf, Literal(1)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.b)))
+      checkFilterPredicate(LessThanOrEqual(udf, Literal(2)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.b), Row(2.b)))
+      checkFilterPredicate(LessThanOrEqual(udf, Literal(3)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.b), Row(2.b), Row(3.b)))
+
+      checkFilterPredicate(GreaterThan(udf, Literal(2)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3.b), Row(4.b)))
+      checkFilterPredicate(GreaterThan(udf, Literal(3)),
+        classOf[UserDefinedByInstance[_, _]], 4.b)
+      checkFilterPredicate(GreaterThan(udf, Literal(4)),
+        classOf[UserDefinedByInstance[_, _]], Seq.empty[Row])
+
+      checkFilterPredicate(GreaterThanOrEqual(udf, Literal(1)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.b), Row(2.b), Row(3.b), Row(4.b)))
+      checkFilterPredicate(GreaterThanOrEqual(udf, Literal(2)),
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(2.b), Row(3.b), Row(4.b)))
+      checkFilterPredicate(GreaterThanOrEqual(udf, Literal(4)),
+        classOf[UserDefinedByInstance[_, _]], 4.b)
     }
   }
 
