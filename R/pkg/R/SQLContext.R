@@ -62,9 +62,9 @@ infer_type <- function(x) {
   }
 }
 
-#' Create a DataFrame from an RDD
+#' Create a DataFrame
 #'
-#' Converts an RDD to a DataFrame by infer the types.
+#' Converts R data.frame or list into DataFrame.
 #'
 #' @param sqlContext A SQLContext
 #' @param data An RDD or list or data.frame
@@ -75,8 +75,8 @@ infer_type <- function(x) {
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-#' df <- createDataFrame(sqlContext, rdd)
+#' df1 <- as.DataFrame(sqlContext, iris)
+#' df2 <- as.DataFrame(sqlContext, list(3,4,5,6))
 #' }
 
 # TODO(davies): support sampling and infer type from NA
@@ -149,9 +149,9 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
   dataFrame(sdf)
 }
 
-#' Create a DataFrame from an RDD
+#' Create a DataFrame
 #'
-#' Converts an RDD to a DataFrame by infer the types.
+#' Converts R data.frame or list into DataFrame.
 #'
 #' @param sqlContext A SQLContext
 #' @param data An RDD or list or data.frame
@@ -162,8 +162,8 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-#' df <- as.DataFrame(sqlContext, rdd)
+#' df1 <- as.DataFrame(sqlContext, iris)
+#' df2 <- as.DataFrame(sqlContext, list(3,4,5,6))
 #' }
 as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0){
   createDataFrame(sqlContext, data, schema, samplingRatio)
