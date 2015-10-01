@@ -48,6 +48,32 @@ private[sql] object ParquetFilters {
     override def inverseCanDrop(statistics: Statistics[T]): Boolean = false
   }
 
+  object StringFilter extends Enumeration {
+    type Mode = Value
+    val STARTS_WITH, ENDS_WITH, CONTAINS = Value
+  }
+
+  case class StringFilter(
+    v: java.lang.String,
+    mode: StringFilter.Mode) extends UserDefinedPredicate[Binary] with Serializable {
+
+    override def keep(value: Binary): Boolean = {
+      val str = value.toStringUsingUTF8()
+      mode match {
+        case StringFilter.STARTS_WITH =>
+          str.startsWith(v)
+        case StringFilter.ENDS_WITH =>
+          str.endsWith(v)
+        case StringFilter.CONTAINS =>
+          str.contains(v)
+      }
+    }
+
+    override def canDrop(statistics: Statistics[Binary]): Boolean = false
+
+    override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
+  }
+
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
     case BooleanType =>
       (n: String, v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[java.lang.Boolean])
@@ -164,6 +190,14 @@ private[sql] object ParquetFilters {
         FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
   }
 
+  private val makeStringFilter: PartialFunction[DataType,
+      (String, String, StringFilter.Mode) => FilterPredicate] = {
+    case StringType =>
+      (n: String, v: String, mode: StringFilter.Mode) =>
+        FilterApi.userDefined(binaryColumn(n),
+          StringFilter(v.asInstanceOf[java.lang.String], mode))
+  }
+
   private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
     case IntegerType =>
       (n: String, v: Set[Any]) =>
@@ -235,6 +269,13 @@ private[sql] object ParquetFilters {
         makeGt.lift(dataTypeOf(name)).map(_(name, value))
       case sources.GreaterThanOrEqual(name, value) =>
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
+
+      case sources.StringStartsWith(name, value) =>
+        makeStringFilter.lift(dataTypeOf(name)).map(_(name, value, StringFilter.STARTS_WITH))
+      case sources.StringEndsWith(name, value) =>
+        makeStringFilter.lift(dataTypeOf(name)).map(_(name, value, StringFilter.ENDS_WITH))
+      case sources.StringContains(name, value) =>
+        makeStringFilter.lift(dataTypeOf(name)).map(_(name, value, StringFilter.CONTAINS))
 
       case sources.And(lhs, rhs) =>
         (createFilter(schema, lhs) ++ createFilter(schema, rhs)).reduceOption(FilterApi.and)

@@ -245,6 +245,26 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       checkFilterPredicate(!('_1 < "4"), classOf[GtEq[_]], "4")
       checkFilterPredicate('_1 < "2" || '_1 > "3", classOf[Operators.Or], Seq(Row("1"), Row("4")))
     }
+
+    withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString * 5 + "test"))) { implicit df =>
+      checkFilterPredicate(('_1 contains "11").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], "11111test")
+
+      checkFilterPredicate(('_1 contains "2test").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], "22222test")
+
+      checkFilterPredicate(('_1 contains "3t").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], "33333test")
+
+      checkFilterPredicate(('_1 startsWith "22").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], "22222test")
+
+      checkFilterPredicate(('_1 endsWith "4test").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], "44444test")
+
+      checkFilterPredicate(('_1 endsWith "2test").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], "22222test")
+    }
   }
 
   test("filter pushdown - binary") {
