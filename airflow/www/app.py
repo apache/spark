@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from functools import wraps
 import inspect
+from itertools import product
 import json
 import logging
 import os
@@ -917,6 +918,8 @@ class Airflow(BaseView):
         confirmed = request.args.get('confirmed') == "true"
         upstream = request.args.get('upstream') == "true"
         downstream = request.args.get('downstream') == "true"
+        future = request.args.get('future') == "true"
+        past = request.args.get('past') == "true"
 
         if action == "run":
             from airflow.executors import DEFAULT_EXECUTOR as executor
@@ -937,9 +940,6 @@ class Airflow(BaseView):
             return redirect(origin)
 
         elif action == 'clear':
-            future = request.args.get('future') == "true"
-            past = request.args.get('past') == "true"
-
             dag = dag.sub_dag(
                 task_regex=r"^{0}$".format(task_id),
                 include_downstream=downstream,
@@ -975,9 +975,27 @@ class Airflow(BaseView):
 
                 return response
         elif action == 'success':
+            MAX_PERIODS = 1000
+
             # Flagging tasks as successful
             session = settings.Session()
             task_ids = [task_id]
+            end_date = ((dag.latest_execution_date or datetime.now())
+                        if future else execution_date)
+
+            if 'start_date' in dag.default_args:
+                start_date = dag.default_args['start_date']
+            elif dag.start_date:
+                start_date = dag.start_date
+            else:
+                start_date = execution_date
+
+            if execution_date < start_date or end_date < start_date:
+                flash("Selected date before DAG start date",'error')
+                return redirect(origin)
+
+            start_date = execution_date if not past else start_date
+
             if downstream:
                 task_ids += [
                     t.task_id
@@ -987,25 +1005,32 @@ class Airflow(BaseView):
                     t.task_id
                     for t in task.get_flat_relatives(upstream=True)]
             TI = models.TaskInstance
+            dates = utils.date_range(start_date, end_date)
             tis = session.query(TI).filter(
                 TI.dag_id == dag_id,
-                TI.execution_date == execution_date,
+                TI.execution_date.in_(dates),
                 TI.task_id.in_(task_ids)).all()
+            tasks = list(product(task_ids, dates))
+
+            if len(tasks) > MAX_PERIODS:
+                flash("Too many tasks at once (>{0})".format(
+                    MAX_PERIODS), 'error')
+                return redirect(origin)
 
             if confirmed:
 
-                updated_task_ids = []
+                updated_tasks = []
                 for ti in tis:
-                    updated_task_ids.append(ti.task_id)
+                    updated_tasks.append((ti.task_id, ti.execution_date))
                     ti.state = State.SUCCESS
 
                 session.commit()
 
-                to_insert = list(set(task_ids) - set(updated_task_ids))
-                for task_id in to_insert:
+                to_insert = list(set(tasks) - set(updated_tasks))
+                for task_id, task_execution_date in to_insert:
                     ti = TI(
                         task=dag.get_task(task_id),
-                        execution_date=execution_date,
+                        execution_date=task_execution_date,
                         state=State.SUCCESS)
                     session.add(ti)
                     session.commit()
@@ -1022,10 +1047,10 @@ class Airflow(BaseView):
                     response = redirect(origin)
                 else:
                     tis = []
-                    for task_id in task_ids:
+                    for task_id, task_execution_date in tasks:
                         tis.append(TI(
                             task=dag.get_task(task_id),
-                            execution_date=execution_date,
+                            execution_date=task_execution_date,
                             state=State.SUCCESS))
                     details = "\n".join([str(t) for t in tis])
 
