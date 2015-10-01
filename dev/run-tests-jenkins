@@ -116,39 +116,6 @@ function post_message () {
   fi
 }
 
-function send_archived_logs () {
-  echo "Archiving unit tests logs..."
-
-  local log_files=$(
-    find .\
-      -name "unit-tests.log" -o\
-      -path "./sql/hive/target/HiveCompatibilitySuite.failed" -o\
-      -path "./sql/hive/target/HiveCompatibilitySuite.hiveFailed" -o\
-      -path "./sql/hive/target/HiveCompatibilitySuite.wrong"
-  )
-
-  if [ -z "$log_files" ]; then
-    echo "> No log files found." >&2
-  else
-    local log_archive="unit-tests-logs.tar.gz"
-    echo "$log_files" | xargs tar czf ${log_archive}
-
-    local jenkins_build_dir=${JENKINS_HOME}/jobs/${JOB_NAME}/builds/${BUILD_NUMBER}
-    local scp_output=$(scp ${log_archive} amp-jenkins-master:${jenkins_build_dir}/${log_archive})
-    local scp_status="$?"
-
-    if [ "$scp_status" -ne 0 ]; then
-      echo "Failed to send archived unit tests logs to Jenkins master." >&2
-      echo "> scp_status: ${scp_status}" >&2
-      echo "> scp_output: ${scp_output}" >&2
-    else
-      echo "> Send successful."
-    fi
-
-    rm -f ${log_archive}
-  fi
-}
-
 # post start message
 {
   start_message="\
@@ -244,8 +211,6 @@ done
 
     test_result_note=" * This patch **fails $failing_test**."
   fi
-
-  send_archived_logs
 }
 
 # post end message

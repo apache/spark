@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.beans.Introspector
+import java.beans.{BeanInfo, Introspector}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
@@ -477,6 +477,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: DeveloperApi ::
+   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * It is important to make sure that the structure of every [[Row]] of the provided List matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @group dataframes
+   * @since 1.6.0
+   */
+  @DeveloperApi
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+    DataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+  }
+
+  /**
    * Applies a schema to an RDD of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
@@ -485,21 +499,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
-    val attributeSeq = getSchema(beanClass)
+    val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
       val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
-      val extractors =
-        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
-        (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
-      }
-      iter.map { row =>
-        new GenericInternalRow(
-          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
-        ): InternalRow
-      }
+      SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
     }
     DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
   }
@@ -515,6 +520,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd.rdd, beanClass)
   }
+
+  /**
+   * Applies a schema to an List of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   * @group dataframes
+   * @since 1.6.0
+   */
+  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
+    val attrSeq = getSchema(beanClass)
+    val className = beanClass.getName
+    val beanInfo = Introspector.getBeanInfo(beanClass)
+    val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
+    DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
+  }
+
 
   /**
    * :: Experimental ::
@@ -590,7 +612,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -636,7 +658,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -732,7 +754,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(new SqlParser().parseTableIdentifier(tableName))
+    table(SqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
@@ -1213,6 +1235,25 @@ object SQLContext {
   private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
     INSTANTIATION_LOCK.synchronized {
       lastInstantiatedContext.set(sqlContext)
+    }
+  }
+
+  /**
+   * Converts an iterator of Java Beans to InternalRow using the provided
+   * bean info & schema. This is not related to the singleton, but is a static
+   * method for internal use.
+   */
+  private def beansToRows(data: Iterator[_], beanInfo: BeanInfo, attrs: Seq[AttributeReference]):
+      Iterator[InternalRow] = {
+    val extractors =
+      beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+    val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
+      (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+    }
+    data.map{ element =>
+      new GenericInternalRow(
+        methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
+      ): InternalRow
     }
   }
 }

@@ -33,6 +33,7 @@ import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -96,7 +97,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   val startTime = System.currentTimeMillis()
 
-  private val stopped: AtomicBoolean = new AtomicBoolean(false)
+  private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
   private def assertNotStopped(): Unit = {
     if (stopped.get()) {
@@ -265,6 +266,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
+  /**
+   * @return true if context is stopped or in the midst of stopping.
+   */
+  def isStopped: Boolean = stopped.get()
+
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
 
@@ -347,8 +353,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
-  private val localProperties = new InheritableThreadLocal[Properties] {
-    override protected def childValue(parent: Properties): Properties = new Properties(parent)
+  protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
+    override protected def childValue(parent: Properties): Properties = {
+      // Note: make a clone such that changes in the parent properties aren't reflected in
+      // the those of the children threads, which has confusing semantics (SPARK-10563).
+      SerializationUtils.clone(parent).asInstanceOf[Properties]
+    }
     override protected def initialValue(): Properties = new Properties()
   }
 
@@ -516,6 +526,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
@@ -1745,6 +1756,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
       SparkEnv.set(null)
     }
+    // Unset YARN mode system env variable, to allow switching between cluster types.
+    System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
   }

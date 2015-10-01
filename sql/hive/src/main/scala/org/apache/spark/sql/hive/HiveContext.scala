@@ -291,12 +291,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     catalog.invalidateTable(tableIdent)
   }
 
@@ -311,7 +311,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    */
   @Experimental
   def analyze(tableName: String) {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent.toSeq))
 
     relation match {
@@ -563,7 +563,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
 
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
-    extends super.QueryExecution(logicalPlan) {
+    extends org.apache.spark.sql.execution.QueryExecution(this, logicalPlan) {
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
@@ -581,10 +581,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
               .mkString("\t")
         }
       case command: ExecutedCommand =>
-        command.executeCollect().map(_(0).toString)
+        command.executeCollect().map(_.getString(0))
 
       case other =>
-        val result: Seq[Seq[Any]] = other.executeCollect().map(_.toSeq).toSeq
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
@@ -609,6 +609,11 @@ private[hive] object HiveContext {
     defaultValue = Some(hiveExecutionVersion),
     doc = "Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
+
+  val HIVE_EXECUTION_VERSION = stringConf(
+    key = "spark.sql.hive.version",
+    defaultValue = Some(hiveExecutionVersion),
+    doc = "Version of Hive used internally by Spark SQL.")
 
   val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
     defaultValue = Some("builtin"),

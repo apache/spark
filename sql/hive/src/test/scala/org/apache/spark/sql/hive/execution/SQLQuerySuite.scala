@@ -263,7 +263,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
       val relation = EliminateSubQueries(catalog.lookupRelation(Seq(tableName)))
       relation match {
-        case LogicalRelation(r: ParquetRelation) =>
+        case LogicalRelation(r: ParquetRelation, _) =>
           if (!isDataSourceParquet) {
             fail(
               s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
@@ -1168,6 +1168,84 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |)
         """.stripMargin)
       checkAnswer(sqlContext.table("`db.t`"), df)
+    }
+  }
+
+  test("SPARK-10593 same column names in lateral view") {
+    val df = sqlContext.sql(
+    """
+      |select
+      |insideLayer2.json as a2
+      |from (select '{"layer1": {"layer2": "text inside layer 2"}}' json) test
+      |lateral view json_tuple(json, 'layer1') insideLayer1 as json
+      |lateral view json_tuple(insideLayer1.json, 'layer2') insideLayer2 as json
+    """.stripMargin
+    )
+
+    checkAnswer(df, Row("text inside layer 2") :: Nil)
+  }
+
+  test("SPARK-10310: " +
+    "script transformation using default input/output SerDe and record reader/writer") {
+    sqlContext
+      .range(5)
+      .selectExpr("id AS a", "id AS b")
+      .registerTempTable("test")
+
+    checkAnswer(
+      sql(
+        """FROM(
+          |  FROM test SELECT TRANSFORM(a, b)
+          |  USING 'python src/test/resources/data/scripts/test_transform.py "\t"'
+          |  AS (c STRING, d STRING)
+          |) t
+          |SELECT c
+        """.stripMargin),
+      (0 until 5).map(i => Row(i + "#")))
+  }
+
+  test("SPARK-10310: script transformation using LazySimpleSerDe") {
+    sqlContext
+      .range(5)
+      .selectExpr("id AS a", "id AS b")
+      .registerTempTable("test")
+
+    val df = sql(
+      """FROM test
+        |SELECT TRANSFORM(a, b)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |WITH SERDEPROPERTIES('field.delim' = '|')
+        |USING 'python src/test/resources/data/scripts/test_transform.py "|"'
+        |AS (c STRING, d STRING)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |WITH SERDEPROPERTIES('field.delim' = '|')
+      """.stripMargin)
+
+    checkAnswer(df, (0 until 5).map(i => Row(i + "#", i + "#")))
+  }
+
+  test("SPARK-10741: Sort on Aggregate using parquet") {
+    withTable("test10741") {
+      withTempTable("src") {
+        Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF().registerTempTable("src")
+        sql("CREATE TABLE test10741(c1 STRING, c2 INT) STORED AS PARQUET AS SELECT * FROM src")
+      }
+
+      checkAnswer(sql(
+        """
+          |SELECT c1, AVG(c2) AS c_avg
+          |FROM test10741
+          |GROUP BY c1
+          |HAVING (AVG(c2) > 5) ORDER BY c1
+        """.stripMargin), Row("a", 7.0) :: Row("b", 6.0) :: Nil)
+
+      checkAnswer(sql(
+        """
+          |SELECT c1, AVG(c2) AS c_avg
+          |FROM test10741
+          |GROUP BY c1
+          |ORDER BY AVG(c2)
+        """.stripMargin), Row("b", 6.0) :: Row("a", 7.0) :: Nil)
     }
   }
 }

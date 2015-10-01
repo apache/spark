@@ -37,6 +37,7 @@ import org.apache.spark.sql.*;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -141,11 +142,7 @@ public class JavaDataFrameSuite {
     }
   }
 
-  @Test
-  public void testCreateDataFrameFromJavaBeans() {
-    Bean bean = new Bean();
-    JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
-    DataFrame df = context.createDataFrame(rdd, Bean.class);
+  void validateDataFrameWithBeans(Bean bean, DataFrame df) {
     StructType schema = df.schema();
     Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
       schema.apply("a"));
@@ -179,6 +176,31 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < d.length(); i++) {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
+  }
+
+  @Test
+  public void testCreateDataFrameFromLocalJavaBeans() {
+    Bean bean = new Bean();
+    List<Bean> data = Arrays.asList(bean);
+    DataFrame df = context.createDataFrame(data, Bean.class);
+    validateDataFrameWithBeans(bean, df);
+  }
+
+  @Test
+  public void testCreateDataFrameFromJavaBeans() {
+    Bean bean = new Bean();
+    JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
+    DataFrame df = context.createDataFrame(rdd, Bean.class);
+    validateDataFrameWithBeans(bean, df);
+  }
+
+  @Test
+  public void testCreateDataFromFromList() {
+    StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
+    List<Row> rows = Arrays.asList(RowFactory.create(0));
+    DataFrame df = context.createDataFrame(rows, schema);
+    Row[] result = df.collect();
+    Assert.assertEquals(1, result.length);
   }
 
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
