@@ -14,6 +14,7 @@ import os
 import socket
 import sys
 import time
+import traceback
 
 from flask._compat import PY2
 from flask import (
@@ -715,7 +716,13 @@ class Airflow(BaseView):
 
     @app.errorhandler(404)
     def circles(self):
-        return render_template('airflow/circles.html'), 404
+        return render_template(
+            'airflow/circles.html', hostname=socket.gethostname()), 404
+
+    @app.errorhandler(500)
+    def show_traceback(self):
+        return render_template(
+            'airflow/traceback.html', info=traceback.format_exc()), 500
 
     @expose('/sandbox')
     @login_required
@@ -1062,18 +1069,20 @@ class Airflow(BaseView):
                 base_date = datetime.now()
         else:
             base_date = dateutil.parser.parse(base_date)
-        base_date = utils.round_time(base_date, dag.schedule_interval)
-        form = TreeForm(data={'base_date': base_date, 'num_runs': num_runs})
 
         start_date = dag.start_date
         if not start_date and 'start_date' in dag.default_args:
             start_date = dag.default_args['start_date']
 
-        if start_date:
-            base_date = utils.round_time(base_date, dag.schedule_interval, start_date)
-        else:
-            base_date = utils.round_time(base_date, dag.schedule_interval)
+        # if a specific base_date is requested, don't round it
+        if not request.args.get('base_date'):
+            if start_date:
+                base_date = utils.round_time(
+                    base_date, dag.schedule_interval, start_date)
+            else:
+                base_date = utils.round_time(base_date, dag.schedule_interval)
 
+        form = TreeForm(data={'base_date': base_date, 'num_runs': num_runs})
 
         from_date = (base_date - (num_runs * dag.schedule_interval))
 

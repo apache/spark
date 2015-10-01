@@ -3,6 +3,7 @@ import imp
 import inspect
 import logging
 import os
+import sys
 from itertools import chain
 merge = chain.from_iterable
 
@@ -31,6 +32,9 @@ plugins_folder = conf.get('core', 'plugins_folder')
 if not plugins_folder:
     plugins_folder = conf.get('core', 'airflow_home') + '/plugins'
 plugins_folder = os.path.expanduser(plugins_folder)
+
+if plugins_folder not in sys.path:
+    sys.path.append(plugins_folder)
 
 plugins = []
 
