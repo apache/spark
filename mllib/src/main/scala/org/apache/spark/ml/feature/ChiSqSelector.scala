@@ -55,7 +55,8 @@ private[feature] trait ChiSqSelectorParams extends Params
 
 /**
  * :: Experimental ::
- * Compute the Chi-Square selector model given an `RDD` of `LabeledPoint` data.
+ * Chi-Squared feature selection, which selects categorical features to use for predicting a
+ * categorical label.
  */
 @Experimental
 final class ChiSqSelector(override val uid: String)
@@ -110,9 +111,12 @@ final class ChiSqSelectorModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
   override def transform(dataset: DataFrame): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
-    val newField = prepOutputField(dataset.schema)
+    val transformedSchema = transformSchema(dataset.schema, logging = true)
+    val newField = transformedSchema.last
     val selector = udf { chiSqSelector.transform _ }
     dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
   }
@@ -140,6 +144,7 @@ final class ChiSqSelectorModel private[ml] (
   }
 
   override def copy(extra: ParamMap): ChiSqSelectorModel = {
-    defaultCopy[ChiSqSelectorModel](extra).setParent(parent)
+    val copied = new ChiSqSelectorModel(uid, chiSqSelector)
+    copyValues(copied, extra).setParent(parent)
   }
 }

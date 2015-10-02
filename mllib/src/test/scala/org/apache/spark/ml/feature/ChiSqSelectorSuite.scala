@@ -26,7 +26,7 @@ import org.apache.spark.sql.{Row, SQLContext}
 
 class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("Test Chi-Square selector") {
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = SQLContext.getOrCreate(sc)
     import sqlContext.implicits._
 
     val data = Seq(
@@ -51,9 +51,9 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setNumTopFeatures(1)
       .setFeaturesCol("data")
       .setLabelCol("label")
-      .setOutputCol("expected")
+      .setOutputCol("filtered")
 
-    model.fit(df).transform(df).select("expected", "preFilteredData").collect().foreach {
+    model.fit(df).transform(df).select("filtered", "preFilteredData").collect().foreach {
       case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 ~== vec2 absTol 1e-1)
     }
