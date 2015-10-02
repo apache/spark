@@ -60,7 +60,6 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
 
       case _ =>
         printUsageAndExit(1)
-
     }
   }
 
