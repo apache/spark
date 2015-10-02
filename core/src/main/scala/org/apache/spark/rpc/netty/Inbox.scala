@@ -129,7 +129,9 @@ private[netty] class Inbox(
             endpoint.onStart()
             if (!endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
               inbox.synchronized {
-                enableConcurrent = true
+                if (!stopped) {
+                  enableConcurrent = true
+                }
               }
             }
           }
