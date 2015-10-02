@@ -713,8 +713,8 @@ class SQLTests(ReusedPySparkTestCase):
         from pyspark.sql.types import StructType, StringType, StructField
         schema = StructType([StructField("f1", StringType(), True, None),
                              StructField("f2", StringType(), True, {'a': None})])
-        rdd = self.sc.parallelize([['a', 'b'],['c', 'd']])
-        self.sqlCtx.createDataFrame(rdd,schema)
+        rdd = self.sc.parallelize([["a", "b"], ["c", "d"]])
+        self.sqlCtx.createDataFrame(rdd, schema)
 
     def test_save_and_load(self):
         df = self.df
