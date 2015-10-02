@@ -38,9 +38,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def start(time: Time) {
     this.synchronized {
-      if (zeroTime != null) {
-        throw new Exception("DStream graph computation already started")
-      }
+      require(zeroTime == null, "DStream graph computation already started")
       zeroTime = time
       startTime = time
       outputStreams.foreach(_.initialize(zeroTime))
