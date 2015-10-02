@@ -59,7 +59,7 @@ will run the Pi example locally.
 
 You can set the MASTER environment variable when running examples to submit
 examples to a cluster. This can be a mesos:// or spark:// URL,
-"yarn-cluster" or "yarn-client" to run on YARN, and "local" to run
+"yarn" to run on YARN, and "local" to run
 locally with one thread, or "local[N]" to run locally with N threads. You
 can also use an abbreviated class name if the class is in the `examples`
 package. For instance:
