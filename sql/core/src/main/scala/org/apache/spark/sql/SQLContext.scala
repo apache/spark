@@ -1219,8 +1219,9 @@ object SQLContext {
       val ctx = instantiatedContext.get()
       if (ctx == null) {
         new SQLContext(sparkContext)
+      } else {
+        ctx
       }
-      ctx
     }
   }
 
