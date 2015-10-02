@@ -36,27 +36,31 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       conf.set("spark.history.fs.logDirectory", args.head)
       System.setProperty("spark.history.fs.logDirectory", args.head )
     } else {
-      args match {
-        case ("--dir" | "-d") :: value :: tail =>
-          logWarning("Setting log directory through the command line is deprecated as of " +
-            "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
-          conf.set("spark.history.fs.logDirectory", value)
-          System.setProperty("spark.history.fs.logDirectory", value)
-          parse(tail)
+      parseOtherArgs(args)
+    }
+  }
 
-        case ("--help" | "-h") :: tail =>
-          printUsageAndExit(0)
+  private def parseOtherArgs(args: List[String]): Unit = {
+    args match {
+      case ("--dir" | "-d") :: value :: tail =>
+        logWarning("Setting log directory through the command line is deprecated as of " +
+          "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
+        conf.set("spark.history.fs.logDirectory", value)
+        System.setProperty("spark.history.fs.logDirectory", value)
+        parse(tail)
 
-        case ("--properties-file") :: value :: tail =>
-          propertiesFile = value
-          parse(tail)
+      case ("--help" | "-h") :: tail =>
+        printUsageAndExit(0)
 
-        case Nil =>
+      case ("--properties-file") :: value :: tail =>
+        propertiesFile = value
+        parse(tail)
 
-        case _ =>
-          printUsageAndExit(1)
+      case Nil =>
 
-      }
+      case _ =>
+        printUsageAndExit(1)
+
     }
   }
 

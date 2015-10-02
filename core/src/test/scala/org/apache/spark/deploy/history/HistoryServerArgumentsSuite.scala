@@ -42,30 +42,25 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
   test("Directory Arguments Parsing --dir or -d") {
     val argStrings = Array("--dir", "src/test/resources/spark-events1")
     val hsa = new HistoryServerArguments(conf, argStrings)
-    assert(conf.get("spark.history.fs.logDirectory").equals("src/test/resources/spark-events1"))
+    assert(conf.get("spark.history.fs.logDirectory") === "src/test/resources/spark-events1")
   }
 
   test("Directory Param can also be set directly") {
     val argStrings = Array("src/test/resources/spark-events2")
     val hsa = new HistoryServerArguments(conf, argStrings)
-    assert(conf.get("spark.history.fs.logDirectory").equals("src/test/resources/spark-events2"))
+    assert(conf.get("spark.history.fs.logDirectory") === "src/test/resources/spark-events2")
   }
 
   test("Properties File Arguments Parsing --properties-file") {
     val tmpDir = Utils.createTempDir()
     val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
-    val argStrings = Array("--properties-file", outFile.getAbsolutePath)
     try {
-      System.setProperty("spark.test.DefaultPropertyB", "1")
-      Files.write("spark.test.CustomPropertyA true\n" +
-        "spark.test.DefaultPropertyB 3\n", outFile, UTF_8)
-      val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
-      properties
-        .filter { case (k, v) => k.startsWith("spark.")}
-        .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
+      Files.write("spark.test.CustomPropertyA blah\n" +
+        "spark.test.CustomPropertyB notblah\n", outFile, UTF_8)
+      val argStrings = Array("--properties-file", outFile.getAbsolutePath)
       val hsa = new HistoryServerArguments(conf, argStrings)
-      assert(conf.getBoolean("spark.test.CustomPropertyA", false))
-      assert(conf.getInt("spark.test.DefaultPropertyB", 1) === 3)
+      assert(conf.get("spark.test.CustomPropertyA") === "blah")
+      assert(conf.get("spark.test.CustomPropertyB") === "notblah")
     } finally {
       Utils.deleteRecursively(tmpDir)
     }
