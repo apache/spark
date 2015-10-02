@@ -83,22 +83,23 @@ private[sql] object ParquetFilters {
     private val f: (T) => U = wrapperScalaUDPForParquet(dataType,
       udf.asInstanceOf[(Any) => Any]).asInstanceOf[(T) => U]
 
-    override def keep(value: T): Boolean = {
-      val cmp = f(value).compareTo(valueToCompare)
-      mode match {
+    private val compare = mode match {
         case ParquetPushDownUDP.EQ =>
-          cmp == 0
+          (x: T) => f(x).compareTo(valueToCompare) == 0
         case ParquetPushDownUDP.NOT_EQ =>
-          cmp != 0
+          (x: T) => f(x).compareTo(valueToCompare) != 0
         case ParquetPushDownUDP.LT =>
-          cmp < 0
+          (x: T) => f(x).compareTo(valueToCompare) < 0
         case ParquetPushDownUDP.LT_EQ =>
-          cmp <= 0
+          (x: T) => f(x).compareTo(valueToCompare) <= 0
         case ParquetPushDownUDP.GT =>
-          cmp > 0
+          (x: T) => f(x).compareTo(valueToCompare) > 0
         case ParquetPushDownUDP.GT_EQ =>
-          cmp >= 0
-      }
+          (x: T) => f(x).compareTo(valueToCompare) >= 0
+    }
+
+    override def keep(value: T): Boolean = {
+      compare(value)
     }
 
     override def canDrop(statistics: Statistics[T]): Boolean = false
