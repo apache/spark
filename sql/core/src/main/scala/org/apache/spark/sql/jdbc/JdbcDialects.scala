@@ -290,23 +290,27 @@ case object MsSqlServerDialect extends JdbcDialect {
 }
 
 /**
-* :: DeveloperApi ::
-* Default Apache Derby dialect, mapping real on read and string/byte/boolean on write.
-*/
+ * :: DeveloperApi ::
+ * Default Apache Derby dialect, mapping real on read
+ * and string/byte/short/boolean/decimal on write.
+ */
 @DeveloperApi
 case object DerbyDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:derby")
   override def getCatalystType(
     sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) {
-      Some(FloatType)
+         Some(FloatType)
     } else None
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
     case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
+    // 31 is the maximum precision and 5 is the default scale for a Derby DECIMAL
+    case _: DecimalType => Some(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
     case _ => None
   }
 
