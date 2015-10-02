@@ -81,7 +81,14 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NCLOB         => StringType
       case java.sql.Types.NULL          => null
       case java.sql.Types.NUMERIC
-        if precision != 0 || scale != 0 => DecimalType.bounded(precision, scale)
+        // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
+        // object returned by ResultSet.getBigDecimal may not be correctly matched to the precision
+        // and the scale of the reported schema. It may cause a problem like: a BigDecimal object
+        // representing 19999 with precision 5 and scale 0 for a column with schema of precision
+        // 5 and scale 2. If we use the reported precision and scale and create Decimal object
+        // later, Decimal class will raise "Overflowed precision" error because actually we create
+        // a Decimal(7, 2) for 19999.99. To solve that, we add scale to the precision here.
+        if precision != 0 || scale != 0 => DecimalType.bounded(precision + scale, scale)
       case java.sql.Types.NUMERIC       => DecimalType.SYSTEM_DEFAULT
       case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
