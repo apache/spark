@@ -78,6 +78,12 @@ object MimaExcludes {
           "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.regression.LeastSquaresCostFun.this")
+      ) ++ Seq(
+        // New methods introduced in SPARK-8398 that expose hadoop Configuration
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.saveAsTextFile"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.saveAsObjectFile")
       )
     case v if v.startsWith("1.5") =>
       Seq(
@@ -90,11 +96,6 @@ object MimaExcludes {
         // JavaRDDLike is not meant to be extended by user programs
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.api.java.JavaRDDLike.partitioner"),
-        // New methods introduced in SPARK-8398 that expose hadoop Configuration                                                                                            
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.api.java.JavaRDDLike.saveAsTextFile"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.api.java.JavaRDDLike.saveAsObjectFile"),
         // Modification of private static method
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "org.apache.spark.streaming.kafka.KafkaUtils.org$apache$spark$streaming$kafka$KafkaUtils$$leadersForRanges"),
