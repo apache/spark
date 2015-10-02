@@ -550,7 +550,10 @@ class SparseMatrix @Since("1.3.0") (
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => toBreeze == m.toBreeze
+    case m: Matrix =>
+      val thisIteratorSet = toBreeze.activeIterator.toSet
+      val mIteratorSet = m.toBreeze.activeIterator.toSet.filter(p => p._2 != 0.0)
+      thisIteratorSet == mIteratorSet
     case _ => false
   }
 
