@@ -135,4 +135,11 @@ class AnalysisSuite extends AnalysisTest {
     plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
     checkAnalysis(plan, plan)
   }
+
+  test("SPARK-8654: invalid CAST in NULL IN(...) expression") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(2))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisSuccess(plan, false)
+  }
 }

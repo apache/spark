@@ -305,11 +305,16 @@ object HiveTypeCoercion {
 
   /**
    * Convert all expressions in in() list to the left operator type
+   * except when the left operator type is NullType. In case when left hand
+   * operator type is NullType create a Literal(Null).
    */
   object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
+
+      case i @ In(a, b) if (a.dataType == NullType) =>
+        Literal.create(null, BooleanType)
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
