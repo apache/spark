@@ -329,7 +329,7 @@ private[deploy] class Worker(
         registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(
           new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
-              Option(self).foreach(_.send(ReregisterWithMaster))
+              self.send(ReregisterWithMaster)
             }
           },
           INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,

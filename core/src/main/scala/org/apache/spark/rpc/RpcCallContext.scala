@@ -37,5 +37,5 @@ private[spark] trait RpcCallContext {
   /**
    * The sender of this message.
    */
-  def senderAddress: RpcAddress
+  def sender: RpcEndpointRef
 }
