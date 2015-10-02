@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kinesis
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
@@ -67,15 +68,15 @@ class KinesisBackedBlockRDDPartition(
  * sequence numbers of the corresponding blocks.
  */
 private[kinesis]
-class KinesisBackedBlockRDD[T](
+class KinesisBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
     val regionName: String,
     val endpointUrl: String,
-    val messageHandler: Record => T,
     @transient blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
+    val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
     val awsCredentialsOption: Option[SerializableAWSCredentials] = None
   ) extends BlockRDD[T](sc, blockIds) {
 

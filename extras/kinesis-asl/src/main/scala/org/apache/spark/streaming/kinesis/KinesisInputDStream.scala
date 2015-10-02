@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.kinesis
 
+import scala.reflect.ClassTag
+
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
 
@@ -27,7 +29,7 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 
-private[kinesis] class KinesisInputDStream[T](
+private[kinesis] class KinesisInputDStream[T: ClassTag](
     @transient _ssc: StreamingContext,
     streamName: String,
     endpointUrl: String,
@@ -55,9 +57,10 @@ private[kinesis] class KinesisInputDStream[T](
       logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.length} " +
           s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
       new KinesisBackedBlockRDD(
-        context.sc, regionName, endpointUrl, messageHandler, blockIds, seqNumRanges,
+        context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
         isBlockIdValid = isBlockIdValid,
         retryTimeoutMs = ssc.graph.batchDuration.milliseconds.toInt,
+        messageHandler = messageHandler,
         awsCredentialsOption = awsCredentialsOption)
     } else {
       logWarning("Kinesis sequence number information was not present with some block metadata," +

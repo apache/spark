@@ -73,22 +73,22 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
 
   testIfEnabled("Basic reading from Kinesis") {
     // Verify all data using multiple ranges in a single RDD partition
-    val receivedData1 = new KinesisBackedBlockRDD(sc, testUtils.regionName, testUtils.endpointUrl,
-      fakeBlockIds(1),
+    val receivedData1 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
+      testUtils.endpointUrl, fakeBlockIds(1),
       Array(SequenceNumberRanges(allRanges.toArray))
     ).map { bytes => new String(bytes).toInt }.collect()
     assert(receivedData1.toSet === testData.toSet)
 
     // Verify all data using one range in each of the multiple RDD partitions
-    val receivedData2 = new KinesisBackedBlockRDD(sc, testUtils.regionName, testUtils.endpointUrl,
-      fakeBlockIds(allRanges.size),
+    val receivedData2 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
+      testUtils.endpointUrl, fakeBlockIds(allRanges.size),
       allRanges.map { range => SequenceNumberRanges(Array(range)) }.toArray
     ).map { bytes => new String(bytes).toInt }.collect()
     assert(receivedData2.toSet === testData.toSet)
 
     // Verify ordering within each partition
-    val receivedData3 = new KinesisBackedBlockRDD(sc, testUtils.regionName, testUtils.endpointUrl,
-      fakeBlockIds(allRanges.size),
+    val receivedData3 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
+      testUtils.endpointUrl, fakeBlockIds(allRanges.size),
       allRanges.map { range => SequenceNumberRanges(Array(range)) }.toArray
     ).map { bytes => new String(bytes).toInt }.collectPartitions()
     assert(receivedData3.length === allRanges.size)
@@ -209,7 +209,7 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
       }, "Incorrect configuration of RDD, unexpected ranges set"
     )
 
-    val rdd = new KinesisBackedBlockRDD(
+    val rdd = new KinesisBackedBlockRDD[Array[Byte]](
       sc, testUtils.regionName, testUtils.endpointUrl, blockIds, ranges)
     val collectedData = rdd.map { bytes =>
       new String(bytes).toInt
@@ -223,7 +223,7 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
     if (testIsBlockValid) {
       require(numPartitionsInBM === numPartitions, "All partitions must be in BlockManager")
       require(numPartitionsInKinesis === 0, "No partitions must be in Kinesis")
-      val rdd2 = new KinesisBackedBlockRDD(
+      val rdd2 = new KinesisBackedBlockRDD[Array[Byte]](
         sc, testUtils.regionName, testUtils.endpointUrl, blockIds.toArray, ranges,
         isBlockIdValid = Array.fill(blockIds.length)(false))
       intercept[SparkException] {
