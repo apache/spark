@@ -68,20 +68,16 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def setBatchDuration(duration: Duration) {
     this.synchronized {
-      if (batchDuration != null) {
-        throw new Exception("Batch duration already set as " + batchDuration +
-          ". cannot set it again.")
-      }
+      require(batchDuration == null,
+        s"Batch duration already set as $batchDuration. Cannot set it again.")
       batchDuration = duration
     }
   }
 
   def remember(duration: Duration) {
     this.synchronized {
-      if (rememberDuration != null) {
-        throw new Exception("Remember duration already set as " + rememberDuration +
-          ". cannot set it again.")
-      }
+      require(rememberDuration == null,
+        s"Remember duration already set as $rememberDuration. Cannot set it again.")
       rememberDuration = duration
     }
   }
