@@ -1080,6 +1080,10 @@ setMethod("subset", signature(x = "DataFrame"),
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
             if (length(col) > 1) {
+              if (length(list(...)) > 0) {
+                stop("To select multiple columns, use a character vector or list for col")
+              }
+
               select(x, as.list(col))
             } else {
               sdf <- callJMethod(x@sdf, "select", col, list(...))
