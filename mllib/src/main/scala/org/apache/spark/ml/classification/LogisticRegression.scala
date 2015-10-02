@@ -264,9 +264,12 @@ class LogisticRegression(override val uid: String)
   }
 
   override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
-    val instances = extractLabeledPoints(dataset).map {
-      case LabeledPoint(label: Double, features: Vector) => (label, features)
+    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val instances = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
+      case Row(label: Double, weight: Double, features: Vector) =>
+        Instance(label, weight, features)
     }
+
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
