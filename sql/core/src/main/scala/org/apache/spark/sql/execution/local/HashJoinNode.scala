@@ -24,6 +24,14 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
+ * A node for inner hash equi-join. It can be used individually or wrapped by other
+ * inner hash equi-join nodes such as [[BinarydHashJoinNode]]. This node takes a already
+ * built [[HashedRelation]] and a [[LocalNode]] representing the streamed side.
+ * If this node is used individually, `isWrapped` should be set to false.
+ * If this node is wrapped in another node, `isWrapped` should be set to true
+ * and the node wrapping this node should call `prepare`, `open`, and `close` on
+ * the `streamedNode`.
+ *
  * Much of this code is similar to [[org.apache.spark.sql.execution.joins.HashJoin]].
  */
 case class HashJoinNode(
@@ -32,7 +40,8 @@ case class HashJoinNode(
     streamedNode: LocalNode,
     buildSide: BuildSide,
     buildOutput: Seq[Attribute],
-    hashedRelation: HashedRelation) extends UnaryLocalNode(conf) {
+    hashedRelation: HashedRelation,
+    isWrapped: Boolean) extends UnaryLocalNode(conf) {
 
   override val child = streamedNode
 
@@ -55,7 +64,6 @@ case class HashJoinNode(
   private[this] val hashed: HashedRelation = hashedRelation
   private[this] var joinKeys: Projection = _
 
-
   private[this] def isUnsafeMode: Boolean = {
     (codegenEnabled && unsafeEnabled && UnsafeProjection.canSupport(schema))
   }
@@ -68,8 +76,18 @@ case class HashJoinNode(
     }
   }
 
+  override def prepare(): Unit = {
+    if (!isWrapped) {
+      // This node is used individually, we should propagate prepare call.
+      super.prepare()
+    }
+  }
+
   override def open(): Unit = {
-    streamedNode.open()
+    if (!isWrapped) {
+      // This node is used individually, we should propagate open call.
+      streamedNode.open()
+    }
     joinRow = new JoinedRow
     resultProjection = {
       if (isUnsafeMode) {
@@ -123,6 +141,9 @@ case class HashJoinNode(
   }
 
   override def close(): Unit = {
-    streamedNode.close()
+    if (!isWrapped) {
+      // This node is used individually, we should propagate close call.
+      streamedNode.close()
+    }
   }
 }

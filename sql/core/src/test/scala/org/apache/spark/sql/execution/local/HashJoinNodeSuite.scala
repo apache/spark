@@ -21,9 +21,10 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Expression}
 import org.apache.spark.sql.execution.joins.{HashedRelation, BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.test.SharedSQLContext
 
 
-class HashJoinNodeSuite extends LocalNodeTest {
+class HashJoinNodeSuite extends LocalNodeTest with SharedSQLContext {
 
   // Test all combinations of the two dimensions: with/out unsafe and build sides
   private val maybeUnsafeAndCodegen = Seq(false, true)
@@ -86,7 +87,12 @@ class HashJoinNodeSuite extends LocalNodeTest {
       val rightInputMap = rightInput.toMap
       val leftNode = new DummyNode(joinNameAttributes, leftInput)
       val rightNode = new DummyNode(joinNicknameAttributes, rightInput)
-      val makeNode = (node1: LocalNode, node2: LocalNode) => {
+      val makeBinaryHashJoinNode = (node1: LocalNode, node2: LocalNode) => {
+        val binaryHashJoinNode =
+          BinarydHashJoinNode(conf, Seq('id1), Seq('id2), buildSide, node1, node2)
+        resolveExpressions(binaryHashJoinNode)
+      }
+      val makeBroadcastJoinNode = (node1: LocalNode, node2: LocalNode) => {
         val leftKeys = Seq('id1.attr)
         val rightKeys = Seq('id2.attr)
         // Figure out the build side and stream side.
@@ -98,28 +104,33 @@ class HashJoinNodeSuite extends LocalNodeTest {
         val resolvedBuildNode = resolveExpressions(buildNode)
         val resolvedBuildKeys = resolveExpressions(buildKeys, resolvedBuildNode)
         val hashedRelation = buildHashedRelation(conf, resolvedBuildKeys, resolvedBuildNode)
+        val broadcastHashedRelation = sqlContext.sparkContext.broadcast(hashedRelation)
 
-        // Build the HashJoinNode.
         val hashJoinNode =
-          HashJoinNode(
+          BroadcastHashJoinNode(
             conf,
             streamedKeys,
             streamedNode,
             buildSide,
             resolvedBuildNode.output,
-            hashedRelation)
+            broadcastHashedRelation)
         resolveExpressions(hashJoinNode)
       }
-      val makeUnsafeNode = if (unsafeAndCodegen) wrapForUnsafe(makeNode) else makeNode
-      val hashJoinNode = makeUnsafeNode(leftNode, rightNode)
+
       val expectedOutput = leftInput
         .filter { case (k, _) => rightInputMap.contains(k) }
         .map { case (k, v) => (k, v, k, rightInputMap(k)) }
-      val actualOutput = hashJoinNode.collect().map { row =>
-        // (id, name, id, nickname)
-        (row.getInt(0), row.getString(1), row.getInt(2), row.getString(3))
+
+      Seq(makeBinaryHashJoinNode, makeBroadcastJoinNode).foreach { makeNode =>
+        val makeUnsafeNode = if (unsafeAndCodegen) wrapForUnsafe(makeNode) else makeNode
+        val hashJoinNode = makeUnsafeNode(leftNode, rightNode)
+
+        val actualOutput = hashJoinNode.collect().map { row =>
+          // (id, name, id, nickname)
+          (row.getInt(0), row.getString(1), row.getInt(2), row.getString(3))
+        }
+        assert(actualOutput === expectedOutput)
       }
-      assert(actualOutput === expectedOutput)
     }
 
     test(s"$testNamePrefix: empty") {
