@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.kinesis;
 
+import com.amazonaws.services.kinesis.model.Record;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
@@ -33,8 +35,25 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
   public void testKinesisStream() {
     // Tests the API, does not actually test data receiving
     JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
-        "https://kinesis.us-west-2.amazonaws.com", new Duration(2000), 
+        "https://kinesis.us-west-2.amazonaws.com", new Duration(2000),
         InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2());
+
+    ssc.stop();
+  }
+
+  @Test
+  public void testCustomHandler() {
+    Function<Record, Integer> handler = new Function<Record, Integer>() {
+      @Override
+      public Integer call(Record record) throws Exception {
+        return Integer.parseInt(new String(record.getData().array()));
+      }
+    };
+
+    // Tests the API, does not actually test data receiving
+    JavaDStream<Integer> kinesisStream = KinesisUtils.createStream(ssc, "testApp", "mySparkStream",
+        "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
+        new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), handler, Integer.class);
     
     ssc.stop();
   }
