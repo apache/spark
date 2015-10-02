@@ -434,7 +434,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         val setNull = dt match {
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
             // Can't call setNullAt() for DecimalType with precision larger than 18.
-            s"$rowWriter.write($index, null, 0, 0);"
+            s"$rowWriter.write($index, null, ${t.precision}, ${t.scale});"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
@@ -455,7 +455,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               final int $tmpCursor = $bufferHolder.cursor;
               ${writeArrayToBuffer(ctx, input.primitive, et, bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
-              $rowWriter.alignWords($bufferHolder.cursor - $tmpCursor);
+              $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
             """
 
           case m @ MapType(kt, vt, _) =>
@@ -465,7 +465,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               final int $tmpCursor = $bufferHolder.cursor;
               ${writeMapToBuffer(ctx, input.primitive, kt, vt, bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
-              $rowWriter.alignWords($bufferHolder.cursor - $tmpCursor);
+              $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
             """
 
           case _ if ctx.isPrimitiveType(dt) =>
@@ -597,9 +597,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val values = ctx.freshName("values")
     val tmpCursor = ctx.freshName("tmpCursor")
 
+
+    // Writes out unsafe map according to the format described in `UnsafeMapData`.
     s"""
       final ArrayData $keys = $input.keyArray();
       final ArrayData $values = $input.valueArray();
+
+      $bufferHolder.grow(8);
 
       // Write the numElements into first 4 bytes.
       Platform.putInt($bufferHolder.buffer, $bufferHolder.cursor, $keys.numElements());
@@ -655,12 +659,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val result = ctx.freshName("result")
     ctx.addMutableState("UnsafeRow", result, s"this.$result = new UnsafeRow();")
     val bufferHolder = ctx.freshName("bufferHolder")
-    val holderClass = classOf[GlobalBufferHolder].getName
+    val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, bufferHolder, s"this.$bufferHolder = new $holderClass();")
 
     val code =
       s"""
-        $bufferHolder.initialize();
+        $bufferHolder.reset();
         ${writeExpressionsToBuffer(ctx, "i", exprEvals, exprTypes, bufferHolder)}
         $result.pointTo($bufferHolder.buffer, ${expressions.length}, $bufferHolder.totalSize());
       """

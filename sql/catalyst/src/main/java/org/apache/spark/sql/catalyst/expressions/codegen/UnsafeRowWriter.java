@@ -31,12 +31,12 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public class UnsafeRowWriter {
 
-  private GlobalBufferHolder holder;
+  private BufferHolder holder;
   // The offset of the global buffer where we start to write this row.
   private int startingOffset;
   private int nullBitsSize;
 
-  public void initialize(GlobalBufferHolder holder, int numFields) {
+  public void initialize(BufferHolder holder, int numFields) {
     this.holder = holder;
     this.startingOffset = holder.cursor;
     this.nullBitsSize = UnsafeRow.calculateBitSetWidthInBytes(numFields);
@@ -79,33 +79,19 @@ public class UnsafeRowWriter {
     Platform.putLong(holder.buffer, fieldOffset, offsetAndSize);
   }
 
-  // Do word alignment for this row and return the number of bytes padded.
+  // Do word alignment for this row and grow the row buffer if needed.
   // todo: remove this after we make unsafe array data word align.
-  public void alignWords(int numBytes) {
+  public void alignToWords(int numBytes) {
     final int remainder = numBytes & 0x07;
 
     if (remainder > 0) {
       final int paddingBytes = 8 - remainder;
       holder.grow(paddingBytes);
 
-      final byte[] orignalValues = new byte[remainder];
-      Platform.copyMemory(
-        holder.buffer,
-        holder.cursor - remainder,
-        orignalValues,
-        Platform.BYTE_ARRAY_OFFSET,
-        remainder);
-
-      Platform.putLong(holder.buffer, holder.cursor - remainder, 0);
-
-      Platform.copyMemory(
-        orignalValues,
-        Platform.BYTE_ARRAY_OFFSET,
-        holder.buffer,
-        holder.cursor - remainder,
-        remainder);
-
-      holder.cursor += paddingBytes;
+      for (int i = 0; i < paddingBytes; i++) {
+        Platform.putByte(holder.buffer, holder.cursor, (byte) 0);
+        holder.cursor++;
+      }
     }
   }
 
@@ -133,8 +119,7 @@ public class UnsafeRowWriter {
     if (input == null || !input.changePrecision(precision, scale)) {
       BitSetMethods.set(holder.buffer, startingOffset, ordinal);
       // keep the offset for future update
-      final long relativeOffset = holder.cursor - startingOffset;
-      Platform.putLong(holder.buffer, getFieldOffset(ordinal), relativeOffset << 32);
+      setOffsetAndSize(ordinal, 0L);
     } else {
       final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
       assert bytes.length <= 16;
@@ -193,9 +178,7 @@ public class UnsafeRowWriter {
     Platform.putLong(holder.buffer, holder.cursor, input.months);
     Platform.putLong(holder.buffer, holder.cursor + 8, input.microseconds);
 
-    // Set the fixed length portion, we don't need size here because it's fixed as 16.
-    final long relativeOffset = holder.cursor - startingOffset;
-    Platform.putLong(holder.buffer, getFieldOffset(ordinal), relativeOffset << 32);
+    setOffsetAndSize(ordinal, 16);
 
     // move the cursor forward.
     holder.cursor += 16;
@@ -205,7 +188,7 @@ public class UnsafeRowWriter {
 
   // If this struct is already an UnsafeRow, we don't need to go through all fields, we can
   // directly write it.
-  public static void directWrite(GlobalBufferHolder holder, UnsafeRow input) {
+  public static void directWrite(BufferHolder holder, UnsafeRow input) {
     // No need to zero-out the bytes as UnsafeRow is word aligned for sure.
     final int numBytes = input.getSizeInBytes();
     // grow the global buffer before writing data.

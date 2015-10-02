@@ -29,12 +29,12 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public class UnsafeArrayWriter {
 
-  private GlobalBufferHolder holder;
+  private BufferHolder holder;
   // The offset of the global buffer where we start to write this array.
   private int startingOffset;
 
   public void initialize(
-      GlobalBufferHolder holder,
+      BufferHolder holder,
       int numElements,
       boolean needHeader,
       int fixedElementSize) {
@@ -156,7 +156,7 @@ public class UnsafeArrayWriter {
   // If this array is already an UnsafeArray, we don't need to go through all elements, we can
   // directly write it.
   public static void directWrite(
-      GlobalBufferHolder holder,
+      BufferHolder holder,
       UnsafeArrayData input,
       boolean needHeader) {
     final int numBytes = input.getSizeInBytes();

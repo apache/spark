@@ -233,8 +233,8 @@ public class UnsafeRowWriters {
 
     public static int write(UnsafeRow target, int ordinal, int cursor, UnsafeMapData input) {
       final long offset = target.getBaseOffset() + cursor;
-      final UnsafeArrayData keyArray = input.keys;
-      final UnsafeArrayData valueArray = input.values;
+      final UnsafeArrayData keyArray = input.keyArray();
+      final UnsafeArrayData valueArray = input.valueArray();
       final int keysNumBytes = keyArray.getSizeInBytes();
       final int valuesNumBytes = valueArray.getSizeInBytes();
       final int numBytes = 4 + 4 + keysNumBytes + valuesNumBytes;

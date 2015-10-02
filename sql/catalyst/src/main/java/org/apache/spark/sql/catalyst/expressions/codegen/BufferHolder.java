@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 import org.apache.spark.unsafe.Platform;
 
 /**
- * A helper class to manage the global row buffer used in `GenerateUnsafeProjection`.
+ * A helper class to manage the row buffer used in `GenerateUnsafeProjection`.
  *
  * Note that it is only used in `GenerateUnsafeProjection`, so it's safe to mark member variables
  * public for ease of use.
  */
-public class GlobalBufferHolder {
+public class BufferHolder {
   public byte[] buffer = new byte[64];
-  public int cursor = 0;
+  public int cursor = Platform.BYTE_ARRAY_OFFSET;
 
   public void grow(int neededSize) {
     final int length = totalSize() + neededSize;
@@ -44,7 +44,7 @@ public class GlobalBufferHolder {
     }
   }
 
-  public void initialize() {
+  public void reset() {
     cursor = Platform.BYTE_ARRAY_OFFSET;
   }
 
