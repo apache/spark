@@ -31,36 +31,33 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
 
   private def parse(args: List[String]): Unit = {
     if (args.length == 1) {
-      logWarning("Setting log directory through the command line is deprecated as of " +
-        "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
-      conf.set("spark.history.fs.logDirectory", args.head)
-      System.setProperty("spark.history.fs.logDirectory", args.head )
+      logWarningAndSet(args.head)
     } else {
-      parseOtherArgs(args)
+      args match {
+        case ("--dir" | "-d") :: value :: tail =>
+          logWarningAndSet(value)
+          parse(tail)
+
+        case ("--help" | "-h") :: tail =>
+          printUsageAndExit(0)
+
+        case ("--properties-file") :: value :: tail =>
+          propertiesFile = value
+          parse(tail)
+
+        case Nil =>
+
+        case _ =>
+          printUsageAndExit(1)
+      }
     }
   }
 
-  private def parseOtherArgs(args: List[String]): Unit = {
-    args match {
-      case ("--dir" | "-d") :: value :: tail =>
-        logWarning("Setting log directory through the command line is deprecated as of " +
-          "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
-        conf.set("spark.history.fs.logDirectory", value)
-        System.setProperty("spark.history.fs.logDirectory", value)
-        parse(tail)
-
-      case ("--help" | "-h") :: tail =>
-        printUsageAndExit(0)
-
-      case ("--properties-file") :: value :: tail =>
-        propertiesFile = value
-        parse(tail)
-
-      case Nil =>
-
-      case _ =>
-        printUsageAndExit(1)
-    }
+  private def logWarningAndSet(value: String): Unit = {
+    logWarning("Setting log directory through the command line is deprecated as of " +
+      "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
+    conf.set("spark.history.fs.logDirectory", value)
+    System.setProperty("spark.history.fs.logDirectory", value)
   }
 
    // This mutates the SparkConf, so all accesses to it must be made after this line
