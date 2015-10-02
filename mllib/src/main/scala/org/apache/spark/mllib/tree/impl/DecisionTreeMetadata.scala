@@ -71,7 +71,7 @@ private[spark] class DecisionTreeMetadata(
    * For ordered features, there is 1 more bin than split.
    */
   def numSplits(featureIndex: Int): Int = if (isUnordered(featureIndex)) {
-    numBins(featureIndex) >> 1
+    numBins(featureIndex) //>> 1
   } else {
     numBins(featureIndex) - 1
   }
@@ -140,6 +140,8 @@ private[spark] object DecisionTreeMetadata extends Logging {
     val unorderedFeatures = new mutable.HashSet[Int]()
     val numBins = Array.fill[Int](numFeatures)(maxPossibleBins)
     if (numClasses > 2) {
+      println("Multiclass")
+      println(strategy.categoricalFeaturesInfo)
       // Multiclass classification
       val maxCategoriesForUnorderedFeature =
         ((math.log(maxPossibleBins / 2 + 1) / math.log(2.0)) + 1).floor.toInt
@@ -151,6 +153,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
           //  which require 2 * ((1 << numCategories - 1) - 1) bins.
           // We do this check with log values to prevent overflows in case numCategories is large.
           // The next check is equivalent to: 2 * ((1 << numCategories - 1) - 1) <= maxBins
+          println(maxCategoriesForUnorderedFeature.toString+numCategories.toString+"[")
           if (numCategories <= maxCategoriesForUnorderedFeature) {
             unorderedFeatures.add(featureIndex)
             numBins(featureIndex) = numUnorderedBins(numCategories)
@@ -212,6 +215,6 @@ private[spark] object DecisionTreeMetadata extends Logging {
    * there are math.pow(2, arity - 1) - 1 such splits.
    * Each split has 2 corresponding bins.
    */
-  def numUnorderedBins(arity: Int): Int = 2 * ((1 << arity - 1) - 1)
+  def numUnorderedBins(arity: Int): Int = ((1 << arity - 1) - 1)
 
 }

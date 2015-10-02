@@ -81,6 +81,10 @@ private[ml] object RandomForest extends Logging {
       s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
     }.mkString("\n"))
 
+    println("*****************")
+    metadata.numBins.foreach(x => printf(x.toString + "/"))
+    println("*****************")
+
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, splits, metadata)
@@ -250,14 +254,22 @@ private[ml] object RandomForest extends Logging {
         val numSplits = agg.metadata.numSplits(featureIndex)
         val featureSplits = splits(featureIndex)
         var splitIndex = 0
+//        while (splitIndex < numSplits) {
+//          if (featureSplits(splitIndex).shouldGoLeft(featureValue, featureSplits)) {
+//            agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
+//          } else {
+//            agg.featureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
+//          }
+//          splitIndex += 1
+//        }
+
         while (splitIndex < numSplits) {
           if (featureSplits(splitIndex).shouldGoLeft(featureValue, featureSplits)) {
             agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
-          } else {
-            agg.featureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
           }
           splitIndex += 1
         }
+
       } else {
         // Ordered feature
         val binIndex = treePoint.binnedFeatures(featureIndex)
@@ -697,17 +709,39 @@ private[ml] object RandomForest extends Logging {
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
+
           val (leftChildOffset, rightChildOffset) =
             binAggregates.getLeftRightFeatureOffsets(featureIndexIdx)
-          val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { splitIndex =>
-              val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-              val rightChildStats =
-                binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
-              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
-                leftChildStats, rightChildStats, binAggregates.metadata)
-              (splitIndex, gainAndImpurityStats)
-            }.maxBy(_._2.gain)
+
+          // SETH
+          val leftSplits = Range(0, numSplits).map { splitIndex =>
+            binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
+          }
+          val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)
+          var splitIndex = 0
+          while (splitIndex < numSplits - 1) {
+            binAggregates.mergeForFeature(nodeFeatureOffset, splitIndex + 1, splitIndex)
+            splitIndex += 1
+          }
+
+          val (bestFeatureSplitIndex, bestFeatureGainStats) = leftSplits.map { leftChildStats =>
+            val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits - 1)
+            rightChildStats.subtract(leftChildStats)
+            gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
+              leftChildStats, rightChildStats, binAggregates.metadata)
+            (splitIndex, gainAndImpurityStats)
+          }.maxBy(_._2.gain)
+          // SETH
+
+//          val (bestFeatureSplitIndex, bestFeatureGainStats) =
+//            Range(0, numSplits).map { splitIndex =>
+//              val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
+//              val rightChildStats =
+//                binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
+//              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
+//                leftChildStats, rightChildStats, binAggregates.metadata)
+//              (splitIndex, gainAndImpurityStats)
+//            }.maxBy(_._2.gain)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else {
           // Ordered categorical feature

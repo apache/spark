@@ -164,4 +164,25 @@ private[spark] class DTStatsAggregator(
     }
     this
   }
+
+  def copy: DTStatsAggregator = {
+    val copyAggregator = new DTStatsAggregator(this.metadata, featureSubset)
+    copyAggregator.merge(this)
+  }
+
+  def totalsForFeature(featureIndex: Int): Array[Double] = {
+    val numBins = metadata.numSplits(featureIndex)
+    val featureOffset = featureOffsets(featureIndex)
+    var i = 0
+    val totals = Array.fill[Double](statsSize)(0.0)
+    while (i < numBins) {
+      var j = 0
+      while (j < statsSize) {
+        totals(j) += allStats(featureOffset + i*statsSize + j)
+        j +=1
+      }
+      i += 1
+    }
+    totals
+  }
 }
