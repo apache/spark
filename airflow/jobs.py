@@ -275,7 +275,6 @@ class SchedulerJob(BaseJob):
 
         if slas:
             sla_dates = [sla.execution_date for sla in slas]
-            logging.info(len(sla_dates))
             blocking_tis = (
                 session
                 .query(TI)
@@ -284,7 +283,6 @@ class SchedulerJob(BaseJob):
                 .filter(TI.dag_id == dag.dag_id)
                 .all()
             )
-            logging.info(len(blocking_tis))
             for ti in blocking_tis:
                     ti.task = dag.get_task(ti.task_id)
             blocking_tis = ([ti for ti in blocking_tis
