@@ -673,6 +673,10 @@ test_that("select with column", {
   expect_equal(columns(df3), c("x"))
   expect_equal(count(df3), 3)
   expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
+
+  df4 <- select(df, c("name", "age"))
+  expect_equal(columns(df4), c("name", "age"))
+  expect_equal(count(df4), 3)
 })
 
 test_that("subsetting", {
