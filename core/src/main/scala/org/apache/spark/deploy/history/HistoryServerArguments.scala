@@ -31,11 +31,11 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
 
   private def parse(args: List[String]): Unit = {
     if (args.length == 1) {
-      logWarningAndSet(args.head)
+      setLogDirectory(args.head)
     } else {
       args match {
         case ("--dir" | "-d") :: value :: tail =>
-          logWarningAndSet(value)
+          setLogDirectory(value)
           parse(tail)
 
         case ("--help" | "-h") :: tail =>
@@ -53,11 +53,10 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
     }
   }
 
-  private def logWarningAndSet(value: String): Unit = {
+  private def setLogDirectory(value: String): Unit = {
     logWarning("Setting log directory through the command line is deprecated as of " +
       "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
     conf.set("spark.history.fs.logDirectory", value)
-    System.setProperty("spark.history.fs.logDirectory", value)
   }
 
    // This mutates the SparkConf, so all accesses to it must be made after this line
