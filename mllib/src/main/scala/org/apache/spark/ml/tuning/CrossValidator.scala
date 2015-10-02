@@ -138,8 +138,8 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
  * Model from k-fold cross validation.
  *
  * @param bestModel The best model selected from k-fold cross validation.
- * @param avgMetrics Average cross-validation metrics for each paramMap in [[estimatorParamMaps]], in the
- *                   corresponding order.
+ * @param avgMetrics Average cross-validation metrics for each paramMap in
+ *                   [[estimatorParamMaps]], in the corresponding order.
  */
 @Experimental
 class CrossValidatorModel private[ml] (
