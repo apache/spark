@@ -983,3 +983,7 @@ setGeneric("glm")
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
+
+#' @rdname attach
+#' @export
+setGeneric("attach")
