@@ -84,18 +84,18 @@ private[sql] object ParquetFilters {
       udf.asInstanceOf[(Any) => Any]).asInstanceOf[(T) => U]
 
     private val compare = mode match {
-        case ParquetPushDownUDP.EQ =>
-          (x: T) => f(x).compareTo(valueToCompare) == 0
-        case ParquetPushDownUDP.NOT_EQ =>
-          (x: T) => f(x).compareTo(valueToCompare) != 0
-        case ParquetPushDownUDP.LT =>
-          (x: T) => f(x).compareTo(valueToCompare) < 0
-        case ParquetPushDownUDP.LT_EQ =>
-          (x: T) => f(x).compareTo(valueToCompare) <= 0
-        case ParquetPushDownUDP.GT =>
-          (x: T) => f(x).compareTo(valueToCompare) > 0
-        case ParquetPushDownUDP.GT_EQ =>
-          (x: T) => f(x).compareTo(valueToCompare) >= 0
+      case ParquetPushDownUDP.EQ =>
+        (x: T) => f(x).compareTo(valueToCompare) == 0
+      case ParquetPushDownUDP.NOT_EQ =>
+        (x: T) => f(x).compareTo(valueToCompare) != 0
+      case ParquetPushDownUDP.LT =>
+        (x: T) => f(x).compareTo(valueToCompare) < 0
+      case ParquetPushDownUDP.LT_EQ =>
+        (x: T) => f(x).compareTo(valueToCompare) <= 0
+      case ParquetPushDownUDP.GT =>
+        (x: T) => f(x).compareTo(valueToCompare) > 0
+      case ParquetPushDownUDP.GT_EQ =>
+        (x: T) => f(x).compareTo(valueToCompare) >= 0
     }
 
     override def keep(value: T): Boolean = {
