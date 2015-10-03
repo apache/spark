@@ -710,7 +710,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(Seq(tableName), df.logicalPlan)
+    catalog.registerTable(TableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -724,7 +724,7 @@ class SQLContext private[sql](
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))
-    catalog.unregisterTable(Seq(tableName))
+    catalog.unregisterTable(TableIdentifier(tableName))
   }
 
   /**
@@ -791,7 +791,7 @@ class SQLContext private[sql](
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
+    DataFrame(this, catalog.lookupRelation(tableIdent))
   }
 
   /**
