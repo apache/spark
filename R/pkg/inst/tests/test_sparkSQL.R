@@ -1332,7 +1332,6 @@ test_that("attach() on a DataFrame", {
   expect_error(age)
   attach(df)
   expect_output(age, "DataFrame[age:bigint]", fixed=T)
-  expect_equal(nrow(name), 3)
   detach()
   expect_error(age)
 })
