@@ -182,7 +182,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
           case None => Metadata.empty
         }
 
-        val isNullable = !notNull.isDefined
+        val isNullable = notNull.isEmpty
         StructField(columnName, typ, nullable = isNullable, meta)
     }
 }
