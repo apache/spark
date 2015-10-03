@@ -54,7 +54,7 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
     JavaDStream<Integer> kinesisStream = KinesisUtils.createStream(ssc, "testApp", "mySparkStream",
         "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
         new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), handler, Integer.class);
-    
+
     ssc.stop();
   }
 }
