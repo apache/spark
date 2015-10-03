@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.File
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -25,8 +24,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
-import org.scalatest.BeforeAndAfter
 
 class DDLScanSource extends RelationProvider {
   override def createRelation(
@@ -73,9 +70,8 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
   }
 }
 
-class DDLTestSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class DDLTestSuite extends DataSourceTest with SharedSQLContext {
   protected override lazy val sql = caseInsensitiveContext.sql _
-  private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -89,12 +85,6 @@ class DDLTestSuite extends DataSourceTest with SharedSQLContext with BeforeAndAf
       |  Table 'test1'
       |)
       """.stripMargin)
-
-    path = Utils.createTempDir()
-  }
-
-  after {
-    Utils.deleteRecursively(path)
   }
 
   sqlTest(
@@ -126,18 +116,21 @@ class DDLTestSuite extends DataSourceTest with SharedSQLContext with BeforeAndAf
   }
 
   test("SPARK-7012 Create table statement should support NOT NULL modifier for columns") {
-    sql(
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql(
       s"""
-        |CREATE TEMPORARY TABLE tempTableDDL
-        |( tCol1 INT NOT NULL,
-        |  tCol2 STRING
-        |)
-        |USING parquet
-        |OPTIONS (
-        |  path '${path.toString}'
-        |)
-      """.stripMargin
-    )
-    caseInsensitiveContext.dropTempTable("tempTableDDL")
+         |CREATE TEMPORARY TABLE tempTableDDL
+         |( tCol1 INT NOT NULL,
+         |  tCol2 STRING
+         |)
+         |USING parquet
+         |OPTIONS (
+         |  path '$path'
+         |)
+       """.stripMargin
+      )
+      caseInsensitiveContext.dropTempTable("tempTableDDL")
+    }
   }
 }

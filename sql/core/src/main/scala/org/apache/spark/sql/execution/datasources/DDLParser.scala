@@ -175,14 +175,14 @@ class DDLParser(parseQuery: String => LogicalPlan)
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ~ (NOT ~ NULL).? ~ (COMMENT ~> stringLit).?  ^^ {
-      case columnName ~ typ ~ setNotNullable ~ cm =>
+      case columnName ~ typ ~ notNull ~ cm =>
         val meta = cm match {
           case Some(comment) =>
             new MetadataBuilder().putString(COMMENT.str.toLowerCase, comment).build()
           case None => Metadata.empty
         }
 
-        val isNullable = !setNotNullable.isDefined
+        val isNullable = !notNull.isDefined
         StructField(columnName, typ, nullable = isNullable, meta)
     }
 }
