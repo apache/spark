@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.sql.types.ArrayData;
 import org.apache.spark.sql.types.MapData;
 
 /**
@@ -50,12 +49,12 @@ public class UnsafeMapData extends MapData {
   }
 
   @Override
-  public ArrayData keyArray() {
+  public UnsafeArrayData keyArray() {
     return keys;
   }
 
   @Override
-  public ArrayData valueArray() {
+  public UnsafeArrayData valueArray() {
     return values;
   }
 

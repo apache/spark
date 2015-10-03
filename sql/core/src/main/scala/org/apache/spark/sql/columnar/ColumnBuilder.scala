@@ -110,21 +110,29 @@ private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringCol
 
 private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
 
-private[sql] class FixedDecimalColumnBuilder(
+private[sql] class CompactDecimalColumnBuilder(
     precision: Int,
     scale: Int)
   extends NativeColumnBuilder(
-    new FixedDecimalColumnStats(precision, scale),
-    FIXED_DECIMAL(precision, scale))
+    new DecimalColumnStats(precision, scale),
+    COMPACT_DECIMAL(precision, scale))
 
-// TODO (lian) Add support for array, struct and map
-private[sql] class GenericColumnBuilder(dataType: DataType)
-  extends ComplexColumnBuilder(new GenericColumnStats(dataType), GENERIC(dataType))
+private[sql] class DecimalColumnBuilder(precision: Int, scale: Int)
+  extends ComplexColumnBuilder(new DecimalColumnStats(precision, scale),
+    DECIMAL(precision, scale))
 
-private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
+private[sql] class StructColumnBuilder(dataType: DataType)
+  extends ComplexColumnBuilder(new GenericColumnStats(dataType), STRUCT(dataType))
 
-private[sql] class TimestampColumnBuilder
-  extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
+private[sql] class ArrayColumnBuilder(dataType: DataType)
+  extends ComplexColumnBuilder(new GenericColumnStats(dataType), ARRAY(dataType))
+
+private[sql] class MapColumnBuilder(dataType: DataType)
+  extends ComplexColumnBuilder(new GenericColumnStats(dataType), MAP(dataType))
+
+private[sql] class NullColumnBuilder
+  extends BasicColumnBuilder[Any](new GenericColumnStats(NullType), NULL)
+  with NullableColumnBuilder
 
 private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
@@ -151,20 +159,25 @@ private[sql] object ColumnBuilder {
       columnName: String = "",
       useCompression: Boolean = false): ColumnBuilder = {
     val builder: ColumnBuilder = dataType match {
+      case NullType => new NullColumnBuilder
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
-      case IntegerType => new IntColumnBuilder
-      case DateType => new DateColumnBuilder
-      case LongType => new LongColumnBuilder
-      case TimestampType => new TimestampColumnBuilder
+      case IntegerType | DateType => new IntColumnBuilder
+      case LongType | TimestampType => new LongColumnBuilder
       case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder
       case BinaryType => new BinaryColumnBuilder
-      case DecimalType.Fixed(precision, scale) if precision < 19 =>
-        new FixedDecimalColumnBuilder(precision, scale)
-      case other => new GenericColumnBuilder(other)
+      case DecimalType.Fixed(precision, scale) if precision <= 18 =>
+        new CompactDecimalColumnBuilder(precision, scale)
+      case DecimalType.Fixed(precision, scale) =>
+        new DecimalColumnBuilder(precision, scale)
+      case struct: StructType => new StructColumnBuilder(struct)
+      case array: ArrayType => new ArrayColumnBuilder(array)
+      case map: MapType => new MapColumnBuilder(map)
+      case other =>
+        throw new Exception(s"not suppported type: $other")
     }
 
     builder.initialize(initialSize, columnName, useCompression)
