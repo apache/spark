@@ -68,11 +68,10 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       any[SerializerInstance],
       anyInt(),
       any[ShuffleWriteMetrics]
-    )).thenAnswer(new Answer[BlockObjectWriter] {
-      override def answer(invocation: InvocationOnMock): BlockObjectWriter = {
+    )).thenAnswer(new Answer[DiskBlockObjectWriter] {
+      override def answer(invocation: InvocationOnMock): DiskBlockObjectWriter = {
         val args = invocation.getArguments
         new DiskBlockObjectWriter(
-          args(0).asInstanceOf[BlockId],
           args(1).asInstanceOf[File],
           args(2).asInstanceOf[SerializerInstance],
           args(3).asInstanceOf[Int],

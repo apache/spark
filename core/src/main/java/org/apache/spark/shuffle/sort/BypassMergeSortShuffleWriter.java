@@ -75,7 +75,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
   private final Serializer serializer;
 
   /** Array of file writers, one for each partition */
-  private BlockObjectWriter[] partitionWriters;
+  private DiskBlockObjectWriter[] partitionWriters;
 
   public BypassMergeSortShuffleWriter(
       SparkConf conf,
@@ -101,7 +101,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
     }
     final SerializerInstance serInstance = serializer.newInstance();
     final long openStartTime = System.nanoTime();
-    partitionWriters = new BlockObjectWriter[numPartitions];
+    partitionWriters = new DiskBlockObjectWriter[numPartitions];
     for (int i = 0; i < numPartitions; i++) {
       final Tuple2<TempShuffleBlockId, File> tempShuffleBlockIdPlusFile =
         blockManager.diskBlockManager().createTempShuffleBlock();
@@ -121,7 +121,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
       partitionWriters[partitioner.getPartition(key)].write(key, record._2());
     }
 
-    for (BlockObjectWriter writer : partitionWriters) {
+    for (DiskBlockObjectWriter writer : partitionWriters) {
       writer.commitAndClose();
     }
   }
@@ -151,7 +151,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
         } finally {
           Closeables.close(in, copyThrewException);
         }
-        if (!blockManager.diskBlockManager().getFile(partitionWriters[i].blockId()).delete()) {
+        if (!partitionWriters[i].fileSegment().file().delete()) {
           logger.error("Unable to delete file for partition {}", i);
         }
       }
@@ -168,12 +168,11 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
   public void stop() throws IOException {
     if (partitionWriters != null) {
       try {
-        final DiskBlockManager diskBlockManager = blockManager.diskBlockManager();
-        for (BlockObjectWriter writer : partitionWriters) {
+        for (DiskBlockObjectWriter writer : partitionWriters) {
           // This method explicitly does _not_ throw exceptions:
-          writer.revertPartialWritesAndClose();
-          if (!diskBlockManager.getFile(writer.blockId()).delete()) {
-            logger.error("Error while deleting file for block {}", writer.blockId());
+          File file = writer.revertPartialWritesAndClose();
+          if (!file.delete()) {
+            logger.error("Error while deleting file {}", file.getAbsolutePath());
           }
         }
       } finally {

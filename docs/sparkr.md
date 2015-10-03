@@ -11,7 +11,8 @@ title: SparkR (R on Spark)
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R.
 In Spark {{site.SPARK_VERSION}}, SparkR provides a distributed data frame implementation that
 supports operations like selection, filtering, aggregation etc. (similar to R data frames,
-[dplyr](https://github.com/hadley/dplyr)) but on large datasets.
+[dplyr](https://github.com/hadley/dplyr)) but on large datasets. SparkR also supports distributed
+machine learning using MLlib.
 
 # SparkR DataFrames
 
@@ -27,9 +28,9 @@ All of the examples on this page use sample data included in R or the Spark dist
 <div data-lang="r"  markdown="1">
 The entry point into SparkR is the `SparkContext` which connects your R program to a Spark cluster.
 You can create a `SparkContext` using `sparkR.init` and pass in options such as the application name
-etc. Further, to work with DataFrames we will need a `SQLContext`, which can be created from the 
-SparkContext. If you are working from the SparkR shell, the `SQLContext` and `SparkContext` should
-already be created for you.
+, any spark packages depended on, etc. Further, to work with DataFrames we will need a `SQLContext`,
+which can be created from the  SparkContext. If you are working from the SparkR shell, the
+`SQLContext` and `SparkContext` should already be created for you.
 
 {% highlight r %}
 sc <- sparkR.init()
@@ -62,7 +63,16 @@ head(df)
 
 SparkR supports operating on a variety of data sources through the `DataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
-The general method for creating DataFrames from data sources is `read.df`. This method takes in the `SQLContext`, the path for the file to load and the type of data source. SparkR supports reading JSON and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [CSV](http://spark-packages.org/package/databricks/spark-csv) and [Avro](http://spark-packages.org/package/databricks/spark-avro).
+The general method for creating DataFrames from data sources is `read.df`. This method takes in the `SQLContext`, the path for the file to load and the type of data source. SparkR supports reading JSON and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [CSV](http://spark-packages.org/package/databricks/spark-csv) and [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
+specifying `--packages` with `spark-submit` or `sparkR` commands, or if creating context through `init`
+you can specify the packages with the `packages` argument.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+sc <- sparkR.init(sparkPackages="com.databricks:spark-csv_2.11:1.0.3")
+sqlContext <- sparkRSQL.init(sc)
+{% endhighlight %}
+</div>
 
 We can see how to use data sources using an example JSON input file. Note that the file that is used here is _not_ a typical JSON file. Each line in the file must contain a separate, self-contained valid JSON object. As a consequence, a regular multi-line JSON file will most often fail.
 
@@ -107,7 +117,7 @@ sql(hiveContext, "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 sql(hiveContext, "LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results <- hiveContext.sql("FROM src SELECT key, value")
+results <- sql(hiveContext, "FROM src SELECT key, value")
 
 # results is now a DataFrame
 head(results)
@@ -219,5 +229,39 @@ head(teenagers)
 ##    name
 ##1 Justin
 
+{% endhighlight %}
+</div>
+
+# Machine Learning
+
+SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', '+', and '-'. The example below shows the use of building a gaussian GLM model using SparkR.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Create the DataFrame
+df <- createDataFrame(sqlContext, iris)
+
+# Fit a linear model over the dataset.
+model <- glm(Sepal_Length ~ Sepal_Width + Species, data = df, family = "gaussian")
+
+# Model coefficients are returned in a similar format to R's native glm().
+summary(model)
+##$coefficients
+##                    Estimate
+##(Intercept)        2.2513930
+##Sepal_Width        0.8035609
+##Species_versicolor 1.4587432
+##Species_virginica  1.9468169
+
+# Make predictions based on the model.
+predictions <- predict(model, newData = df)
+head(select(predictions, "Sepal_Length", "prediction"))
+##  Sepal_Length prediction
+##1          5.1   5.063856
+##2          4.9   4.662076
+##3          4.7   4.822788
+##4          4.6   4.742432
+##5          5.0   5.144212
+##6          5.4   5.385281
 {% endhighlight %}
 </div>

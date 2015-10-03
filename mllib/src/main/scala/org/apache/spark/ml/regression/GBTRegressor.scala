@@ -33,6 +33,8 @@ import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, Loss
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: Experimental ::
@@ -126,11 +128,14 @@ final class GBTRegressor(override val uid: String)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val oldGBT = new OldGBT(boostingStrategy)
     val oldModel = oldGBT.run(oldDataset)
-    GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures)
+    GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
   }
+
+  override def copy(extra: ParamMap): GBTRegressor = defaultCopy(extra)
 }
 
 @Experimental
@@ -150,10 +155,11 @@ object GBTRegressor {
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
 @Experimental
-final class GBTRegressionModel(
+final class GBTRegressionModel private[ml](
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
-    private val _treeWeights: Array[Double])
+    private val _treeWeights: Array[Double],
+    override val numFeatures: Int)
   extends PredictionModel[Vector, GBTRegressionModel]
   with TreeEnsembleModel with Serializable {
 
@@ -161,25 +167,40 @@ final class GBTRegressionModel(
   require(_trees.length == _treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
     s" non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
+  /**
+   * Construct a GBTRegressionModel
+   * @param _trees  Decision trees in the ensemble.
+   * @param _treeWeights  Weights for the decision trees in the ensemble.
+   */
+  def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
+    this(uid, _trees, _treeWeights, -1)
+
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   override def treeWeights: Array[Double] = _treeWeights
 
+  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    val predictUDF = udf { (features: Any) =>
+      bcastModel.value.predict(features.asInstanceOf[Vector])
+    }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+  }
+
   override protected def predict(features: Vector): Double = {
-    // TODO: Override transform() to broadcast model. SPARK-7127
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predict(features))
-    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
-    if (prediction > 0.0) 1.0 else 0.0
+    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
+    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   override def copy(extra: ParamMap): GBTRegressionModel = {
-    copyValues(new GBTRegressionModel(uid, _trees, _treeWeights), extra)
+    copyValues(new GBTRegressionModel(uid, _trees, _treeWeights, numFeatures),
+      extra).setParent(parent)
   }
 
   override def toString: String = {
-    s"GBTRegressionModel with $numTrees trees"
+    s"GBTRegressionModel (uid=$uid) with $numTrees trees"
   }
 
   /** (private[ml]) Convert to a model in the old API */
@@ -194,7 +215,8 @@ private[ml] object GBTRegressionModel {
   def fromOld(
       oldModel: OldGBTModel,
       parent: GBTRegressor,
-      categoricalFeatures: Map[Int, Int]): GBTRegressionModel = {
+      categoricalFeatures: Map[Int, Int],
+      numFeatures: Int = -1): GBTRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTRegressionModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
@@ -202,6 +224,6 @@ private[ml] object GBTRegressionModel {
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtr")
-    new GBTRegressionModel(parent.uid, newTrees, oldModel.treeWeights)
+    new GBTRegressionModel(parent.uid, newTrees, oldModel.treeWeights, numFeatures)
   }
 }

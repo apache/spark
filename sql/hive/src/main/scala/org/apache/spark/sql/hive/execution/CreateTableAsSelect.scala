@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{AnalysisException, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.client.{HiveTable, HiveColumn}
-import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation, HiveMetastoreTypes}
+import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
+import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, MetastoreRelation}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 
 /**
  * Create table and insert the query result into it.
@@ -42,11 +40,13 @@ case class CreateTableAsSelect(
   def database: String = tableDesc.database
   def tableName: String = tableDesc.name
 
+  override def children: Seq[LogicalPlan] = Seq(query)
+
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     lazy val metastoreRelation: MetastoreRelation = {
-      import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
       import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+      import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
       import org.apache.hadoop.io.Text
       import org.apache.hadoop.mapred.TextInputFormat
 
@@ -93,6 +93,6 @@ case class CreateTableAsSelect(
   }
 
   override def argString: String = {
-    s"[Database:$database, TableName: $tableName, InsertIntoHiveTable]\n" + query.toString
+    s"[Database:$database, TableName: $tableName, InsertIntoHiveTable]"
   }
 }

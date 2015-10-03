@@ -41,15 +41,12 @@ infer_type <- function(x) {
   if (type == "map") {
     stopifnot(length(x) > 0)
     key <- ls(x)[[1]]
-    list(type = "map",
-         keyType = "string",
-         valueType = infer_type(get(key, x)),
-         valueContainsNull = TRUE)
+    paste0("map<string,", infer_type(get(key, x)), ">")
   } else if (type == "array") {
     stopifnot(length(x) > 0)
     names <- names(x)
     if (is.null(names)) {
-      list(type = "array", elementType = infer_type(x[[1]]), containsNull = TRUE)
+      paste0("array<", infer_type(x[[1]]), ">")
     } else {
       # StructType
       types <- lapply(x, infer_type)
@@ -59,7 +56,7 @@ infer_type <- function(x) {
       do.call(structType, fields)
     }
   } else if (length(x) > 1) {
-    list(type = "array", elementType = type, containsNull = TRUE)
+    paste0("array<", infer_type(x[[1]]), ">")
   } else {
     type
   }
@@ -86,7 +83,9 @@ infer_type <- function(x) {
 createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
   if (is.data.frame(data)) {
       # get the names of columns, they will be put into RDD
-      schema <- names(data)
+      if (is.null(schema)) {
+        schema <- names(data)
+      }
       n <- nrow(data)
       m <- ncol(data)
       # get rid of factor type
@@ -182,7 +181,7 @@ setMethod("toDF", signature(x = "RDD"),
 
 #' Create a DataFrame from a JSON file.
 #'
-#' Loads a JSON file (one object per line), returning the result as a DataFrame 
+#' Loads a JSON file (one object per line), returning the result as a DataFrame
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param sqlContext SQLContext to use
@@ -199,7 +198,7 @@ setMethod("toDF", signature(x = "RDD"),
 
 jsonFile <- function(sqlContext, path) {
   # Allow the user to have a more flexible definiton of the text file path
-  path <- normalizePath(path)
+  path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
   sdf <- callJMethod(sqlContext, "jsonFile", path)
@@ -238,7 +237,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 
 
 #' Create a DataFrame from a Parquet file.
-#' 
+#'
 #' Loads a Parquet file, returning the result as a DataFrame.
 #'
 #' @param sqlContext SQLContext to use
@@ -249,7 +248,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 # TODO: Implement saveasParquetFile and write examples for both
 parquetFile <- function(sqlContext, ...) {
   # Allow the user to have a more flexible definiton of the text file path
-  paths <- lapply(list(...), normalizePath)
+  paths <- lapply(list(...), function(x) suppressWarnings(normalizePath(x)))
   sdf <- callJMethod(sqlContext, "parquetFile", paths)
   dataFrame(sdf)
 }
@@ -278,7 +277,7 @@ sql <- function(sqlContext, sqlQuery) {
 }
 
 #' Create a DataFrame from a SparkSQL Table
-#' 
+#'
 #' Returns the specified Table as a DataFrame.  The Table must have already been registered
 #' in the SQLContext.
 #'
@@ -298,7 +297,7 @@ sql <- function(sqlContext, sqlQuery) {
 
 table <- function(sqlContext, tableName) {
   sdf <- callJMethod(sqlContext, "table", tableName)
-  dataFrame(sdf) 
+  dataFrame(sdf)
 }
 
 
@@ -352,7 +351,7 @@ tableNames <- function(sqlContext, databaseName = NULL) {
 
 
 #' Cache Table
-#' 
+#'
 #' Caches the specified table in-memory.
 #'
 #' @param sqlContext SQLContext to use
@@ -370,11 +369,11 @@ tableNames <- function(sqlContext, databaseName = NULL) {
 #' }
 
 cacheTable <- function(sqlContext, tableName) {
-  callJMethod(sqlContext, "cacheTable", tableName)  
+  callJMethod(sqlContext, "cacheTable", tableName)
 }
 
 #' Uncache Table
-#' 
+#'
 #' Removes the specified table from the in-memory cache.
 #'
 #' @param sqlContext SQLContext to use
@@ -455,7 +454,7 @@ dropTempTable <- function(sqlContext, tableName) {
 read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
-    options[['path']] <- path
+    options[["path"]] <- path
   }
   if (is.null(source)) {
     sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
@@ -504,7 +503,7 @@ loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
 createExternalTable <- function(sqlContext, tableName, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
-    options[['path']] <- path
+    options[["path"]] <- path
   }
   sdf <- callJMethod(sqlContext, "createExternalTable", tableName, source, options)
   dataFrame(sdf)

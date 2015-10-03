@@ -63,8 +63,7 @@ private[spark] object CompressionCodec {
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
     val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
     val codec = try {
-      val ctor = Class.forName(codecClass, true, Utils.getContextOrSparkClassLoader)
-        .getConstructor(classOf[SparkConf])
+      val ctor = Utils.classForName(codecClass).getConstructor(classOf[SparkConf])
       Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
     } catch {
       case e: ClassNotFoundException => None
@@ -149,7 +148,7 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   try {
     Snappy.getNativeLibraryVersion
   } catch {
-    case e: Error => throw new IllegalArgumentException
+    case e: Error => throw new IllegalArgumentException(e)
   }
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {

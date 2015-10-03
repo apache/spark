@@ -34,7 +34,7 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
   val WAIT_TIMEOUT_MILLIS = 10000
 
   before {
-    sc = new SparkContext("local-cluster[2,1,512]", "SparkListenerSuite")
+    sc = new SparkContext("local-cluster[2,1,1024]", "SparkListenerSuite")
   }
 
   test("SparkListener sends executor added message") {
@@ -43,7 +43,7 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
 
     // This test will check if the number of executors received by "SparkListener" is same as the
     // number of all executors, so we need to wait until all executors are up
-    sc.jobProgressListener.waitUntilExecutorsUp(2, 10000)
+    sc.jobProgressListener.waitUntilExecutorsUp(2, 60000)
 
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)

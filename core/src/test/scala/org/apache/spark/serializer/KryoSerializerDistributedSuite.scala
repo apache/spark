@@ -35,7 +35,7 @@ class KryoSerializerDistributedSuite extends SparkFunSuite {
     val jar = TestUtils.createJarWithClasses(List(AppJarRegistrator.customClassName))
     conf.setJars(List(jar.getPath))
 
-    val sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    val sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     val original = Thread.currentThread.getContextClassLoader
     val loader = new java.net.URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
     SparkEnv.get.serializer.setDefaultClassLoader(loader)
@@ -59,7 +59,9 @@ object KryoDistributedTest {
   class AppJarRegistrator extends KryoRegistrator {
     override def registerClasses(k: Kryo) {
       val classLoader = Thread.currentThread.getContextClassLoader
+      // scalastyle:off classforname
       k.register(Class.forName(AppJarRegistrator.customClassName, true, classLoader))
+      // scalastyle:on classforname
     }
   }
 

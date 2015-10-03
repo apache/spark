@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.PrintStream
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.scheduler.StatsReportListener
 import org.apache.spark.sql.hive.HiveContext
@@ -38,9 +38,14 @@ private[hive] object SparkSQLEnv extends Logging {
       val sparkConf = new SparkConf(loadDefaults = true)
       val maybeSerializer = sparkConf.getOption("spark.serializer")
       val maybeKryoReferenceTracking = sparkConf.getOption("spark.kryo.referenceTracking")
+      // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
+      // the default appName [SparkSQLCLIDriver] in cli or beeline.
+      val maybeAppName = sparkConf
+        .getOption("spark.app.name")
+        .filterNot(_ == classOf[SparkSQLCLIDriver].getName)
 
       sparkConf
-        .setAppName(s"SparkSQL::${Utils.localHostName()}")
+        .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
         .set(
           "spark.serializer",
           maybeSerializer.getOrElse("org.apache.spark.serializer.KryoSerializer"))
@@ -59,7 +64,7 @@ private[hive] object SparkSQLEnv extends Logging {
       hiveContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
 
       if (log.isDebugEnabled) {
-        hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>
+        hiveContext.hiveconf.getAllProperties.asScala.toSeq.sorted.foreach { case (k, v) =>
           logDebug(s"HiveConf var: $k=$v")
         }
       }

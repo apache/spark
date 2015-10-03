@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
@@ -115,8 +116,10 @@ class VectorAssembler(override val uid: String)
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
-    StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, false))
+    StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
   }
+
+  override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 }
 
 private object VectorAssembler {

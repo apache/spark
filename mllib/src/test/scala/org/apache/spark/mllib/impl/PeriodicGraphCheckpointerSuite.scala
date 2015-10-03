@@ -30,20 +30,20 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with MLlibTestSparkCo
 
   import PeriodicGraphCheckpointerSuite._
 
-  // TODO: Do I need to call count() on the graphs' RDDs?
-
   test("Persisting") {
     var graphsToCheck = Seq.empty[GraphToCheck]
 
     val graph1 = createGraph(sc)
-    val checkpointer = new PeriodicGraphCheckpointer(graph1, 10)
+    val checkpointer =
+      new PeriodicGraphCheckpointer[Double, Double](10, graph1.vertices.sparkContext)
+    checkpointer.update(graph1)
     graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
     checkPersistence(graphsToCheck, 1)
 
     var iteration = 2
     while (iteration < 9) {
       val graph = createGraph(sc)
-      checkpointer.updateGraph(graph)
+      checkpointer.update(graph)
       graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
       checkPersistence(graphsToCheck, iteration)
       iteration += 1
@@ -57,7 +57,9 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with MLlibTestSparkCo
     var graphsToCheck = Seq.empty[GraphToCheck]
     sc.setCheckpointDir(path)
     val graph1 = createGraph(sc)
-    val checkpointer = new PeriodicGraphCheckpointer(graph1, checkpointInterval)
+    val checkpointer = new PeriodicGraphCheckpointer[Double, Double](
+      checkpointInterval, graph1.vertices.sparkContext)
+    checkpointer.update(graph1)
     graph1.edges.count()
     graph1.vertices.count()
     graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
@@ -66,7 +68,7 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with MLlibTestSparkCo
     var iteration = 2
     while (iteration < 9) {
       val graph = createGraph(sc)
-      checkpointer.updateGraph(graph)
+      checkpointer.update(graph)
       graph.vertices.count()
       graph.edges.count()
       graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
@@ -168,7 +170,7 @@ private object PeriodicGraphCheckpointerSuite {
       } else {
         // Graph should never be checkpointed
         assert(!graph.isCheckpointed, "Graph should never have been checkpointed")
-        assert(graph.getCheckpointFiles.length == 0, "Graph should not have any checkpoint files")
+        assert(graph.getCheckpointFiles.isEmpty, "Graph should not have any checkpoint files")
       }
     } catch {
       case e: AssertionError =>

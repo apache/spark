@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types._
 
 object Literal {
   def apply(v: Any): Literal = v match {
@@ -35,12 +36,14 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
-    case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
-    case d: Decimal => Literal(d, DecimalType.Unlimited)
-    case t: Timestamp => Literal(DateUtils.fromJavaTimestamp(t), TimestampType)
-    case d: Date => Literal(DateUtils.fromJavaDate(d), DateType)
+    case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case d: java.math.BigDecimal =>
+      Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+    case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
+    case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
+    case i: CalendarInterval => Literal(i, CalendarIntervalType)
     case null => Literal(null, NullType)
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
@@ -73,7 +76,8 @@ object IntegerLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal protected (value: Any, dataType: DataType) extends LeafExpression {
+case class Literal protected (value: Any, dataType: DataType)
+  extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
@@ -87,7 +91,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
     case _ => false
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: InternalRow): Any = value
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     // change the isNull and primitive to consts, to inline them
@@ -115,7 +119,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
             super.genCode(ctx, ev)
           } else {
             ev.isNull = "false"
-            ev.primitive = s"${value}"
+            ev.primitive = s"${value}D"
             ""
           }
         case ByteType | ShortType =>
@@ -140,11 +144,11 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 
 // TODO: Specialize
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
-    extends LeafExpression {
+  extends LeafExpression with CodegenFallback {
 
-  def update(expression: Expression, input: Row): Unit = {
+  def update(expression: Expression, input: InternalRow): Unit = {
     value = expression.eval(input)
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: InternalRow): Any = value
 }

@@ -17,15 +17,15 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{HashMap, ListBuffer}
-import scala.xml.{Node, NodeSeq, Unparsed, Utility}
-
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
-import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
+import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.xml._
+
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
@@ -79,6 +79,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         case JobExecutionStatus.SUCCEEDED => "succeeded"
         case JobExecutionStatus.FAILED => "failed"
         case JobExecutionStatus.RUNNING => "running"
+        case JobExecutionStatus.UNKNOWN => "unknown"
       }
 
       // The timeline library treats contents as HTML, so we have to escape them; for the
@@ -223,6 +224,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
+      val jobDescription = UIUtils.makeDescription(lastStageDescription, parent.basePath)
+
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
       <tr id={"job-" + job.jobId}>
@@ -230,7 +233,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
         <td>
-          <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
+          {jobDescription}
           <a href={detailUrl} class="name-link">{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>

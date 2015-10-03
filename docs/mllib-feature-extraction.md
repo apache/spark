@@ -221,7 +221,7 @@ model = word2vec.fit(inp)
 synonyms = model.findSynonyms('china', 40)
 
 for word, cosine_distance in synonyms:
-    print "{}: {}".format(word, cosine_distance)
+    print("{}: {}".format(word, cosine_distance))
 {% endhighlight %}
 </div>
 </div>
@@ -380,35 +380,43 @@ data2 = labels.zip(normalizer2.transform(features))
 </div>
 </div>
 
-## Feature selection
-[Feature selection](http://en.wikipedia.org/wiki/Feature_selection) allows selecting the most relevant features for use in model construction. Feature selection reduces the size of the vector space and, in turn, the complexity of any subsequent operation with vectors. The number of features to select can be tuned using a held-out validation set.
+## ChiSqSelector
 
-### ChiSqSelector
-[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) stands for Chi-Squared feature selection. It operates on labeled data with categorical features. `ChiSqSelector` orders features based on a Chi-Squared test of independence from the class, and then filters (selects) the top features which are most closely related to the label.
+[Feature selection](http://en.wikipedia.org/wiki/Feature_selection) tries to identify relevant
+features for use in model construction. It reduces the size of the feature space, which can improve
+both speed and statistical learning behavior.
 
-#### Model Fitting
+[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) implements
+Chi-Squared feature selection. It operates on labeled data with categorical features.
+`ChiSqSelector` orders features based on a Chi-Squared test of independence from the class,
+and then filters (selects) the top features which the class label depends on the most.
+This is akin to yielding the features with the most predictive power.
 
-[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) has the
-following parameters in the constructor:
+The number of features to select can be tuned using a held-out validation set.
 
-* `numTopFeatures` number of top features that the selector will select (filter).
+### Model Fitting
 
-We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) method in
-`ChiSqSelector` which can take an input of `RDD[LabeledPoint]` with categorical features, learn the summary statistics, and then
-return a `ChiSqSelectorModel` which can transform an input dataset into the reduced feature space.
+`ChiSqSelector` takes a `numTopFeatures` parameter specifying the number of top features that
+the selector will select.
 
-This model implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
-which can apply the Chi-Squared feature selection on a `Vector` to produce a reduced `Vector` or on
+The [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) method takes
+an input of `RDD[LabeledPoint]` with categorical features, learns the summary statistics, and then
+returns a `ChiSqSelectorModel` which can transform an input dataset into the reduced feature space.
+The `ChiSqSelectorModel` can be applied either to a `Vector` to produce a reduced `Vector`, or to
 an `RDD[Vector]` to produce a reduced `RDD[Vector]`.
 
 Note that the user can also construct a `ChiSqSelectorModel` by hand by providing an array of selected feature indices (which must be sorted in ascending order).
 
-#### Example
+### Example
 
-The following example shows the basic use of ChiSqSelector.
+The following example shows the basic use of ChiSqSelector. The data set used has a feature matrix consisting of greyscale values that vary from 0 to 255 for each feature.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+
+Refer to the [`ChiSqSelector` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector)
+for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
@@ -419,10 +427,11 @@ import org.apache.spark.mllib.feature.ChiSqSelector
 // Load some data in libsvm format
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 // Discretize data in 16 equal bins since ChiSqSelector requires categorical features
+// Even though features are doubles, the ChiSqSelector treats each unique value as a category
 val discretizedData = data.map { lp =>
-  LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => x / 16 } ) )
+  LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => (x / 16).floor } ) )
 }
-// Create ChiSqSelector that will select 50 features
+// Create ChiSqSelector that will select top 50 of 692 features
 val selector = new ChiSqSelector(50)
 // Create ChiSqSelector model (selecting features)
 val transformer = selector.fit(discretizedData)
@@ -433,7 +442,11 @@ val filteredData = discretizedData.map { lp =>
 {% endhighlight %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
+
+Refer to the [`ChiSqSelector` Java docs](api/java/org/apache/spark/mllib/feature/ChiSqSelector.html)
+for details on the API.
+
 {% highlight java %}
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
@@ -451,19 +464,20 @@ JavaRDD<LabeledPoint> points = MLUtils.loadLibSVMFile(sc.sc(),
     "data/mllib/sample_libsvm_data.txt").toJavaRDD().cache();
 
 // Discretize data in 16 equal bins since ChiSqSelector requires categorical features
+// Even though features are doubles, the ChiSqSelector treats each unique value as a category
 JavaRDD<LabeledPoint> discretizedData = points.map(
     new Function<LabeledPoint, LabeledPoint>() {
       @Override
       public LabeledPoint call(LabeledPoint lp) {
         final double[] discretizedFeatures = new double[lp.features().size()];
         for (int i = 0; i < lp.features().size(); ++i) {
-          discretizedFeatures[i] = lp.features().apply(i) / 16;
+          discretizedFeatures[i] = Math.floor(lp.features().apply(i) / 16);
         }
         return new LabeledPoint(lp.label(), Vectors.dense(discretizedFeatures));
       }
     });
 
-// Create ChiSqSelector that will select 50 features
+// Create ChiSqSelector that will select top 50 of 692 features
 ChiSqSelector selector = new ChiSqSelector(50);
 // Create ChiSqSelector model (selecting features)
 final ChiSqSelectorModel transformer = selector.fit(discretizedData.rdd());
@@ -484,7 +498,12 @@ sc.stop();
 
 ## ElementwiseProduct
 
-ElementwiseProduct multiplies each input vector by a provided "weight" vector, using element-wise multiplication. In other words, it scales each column of the dataset by a scalar multiplier.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and transforming vector, `w`, to yield a result vector.
+`ElementwiseProduct` multiplies each input vector by a provided "weight" vector, using element-wise
+multiplication. In other words, it scales each column of the dataset by a scalar multiplier. This
+represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29)
+between the input vector, `v` and transforming vector, `scalingVec`, to yield a result vector.
+Qu8T948*1#
+Denoting the `scalingVec` as "`w`," this transformation may be written as:
 
 `\[ \begin{pmatrix}
 v_1 \\
@@ -504,7 +523,7 @@ v_N
 
 [`ElementwiseProduct`](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) has the following parameter in the constructor:
 
-* `w`: the transforming vector.
+* `scalingVec`: the transforming vector.
 
 `ElementwiseProduct` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
@@ -557,6 +576,29 @@ JavaRDD<Vector> transformedData2 = data.map(
     }
   }
 );
+
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+{% highlight python %}
+from pyspark import SparkContext
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.feature import ElementwiseProduct
+
+# Load and parse the data
+sc = SparkContext()
+data = sc.textFile("data/mllib/kmeans_data.txt")
+parsedData = data.map(lambda x: [float(t) for t in x.split(" ")])
+
+# Create weight vector.
+transformingVector = Vectors.dense([0.0, 1.0, 2.0])
+transformer = ElementwiseProduct(transformingVector)
+
+# Batch transform
+transformedData = transformer.transform(parsedData)
+# Single-row transform
+transformedData2 = transformer.transform(parsedData.first())
 
 {% endhighlight %}
 </div>

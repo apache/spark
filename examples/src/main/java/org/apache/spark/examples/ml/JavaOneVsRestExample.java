@@ -178,6 +178,7 @@ public class JavaOneVsRestExample {
     return params;
   }
 
+  @SuppressWarnings("static")
   private static Options generateCommandlineOptions() {
     Option input = OptionBuilder.withArgName("input")
       .hasArg()

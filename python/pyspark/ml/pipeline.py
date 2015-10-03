@@ -42,7 +42,7 @@ class Estimator(Params):
         """
         raise NotImplementedError()
 
-    def fit(self, dataset, params={}):
+    def fit(self, dataset, params=None):
         """
         Fits a model to the input dataset with optional parameters.
 
@@ -54,6 +54,8 @@ class Estimator(Params):
                        list of models.
         :returns: fitted model(s)
         """
+        if params is None:
+            params = dict()
         if isinstance(params, (list, tuple)):
             return [self.fit(dataset, paramMap) for paramMap in params]
         elif isinstance(params, dict):
@@ -86,7 +88,7 @@ class Transformer(Params):
         """
         raise NotImplementedError()
 
-    def transform(self, dataset, params={}):
+    def transform(self, dataset, params=None):
         """
         Transforms the input dataset with optional parameters.
 
@@ -96,6 +98,8 @@ class Transformer(Params):
                        params.
         :returns: transformed dataset
         """
+        if params is None:
+            params = dict()
         if isinstance(params, dict):
             if params:
                 return self.copy(params,)._transform(dataset)
@@ -135,10 +139,12 @@ class Pipeline(Estimator):
     """
 
     @keyword_only
-    def __init__(self, stages=[]):
+    def __init__(self, stages=None):
         """
-        __init__(self, stages=[])
+        __init__(self, stages=None)
         """
+        if stages is None:
+            stages = []
         super(Pipeline, self).__init__()
         #: Param for pipeline stages.
         self.stages = Param(self, "stages", "pipeline stages")
@@ -148,6 +154,7 @@ class Pipeline(Estimator):
     def setStages(self, value):
         """
         Set pipeline stages.
+
         :param value: a list of transformers or estimators
         :return: the pipeline instance
         """
@@ -162,11 +169,13 @@ class Pipeline(Estimator):
             return self._paramMap[self.stages]
 
     @keyword_only
-    def setParams(self, stages=[]):
+    def setParams(self, stages=None):
         """
-        setParams(self, stages=[])
+        setParams(self, stages=None)
         Sets params for Pipeline.
         """
+        if stages is None:
+            stages = []
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
@@ -195,7 +204,9 @@ class Pipeline(Estimator):
                 transformers.append(stage)
         return PipelineModel(transformers)
 
-    def copy(self, extra={}):
+    def copy(self, extra=None):
+        if extra is None:
+            extra = dict()
         that = Params.copy(self, extra)
         stages = [stage.copy(extra) for stage in that.getStages()]
         return that.setStages(stages)
@@ -216,6 +227,8 @@ class PipelineModel(Model):
             dataset = t.transform(dataset)
         return dataset
 
-    def copy(self, extra={}):
+    def copy(self, extra=None):
+        if extra is None:
+            extra = dict()
         stages = [stage.copy(extra) for stage in self.stages]
         return PipelineModel(stages)

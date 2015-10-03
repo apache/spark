@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
+import org.apache.spark.util.SerializableJobConf
 
 /**
  * Internal helper class that saves an RDD using a Hadoop OutputFormat.
@@ -36,13 +37,13 @@ import org.apache.spark.rdd.HadoopRDD
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
 private[spark]
-class SparkHadoopWriter(@transient jobConf: JobConf)
+class SparkHadoopWriter(jobConf: JobConf)
   extends Logging
   with SparkHadoopMapRedUtil
   with Serializable {
 
   private val now = new Date()
-  private val conf = new SerializableWritable(jobConf)
+  private val conf = new SerializableJobConf(jobConf)
 
   private var jobID = 0
   private var splitID = 0
@@ -103,8 +104,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   }
 
   def commit() {
-    SparkHadoopMapRedUtil.commitTask(
-      getOutputCommitter(), getTaskContext(), jobID, splitID, attemptID)
+    SparkHadoopMapRedUtil.commitTask(getOutputCommitter(), getTaskContext(), jobID, splitID)
   }
 
   def commitJob() {

@@ -25,9 +25,13 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
+class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+  import testImplicits._
+
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
@@ -41,12 +45,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
       Some(StringType)
   }
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-  import ctx.sql
-
   before {
-    Class.forName("org.h2.Driver")
+    Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
     // usage of parameters from OPTIONS clause in queries.
     val properties = new Properties()
@@ -133,7 +133,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(40, 20))"
+    conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))"
         ).executeUpdate()
     conn.prepareStatement("insert into test.flttypes values ("
       + "1.0000000000000002220446049250313080847263336181640625, "
@@ -151,7 +151,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
       s"""
         |create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20),
         |f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP,
-        |m DOUBLE, n REAL, o DECIMAL(40, 20))
+        |m DOUBLE, n REAL, o DECIMAL(38, 18))
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.prepareStatement("insert into test.nulltypes values ("
       + "null, null, null, null, null, null, null, null, null, "
@@ -255,26 +255,26 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Basic API") {
-    assert(ctx.read.jdbc(
+    assert(sqlContext.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
   }
 
   test("Basic API with FetchSize") {
     val properties = new Properties
     properties.setProperty("fetchSize", "2")
-    assert(ctx.read.jdbc(
+    assert(sqlContext.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
     assert(
-      ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
       .collect().length === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
+    assert(sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
       .collect().length === 3)
   }
 
@@ -326,13 +326,13 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(cal.get(Calendar.HOUR) === 11)
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543500)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
   test("test DATE types") {
-    val rows = ctx.read.jdbc(
+    val rows = sqlContext.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
-    val cachedRows = ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val cachedRows = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
       .cache().collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(1).getAs[java.sql.Date](1) === null)
@@ -340,8 +340,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test DATE types in cache") {
-    val rows = ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
-    ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val rows = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
+    sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
       .cache().registerTempTable("mycached_date")
     val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
@@ -349,21 +349,21 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test types for null value") {
-    val rows = ctx.read.jdbc(
+    val rows = sqlContext.read.jdbc(
       urlWithUserAndPass, "TEST.NULLTYPES", new Properties).collect()
     assert((0 to 14).forall(i => rows(0).isNullAt(i)))
   }
 
   test("H2 floating-point types") {
     val rows = sql("SELECT * FROM flttypes").collect()
-    assert(rows(0).getDouble(0) === 1.00000000000000022) // Yes, I meant ==.
-    assert(rows(0).getDouble(1) === 1.00000011920928955) // Yes, I meant ==.
-    assert(rows(0).getAs[BigDecimal](2)
-      .equals(new BigDecimal("123456789012345.54321543215432100000")))
-    assert(rows(0).schema.fields(2).dataType === DecimalType(40, 20))
-    val compareDecimal = sql("SELECT C FROM flttypes where C > C - 1").collect()
-    assert(compareDecimal(0).getAs[BigDecimal](0)
-      .equals(new BigDecimal("123456789012345.54321543215432100000")))
+    assert(rows(0).getDouble(0) === 1.00000000000000022)
+    assert(rows(0).getDouble(1) === 1.00000011920928955)
+    assert(rows(0).getAs[BigDecimal](2) ===
+      new BigDecimal("123456789012345.543215432154321000"))
+    assert(rows(0).schema.fields(2).dataType === DecimalType(38, 18))
+    val result = sql("SELECT C FROM flttypes where C > C - 1").collect()
+    assert(result(0).getAs[BigDecimal](0) ===
+      new BigDecimal("123456789012345.543215432154321000"))
   }
 
   test("SQL query as table name") {
@@ -396,7 +396,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Remap types via JdbcDialects") {
     JdbcDialects.registerDialect(testH2Dialect)
-    val df = ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    val df = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
     assert(df.schema.filter(_.dataType != org.apache.spark.sql.types.StringType).isEmpty)
     val rows = df.collect()
     assert(rows(0).get(0).isInstanceOf[String])
@@ -407,6 +407,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
+    assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
+    assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
@@ -444,4 +446,23 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
   }
 
+  test("DB2Dialect type mapping") {
+    val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+  }
+
+  test("table exists query by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val table = "weblogs"
+    val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
+    val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
+    assert(MySQL.getTableExistsQuery(table) == limitQuery)
+    assert(Postgres.getTableExistsQuery(table) == limitQuery)
+    assert(db2.getTableExistsQuery(table) == defaultQuery)
+    assert(h2.getTableExistsQuery(table) == defaultQuery)
+  }
 }

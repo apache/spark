@@ -24,11 +24,12 @@ import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[deploy] sealed trait DeployMessage extends Serializable
 
-/** Contains messages sent between Scheduler actor nodes. */
+/** Contains messages sent between Scheduler endpoint nodes. */
 private[deploy] object DeployMessages {
 
   // Worker to Master
@@ -37,6 +38,7 @@ private[deploy] object DeployMessages {
       id: String,
       host: String,
       port: Int,
+      worker: RpcEndpointRef,
       cores: Int,
       memory: Int,
       webUiPort: Int,
@@ -63,11 +65,11 @@ private[deploy] object DeployMessages {
   case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription],
      driverIds: Seq[String])
 
-  case class Heartbeat(workerId: String) extends DeployMessage
+  case class Heartbeat(workerId: String, worker: RpcEndpointRef) extends DeployMessage
 
   // Master to Worker
 
-  case class RegisteredWorker(masterUrl: String, masterWebUiUrl: String) extends DeployMessage
+  case class RegisteredWorker(master: RpcEndpointRef, masterWebUiUrl: String) extends DeployMessage
 
   case class RegisterWorkerFailed(message: String) extends DeployMessage
 
@@ -92,22 +94,26 @@ private[deploy] object DeployMessages {
 
   // Worker internal
 
-  case object WorkDirCleanup      // Sent to Worker actor periodically for cleaning up app folders
+  case object WorkDirCleanup // Sent to Worker endpoint periodically for cleaning up app folders
 
   case object ReregisterWithMaster // used when a worker attempts to reconnect to a master
 
   // AppClient to Master
 
-  case class RegisterApplication(appDescription: ApplicationDescription)
+  case class RegisterApplication(appDescription: ApplicationDescription, driver: RpcEndpointRef)
     extends DeployMessage
 
   case class UnregisterApplication(appId: String)
 
   case class MasterChangeAcknowledged(appId: String)
 
+  case class RequestExecutors(appId: String, requestedTotal: Int)
+
+  case class KillExecutors(appId: String, executorIds: Seq[String])
+
   // Master to AppClient
 
-  case class RegisteredApplication(appId: String, masterUrl: String) extends DeployMessage
+  case class RegisteredApplication(appId: String, master: RpcEndpointRef) extends DeployMessage
 
   // TODO(matei): replace hostPort with host
   case class ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) {
@@ -123,12 +129,14 @@ private[deploy] object DeployMessages {
 
   case class RequestSubmitDriver(driverDescription: DriverDescription) extends DeployMessage
 
-  case class SubmitDriverResponse(success: Boolean, driverId: Option[String], message: String)
+  case class SubmitDriverResponse(
+      master: RpcEndpointRef, success: Boolean, driverId: Option[String], message: String)
     extends DeployMessage
 
   case class RequestKillDriver(driverId: String) extends DeployMessage
 
-  case class KillDriverResponse(driverId: String, success: Boolean, message: String)
+  case class KillDriverResponse(
+      master: RpcEndpointRef, driverId: String, success: Boolean, message: String)
     extends DeployMessage
 
   case class RequestDriverStatus(driverId: String) extends DeployMessage
@@ -142,7 +150,7 @@ private[deploy] object DeployMessages {
 
   // Master to Worker & AppClient
 
-  case class MasterChanged(masterUrl: String, masterWebUiUrl: String)
+  case class MasterChanged(master: RpcEndpointRef, masterWebUiUrl: String)
 
   // MasterWebUI To Master
 

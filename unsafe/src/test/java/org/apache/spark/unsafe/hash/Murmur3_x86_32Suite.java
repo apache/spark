@@ -22,7 +22,7 @@ import java.util.Random;
 import java.util.Set;
 
 import junit.framework.Assert;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.junit.Test;
 
 /**
@@ -83,11 +83,11 @@ public class Murmur3_x86_32Suite {
       rand.nextBytes(bytes);
 
       Assert.assertEquals(
-        hasher.hashUnsafeWords(bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize),
-        hasher.hashUnsafeWords(bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+        hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
+        hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
       hashcodes.add(hasher.hashUnsafeWords(
-        bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+        bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 
     // A very loose bound.
@@ -106,11 +106,11 @@ public class Murmur3_x86_32Suite {
       System.arraycopy(strBytes, 0, paddedBytes, 0, strBytes.length);
 
       Assert.assertEquals(
-        hasher.hashUnsafeWords(paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize),
-        hasher.hashUnsafeWords(paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+        hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
+        hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
       hashcodes.add(hasher.hashUnsafeWords(
-        paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+        paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 
     // A very loose bound.

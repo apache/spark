@@ -33,7 +33,7 @@ SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 SPARK_TACHYON=false
-TACHYON_VERSION="0.6.4"
+TACHYON_VERSION="0.7.1"
 TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
 TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/${TACHYON_TGZ}"
 
@@ -198,6 +198,7 @@ fi
 
 # Copy license and ASF files
 cp "$SPARK_HOME/LICENSE" "$DISTDIR"
+cp -r "$SPARK_HOME/licenses" "$DISTDIR"
 cp "$SPARK_HOME/NOTICE" "$DISTDIR"
 
 if [ -e "$SPARK_HOME"/CHANGES.txt ]; then
