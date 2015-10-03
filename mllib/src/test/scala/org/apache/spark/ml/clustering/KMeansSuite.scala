@@ -18,7 +18,7 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
+import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext}
@@ -105,4 +105,32 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(clusters.size === k)
     assert(clusters === Set(0, 1, 2, 3, 4))
   }
+
+  test("Initialize using given cluster centers") {
+    val points = Seq(
+      Vectors.dense(0.0, 0.0, 0.0),
+      Vectors.dense(1.0, 1.0, 1.0),
+      Vectors.dense(2.0, 2.0, 2.0),
+      Vectors.dense(3.0, 3.0, 3.0),
+      Vectors.dense(4.0, 4.0, 4.0)
+    )
+
+    // creating an initial model
+    val initialModel = new MLlibKMeansModel(Array(points(0), points(1), points(2), points(3), points(4)))
+
+    val predictionColName = "kmeans_prediction"
+    var kmeans : KMeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1).setInitialModel(initialModel)
+    val model = kmeans.fit(dataset)
+    assert(model.clusterCenters.length === k)
+
+    val transformed = model.transform(dataset)
+    val expectedColumns = Array("features", predictionColName)
+    expectedColumns.foreach { column =>
+      assert(transformed.columns.contains(column))
+    }
+    val clusters = transformed.select(predictionColName).map(_.getInt(0)).distinct().collect().toSet
+    assert(clusters.size === k)
+    assert(clusters === Set(0, 1, 2, 3, 4))
+  }
+
 }
