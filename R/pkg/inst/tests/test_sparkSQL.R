@@ -992,21 +992,15 @@ test_that("arrange() and orderBy() on a DataFrame", {
   sorted4 <- orderBy(df, desc(df$name))
   expect_equal(first(sorted4)$name, "Michael")
   expect_equal(collect(sorted4)[3,"name"], "Andy")
-})
 
-test_that("sort() on a DataFrame", {
-  df <- jsonFile(sqlContext, jsonPath)
-  sorted1 <- sort(df, col="age")
-  expect_equal(collect(sorted1)[1,2], "Michael")
+  sorted5 <- arrange(df, "age", "name", TRUE)
+  expect_equal(collect(sorted5)[1,2], "Andy")
 
-  sorted2 <- sort(df, TRUE, "age","name")
-  expect_equal(collect(sorted2)[1,2], "Andy")
+  sorted6 <- arrange(df, "age","name", c(T, F))
+  expect_equal(collect(sorted6)[1,2], "Andy")
 
-  sorted3 <- sort(df, c(T, F), "age","name")
-  expect_equal(collect(sorted3)[1,2], "Andy")
-
-  sorted4 <- sort(df, FALSE, "name")
-  expect_equal(collect(sorted4)[2,"age"], 19)
+  sorted7 <- arrange(df, "name", decreasing=FALSE)
+  expect_equal(collect(sorted7)[2,"age"], 19)
 })
 
 test_that("filter() on a DataFrame", {

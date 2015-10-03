@@ -23,7 +23,6 @@ export("setJobGroup",
 exportClasses("DataFrame")
 
 exportMethods("arrange",
-              "sort",
               "cache",
               "collect",
               "columns",

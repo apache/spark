@@ -1290,8 +1290,9 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' Sort a DataFrame by the specified column(s).
 #'
 #' @param x A DataFrame to be sorted.
-#' @param col Either a Column object or character vector indicating the field to sort on
+#' @param col A character or Column object vector indicating the fields to sort on
 #' @param ... Additional sorting fields
+#' @param decreasing A logical argument indicating the order of with character specified columns 
 #' @return A DataFrame where all elements are sorted.
 #' @rdname arrange
 #' @name arrange
@@ -1304,20 +1305,54 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlContext, path)
 #' arrange(df, df$col1)
-#' arrange(df, "col1")
 #' arrange(df, asc(df$col1), desc(abs(df$col2)))
+#' arrange(df, "col1")
+#' arrange(df, "col2", FALSE)
+#' arrange(df, "col1", decreasing=TRUE)
+#' arrange(df, "col1", "col2", c(TRUE, FALSE))
 #' }
 setMethod("arrange",
-          signature(x = "DataFrame", col = "characterOrColumn"),
-          function(x, col, ...) {
-            if (class(col) == "character") {
-              sdf <- callJMethod(x@sdf, "sort", col, list(...))
-            } else if (class(col) == "Column") {
-              jcols <- lapply(list(col, ...), function(c) {
+          signature(x = "DataFrame", col="characterOrColumn"),
+          function(x, col, ..., decreasing=FALSE) {
+
+            # all sorting columns
+            by <- list(col, ...)
+
+            # extracting the last element and uses it as decreasing if it is boolean
+            lastElement <- tail(by,1)[[1]]
+            if (is.logical(lastElement)) {
+              length(by) <- length(by) - 1
+              decreasing <- lastElement
+            }
+
+            if (class(col) == "Column") {
+              jcols <- lapply(by, function(c) {
                 c@jc
               })
-              sdf <- callJMethod(x@sdf, "sort", jcols)
+            } else if (class(col) == "character") {
+              if (length(decreasing) == 1) {
+                # in case only 1 boolean argument - decreasing value is specified,
+                # it will be used for all columns
+                decreasing <- rep(decreasing,length(by))
+              } else if (length(decreasing) != length(by)) {
+                stop("Arguments 'col' and 'decreasing' must have the same length")
+              }
+
+              # builds a list of columns of type Column
+              # example: [[1]] Column Species ASC
+              #          [[2]] Column Petal_Length DESC
+              jcols <- lapply(seq_len(length(decreasing)), function(i){
+                if (decreasing[[i]]) {
+                  desc(getColumn(x, by[[i]]))@jc
+                } else {
+                  asc(getColumn(x, by[[i]]))@jc
+                }
+              })
+            } else {
+              stop("col has invalid data type")
             }
+            sdf <- callJMethod(x@sdf, "sort", jcols)
+
             dataFrame(sdf)
           })
 
@@ -1847,58 +1882,4 @@ setMethod("crosstab",
             statFunctions <- callJMethod(x@sdf, "stat")
             sct <- callJMethod(statFunctions, "crosstab", col1, col2)
             collect(dataFrame(sct))
-          })
-
-#' Sort
-#'
-#' Sort a DataFrame by the specified column(s).
-#'
-#' @param x A DataFrame to be sorted.
-#' @param by A character column indicating the field to sort on.
-#'           if the column names are specified as Column object arrange function
-#'           can be used instead
-#' @param decreasing Orderings for each sorting column
-#' @param ... Additional sorting fields
-#' @return A DataFrame where elements are sorted by input sorting columns.
-#' @rdname sort
-#' @name sort
-#' @aliases orderby
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
-#' sort(df, col="col1")
-#' sort(df, decreasing=FALSE, "col2")
-#' sort(df, decreasing=TRUE, "col1")
-#' sort(df, c(TRUE,FALSE), "col1","col2")
-#' }
-setMethod("sort",
-          signature(x = "DataFrame"),
-          function(x, decreasing=FALSE, col, ...) {
-
-            # all sorting columns
-            by <- c(col, ...)
-            if (length(decreasing) == 1){
-              # in case only 1 boolean argument - decreasing value is specified,
-              # it will be used for all columns
-              decreasing <- rep(decreasing,length(by))
-            } else if (length(decreasing) != length(by)){
-              stop("Arguments 'col' and 'decreasing' must have the same length")
-            }
-
-            # builds a list of columns of type Column
-            # example: [[1]] Column Species ASC
-            #          [[2]] Column Petal_Length DESC
-            columns <- lapply(seq_len(length(decreasing)), function(i){
-              if (decreasing[[i]]){
-                desc(getColumn(x, by[[i]]))
-              }else{
-                asc(getColumn(x, by[[i]]))
-              }
-            })
-
-            do.call("arrange", c(x, columns))
           })
