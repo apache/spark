@@ -57,16 +57,18 @@ private[sql] object ParquetFilters {
     v: java.lang.String,
     mode: StringFilter.Mode) extends UserDefinedPredicate[Binary] with Serializable {
 
+    private val compare = mode match {
+      case StringFilter.STARTS_WITH =>
+        (x: java.lang.String) => x.startsWith(v)
+      case StringFilter.ENDS_WITH =>
+        (x: java.lang.String) => x.endsWith(v)
+      case StringFilter.CONTAINS =>
+        (x: java.lang.String) => x.contains(v)
+    }
+
     override def keep(value: Binary): Boolean = {
       val str = value.toStringUsingUTF8()
-      mode match {
-        case StringFilter.STARTS_WITH =>
-          str.startsWith(v)
-        case StringFilter.ENDS_WITH =>
-          str.endsWith(v)
-        case StringFilter.CONTAINS =>
-          str.contains(v)
-      }
+      compare(str)
     }
 
     override def canDrop(statistics: Statistics[Binary]): Boolean = false
