@@ -65,7 +65,7 @@ setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
 # @rdname freqItems
 # @export
-setGeneric("freqItems", function(x, ..., support = 0.01) { standardGeneric("freqItems") })
+setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("freqItems") })
 
 # @rdname distinct
 # @export
