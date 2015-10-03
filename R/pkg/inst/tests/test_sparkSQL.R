@@ -677,6 +677,8 @@ test_that("select with column", {
   df4 <- select(df, c("name", "age"))
   expect_equal(columns(df4), c("name", "age"))
   expect_equal(count(df4), 3)
+
+  expect_error(select(df, c("name", "age"), "name"), "To select multiple columns, use a character vector or list for col")
 })
 
 test_that("subsetting", {
