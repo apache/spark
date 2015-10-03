@@ -66,23 +66,17 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("model load / save") {
-
     val model = ChiSqSelectorSuite.createModel()
-
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
-
     try {
       model.save(sc, path)
       val sameModel = ChiSqSelectorModel.load(sc, path)
       ChiSqSelectorSuite.checkEqual(model, sameModel)
-
     } finally {
       Utils.deleteRecursively(tempDir)
     }
-
   }
-
 }
 
 object ChiSqSelectorSuite extends SparkFunSuite {
