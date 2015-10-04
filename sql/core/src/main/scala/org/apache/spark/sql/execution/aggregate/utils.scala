@@ -97,7 +97,7 @@ object Utils {
     // Check if we can use TungstenAggregate.
     val usesTungstenAggregate =
       child.sqlContext.conf.unsafeEnabled &&
-      aggregateExpressions.forall(_.aggregateFunction.isInstanceOf[AlgebraicAggregate]) &&
+      aggregateExpressions.forall(_.aggregateFunction.isInstanceOf[ExpressionAggregateFunction]) &&
       supportsTungstenAggregate(
         groupingExpressions,
         aggregateExpressions.flatMap(_.aggregateFunction.bufferAttributes))
@@ -157,7 +157,7 @@ object Utils {
             // aggregateFunctionMap contains unique aggregate functions.
             val aggregateFunction =
               aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct)._1
-            aggregateFunction.asInstanceOf[AlgebraicAggregate].evaluateExpression
+            aggregateFunction.asInstanceOf[ExpressionAggregateFunction].evaluateExpression
           case expression =>
             // We do not rely on the equality check at here since attributes may
             // different cosmetically. Instead, we use semanticEquals.
@@ -214,7 +214,7 @@ object Utils {
     val aggregateExpressions = functionsWithDistinct ++ functionsWithoutDistinct
     val usesTungstenAggregate =
       child.sqlContext.conf.unsafeEnabled &&
-        aggregateExpressions.forall(_.aggregateFunction.isInstanceOf[AlgebraicAggregate]) &&
+        aggregateExpressions.forall(_.aggregateFunction.isInstanceOf[ExpressionAggregateFunction]) &&
         supportsTungstenAggregate(
           groupingExpressions,
           aggregateExpressions.flatMap(_.aggregateFunction.bufferAttributes))
@@ -358,7 +358,7 @@ object Utils {
                 // aggregate functions that have not been rewritten.
                 aggregateFunctionMap(function, isDistinct)._1
               }
-            aggregateFunction.asInstanceOf[AlgebraicAggregate].evaluateExpression
+            aggregateFunction.asInstanceOf[ExpressionAggregateFunction].evaluateExpression
           case expression =>
             // We do not rely on the equality check at here since attributes may
             // different cosmetically. Instead, we use semanticEquals.

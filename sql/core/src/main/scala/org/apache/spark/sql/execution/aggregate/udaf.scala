@@ -22,7 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, InterpretedMutableProjection, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction2
+import org.apache.spark.sql.catalyst.expressions.aggregate.{InterpretedAggregateFunction, AggregateFunction2}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -324,7 +324,7 @@ private[sql] class InputAggregationBuffer private[sql] (
 private[sql] case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction)
-  extends AggregateFunction2 with Logging {
+  extends InterpretedAggregateFunction with Logging {
 
   require(
     children.length == udaf.inputSchema.length,

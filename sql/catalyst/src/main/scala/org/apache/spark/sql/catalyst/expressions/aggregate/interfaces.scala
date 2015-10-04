@@ -95,11 +95,31 @@ private[sql] case class AggregateExpression2(
   override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
 }
 
-abstract class AggregateFunction2
-  extends Expression with ImplicitCastInputTypes {
+sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInputTypes {
 
   /** An aggregate function is not foldable. */
   final override def foldable: Boolean = false
+
+  /** The schema of the aggregation buffer. */
+  def bufferSchema: StructType
+
+  /** Attributes of fields in bufferSchema. */
+  def bufferAttributes: Seq[AttributeReference]
+
+  /** Clones bufferAttributes. */
+  def cloneBufferAttributes: Seq[Attribute]
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  /**
+   * Indicates if this function supports partial aggregation.
+   * Currently Hive UDAF is the only one that doesn't support partial aggregation.
+   */
+  def supportsPartial: Boolean = true
+}
+
+abstract class InterpretedAggregateFunction extends AggregateFunction2 {
 
   /**
    * The offset of this function's start buffer value in the
@@ -135,15 +155,6 @@ abstract class AggregateFunction2
     inputBufferOffset = newInputBufferOffset
   }
 
-  /** The schema of the aggregation buffer. */
-  def bufferSchema: StructType
-
-  /** Attributes of fields in bufferSchema. */
-  def bufferAttributes: Seq[AttributeReference]
-
-  /** Clones bufferAttributes. */
-  def cloneBufferAttributes: Seq[Attribute]
-
   /**
    * Initializes its aggregation buffer located in `buffer`.
    * It will use bufferOffset to find the starting point of
@@ -165,21 +176,15 @@ abstract class AggregateFunction2
    * and `buffer2`.
    */
   def merge(buffer1: MutableRow, buffer2: InternalRow): Unit
-
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
-
-  /**
-   * Indicates if this function supports partial aggregation.
-   * Currently Hive UDAF is the only one that doesn't support partial aggregation.
-   */
-  def supportsPartial: Boolean = true
 }
 
 /**
- * A helper class for aggregate functions that can be implemented in terms of catalyst expressions.
+ * A helper class for aggregate functions that can be implemented in terms of Catalyst expressions.
  */
-abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable with Unevaluable {
+abstract class ExpressionAggregateFunction
+  extends AggregateFunction2
+  with Serializable
+  with Unevaluable {
 
   val initialValues: Seq[Expression]
   val updateExpressions: Seq[Expression]
@@ -188,6 +193,10 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable w
 
   override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
 
+  /** An expresison-based aggregate's bufferSchema is derived from bufferAttributes. */
+  override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
+
+  // TODO(josh): Do we need this?
   /**
    * A helper class for representing an attribute used in merging two
    * aggregation buffers. When merging two buffers, `bufferLeft` and `bufferRight`,
@@ -203,24 +212,5 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable w
     /** Represents this attribute at the input buffer side (the data value is read-only). */
     def right: AttributeReference = cloneBufferAttributes(bufferAttributes.indexOf(a))
   }
-
-  /** An AlgebraicAggregate's bufferSchema is derived from bufferAttributes. */
-  override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
-
-  override def initialize(buffer: MutableRow): Unit = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's initialize should not be called directly")
-  }
-
-  override final def update(buffer: MutableRow, input: InternalRow): Unit = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's update should not be called directly")
-  }
-
-  override final def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's merge should not be called directly")
-  }
-
 }
 

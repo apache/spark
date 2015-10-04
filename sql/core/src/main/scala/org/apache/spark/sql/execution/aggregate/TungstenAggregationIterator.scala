@@ -128,17 +128,18 @@ class TungstenAggregationIterator(
       completeAggregateExpressions.map(_.mode).distinct.headOption
   }
 
-  // All aggregate functions. TungstenAggregationIterator only handles AlgebraicAggregates.
-  // If there is any functions that is not an AlgebraicAggregate, we throw an
+  // All aggregate functions. TungstenAggregationIterator only handles expression-based aggregate.
+  // If there is any functions that is an InterpretedAggregateFunction, we throw an
   // IllegalStateException.
-  private[this] val allAggregateFunctions: Array[AlgebraicAggregate] = {
-    if (!allAggregateExpressions.forall(_.aggregateFunction.isInstanceOf[AlgebraicAggregate])) {
+  private[this] val allAggregateFunctions: Array[ExpressionAggregateFunction] = {
+    if (!allAggregateExpressions.forall(
+        _.aggregateFunction.isInstanceOf[ExpressionAggregateFunction])) {
       throw new IllegalStateException(
-        "Only AlgebraicAggregates should be passed in TungstenAggregationIterator.")
+        "Only ExpressionAggregateFunctions should be passed in TungstenAggregationIterator.")
     }
 
     allAggregateExpressions
-      .map(_.aggregateFunction.asInstanceOf[AlgebraicAggregate])
+      .map(_.aggregateFunction.asInstanceOf[ExpressionAggregateFunction])
       .toArray
   }
 
@@ -149,7 +150,7 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // The projection used to initialize buffer values.
-  private[this] val algebraicInitialProjection: MutableProjection = {
+  private[this] val initialProjection: MutableProjection = {
     val initExpressions = allAggregateFunctions.flatMap(_.initialValues)
     newMutableProjection(initExpressions, Nil)()
   }
@@ -166,7 +167,7 @@ class TungstenAggregationIterator(
     val unsafeProjection =
       UnsafeProjection.create(bufferSchema.map(_.dataType))
     val buffer = unsafeProjection.apply(genericMutableBuffer)
-    algebraicInitialProjection.target(buffer)(EmptyRow)
+    initialProjection.target(buffer)(EmptyRow)
     buffer
   }
 
@@ -181,77 +182,71 @@ class TungstenAggregationIterator(
       // Partial-only
       case (Some(Partial), None) =>
         val updateExpressions = allAggregateFunctions.flatMap(_.updateExpressions)
-        val algebraicUpdateProjection =
+        val updateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
-          algebraicUpdateProjection.target(currentBuffer)
-          algebraicUpdateProjection(joinedRow(currentBuffer, row))
+          updateProjection.target(currentBuffer)
+          updateProjection(joinedRow(currentBuffer, row))
         }
 
       // PartialMerge-only or Final-only
       case (Some(PartialMerge), None) | (Some(Final), None) =>
         val mergeExpressions = allAggregateFunctions.flatMap(_.mergeExpressions)
-        // This projection is used to merge buffer values for all AlgebraicAggregates.
-        val algebraicMergeProjection =
-          newMutableProjection(
-            mergeExpressions,
-            aggregationBufferAttributes ++ inputAttributes)()
+        val mergeProjection =
+          newMutableProjection(mergeExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
-          // Process all algebraic aggregate functions.
-          algebraicMergeProjection.target(currentBuffer)
-          algebraicMergeProjection(joinedRow(currentBuffer, row))
+          mergeProjection.target(currentBuffer)
+          mergeProjection(joinedRow(currentBuffer, row))
         }
 
       // Final-Complete
       case (Some(Final), Some(Complete)) =>
-        val nonCompleteAggregateFunctions: Array[AlgebraicAggregate] =
+        val nonCompleteAggregateFunctions: Array[ExpressionAggregateFunction] =
           allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
-        val completeAggregateFunctions: Array[AlgebraicAggregate] =
+        val completeAggregateFunctions: Array[ExpressionAggregateFunction] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
 
         val completeOffsetExpressions =
           Seq.fill(completeAggregateFunctions.map(_.bufferAttributes.length).sum)(NoOp)
         val mergeExpressions =
           nonCompleteAggregateFunctions.flatMap(_.mergeExpressions) ++ completeOffsetExpressions
-        val finalAlgebraicMergeProjection =
-          newMutableProjection(
-            mergeExpressions,
-            aggregationBufferAttributes ++ inputAttributes)()
+        val finalMergeProjection =
+          newMutableProjection(mergeExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         // We do not touch buffer values of aggregate functions with the Final mode.
         val finalOffsetExpressions =
           Seq.fill(nonCompleteAggregateFunctions.map(_.bufferAttributes.length).sum)(NoOp)
         val updateExpressions =
           finalOffsetExpressions ++ completeAggregateFunctions.flatMap(_.updateExpressions)
-        val completeAlgebraicUpdateProjection =
+        val completeUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
           val input = joinedRow(currentBuffer, row)
           // For all aggregate functions with mode Complete, update the given currentBuffer.
-          completeAlgebraicUpdateProjection.target(currentBuffer)(input)
+          completeUpdateProjection.target(currentBuffer)(input)
 
           // For all aggregate functions with mode Final, merge buffer values in row to
           // currentBuffer.
-          finalAlgebraicMergeProjection.target(currentBuffer)(input)
+          finalMergeProjection.target(currentBuffer)(input)
         }
 
       // Complete-only
       case (None, Some(Complete)) =>
-        val completeAggregateFunctions: Array[AlgebraicAggregate] =
+        val completeAggregateFunctions: Array[ExpressionAggregateFunction] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
 
         val updateExpressions =
           completeAggregateFunctions.flatMap(_.updateExpressions)
-        val completeAlgebraicUpdateProjection =
+        val completeUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
-          completeAlgebraicUpdateProjection.target(currentBuffer)
+          completeUpdateProjection.target(currentBuffer)
           // For all aggregate functions with mode Complete, update the given currentBuffer.
-          completeAlgebraicUpdateProjection(joinedRow(currentBuffer, row))
+          completeUpdateProjection(joinedRow(currentBuffer, row))
         }
 
       // Grouping only.
