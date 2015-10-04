@@ -15,7 +15,7 @@ MLlib provides support for dimensionality reduction on the <a href="mllib-data-t
 
 ## Singular value decomposition (SVD)
 
-[Singular value decomposition (SVD)](http://en.wikipedia.org/wiki/Singular_value_decomposition)
+[Singular value decomposition (SVD)](api/scala/index.html#org.apache.spark.mllib.linalg.SingularValueDecomposition)
 factorizes a matrix into three matrices: $U$, $\Sigma$, and $V$ such that
 
 `\[
@@ -132,7 +132,7 @@ a dependency.
 
 ## Principal component analysis (PCA)
 
-[Principal component analysis (PCA)](http://en.wikipedia.org/wiki/Principal_component_analysis) is a
+[Principal component analysis (PCA)](api/scala/index.html#org.apache.spark.mllib.feature.PCA) is a
 statistical method to find a rotation such that the first coordinate has the largest variance
 possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.

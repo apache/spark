@@ -10,7 +10,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Feature Extraction and Tran
 
 ## TF-IDF
 
-[Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a feature 
+[Term frequency-inverse document frequency (TF-IDF)](api/scala/index.html#org.apache.spark.mllib.feature.IDF) is a feature 
 vectorization method widely used in text mining to reflect the importance of a term to a document in the corpus.
 Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.
 Term frequency `$TF(t, d)$` is the number of times that term `$t$` appears in document `$d$`,
@@ -152,7 +152,7 @@ recognition, disambiguation, parsing, tagging and machine translation.
 
 ### Model
 
-In our implementation of Word2Vec, we used skip-gram model. The training objective of skip-gram is
+In our implementation of [Word2Vec](api/scala/index.html#org.apache.spark.mllib.feature.Word2Vec), we used skip-gram model. The training objective of skip-gram is
 to learn word vector representations that are good at predicting its context in the same sentence. 
 Mathematically, given a sequence of training words `$w_1, w_2, \dots, w_T$`, the objective of the
 skip-gram model is to maximize the average log-likelihood 
@@ -498,7 +498,7 @@ sc.stop();
 
 ## ElementwiseProduct
 
-`ElementwiseProduct` multiplies each input vector by a provided "weight" vector, using element-wise
+[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) multiplies each input vector by a provided "weight" vector, using element-wise
 multiplication. In other words, it scales each column of the dataset by a scalar multiplier. This
 represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29)
 between the input vector, `v` and transforming vector, `scalingVec`, to yield a result vector.
@@ -607,7 +607,7 @@ transformedData2 = transformer.transform(parsedData.first())
 
 ## PCA
 
-A feature transformer that projects vectors to a low-dimensional space using PCA.
+A feature transformer that projects vectors to a low-dimensional space using [PCA](api/scala/index.html#org.apache.spark.mllib.feature.PCA).
 Details you can read at [dimensionality reduction](mllib-dimensionality-reduction.html).
 
 ### Example

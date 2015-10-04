@@ -28,7 +28,7 @@ PFP distributes the work of growing FP-trees based on the suffices of transactio
 and hence more scalable than a single-machine implementation.
 We refer users to the papers for more details.
 
-MLlib's FP-growth implementation takes the following (hyper-)parameters:
+MLlib's [FP-growth](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) implementation takes the following (hyper-)parameters:
 
 * `minSupport`: the minimum support for an itemset to be identified as frequent.
   For example, if an item appears 3 out of 5 transactions, it has a support of 3/5=0.6.
@@ -195,7 +195,7 @@ results.collect().foreach { rule =>
 </div>
 
 <div data-lang="java" markdown="1">
-[AssociationRules](api/java/org/apache/spark/mllib/fpm/AssociationRules.html)
+[AssociationRules](api/scala/index.html#org.apache.spark.mllib.fpm.AssociationRules)
 implements a parallel rule generation algorithm for constructing rules
 that have a single item as the consequent.
 
@@ -234,7 +234,7 @@ PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
 the reader to the referenced paper for formalizing the sequential
 pattern mining problem.
 
-MLlib's PrefixSpan implementation takes the following parameters:
+MLlib's [PrefixSpan](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) implementation takes the following parameters:
 
 * `minSupport`: the minimum support required to be considered a frequent
   sequential pattern.

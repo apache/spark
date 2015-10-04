@@ -4,10 +4,10 @@ title: Clustering - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Clustering
 ---
 
-Clustering is an unsupervised learning problem whereby we aim to group subsets
+[Clustering](https://en.wikipedia.org/wiki/Cluster_analysis) is an unsupervised learning problem whereby we aim to group subsets
 of entities with one another based on some notion of similarity.  Clustering is
 often used for exploratory analysis and/or as a component of a hierarchical
-supervised learning pipeline (in which distinct classifiers or regression
+[supervised learning](https://en.wikipedia.org/wiki/Supervised_learning) pipeline (in which distinct classifiers or regression
 models are trained for each cluster).
 
 MLlib supports the following models:
@@ -17,7 +17,7 @@ MLlib supports the following models:
 
 ## K-means
 
-[k-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
+[k-means](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) is one of the
 most commonly used clustering algorithms that clusters the data points into a
 predefined number of clusters. The MLlib implementation includes a parallelized
 variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
@@ -163,7 +163,7 @@ sameModel = KMeansModel.load(sc, "myModelPath")
 
 ## Gaussian mixture
 
-A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
+A [Gaussian Mixture Model](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture)
 represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
 each with its own probability.  The MLlib implementation uses the
 [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
@@ -291,7 +291,7 @@ for i in range(2):
 
 ## Power iteration clustering (PIC)
 
-Power iteration clustering (PIC) is a scalable and efficient algorithm for clustering vertices of a
+[Power iteration clustering (PIC)](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) is a scalable and efficient algorithm for clustering vertices of a
 graph given pairwise similarties as edge properties,
 described in [Lin and Cohen, Power Iteration Clustering](http://www.icml2010.org/papers/387.pdf).
 It computes a pseudo-eigenvector of the normalized affinity matrix of the graph via
@@ -434,7 +434,7 @@ sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
 
 ## Latent Dirichlet allocation (LDA)
 
-[Latent Dirichlet allocation (LDA)](http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation)
+[Latent Dirichlet allocation (LDA)](api/scala/index.html#org.apache.spark.mllib.clustering.LDA)
 is a topic model which infers topics from a collection of text documents.
 LDA can be thought of as a clustering algorithm as follows:
 
@@ -698,7 +698,7 @@ sameModel = LDAModel.load(sc, "myModelPath")
 ## Streaming k-means
 
 When data arrive in a stream, we may want to estimate clusters dynamically,
-updating them as new data arrive. MLlib provides support for streaming k-means clustering,
+updating them as new data arrive. MLlib provides support for [streaming k-means clustering](api/scala/index.html#org.apache.spark.mllib.clustering.StreamingKMeans),
 with parameters to control the decay (or "forgetfulness") of the estimates. The algorithm
 uses a generalization of the mini-batch k-means update rule. For each batch of data, we assign
 all points to their nearest cluster, compute new cluster centers, then update each cluster using:
