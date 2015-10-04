@@ -17,7 +17,7 @@ A training example used in supervised learning is called a "labeled point" in ML
 ## Local vector
 
 A local vector has integer-typed and 0-based indices and double-typed values, stored on a single
-machine.  MLlib supports two types of local vectors: dense and sparse.  A dense vector is backed by
+machine.  MLlib supports two types of local vectors: [dense](api/scala/index.html#org.apache.spark.mllib.linalg.DenseVector) and [sparse](api/scala/index.html#org.apache.spark.mllib.linalg.SparseVector).  A dense vector is backed by
 a double array representing its entry values, while a sparse vector is backed by two parallel
 arrays: indices and values.  For example, a vector `(1.0, 0.0, 3.0)` can be represented in dense
 format as `[1.0, 0.0, 3.0]` or in sparse format as `(3, [0, 2], [1.0, 3.0])`, where `3` is the size
@@ -106,7 +106,7 @@ sv2 = sps.csc_matrix((np.array([1.0, 3.0]), np.array([0, 2]), np.array([0, 2])),
 
 ## Labeled point
 
-A labeled point is a local vector, either dense or sparse, associated with a label/response.
+A [labeled point](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) is a local vector, either dense or sparse, associated with a label/response.
 In MLlib, labeled points are used in supervised learning algorithms.
 We use a double to store a label, so we can use labeled points in both regression and classification.
 For binary classification, a label should be either `0` (negative) or `1` (positive).
@@ -225,8 +225,8 @@ examples = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 ## Local matrix
 
 A local matrix has integer-typed row and column indices and double-typed values, stored on a single
-machine.  MLlib supports dense matrices, whose entry values are stored in a single double array in
-column-major order, and sparse matrices, whose non-zero entry values are stored in the Compressed Sparse
+machine.  MLlib supports [dense matrices](api/scala/index.html#org.apache.spark.mllib.linalg.DenseMatrix), whose entry values are stored in a single double array in
+column-major order, and [sparse matrices](api/scala/index.html#org.apache.spark.mllib.linalg.SparseMatrix), whose non-zero entry values are stored in the Compressed Sparse
 Column (CSC) format in column-major order.  For example, the following dense matrix `\[ \begin{pmatrix}
 1.0 & 2.0 \\
 3.0 & 4.0 \\

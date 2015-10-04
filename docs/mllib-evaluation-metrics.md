@@ -39,7 +39,7 @@ be captured by combining the two into a single metric, called the [F-measure](ht
 
 ### Binary classification
 
-[Binary classifiers](https://en.wikipedia.org/wiki/Binary_classification) are used to separate the elements of a given
+[Binary classifiers](api/scala/index.html#org.apache.spark.mllib.evaluation.BinaryClassificationMetrics) are used to separate the elements of a given
 dataset into one of two possible groups (e.g. fraud or not fraud) and is a special case of multiclass classification.
 Most binary classification metrics can be generalized to multiclass classification metrics.
 
@@ -315,7 +315,7 @@ print("Area under ROC = %s" % metrics.areaUnderROC)
 
 ### Multiclass classification
 
-A [multiclass classification](https://en.wikipedia.org/wiki/Multiclass_classification) describes a classification
+A [multiclass classification](api/scala/index.html#org.apache.spark.mllib.evaluation.MulticlassMetrics) describes a classification
 problem where there are $M \gt 2$ possible labels for each data point (the case where $M=2$ is the binary
 classification problem). For example, classifying handwriting samples to the digits 0 to 9, having 10 possible classes.
 
@@ -631,7 +631,7 @@ print("Weighted false positive rate = %s" % metrics.weightedFalsePositiveRate)
 
 ### Multilabel classification
 
-A [multilabel classification](https://en.wikipedia.org/wiki/Multi-label_classification) problem involves mapping
+A [multilabel classification](api/scala/index.html#org.apache.spark.mllib.evaluation.MultilabelMetrics) problem involves mapping
 each sample in a dataset to a set of class labels. In this type of classification problem, the labels are not
 mutually exclusive. For example, when classifying a set of news articles into topics, a single article might be both
 science and politics.
@@ -911,7 +911,7 @@ print("Subset accuracy = %s" % metrics.subsetAccuracy)
 
 ### Ranking systems
 
-The role of a ranking algorithm (often thought of as a [recommender system](https://en.wikipedia.org/wiki/Recommender_system))
+The role of a ranking algorithm (often thought of as a [recommender system](api/scala/index.html#org.apache.spark.mllib.evaluation.RankingMetrics))
 is to return to the user a set of relevant items or documents based on some training data. The definition of relevance
 may vary and is usually application specific. Ranking system metrics aim to quantify the effectiveness of these
 rankings or recommendations in various contexts. Some metrics compare a set of recommended documents to a ground truth
@@ -1295,7 +1295,7 @@ print("R-squared = %s" % metrics.r2)
 
 ## Regression model evaluation
 
-[Regression analysis](https://en.wikipedia.org/wiki/Regression_analysis) is used when predicting a continuous output
+[Regression analysis](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) is used when predicting a continuous output
 variable from a number of independent variables.
 
 **Available metrics**

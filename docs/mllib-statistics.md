@@ -422,7 +422,7 @@ for i, result in enumerate(featureTestResults):
 
 </div>
 
-Additionally, MLlib provides a 1-sample, 2-sided implementation of the Kolmogorov-Smirnov (KS) test
+Additionally, MLlib provides a 1-sample, 2-sided implementation of the [Kolmogorov-Smirnov (KS) test](api/scala/index.html#org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult)
 for equality of probability distributions. By providing the name of a theoretical distribution
 (currently solely supported for the normal distribution) and its parameters, or a function to 
 calculate the cumulative distribution according to a given theoretical distribution, the user can
