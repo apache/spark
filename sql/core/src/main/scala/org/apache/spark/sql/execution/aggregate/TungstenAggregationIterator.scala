@@ -62,10 +62,6 @@ import org.apache.spark.sql.types.StructType
  *   [[PartialMerge]], or [[Final]].
  * @param completeAggregateExpressions
  *   [[AggregateExpression2]] containing [[AggregateFunction2]]s with mode [[Complete]].
- * @param initialInputBufferOffset
- *   If this iterator is used to handle functions with mode [[PartialMerge]] or [[Final]].
- *   The input rows have the format of `grouping keys + aggregation buffer`.
- *   This offset indicates the starting position of aggregation buffer in a input row.
  * @param resultExpressions
  *   expressions for generating output rows.
  * @param newMutableProjection
@@ -77,7 +73,6 @@ class TungstenAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
     completeAggregateExpressions: Seq[AggregateExpression2],
-    initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     originalInputAttributes: Seq[Attribute],

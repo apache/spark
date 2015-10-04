@@ -128,7 +128,6 @@ object Utils {
         groupingExpressions = namedGroupingExpressions.map(_._2),
         nonCompleteAggregateExpressions = partialAggregateExpressions,
         completeAggregateExpressions = Nil,
-        initialInputBufferOffset = 0,
         resultExpressions = partialResultExpressions,
         child = child)
     } else {
@@ -173,7 +172,6 @@ object Utils {
         groupingExpressions = namedGroupingAttributes,
         nonCompleteAggregateExpressions = finalAggregateExpressions,
         completeAggregateExpressions = Nil,
-        initialInputBufferOffset = namedGroupingAttributes.length,
         resultExpressions = rewrittenResultExpressions,
         child = partialAggregate)
     } else {
@@ -265,7 +263,6 @@ object Utils {
         groupingExpressions = partialAggregateGroupingExpressions,
         nonCompleteAggregateExpressions = partialAggregateExpressions,
         completeAggregateExpressions = Nil,
-        initialInputBufferOffset = 0,
         resultExpressions = partialAggregateResult,
         child = child)
     } else {
@@ -295,7 +292,6 @@ object Utils {
         groupingExpressions = namedGroupingAttributes ++ distinctColumnAttributes,
         nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
         completeAggregateExpressions = Nil,
-        initialInputBufferOffset = (namedGroupingAttributes ++ distinctColumnAttributes).length,
         resultExpressions = partialMergeAggregateResult,
         child = partialAggregate)
     } else {
@@ -377,7 +373,6 @@ object Utils {
         groupingExpressions = namedGroupingAttributes,
         nonCompleteAggregateExpressions = finalAggregateExpressions,
         completeAggregateExpressions = completeAggregateExpressions,
-        initialInputBufferOffset = (namedGroupingAttributes ++ distinctColumnAttributes).length,
         resultExpressions = rewrittenResultExpressions,
         child = partialMergeAggregate)
     } else {
