@@ -1044,12 +1044,20 @@ setMethod("subset", signature(x = "DataFrame"),
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
 #'   # Similar to R data frames columns can also be selected using `$`
-#'   df$age
+#'   df[,df$age]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
-            sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
-            dataFrame(sdf)
+            if (length(col) > 1) {
+              if (length(list(...)) > 0) {
+                stop("To select multiple columns, use a character vector or list for col")
+              }
+
+              select(x, as.list(col))
+            } else {
+              sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
+              dataFrame(sdf)
+            }
           })
 
 #' @rdname select
