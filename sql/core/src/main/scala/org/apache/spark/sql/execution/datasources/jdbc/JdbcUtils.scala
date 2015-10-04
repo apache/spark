@@ -169,14 +169,10 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field => {
       val name = field.name
-      /* Modified getJDBCType with added parameter metadata
-       * To override field metadata in Scala
-       * import org.apache.spark.sql.types.MetadataBuilder
-       * val metadata = new MetadataBuilder().putLong("maxlength", 10).build()
-       * df.withColumn("colName", col("colName").as("colName", metadata)
-       */
+      // Added getJDBCType with added parameter metadata
       val typ: String = dialect.getJDBCType(field.dataType, field.metadata)
-        .map(_.databaseTypeDefinition).getOrElse(
+        .map(_.databaseTypeDefinition).orElse(dialect.getJDBCType(field.dataType)
+        .map(_.databaseTypeDefinition)).getOrElse(
           field.dataType match {
             case IntegerType => "INTEGER"
             case LongType => "BIGINT"
@@ -208,29 +204,27 @@ object JdbcUtils extends Logging {
       properties: Properties = new Properties()) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
-      /* Modified getJDBCType with added parameter metadata
-       * To override field metadata in Scala
-       * import org.apache.spark.sql.types.MetadataBuilder
-       * val metadata = new MetadataBuilder().putLong("maxlength", 10).build()
-       * df.withColumn("colName", col("colName").as("colName", metadata)
-       */
-      dialect.getJDBCType(field.dataType, field.metadata).map(_.jdbcNullType).getOrElse(
-        field.dataType match {
-          case IntegerType => java.sql.Types.INTEGER
-          case LongType => java.sql.Types.BIGINT
-          case DoubleType => java.sql.Types.DOUBLE
-          case FloatType => java.sql.Types.REAL
-          case ShortType => java.sql.Types.INTEGER
-          case ByteType => java.sql.Types.INTEGER
-          case BooleanType => java.sql.Types.BIT
-          case StringType => java.sql.Types.CLOB
-          case BinaryType => java.sql.Types.BLOB
-          case TimestampType => java.sql.Types.TIMESTAMP
-          case DateType => java.sql.Types.DATE
-          case t: DecimalType => java.sql.Types.DECIMAL
-          case _ => throw new IllegalArgumentException(
+      // Added getJDBCType with added parameter metadata
+      dialect.getJDBCType(field.dataType, field.metadata)
+        .map(_.jdbcNullType).orElse(dialect.getJDBCType(field.dataType)
+        .map(_.jdbcNullType)).getOrElse(
+          field.dataType match {
+            case IntegerType => java.sql.Types.INTEGER
+            case LongType => java.sql.Types.BIGINT
+            case DoubleType => java.sql.Types.DOUBLE
+            case FloatType => java.sql.Types.REAL
+            case ShortType => java.sql.Types.INTEGER
+            case ByteType => java.sql.Types.INTEGER
+            case BooleanType => java.sql.Types.BIT
+            case StringType => java.sql.Types.CLOB
+            case BinaryType => java.sql.Types.BLOB
+            case TimestampType => java.sql.Types.TIMESTAMP
+            case DateType => java.sql.Types.DATE
+            case t: DecimalType => java.sql.Types.DECIMAL
+            case _ => throw new IllegalArgumentException(
             s"Can't translate null value for field $field")
-        })
+          }
+        )
     }
 
     val rddSchema = df.schema
