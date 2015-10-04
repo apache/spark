@@ -393,7 +393,7 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 
 #' @rdname arrange
 #' @export
-setGeneric("arrange", function(x, col, ...) {standardGeneric("arrange") })
+setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
 #' @rdname schema
 #' @export

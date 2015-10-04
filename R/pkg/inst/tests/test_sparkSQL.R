@@ -982,7 +982,7 @@ test_that("arrange() and orderBy() on a DataFrame", {
   sorted <- arrange(df, df$age)
   expect_equal(collect(sorted)[1,2], "Michael")
 
-  sorted2 <- arrange(df, "name")
+  sorted2 <- arrange(df, "name", decreasing = FALSE)
   expect_equal(collect(sorted2)[2,"age"], 19)
 
   sorted3 <- orderBy(df, asc(df$age))
@@ -993,13 +993,13 @@ test_that("arrange() and orderBy() on a DataFrame", {
   expect_equal(first(sorted4)$name, "Michael")
   expect_equal(collect(sorted4)[3,"name"], "Andy")
 
-  sorted5 <- arrange(df, "age", "name", TRUE)
+  sorted5 <- arrange(df, "age", "name", decreasing = TRUE)
   expect_equal(collect(sorted5)[1,2], "Andy")
 
-  sorted6 <- arrange(df, "age","name", c(T, F))
+  sorted6 <- arrange(df, "age","name", decreasing = c(T, F))
   expect_equal(collect(sorted6)[1,2], "Andy")
 
-  sorted7 <- arrange(df, "name", decreasing=FALSE)
+  sorted7 <- arrange(df, "name", decreasing = FALSE)
   expect_equal(collect(sorted7)[2,"age"], 19)
 })
 

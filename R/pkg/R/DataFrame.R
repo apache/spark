@@ -1307,13 +1307,11 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' df <- jsonFile(sqlContext, path)
 #' arrange(df, df$col1)
 #' arrange(df, asc(df$col1), desc(abs(df$col2)))
-#' arrange(df, "col1")
-#' arrange(df, "col2", FALSE)
-#' arrange(df, "col1", decreasing=TRUE)
-#' arrange(df, "col1", "col2", c(TRUE, FALSE))
+#' arrange(df, "col1", decreasing = TRUE)
+#' arrange(df, "col1", "col2", decreasing = c(TRUE, FALSE))
 #' }
 setMethod("arrange",
-          signature(x = "DataFrame", col="Column"),
+          signature(x = "DataFrame", col = "Column"),
           function(x, col, ...) {
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
@@ -1326,23 +1324,16 @@ setMethod("arrange",
 #' @rdname arrange
 #' @export
 setMethod("arrange",
-          signature(x = "DataFrame", col="character"),
-          function(x, col, ..., decreasing=FALSE) {
+          signature(x = "DataFrame", col = "character"),
+          function(x, col, ..., decreasing = FALSE) {
 
             # all sorting columns
             by <- list(col, ...)
 
-            # extracting the last element and uses it as decreasing if it is boolean
-            lastElement <- tail(by,1)[[1]]
-            if (is.logical(lastElement)) {
-              length(by) <- length(by) - 1
-              decreasing <- lastElement
-            }
-
             if (length(decreasing) == 1) {
               # in case only 1 boolean argument - decreasing value is specified,
               # it will be used for all columns
-              decreasing <- rep(decreasing,length(by))
+              decreasing <- rep(decreasing, length(by))
             } else if (length(decreasing) != length(by)) {
               stop("Arguments 'col' and 'decreasing' must have the same length")
             }
