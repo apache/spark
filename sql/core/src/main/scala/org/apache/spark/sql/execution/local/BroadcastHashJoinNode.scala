@@ -37,7 +37,15 @@ case class BroadcastHashJoinNode(
 
   override val child = streamedNode
 
-  private[this] var hashJoinNode: HashJoinNode = _
+  private[this] val hashJoinNode: HashJoinNode = {
+    HashJoinNode(
+      conf = conf,
+      streamedKeys = streamedKeys,
+      streamedNode = streamedNode,
+      buildSide = buildSide,
+      buildOutput = buildOutput,
+      isWrapped = true)
+  }
 
   // Because we do not pass in the buildNode, we take the output of buildNode to
   // create the inputSet properly.
@@ -51,16 +59,8 @@ case class BroadcastHashJoinNode(
   override def open(): Unit = {
     // Call the open of streamedNode.
     streamedNode.open()
-    // Create the HashJoinNode based on the streamedNode and HashedRelation.
-    hashJoinNode =
-      HashJoinNode(
-        conf = conf,
-        streamedKeys = streamedKeys,
-        streamedNode = streamedNode,
-        buildSide = buildSide,
-        buildOutput = buildOutput,
-        hashedRelation = hashedRelation.value,
-        isWrapped = true)
+    // Set the HashedRelation used by the HashJoinNode.
+    hashJoinNode.withHashedRelation(hashedRelation.value)
     // Setup this HashJoinNode. We still call these in case there is any setup work
     // that needs to be done in this HashJoinNode. Because isWrapped is true,
     // prepare and open will not propagate to the child of streamedNode.

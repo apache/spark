@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * A node for inner hash equi-join. It can be used individually or wrapped by other
- * inner hash equi-join nodes such as [[BinarydHashJoinNode]]. This node takes a already
+ * inner hash equi-join nodes such as [[BinaryHashJoinNode]]. This node takes a already
  * built [[HashedRelation]] and a [[LocalNode]] representing the streamed side.
  * If this node is used individually, `isWrapped` should be set to false.
  * If this node is wrapped in another node, `isWrapped` should be set to true
@@ -40,7 +40,6 @@ case class HashJoinNode(
     streamedNode: LocalNode,
     buildSide: BuildSide,
     buildOutput: Seq[Attribute],
-    hashedRelation: HashedRelation,
     isWrapped: Boolean) extends UnaryLocalNode(conf) {
 
   override val child = streamedNode
@@ -61,7 +60,7 @@ case class HashJoinNode(
   private[this] var joinRow: JoinedRow = _
   private[this] var resultProjection: (InternalRow) => InternalRow = _
 
-  private[this] val hashed: HashedRelation = hashedRelation
+  private[this] var hashed: HashedRelation = _
   private[this] var joinKeys: Projection = _
 
   private[this] def isUnsafeMode: Boolean = {
@@ -74,6 +73,11 @@ case class HashJoinNode(
     } else {
       newMutableProjection(streamedKeys, streamedNode.output)()
     }
+  }
+
+  /** Sets the HashedRelation used by this node. */
+  def withHashedRelation(hashedRelation: HashedRelation): Unit = {
+    hashed = hashedRelation
   }
 
   override def prepare(): Unit = {

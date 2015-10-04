@@ -89,7 +89,7 @@ class HashJoinNodeSuite extends LocalNodeTest with SharedSQLContext {
       val rightNode = new DummyNode(joinNicknameAttributes, rightInput)
       val makeBinaryHashJoinNode = (node1: LocalNode, node2: LocalNode) => {
         val binaryHashJoinNode =
-          BinarydHashJoinNode(conf, Seq('id1), Seq('id2), buildSide, node1, node2)
+          BinaryHashJoinNode(conf, Seq('id1), Seq('id2), buildSide, node1, node2)
         resolveExpressions(binaryHashJoinNode)
       }
       val makeBroadcastJoinNode = (node1: LocalNode, node2: LocalNode) => {

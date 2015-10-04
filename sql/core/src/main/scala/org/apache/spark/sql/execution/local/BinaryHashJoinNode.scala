@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.joins.{HashedRelation, BuildLeft, BuildRig
  * `buildSide`. The actual work of this node will be delegated to the [[HashJoinNode]]
  * that is created in `open`.
  */
-case class BinarydHashJoinNode(
+case class BinaryHashJoinNode(
     conf: SQLConf,
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -40,8 +40,15 @@ case class BinarydHashJoinNode(
     case BuildRight => (right, rightKeys, left, leftKeys)
   }
 
-  private[this] var hashJoinNode: HashJoinNode = _
-
+  private[this] val hashJoinNode: HashJoinNode = {
+    HashJoinNode(
+      conf = conf,
+      streamedKeys = streamedKeys,
+      streamedNode = streamedNode,
+      buildSide = buildSide,
+      buildOutput = buildNode.output,
+      isWrapped = true)
+  }
   override def output: Seq[Attribute] = left.output ++ right.output
 
   private[this] def isUnsafeMode: Boolean = {
@@ -65,16 +72,8 @@ case class BinarydHashJoinNode(
 
     // Call the open of streamedNode.
     streamedNode.open()
-    // Create the HashJoinNode based on the streamedNode and HashedRelation.
-    hashJoinNode =
-      HashJoinNode(
-        conf = conf,
-        streamedKeys = streamedKeys,
-        streamedNode = streamedNode,
-        buildSide = buildSide,
-        buildOutput = buildNode.output,
-        hashedRelation = hashedRelation,
-        isWrapped = true)
+    // Set the HashedRelation used by the HashJoinNode.
+    hashJoinNode.withHashedRelation(hashedRelation)
     // Setup this HashJoinNode. We still call these in case there is any setup work
     // that needs to be done in this HashJoinNode. Because isWrapped is true,
     // prepare and open will not propagate to the child of streamedNode.
