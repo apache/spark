@@ -1312,7 +1312,20 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' arrange(df, "col1", "col2", c(TRUE, FALSE))
 #' }
 setMethod("arrange",
-          signature(x = "DataFrame", col="characterOrColumn"),
+          signature(x = "DataFrame", col="Column"),
+          function(x, col, ...) {
+              jcols <- lapply(list(col, ...), function(c) {
+                c@jc
+              })
+
+            sdf <- callJMethod(x@sdf, "sort", jcols)
+            dataFrame(sdf)
+          })
+
+#' @rdname arrange
+#' @export
+setMethod("arrange",
+          signature(x = "DataFrame", col="character"),
           function(x, col, ..., decreasing=FALSE) {
 
             # all sorting columns
@@ -1325,35 +1338,26 @@ setMethod("arrange",
               decreasing <- lastElement
             }
 
-            if (class(col) == "Column") {
-              jcols <- lapply(by, function(c) {
-                c@jc
-              })
-            } else if (class(col) == "character") {
-              if (length(decreasing) == 1) {
-                # in case only 1 boolean argument - decreasing value is specified,
-                # it will be used for all columns
-                decreasing <- rep(decreasing,length(by))
-              } else if (length(decreasing) != length(by)) {
-                stop("Arguments 'col' and 'decreasing' must have the same length")
-              }
-
-              # builds a list of columns of type Column
-              # example: [[1]] Column Species ASC
-              #          [[2]] Column Petal_Length DESC
-              jcols <- lapply(seq_len(length(decreasing)), function(i){
-                if (decreasing[[i]]) {
-                  desc(getColumn(x, by[[i]]))@jc
-                } else {
-                  asc(getColumn(x, by[[i]]))@jc
-                }
-              })
-            } else {
-              stop("col has invalid data type")
+            if (length(decreasing) == 1) {
+              # in case only 1 boolean argument - decreasing value is specified,
+              # it will be used for all columns
+              decreasing <- rep(decreasing,length(by))
+            } else if (length(decreasing) != length(by)) {
+              stop("Arguments 'col' and 'decreasing' must have the same length")
             }
-            sdf <- callJMethod(x@sdf, "sort", jcols)
 
-            dataFrame(sdf)
+            # builds a list of columns of type Column
+            # example: [[1]] Column Species ASC
+            #          [[2]] Column Petal_Length DESC
+            jcols <- lapply(seq_len(length(decreasing)), function(i){
+              if (decreasing[[i]]) {
+                desc(getColumn(x, by[[i]]))
+              } else {
+                asc(getColumn(x, by[[i]]))
+              }
+            })
+
+            do.call("arrange", c(x, jcols))
           })
 
 #' @rdname arrange
