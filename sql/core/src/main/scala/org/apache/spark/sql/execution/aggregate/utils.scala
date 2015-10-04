@@ -214,7 +214,8 @@ object Utils {
     val aggregateExpressions = functionsWithDistinct ++ functionsWithoutDistinct
     val usesTungstenAggregate =
       child.sqlContext.conf.unsafeEnabled &&
-        aggregateExpressions.forall(_.aggregateFunction.isInstanceOf[ExpressionAggregateFunction]) &&
+        aggregateExpressions.forall(
+          _.aggregateFunction.isInstanceOf[ExpressionAggregateFunction]) &&
         supportsTungstenAggregate(
           groupingExpressions,
           aggregateExpressions.flatMap(_.aggregateFunction.bufferAttributes))

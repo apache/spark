@@ -141,7 +141,7 @@ abstract class AggregationIterator(
 
   // All interpreted aggregate functions with mode Partial, PartialMerge, or Final.
   private[this] val nonCompleteInterpretedAggregateFunctions: Array[InterpretedAggregateFunction] =
-    nonCompleteAggregateFunctions.collect { case func: InterpretedAggregateFunction  => func }
+    nonCompleteAggregateFunctions.collect { case func: InterpretedAggregateFunction => func }
 
   // The projection used to initialize buffer values for all expression-based aggregates.
   private[this] val expressionAggInitialProjection = {
