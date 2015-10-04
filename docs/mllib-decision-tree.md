@@ -23,7 +23,7 @@ Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described in 
 
 ## Basic algorithm
 
-The [decision tree](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree1) is a greedy algorithm that performs a recursive binary partitioning of the feature
+The [decision tree](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) is a greedy algorithm that performs a recursive binary partitioning of the feature
 space.  The tree predicts the same label for each bottommost (leaf) partition.
 Each partition is chosen greedily by selecting the *best split* from a set of possible splits,
 in order to maximize the information gain at a tree node. In other words, the split chosen at each
