@@ -177,7 +177,6 @@ private[spark] object ShuffleMemoryManager {
     val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
     // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
     val safetyFactor = 16
-    // TODO(davies): don't round to next power of 2
     val size = ByteArrayMethods.nextPowerOf2(maxMemory / cores / safetyFactor)
     val default = math.min(maxPageSize, math.max(minPageSize, size))
     conf.getSizeAsBytes("spark.buffer.pageSize", default)
