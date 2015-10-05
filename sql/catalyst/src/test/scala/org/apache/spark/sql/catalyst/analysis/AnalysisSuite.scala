@@ -140,6 +140,6 @@ class AnalysisSuite extends AnalysisTest {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(2))), "a")() :: Nil,
       LocalRelation()
     )
-    assertAnalysisSuccess(plan, false)
+    assertAnalysisSuccess(plan)
   }
 }
