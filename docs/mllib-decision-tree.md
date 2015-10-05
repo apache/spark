@@ -15,7 +15,7 @@ feature scaling, and are able to capture non-linearities and feature interaction
 algorithms such as random forests and boosting are among the top performers for classification and
 regression tasks.
 
-MLlib supports [decision trees](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) for binary and multiclass classification and for regression,
+MLlib supports decision trees for binary and multiclass classification and for regression,
 using both continuous and categorical features. The implementation partitions data by rows,
 allowing distributed training with millions of instances.
 
@@ -23,7 +23,7 @@ Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described in 
 
 ## Basic algorithm
 
-The [decision tree](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) is a greedy algorithm that performs a recursive binary partitioning of the feature
+The decision tree is a greedy algorithm that performs a recursive binary partitioning of the feature
 space.  The tree predicts the same label for each bottommost (leaf) partition.
 Each partition is chosen greedily by selecting the *best split* from a set of possible splits,
 in order to maximize the information gain at a tree node. In other words, the split chosen at each

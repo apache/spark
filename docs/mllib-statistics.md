@@ -118,7 +118,7 @@ correlation methods are currently Pearson's and Spearman's correlation.
  
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) provides methods to 
+[`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to 
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or 
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
 
@@ -438,7 +438,7 @@ for i, result in enumerate(featureTestResults):
 
 </div>
 
-Additionally, MLlib provides a 1-sample, 2-sided implementation of the [Kolmogorov-Smirnov (KS) test](api/scala/index.html#org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult)
+Additionally, MLlib provides a 1-sample, 2-sided implementation of the Kolmogorov-Smirnov (KS) test
 for equality of probability distributions. By providing the name of a theoretical distribution
 (currently solely supported for the normal distribution) and its parameters, or a function to 
 calculate the cumulative distribution according to a given theoretical distribution, the user can

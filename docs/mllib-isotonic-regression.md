@@ -28,12 +28,12 @@ MLlib supports a
 which uses an approach to
 [parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
 The training input is a RDD of tuples of three double values that represent
-label, feature and weight in this order. Additionally [IsotonicRegression](api/scala/index.html#org.apache.spark.mllib.regression.IsotonicRegression) algorithm has one
+label, feature and weight in this order. Additionally IsotonicRegression algorithm has one
 optional parameter called $isotonic$ defaulting to true.
 This argument specifies if the isotonic regression is
 isotonic (monotonically increasing) or antitonic (monotonically decreasing).
 
-Training returns an [IsotonicRegressionModel](api/scala/index.html#org.apache.spark.mllib.regression.IsotonicRegressionModel) that can be used to predict
+Training returns an IsotonicRegressionModel that can be used to predict
 labels for both known and unknown features. The result of isotonic regression
 is treated as piecewise linear function. The rules for prediction therefore are:
 

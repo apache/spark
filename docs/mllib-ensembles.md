@@ -9,12 +9,12 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Ensembles
 
 An [ensemble method](http://en.wikipedia.org/wiki/Ensemble_learning)
 is a learning algorithm which creates a model composed of a set of other base models.
-MLlib supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest).
-Both use [decision trees](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) as their base models.
+MLlib supports two major ensemble algorithms: [`GradientBoostedTrees`](mllib-ensembles.html#Gradient-Boosted-Trees-(GBTS)) and [`RandomForest`](mllib-ensembles.html#Random-Forests).
+Both use [decision trees](mllib-decision-tree.html) as their base models.
 
 ## Gradient-Boosted Trees vs. Random Forests
 
-Both [Gradient-Boosted Trees (GBTs)](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [Random Forests](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) are algorithms for learning ensembles of trees, but the training processes are different.  There are several practical trade-offs:
+Both [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting) and [Random Forests](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) are algorithms for learning ensembles of trees, but the training processes are different.  There are several practical trade-offs:
 
  * GBTs train one tree at a time, so they can take longer to train than random forests.  Random Forests can train multiple trees in parallel.
    * On the other hand, it is often reasonable to use smaller (shallower) trees with GBTs than with Random Forests, and training smaller trees takes less time.
@@ -25,8 +25,8 @@ In short, both algorithms can be effective, and the choice should be based on th
 
 ## Random Forests
 
-[Random forests](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest)
-are ensembles of [decision trees](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree).
+[Random forests](http://en.wikipedia.org/wiki/Random_forest)
+are ensembles of [decision trees](mllib-decision-tree.html).
 Random forests are one of the most successful machine learning models for classification and
 regression.  They combine many decision trees in order to reduce the risk of overfitting.
 Like decision trees, random forests handle categorical features,
@@ -401,8 +401,8 @@ sameModel = RandomForestModel.load(sc, "myModelPath")
 
 ## Gradient-Boosted Trees (GBTs)
 
-[Gradient-Boosted Trees (GBTs)](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees)
-are ensembles of [decision trees](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree).
+[Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting)
+are ensembles of [decision trees](mllib-decision-tree.html).
 GBTs iteratively train decision trees in order to minimize a loss function.
 Like decision trees, GBTs handle categorical features,
 extend to the multiclass classification setting, do not require
@@ -410,10 +410,10 @@ feature scaling, and are able to capture non-linearities and feature interaction
 
 MLlib supports GBTs for binary classification and for regression,
 using both continuous and categorical features.
-MLlib implements GBTs using the existing [decision tree](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) implementation.  Please see the decision tree guide for more information on trees.
+MLlib implements GBTs using the existing [decision tree](mllib-decision-tree.html) implementation.  Please see the decision tree guide for more information on trees.
 
 *Note*: GBTs do not yet support multiclass classification.  For multiclass problems, please use
-[decision trees](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) or [Random Forests](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest).
+[decision trees](mllib-decision-tree.html) or [Random Forests](mllib-ensembles.html#Random-Forest).
 
 ### Basic algorithm
 

@@ -15,7 +15,7 @@ missing entries of a user-item association matrix.  MLlib currently supports
 model-based collaborative filtering, in which users and products are described
 by a small set of latent factors that can be used to predict missing entries.
 MLlib uses the [alternating least squares
-(ALS)](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS)
+(ALS)](http://dl.acm.org/citation.cfm?id=1608614)
 algorithm to learn these latent factors. The implementation in MLlib has the
 following parameters:
 
