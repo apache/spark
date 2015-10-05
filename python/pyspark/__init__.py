@@ -41,7 +41,7 @@ import sys
 
 import xml.etree.ElementTree as ET
 
-if (os.environ.get("SPARK_HOME", "not found") == "not found"):
+if os.environ.get("SPARK_HOME") is None:
     raise ImportError("Environment variable SPARK_HOME is undefined.")
 
 spark_home = os.environ['SPARK_HOME']
