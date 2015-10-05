@@ -125,7 +125,8 @@ private[spark] class ExecutorAllocationManager(
     conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
 
   // Executors that have been requested to be removed but have not been killed yet
-  private val executorsPendingToRemove = new mutable.HashSet[String] with mutable.SynchronizedSet[String]
+  private val executorsPendingToRemove = new mutable.HashSet[String]
+    with mutable.SynchronizedSet[String]
 
   // All known executors
   private val executorIds = new mutable.HashSet[String] with mutable.SynchronizedSet[String]
@@ -136,7 +137,8 @@ private[spark] class ExecutorAllocationManager(
 
   // A timestamp for each executor of when the executor should be removed, indexed by the ID
   // This is set when an executor is no longer running a task, or when it first registers
-  private val removeTimes = new mutable.HashMap[String, Long] with mutable.SynchronizedMap[String, Long]
+  private val removeTimes = new mutable.HashMap[String, Long]
+    with mutable.SynchronizedMap[String, Long]
 
   // Polling loop interval (ms)
   private val intervalMillis: Long = 100
@@ -501,7 +503,7 @@ private[spark] class ExecutorAllocationManager(
       logWarning(s"Attempted to mark unknown executor $executorId idle")
     }
   }
-  
+
   def isExecutorAlive(executorId: String): Boolean = {
     if (!executorsPendingToRemove.contains(executorId)) {
       true

@@ -475,13 +475,13 @@ private[spark] class TaskSetManager(
               throw new TaskNotSerializableException(e)
           }
           val executorManager = sched.sc.executorAllocationManager.getOrElse(null)
-          if(executorManager != null) {
-            if(!executorManager.isExecutorAlive(execId)) {
+          if (executorManager != null) {
+            if (!executorManager.isExecutorAlive(execId)) {
               return None
             }
             executorManager.onExecutorBusy(execId)
           }
-          
+
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
               !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true
