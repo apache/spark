@@ -232,7 +232,7 @@ Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a 
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given bellow:
 
-Refer to the [`BinaryClassificationMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/BinaryClassificationMetrics.html) for details on the API.
+Refer to the [`SVMWithSGD` Java docs](api/java/org/apache/spark/mllib/classification/SVMWithSGD.html) and [`SVMModel` Java docs](api/java/org/apache/spark/mllib/classification/SVMModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;

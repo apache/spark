@@ -103,7 +103,7 @@ i.e. 4710.28,500.00. The data are split to training and testing set.
 Model is created using the training set and a mean squared error is calculated from the predicted
 labels and real labels in the test set.
 
-Refer to the [`IsotonicRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/IsotonicRegressionModel.html) for details on the API.
+Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/mllib/regression/IsotonicRegression.html) and [`IsotonicRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/IsotonicRegressionModel.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.SparkConf;

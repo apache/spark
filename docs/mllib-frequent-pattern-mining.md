@@ -202,7 +202,7 @@ results.collect().foreach { rule =>
 </div>
 
 <div data-lang="java" markdown="1">
-[AssociationRules](api/scala/index.html#org.apache.spark.mllib.fpm.AssociationRules)
+[AssociationRules](api/java/org/apache/spark/mllib/fpm/AssociationRules.html)
 implements a parallel rule generation algorithm for constructing rules
 that have a single item as the consequent.
 
@@ -276,7 +276,7 @@ Calling `PrefixSpan.run` returns a
 [`PrefixSpanModel`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel)
 that stores the frequent sequences with their frequencies.
 
-Refer to the [`PrefixSpan` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) for details on the API.
+Refer to the [`PrefixSpan` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) and [`PrefixSpanModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.fpm.PrefixSpan

@@ -278,7 +278,7 @@ In the following example after loading and parsing data, we use a
 object to cluster the data into two clusters. The number of desired clusters is passed
 to the algorithm. We then output the parameters of the mixture model.
 
-Refer to the [`GaussianMixture` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture) for more details on the API.
+Refer to the [`GaussianMixture` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture) and [`GaussianMixtureModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixtureModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.clustering import GaussianMixture

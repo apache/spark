@@ -189,7 +189,7 @@ the [text8](http://mattmahoney.net/dc/text8.zip) data and extract it to your pre
 Here we assume the extracted file is `text8` and in same directory as you run the spark shell.  
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 Refer to the [`Word2Vec` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Word2Vec) for details on the API.
 
 {% highlight scala %}
@@ -215,7 +215,7 @@ model.save(sc, "myModelPath")
 val sameModel = Word2VecModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 Refer to the [`Word2Vec` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Word2Vec) for more details on the API.
 
 {% highlight python %}
@@ -274,7 +274,7 @@ The example below demonstrates how to load a dataset in libsvm format, and stand
 so that the new features have unit standard deviation and/or zero mean.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 Refer to the [`StandardScaler` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) for details on the API.
 
 {% highlight scala %}
@@ -300,7 +300,7 @@ val data2 = data.map(x => (x.label, scaler2.transform(Vectors.dense(x.features.t
 {% endhighlight %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 Refer to the [`StandardScaler` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.StandardScaler) for more details on the API.
 
 {% highlight python %}
@@ -352,7 +352,7 @@ The example below demonstrates how to load a dataset in libsvm format, and norma
 with $L^2$ norm, and $L^\infty$ norm.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 Refer to the [`Normalizer` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Normalizer) for details on the API.
 
 {% highlight scala %}
@@ -374,7 +374,7 @@ val data2 = data.map(x => (x.label, normalizer2.transform(x.features)))
 {% endhighlight %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 Refer to the [`Normalizer` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Normalizer) for more details on the API.
 
 {% highlight python %}
@@ -550,7 +550,7 @@ v_N
 This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [`ElementwiseProduct` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) for details on the API.
 
@@ -572,8 +572,8 @@ val transformedData2 = data.map(x => transformer.transform(x))
 {% endhighlight %}
 </div>
 
-<div data-lang="java">
-Refer to the [`ChiSqSelector` Java docs](api/java/org/apache/spark/mllib/feature/ChiSqSelector.html) for details on the API.
+<div data-lang="java" markdown="1">
+Refer to the [`ElementwiseProduct` Java docs](api/java/org/apache/spark/mllib/feature/ElementwiseProduct.html) for details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -603,7 +603,7 @@ JavaRDD<Vector> transformedData2 = data.map(
 {% endhighlight %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 Refer to the [`ElementwiseProduct` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.ElementwiseProduct) for more details on the API.
 
 {% highlight python %}
@@ -642,7 +642,7 @@ and use them to project the vectors into a low-dimensional space while keeping a
 for calculation a [Linear Regression]((mllib-linear-methods.html))
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.PCA) for details on the API.
 
 {% highlight scala %}

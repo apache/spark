@@ -90,7 +90,7 @@ System.out.println(summary.numNonzeros()); // number of nonzeros in each column
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
 
-Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
+Refer to the [`MultivariateStatisticalSummary` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.MultivariateStatisticalSummary) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.stat import Statistics
