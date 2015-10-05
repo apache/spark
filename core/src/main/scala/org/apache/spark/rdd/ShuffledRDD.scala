@@ -85,8 +85,8 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    List(new ShuffleDependency(prev, part, serializer, keyOrdering,
-      aggregator, mapSideCombine, dropKeys))
+    List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator,
+      mapSideCombine, dropKeys))
   }
 
   override val partitioner = Some(part)
