@@ -1193,10 +1193,10 @@ object Client extends Logging {
   }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
-    mainJar.flatMap { path =
+    mainJar.flatMap { path =>
       val uri = new URI(path)
       if (uri.getScheme == LOCAL_SCHEME) Some(uri) else None
-    }.orElse(Some(new URI(APP_JAR))) 
+    }.orElse(Some(new URI(APP_JAR)))
   }
 
   private def getSecondaryJarUris(secondaryJars: Option[String]): Seq[URI] = {
