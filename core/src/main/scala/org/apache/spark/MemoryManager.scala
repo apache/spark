@@ -17,6 +17,11 @@
 
 package org.apache.spark
 
+import scala.collection.mutable
+
+import org.apache.spark.storage.{BlockId, BlockStatus}
+
+
 /**
  * An abstract memory manager that enforces how memory is shared between execution and storage.
  *
@@ -25,6 +30,47 @@ package org.apache.spark
  * internal data across the cluster.
  */
 private[spark] abstract class MemoryManager {
+
+  /**
+   * Acquire N bytes of memory for execution.
+   * @return number of bytes successfully granted (<= N).
+   */
+  def acquireExecutionMemory(numBytes: Long): Long
+
+  /**
+   * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
+   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
+   * @return number of bytes successfully granted (0 or N).
+   */
+  def acquireStorageMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long
+
+  /**
+   * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
+   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
+   * @return number of bytes successfully granted (<= N).
+   */
+  def acquireUnrollMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long
+
+  /**
+   * Release N bytes of execution memory.
+   */
+  def releaseExecutionMemory(numBytes: Long): Unit
+
+  /**
+   * Release N bytes of storage memory.
+   */
+  def releaseStorageMemory(numBytes: Long): Unit
+
+  /**
+   * Release N bytes of unroll memory.
+   */
+  def releaseUnrollMemory(numBytes: Long): Unit
 
   /**
    * Total available memory for execution, in bytes.
@@ -37,25 +83,13 @@ private[spark] abstract class MemoryManager {
   def maxStorageMemory: Long
 
   /**
-   * Acquire N bytes of memory for execution.
-   * @return whether the number bytes successfully granted (<= N).
+   * Execution memory currently in use, in bytes.
    */
-  def acquireExecutionMemory(numBytes: Long): Long
+  def executionMemoryUsed: Long
 
   /**
-   * Acquire N bytes of memory for storage.
-   * @return whether the number bytes successfully granted (<= N).
+   * Storage memory currently in use, in bytes.
    */
-  def acquireStorageMemory(numBytes: Long): Long
-
-  /**
-   * Release N bytes of execution memory.
-   */
-  def releaseExecutionMemory(numBytes: Long): Unit
-
-  /**
-   * Release N bytes of storage memory.
-   */
-  def releaseStorageMemory(numBytes: Long): Unit
+  def storageMemoryUsed: Long
 
 }

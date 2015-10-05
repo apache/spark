@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+
 import org.apache.spark.MemoryManager
 import org.apache.spark.shuffle.ShuffleMemoryManager
+import org.apache.spark.storage.{BlockId, BlockStatus}
+
 
 /**
  * A [[ShuffleMemoryManager]] that can be controlled to run out of memory.
@@ -53,10 +57,20 @@ class TestShuffleMemoryManager
 }
 
 private class GrantEverythingMemoryManager extends MemoryManager {
-  override def maxExecutionMemory: Long = Long.MaxValue
-  override def maxStorageMemory: Long = Long.MaxValue
   override def acquireExecutionMemory(numBytes: Long): Long = numBytes
-  override def acquireStorageMemory(numBytes: Long): Long = numBytes
+  override def acquireStorageMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
+  override def acquireUnrollMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
   override def releaseExecutionMemory(numBytes: Long): Unit = { }
   override def releaseStorageMemory(numBytes: Long): Unit = { }
+  override def releaseUnrollMemory(numBytes: Long): Unit = { }
+  override def maxExecutionMemory: Long = Long.MaxValue
+  override def maxStorageMemory: Long = Long.MaxValue
+  override def executionMemoryUsed: Long = Long.MaxValue
+  override def storageMemoryUsed: Long = Long.MaxValue
 }

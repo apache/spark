@@ -165,9 +165,8 @@ private[spark] object ShuffleMemoryManager {
    * Create a dummy [[ShuffleMemoryManager]] with the specified capacity and page size.
    */
   def create(maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
-    val memoryManager = new StaticMemoryManager {
-      override def maxExecutionMemory: Long = maxMemory
-    }
+    val conf = new SparkConf
+    val memoryManager = new StaticMemoryManager(conf, maxMemory, Long.MaxValue)
     new ShuffleMemoryManager(memoryManager, pageSizeBytes)
   }
 

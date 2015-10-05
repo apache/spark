@@ -44,7 +44,6 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
   private val securityMgr = new SecurityManager(conf)
   private val mapOutputTracker = new MapOutputTrackerMaster(conf)
   private val shuffleManager = new HashShuffleManager(conf)
-  private val memoryManager = new StaticMemoryManager(conf)
 
   // List of block manager created during an unit test, so that all of the them can be stopped
   // after the unit test.
@@ -57,16 +56,14 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
   // Implicitly convert strings to BlockIds for test clarity.
   implicit private def StringToBlockId(value: String): BlockId = new TestBlockId(value)
 
-  private def makeMemoryManager(maxMem: Long) = new StaticMemoryManager(conf) {
-    override def maxStorageMemory: Long = maxMem
-  }
-
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem)
     val store = new BlockManager(name, rpcEnv, master, serializer, conf,
-      makeMemoryManager(maxMem), mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    memManager.setMemoryStore(store.memoryStore)
     store.initialize("app-id")
     allStores += store
     store
@@ -263,8 +260,10 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
     val failableTransfer = mock(classOf[BlockTransferService]) // this wont actually work
     when(failableTransfer.hostName).thenReturn("some-hostname")
     when(failableTransfer.port).thenReturn(1000)
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, 10000)
     val failableStore = new BlockManager("failable-store", rpcEnv, master, serializer, conf,
-      makeMemoryManager(10000), mapOutputTracker, shuffleManager, failableTransfer, securityMgr, 0)
+      memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, 0)
+    memManager.setMemoryStore(failableStore.memoryStore)
     failableStore.initialize("app-id")
     allStores += failableStore // so that this gets stopped after test
     assert(master.getPeers(store.blockManagerId).toSet === Set(failableStore.blockManagerId))

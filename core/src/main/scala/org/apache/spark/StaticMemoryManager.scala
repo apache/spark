@@ -17,6 +17,10 @@
 
 package org.apache.spark
 
+import scala.collection.mutable
+
+import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
+
 
 /**
  * A [[MemoryManager]] that statically partitions the heap space into disjoint regions.
@@ -25,52 +29,112 @@ package org.apache.spark
  * `spark.shuffle.memoryFraction` and `spark.storage.memoryFraction` respectively. The two
  * regions are cleanly separated such that neither usage can borrow memory from the other.
  */
-private[spark] class StaticMemoryManager(conf: SparkConf = new SparkConf)
+private[spark] class StaticMemoryManager(
+    conf: SparkConf,
+    override val maxExecutionMemory: Long,
+    override val maxStorageMemory: Long)
   extends MemoryManager with Logging {
 
-  private val _maxExecutionMemory: Long = StaticMemoryManager.getMaxExecutionMemory(conf)
-  private val _maxStorageMemory: Long = StaticMemoryManager.getMaxStorageMemory(conf)
-  private val executionMemoryLock = new Object
-  private val storageMemoryLock = new Object
+  // Max number of bytes worth of blocks to evict when unrolling
+  private val maxMemoryToEvictForUnroll: Long = {
+    (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
+  }
 
-  // All accesses must be synchronized on `executionMemoryLock`
-  private var executionMemoryUsed: Long = 0
+  // Amount of execution memory in use. Accesses must be synchronized on `executionLock`.
+  private var _executionMemoryUsed: Long = 0
+  private val executionLock = new Object
 
-  // All accesses must be synchronized on `storageMemoryLock`
-  private var storageMemoryUsed: Long = 0
+  // Amount of storage memory in use. Accesses must be synchronized on `storageLock`.
+  private var _storageMemoryUsed: Long = 0
+  private val storageLock = new Object
 
-  /**
-   * Total available memory for execution, in bytes.
-   */
-  override def maxExecutionMemory: Long = _maxExecutionMemory
+  // The memory store used to evict cached blocks
+  private var _memoryStore: MemoryStore = _
+  private def memoryStore: MemoryStore = {
+    if (_memoryStore == null) {
+      _memoryStore = SparkEnv.get.blockManager.memoryStore
+    }
+    _memoryStore
+  }
 
-  /**
-   * Total available memory for storage, in bytes.
-   */
-  override def maxStorageMemory: Long = _maxStorageMemory
+  // For testing only
+  def setMemoryStore(store: MemoryStore): Unit = {
+    _memoryStore = store
+  }
+
+  def this(conf: SparkConf) {
+    this(
+      conf,
+      StaticMemoryManager.getMaxExecutionMemory(conf),
+      StaticMemoryManager.getMaxStorageMemory(conf))
+  }
 
   /**
    * Acquire N bytes of memory for execution.
-   * @return whether the number bytes successfully granted (<= N).
+   * @return number of bytes successfully granted (<= N).
    */
   override def acquireExecutionMemory(numBytes: Long): Long = {
-    executionMemoryLock.synchronized {
-      assert(_maxExecutionMemory >= executionMemoryUsed)
-      val bytesToGrant = math.min(numBytes, _maxExecutionMemory - executionMemoryUsed)
-      executionMemoryUsed += bytesToGrant
+    executionLock.synchronized {
+      assert(_executionMemoryUsed <= maxExecutionMemory)
+      val bytesToGrant = math.min(numBytes, maxExecutionMemory - _executionMemoryUsed)
+      _executionMemoryUsed += bytesToGrant
       bytesToGrant
     }
   }
 
   /**
-   * Acquire N bytes of memory for storage.
-   * @return whether the number bytes successfully granted (<= N).
+   * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
+   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
+   * @return number of bytes successfully granted (0 or N).
    */
-  override def acquireStorageMemory(numBytes: Long): Long = {
-    storageMemoryLock.synchronized {
-      assert(_maxStorageMemory >= storageMemoryUsed)
-      val bytesToGrant = math.min(numBytes, _maxStorageMemory - storageMemoryUsed)
-      storageMemoryUsed += bytesToGrant
+  override def acquireStorageMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+    acquireStorageMemory(blockId, numBytes, numBytes, evictedBlocks)
+  }
+
+  /**
+   * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
+   *
+   * This evicts at most M bytes worth of existing blocks, where M is a fraction of the storage
+   * space specified by `spark.storage.unrollFraction`. Blocks evicted in the process, if any,
+   * are added to `evictedBlocks`.
+   *
+   * @return number of bytes successfully granted (0 or N).
+   */
+  override def acquireUnrollMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+    storageLock.synchronized {
+      val currentUnrollMemory = memoryStore.currentUnrollMemory
+      val maxNumBytesToFree = math.max(0, maxMemoryToEvictForUnroll - currentUnrollMemory)
+      val numBytesToFree = math.min(numBytes, maxNumBytesToFree)
+      acquireStorageMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
+    }
+  }
+
+  /**
+   * Acquire N bytes of storage memory for the given block, evicting existing ones if necessary.
+   *
+   * @param blockId the ID of the block we are acquiring storage memory for
+   * @param numBytesToAcquire the size of this block
+   * @param numBytesToFree the size of space to be freed through evicting blocks
+   * @param evictedBlocks a holder for blocks evicted in the process
+   * @return number of bytes successfully granted (0 or N).
+   */
+  private def acquireStorageMemory(
+      blockId: BlockId,
+      numBytesToAcquire: Long,
+      numBytesToFree: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+    storageLock.synchronized {
+      memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
+      assert(_storageMemoryUsed <= maxStorageMemory)
+      val enoughMemory = _storageMemoryUsed + numBytesToAcquire <= maxStorageMemory
+      val bytesToGrant = if (enoughMemory) numBytesToAcquire else 0
+      _storageMemoryUsed += bytesToGrant
       bytesToGrant
     }
   }
@@ -79,13 +143,13 @@ private[spark] class StaticMemoryManager(conf: SparkConf = new SparkConf)
    * Release N bytes of execution memory.
    */
   override def releaseExecutionMemory(numBytes: Long): Unit = {
-    executionMemoryLock.synchronized {
-      if (numBytes > executionMemoryUsed) {
+    executionLock.synchronized {
+      if (numBytes > _executionMemoryUsed) {
         logWarning(s"Attempted to release $numBytes bytes of execution " +
-          s"memory when we only have $executionMemoryUsed bytes")
-        executionMemoryUsed = 0
+          s"memory when we only have ${_executionMemoryUsed} bytes")
+        _executionMemoryUsed = 0
       } else {
-        executionMemoryUsed -= numBytes
+        _executionMemoryUsed -= numBytes
       }
     }
   }
@@ -94,21 +158,42 @@ private[spark] class StaticMemoryManager(conf: SparkConf = new SparkConf)
    * Release N bytes of storage memory.
    */
   override def releaseStorageMemory(numBytes: Long): Unit = {
-    storageMemoryLock.synchronized {
-      if (numBytes > storageMemoryUsed) {
+    storageLock.synchronized {
+      if (numBytes > _storageMemoryUsed) {
         logWarning(s"Attempted to release $numBytes bytes of storage " +
-          s"memory when we only have $storageMemoryUsed bytes")
-        storageMemoryUsed = 0
+          s"memory when we only have ${_storageMemoryUsed} bytes")
+        _storageMemoryUsed = 0
       } else {
-        storageMemoryUsed -= numBytes
+        _storageMemoryUsed -= numBytes
       }
     }
+  }
+
+  /**
+   * Release N bytes of unroll memory.
+   */
+  override def releaseUnrollMemory(numBytes: Long): Unit = {
+    releaseStorageMemory(numBytes)
+  }
+
+  /**
+   * Amount of execution memory currently in use, in bytes.
+   */
+  override def executionMemoryUsed: Long = executionLock.synchronized {
+    _executionMemoryUsed
+  }
+
+  /**
+   * Amount of storage memory currently in use, in bytes.
+   */
+  override def storageMemoryUsed: Long = storageLock.synchronized {
+    _storageMemoryUsed
   }
 
 }
 
 
-private object StaticMemoryManager {
+private[spark] object StaticMemoryManager {
 
   /**
    * Return the total amount of memory available for the storage region, in bytes.

@@ -63,18 +63,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
-  private def makeMemoryManager(maxMem: Long) = new StaticMemoryManager(conf) {
-    override def maxStorageMemory: Long = maxMem
-  }
-
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
-    val manager = new BlockManager(name, rpcEnv, master, serializer, conf,
-      makeMemoryManager(maxMem), mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
-    manager.initialize("app-id")
-    manager
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem)
+    val blockManager = new BlockManager(name, rpcEnv, master, serializer, conf,
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    memManager.setMemoryStore(blockManager.memoryStore)
+    blockManager.initialize("app-id")
+    blockManager
   }
 
   override def beforeEach(): Unit = {
@@ -824,9 +822,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
+    val memoryManager = new StaticMemoryManager(conf, Long.MaxValue, 1200)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
-      new JavaSerializer(conf), conf, makeMemoryManager(1200), mapOutputTracker,
+      new JavaSerializer(conf), conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, 0)
+    memoryManager.setMemoryStore(store.memoryStore)
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -1044,17 +1044,23 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   test("reserve/release unroll memory") {
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
+    val dummyBlock = TestBlockId("")
+    val dummyEvictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     assert(memoryStore.currentUnrollMemory === 0)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
+    def reserveUnrollMemoryForThisTask(memory: Long): Boolean = {
+      memoryStore.reserveUnrollMemoryForThisTask(dummyBlock, memory, dummyEvictedBlocks)
+    }
+
     // Reserve
-    memoryStore.reserveUnrollMemoryForThisTask(100)
+    assert(reserveUnrollMemoryForThisTask(100))
     assert(memoryStore.currentUnrollMemoryForThisTask === 100)
-    memoryStore.reserveUnrollMemoryForThisTask(200)
+    assert(reserveUnrollMemoryForThisTask(200))
     assert(memoryStore.currentUnrollMemoryForThisTask === 300)
-    memoryStore.reserveUnrollMemoryForThisTask(500)
+    assert(reserveUnrollMemoryForThisTask(500))
     assert(memoryStore.currentUnrollMemoryForThisTask === 800)
-    memoryStore.reserveUnrollMemoryForThisTask(1000000)
+    assert(!reserveUnrollMemoryForThisTask(1000000))
     assert(memoryStore.currentUnrollMemoryForThisTask === 800) // not granted
     // Release
     memoryStore.releaseUnrollMemoryForThisTask(100)
@@ -1062,9 +1068,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     memoryStore.releaseUnrollMemoryForThisTask(100)
     assert(memoryStore.currentUnrollMemoryForThisTask === 600)
     // Reserve again
-    memoryStore.reserveUnrollMemoryForThisTask(4400)
+    assert(reserveUnrollMemoryForThisTask(4400))
     assert(memoryStore.currentUnrollMemoryForThisTask === 5000)
-    memoryStore.reserveUnrollMemoryForThisTask(20000)
+    assert(!reserveUnrollMemoryForThisTask(20000))
     assert(memoryStore.currentUnrollMemoryForThisTask === 5000) // not granted
     // Release again
     memoryStore.releaseUnrollMemoryForThisTask(1000)
