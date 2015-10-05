@@ -272,6 +272,7 @@ class CodeGenContext {
    * 64kb code size limit in JVM
    *
    * @param row the variable name of row that is used by expressions
+   * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
     val blocks = new ArrayBuffer[String]()

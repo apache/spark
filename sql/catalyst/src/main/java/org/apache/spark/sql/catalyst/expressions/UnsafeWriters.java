@@ -168,8 +168,8 @@ public class UnsafeWriters {
     }
 
     public static int write(Object targetObject, long targetOffset, UnsafeMapData input) {
-      final UnsafeArrayData keyArray = input.keys;
-      final UnsafeArrayData valueArray = input.values;
+      final UnsafeArrayData keyArray = input.keyArray();
+      final UnsafeArrayData valueArray = input.valueArray();
       final int keysNumBytes = keyArray.getSizeInBytes();
       final int valuesNumBytes = valueArray.getSizeInBytes();
       final int numBytes = 4 + 4 + keysNumBytes + valuesNumBytes;

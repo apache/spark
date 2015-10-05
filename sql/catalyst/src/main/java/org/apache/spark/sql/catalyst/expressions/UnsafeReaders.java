@@ -21,6 +21,9 @@ import org.apache.spark.unsafe.Platform;
 
 public class UnsafeReaders {
 
+  /**
+   * Reads in unsafe array according to the format described in `UnsafeArrayData`.
+   */
   public static UnsafeArrayData readArray(Object baseObject, long baseOffset, int numBytes) {
     // Read the number of elements from first 4 bytes.
     final int numElements = Platform.getInt(baseObject, baseOffset);
@@ -30,6 +33,9 @@ public class UnsafeReaders {
     return array;
   }
 
+  /**
+   * Reads in unsafe map according to the format described in `UnsafeMapData`.
+   */
   public static UnsafeMapData readMap(Object baseObject, long baseOffset, int numBytes) {
     // Read the number of elements from first 4 bytes.
     final int numElements = Platform.getInt(baseObject, baseOffset);
