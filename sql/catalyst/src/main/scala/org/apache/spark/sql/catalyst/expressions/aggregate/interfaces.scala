@@ -69,9 +69,6 @@ private[sql] case object NoOp extends Expression with Unevaluable {
 /**
  * A container for an [[AggregateFunction2]] with its [[AggregateMode]] and a field
  * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
- * @param aggregateFunction
- * @param mode
- * @param isDistinct
  */
 private[sql] case class AggregateExpression2(
     aggregateFunction: AggregateFunction2,
@@ -119,7 +116,7 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
   def supportsPartial: Boolean = true
 }
 
-abstract class InterpretedAggregateFunction extends AggregateFunction2 {
+abstract class ImperativeAggregateFunction extends AggregateFunction2 {
 
   /**
    * The offset of this function's start buffer value in the

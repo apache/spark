@@ -473,7 +473,7 @@ case class Sum(child: Expression) extends ExpressionAggregateFunction {
  */
 // scalastyle:on
 case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
-    extends InterpretedAggregateFunction {
+    extends ImperativeAggregateFunction {
   import HyperLogLogPlusPlus._
 
   /**

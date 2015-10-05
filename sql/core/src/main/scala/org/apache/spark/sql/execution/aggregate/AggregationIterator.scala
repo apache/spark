@@ -85,7 +85,7 @@ abstract class AggregationIterator(
     while (i < allAggregateExpressions.length) {
       val func = allAggregateExpressions(i).aggregateFunction
       val funcWithBoundReferences = allAggregateExpressions(i).mode match {
-        case Partial | Complete if func.isInstanceOf[InterpretedAggregateFunction] =>
+        case Partial | Complete if func.isInstanceOf[ImperativeAggregateFunction] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
           // this function is Partial or Complete because we will call eval of this
@@ -96,7 +96,7 @@ abstract class AggregationIterator(
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
           func match {
-            case function: InterpretedAggregateFunction =>
+            case function: ImperativeAggregateFunction =>
               function.withNewInputBufferOffset(inputBufferOffset)
             case _ =>
           }
@@ -107,7 +107,7 @@ abstract class AggregationIterator(
       // mutableBufferOffset happens after all potential bindReference operations
       // because bindReference will create a new instance of the function.
       funcWithBoundReferences match {
-        case function: InterpretedAggregateFunction =>
+        case function: ImperativeAggregateFunction =>
           function.withNewMutableBufferOffset(mutableBufferOffset)
         case _ =>
       }
@@ -140,8 +140,8 @@ abstract class AggregationIterator(
     allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
 
   // All interpreted aggregate functions with mode Partial, PartialMerge, or Final.
-  private[this] val nonCompleteInterpretedAggregateFunctions: Array[InterpretedAggregateFunction] =
-    nonCompleteAggregateFunctions.collect { case func: InterpretedAggregateFunction => func }
+  private[this] val nonCompleteInterpretedAggregateFunctions: Array[ImperativeAggregateFunction] =
+    nonCompleteAggregateFunctions.collect { case func: ImperativeAggregateFunction => func }
 
   // The projection used to initialize buffer values for all expression-based aggregates.
   private[this] val expressionAggInitialProjection = {
@@ -149,16 +149,16 @@ abstract class AggregationIterator(
       case ae: ExpressionAggregateFunction => ae.initialValues
       // For the positions corresponding to interpreted aggregate functions, we'll use special
       // no-op expressions which are ignored during projection code-generation.
-      case i: InterpretedAggregateFunction => Seq.fill(i.bufferAttributes.length)(NoOp)
+      case i: ImperativeAggregateFunction => Seq.fill(i.bufferAttributes.length)(NoOp)
     }
     newMutableProjection(initExpressions, Nil)()
   }
 
   // All interpreted AggregateFunctions.
-  private[this] val allInterpretedAggregateFunctions: Array[InterpretedAggregateFunction] =
+  private[this] val allInterpretedAggregateFunctions: Array[ImperativeAggregateFunction] =
     allInterpretedAggregateFunctionPositions
       .map(allAggregateFunctions)
-      .map(_.asInstanceOf[InterpretedAggregateFunction])
+      .map(_.asInstanceOf[ImperativeAggregateFunction])
 
   ///////////////////////////////////////////////////////////////////////////
   // Methods and fields used by sub-classes.
@@ -229,8 +229,8 @@ abstract class AggregationIterator(
         val completeAggregateFunctions: Array[AggregateFunction2] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
         // All interpreted aggregate functions with mode Complete.
-        val completeInterpretedAggregateFunctions: Array[InterpretedAggregateFunction] =
-          completeAggregateFunctions.collect { case func: InterpretedAggregateFunction => func }
+        val completeInterpretedAggregateFunctions: Array[ImperativeAggregateFunction] =
+          completeAggregateFunctions.collect { case func: ImperativeAggregateFunction => func }
 
         // The first initialInputBufferOffset values of the input aggregation buffer is
         // for grouping expressions and distinct columns.
@@ -286,8 +286,8 @@ abstract class AggregationIterator(
         val completeAggregateFunctions: Array[AggregateFunction2] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
         // All interpreted aggregate functions with mode Complete.
-        val completeInterpretedAggregateFunctions: Array[InterpretedAggregateFunction] =
-          completeAggregateFunctions.collect { case func: InterpretedAggregateFunction => func }
+        val completeInterpretedAggregateFunctions: Array[ImperativeAggregateFunction] =
+          completeAggregateFunctions.collect { case func: ImperativeAggregateFunction => func }
 
         val updateExpressions =
           completeAggregateFunctions.flatMap {
