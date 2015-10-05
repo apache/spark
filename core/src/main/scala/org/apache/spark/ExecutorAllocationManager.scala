@@ -125,10 +125,10 @@ private[spark] class ExecutorAllocationManager(
     conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
 
   // Executors that have been requested to be removed but have not been killed yet
-  private val executorsPendingToRemove = new mutable.HashSet[String]
+  private val executorsPendingToRemove = new mutable.HashSet[String] with mutable.SynchronizedSet[String]
 
   // All known executors
-  private val executorIds = new mutable.HashSet[String]
+  private val executorIds = new mutable.HashSet[String] with mutable.SynchronizedSet[String]
 
   // A timestamp of when an addition should be triggered, or NOT_SET if it is not set
   // This is set when pending tasks are added but not scheduled yet
@@ -136,7 +136,7 @@ private[spark] class ExecutorAllocationManager(
 
   // A timestamp for each executor of when the executor should be removed, indexed by the ID
   // This is set when an executor is no longer running a task, or when it first registers
-  private val removeTimes = new mutable.HashMap[String, Long]
+  private val removeTimes = new mutable.HashMap[String, Long] with mutable.SynchronizedMap[String, Long]
 
   // Polling loop interval (ms)
   private val intervalMillis: Long = 100
@@ -501,12 +501,20 @@ private[spark] class ExecutorAllocationManager(
       logWarning(s"Attempted to mark unknown executor $executorId idle")
     }
   }
+  
+  def isExecutorAlive(executorId: String): Boolean = {
+    if (!executorsPendingToRemove.contains(executorId)) {
+      true
+    } else {
+      false
+    }
+  }
 
   /**
    * Callback invoked when the specified executor is now running a task.
    * This resets all variables used for removing this executor.
    */
-  private def onExecutorBusy(executorId: String): Unit = synchronized {
+  def onExecutorBusy(executorId: String): Unit = synchronized {
     logDebug(s"Clearing idle timer for $executorId because it is now running a task")
     removeTimes.remove(executorId)
   }
@@ -605,7 +613,6 @@ private[spark] class ExecutorAllocationManager(
 
         // Mark the executor on which this task is scheduled as busy
         executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
-        allocationManager.onExecutorBusy(executorId)
       }
     }
 
