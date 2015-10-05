@@ -1,4 +1,0 @@
-EXPLAIN
-SELECT x.* FROM SRC x SORT BY key;
-
-SELECT x.* FROM SRC x SORT BY key;

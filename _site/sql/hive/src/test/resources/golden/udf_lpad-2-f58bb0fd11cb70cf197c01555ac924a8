@@ -1,6 +1,0 @@
-lpad(str, len, pad) - Returns str, left-padded with pad to a length of len
-If str is longer than len, the return value is shortened to len characters.
-Example:
-  > SELECT lpad('hi', 5, '??') FROM src LIMIT 1;
-  '???hi'  > SELECT lpad('hi', 1, '??') FROM src LIMIT 1;
-  'h'

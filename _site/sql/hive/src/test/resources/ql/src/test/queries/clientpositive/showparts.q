@@ -1,4 +1,0 @@
-EXPLAIN
-SHOW PARTITIONS srcpart; 
-
-SHOW PARTITIONS srcpart;

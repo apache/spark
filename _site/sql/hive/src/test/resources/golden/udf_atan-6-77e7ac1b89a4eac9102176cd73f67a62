@@ -1,4 +1,0 @@
-atan(x) - returns the atan (arctan) of x (x is in radians)
-Example:
-   > SELECT atan(0) FROM src LIMIT 1;
-  0

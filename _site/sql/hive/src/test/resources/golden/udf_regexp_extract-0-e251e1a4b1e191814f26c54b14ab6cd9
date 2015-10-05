@@ -1,1 +1,0 @@
-regexp_extract(str, regexp[, idx]) - extracts a group that matches regexp

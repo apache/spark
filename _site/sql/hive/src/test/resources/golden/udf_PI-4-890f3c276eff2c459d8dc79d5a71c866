@@ -1,5 +1,0 @@
-PI() - returns pi 
-Synonyms: pi
-Example:
- > SELECT PI() FROM src LIMIT 1;
- 3.14159...

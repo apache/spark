@@ -1,7 +1,0 @@
-second(date) - Returns the second of date
-date is a string in the format of 'yyyy-MM-dd HH:mm:ss' or 'HH:mm:ss'.
-Example:
-   > SELECT second('2009-07-30 12:58:59') FROM src LIMIT 1;
-  59
-  > SELECT second('12:58:59') FROM src LIMIT 1;
-  59

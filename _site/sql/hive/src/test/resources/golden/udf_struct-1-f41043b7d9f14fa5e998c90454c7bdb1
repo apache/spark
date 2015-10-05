@@ -1,1 +1,0 @@
-struct(col1, col2, col3, ...) - Creates a struct with the given field values

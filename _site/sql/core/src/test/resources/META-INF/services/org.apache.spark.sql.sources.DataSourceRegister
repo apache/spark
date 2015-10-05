@@ -1,3 +1,0 @@
-org.apache.spark.sql.sources.FakeSourceOne
-org.apache.spark.sql.sources.FakeSourceTwo
-org.apache.spark.sql.sources.FakeSourceThree

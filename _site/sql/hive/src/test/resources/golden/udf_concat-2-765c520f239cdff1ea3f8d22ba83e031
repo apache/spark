@@ -1,5 +1,0 @@
-concat(str1, str2, ... strN) - returns the concatenation of str1, str2, ... strN or concat(bin1, bin2, ... binN) - returns the concatenation of bytes in binary data  bin1, bin2, ... binN
-Returns NULL if any argument is NULL.
-Example:
-  > SELECT concat('abc', 'def') FROM src LIMIT 1;
-  'abcdef'

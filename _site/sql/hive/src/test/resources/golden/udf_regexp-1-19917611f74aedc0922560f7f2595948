@@ -1,1 +1,0 @@
-str regexp regexp - Returns true if str matches regexp and false otherwise

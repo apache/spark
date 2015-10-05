@@ -1,1 +1,0 @@
-xpath_float(xml, xpath) - Returns a float value that matches the xpath expression

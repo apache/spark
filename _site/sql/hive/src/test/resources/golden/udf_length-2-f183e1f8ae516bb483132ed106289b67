@@ -1,4 +1,0 @@
-length(str | binary) - Returns the length of str or number of bytes in binary data
-Example:
-  > SELECT length('Facebook') FROM src LIMIT 1;
-  8
