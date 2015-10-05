@@ -1153,17 +1153,26 @@ object Client extends Logging {
     }
 
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
-      val userClassPath =
+      // in order to properly add the app jar when user classpath is first
+      // we have to do the mainJar separate in order to send the right thing
+      // into addFileToClasspath
+      val mainJar = 
         if (args != null) {
-          getUserClasspath(Option(args.userJar), Option(args.addJars))
+          getMainJarUri(Option(args.userJar))
         } else {
-          getUserClasspath(sparkConf)
+          getMainJarUri(sparkConf.getOption(CONF_SPARK_USER_JAR))
         }
-      userClassPath.foreach { x =>
+      mainJar.foreach(addFileToClasspath(sparkConf, _, APP_JAR, env))
+
+      val secondaryJars =
+        if (args != null) {
+          getSecondaryJarUris(Option(args.addJars))
+        } else {
+          getSecondaryJarUris(sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+        }
+      secondaryJars.foreach { x =>
         addFileToClasspath(sparkConf, x, null, env)
       }
-      // add the users application jar if its distributed through dist cache
-      addFileToClasspath(sparkConf, null, APP_JAR, env)
     }
     addFileToClasspath(sparkConf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
@@ -1185,9 +1194,20 @@ object Client extends Logging {
   private def getUserClasspath(
       mainJar: Option[String],
       secondaryJars: Option[String]): Array[URI] = {
-    val mainUri = mainJar.orElse(Some(APP_JAR)).map(new URI(_))
-    val secondaryUris = secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
+    val mainUri = getMainJarUri(mainJar)
+    val secondaryUris = getSecondaryJarUris(secondaryJars)
     (mainUri ++ secondaryUris).toArray
+  }
+
+  private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
+    mainJar.flatMap { path =>
+      val uri = new URI(path)
+      if (uri.getScheme == LOCAL_SCHEME) Some(uri) else None
+    }.orElse(Some(new URI(APP_JAR))) 
+  }
+
+  private def getSecondaryJarUris(secondaryJars: Option[String]): Seq[URI] = {
+    secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
   }
 
   /**
