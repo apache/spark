@@ -39,15 +39,12 @@ case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends Streami
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
 @DeveloperApi
-case class StreamingListenerOutputOperationStarted(
-    outputOperationId: Int,
-    outputOperationCallSite: String,
-    startTime: Long) extends StreamingListenerEvent
+case class StreamingListenerOutputOperationStarted(outputOperationInfo: OutputOperationInfo)
+  extends StreamingListenerEvent
 
 @DeveloperApi
-case class StreamingListenerOutputOperationCompleted(
-    outputOperationId: Int,
-    completedTime: Long) extends StreamingListenerEvent
+case class StreamingListenerOutputOperationCompleted(outputOperationInfo: OutputOperationInfo)
+  extends StreamingListenerEvent
 
 @DeveloperApi
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)

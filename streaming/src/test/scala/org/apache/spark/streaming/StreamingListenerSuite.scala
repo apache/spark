@@ -282,12 +282,12 @@ class OutputOperationInfoCollector extends StreamingListener {
 
   override def onOutputOperationStarted(
       outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = {
-    startedOutputOperationIds += outputOperationStarted.outputOperationId
+    startedOutputOperationIds += outputOperationStarted.outputOperationInfo.id
   }
 
   override def onOutputOperationCompleted(
       outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
-    completedOutputOperationIds += outputOperationCompleted.outputOperationId
+    completedOutputOperationIds += outputOperationCompleted.outputOperationInfo.id
   }
 }
 
