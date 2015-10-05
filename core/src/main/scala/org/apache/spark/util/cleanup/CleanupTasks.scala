@@ -27,6 +27,7 @@ private[spark] case class CleanShuffle(shuffleId: Int) extends CleanupTask
 private[spark] case class CleanBroadcast(broadcastId: Long) extends CleanupTask
 private[spark] case class CleanAccum(accId: Long) extends CleanupTask
 private[spark] case class CleanCheckpoint(rddId: Int) extends CleanupTask
+private[spark] case class CleanExternalList(pathsToClean: Iterable[String]) extends CleanupTask
 
 /**
  * A WeakReference associated with a CleanupTask.
