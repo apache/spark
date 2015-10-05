@@ -201,6 +201,9 @@ private[sql] object ParquetFilters {
   }
 
   private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
+    case BooleanType =>
+      (n: String, v: Set[Any]) =>
+        FilterApi.userDefined(booleanColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Boolean]]))
     case IntegerType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(intColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Integer]]))
@@ -251,6 +254,9 @@ private[sql] object ParquetFilters {
         makeEq.lift(dataTypeOf(name)).map(_(name, null))
       case sources.IsNotNull(name) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
+
+      case sources.In(name, values) =>
+        makeInSet.lift(dataTypeOf(name)).map(_(name, values.toSet))
 
       case sources.EqualTo(name, value) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))

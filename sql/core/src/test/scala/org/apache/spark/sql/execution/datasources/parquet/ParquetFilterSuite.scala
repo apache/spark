@@ -112,6 +112,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       checkFilterPredicate('_1 === true, classOf[Eq[_]], true)
       checkFilterPredicate('_1 <=> true, classOf[Eq[_]], true)
       checkFilterPredicate('_1 !== true, classOf[NotEq[_]], false)
+
+      checkFilterPredicate(('_1 in(true)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], true)
+      checkFilterPredicate(('_1 in(false)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], false)
     }
   }
 
@@ -138,6 +143,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
       checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+
+      checkFilterPredicate(('_1 in(1, 2)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1), Row(2)))
+      checkFilterPredicate(('_1 in(3, 4)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3), Row(4)))
     }
   }
 
@@ -164,6 +174,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
       checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+
+      checkFilterPredicate(('_1 in(1L, 2L)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1L), Row(2L)))
+      checkFilterPredicate(('_1 in(3L, 4L)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3L), Row(4L)))
     }
   }
 
@@ -190,6 +205,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
       checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+
+      checkFilterPredicate(('_1 in(1.0f, 2.0f)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.0f), Row(2.0f)))
+      checkFilterPredicate(('_1 in(3.0f, 4.0f)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3.0f), Row(4.0f)))
     }
   }
 
@@ -216,6 +236,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
       checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+
+      checkFilterPredicate(('_1 in(1.0, 2.0)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.0), Row(2.0)))
+      checkFilterPredicate(('_1 in(3.0, 4.0)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3.0), Row(4.0)))
     }
   }
 
@@ -244,6 +269,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       checkFilterPredicate(!('_1 < "4"), classOf[GtEq[_]], "4")
       checkFilterPredicate('_1 < "2" || '_1 > "3", classOf[Operators.Or], Seq(Row("1"), Row("4")))
+
+      checkFilterPredicate(('_1 in("1", "2")).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("1"), Row("2")))
+      checkFilterPredicate(('_1 in("3", "4")).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row("3"), Row("4")))
     }
 
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString * 5 + "test"))) { implicit df =>
@@ -298,6 +328,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       checkBinaryFilterPredicate(!('_1 < 4.b), classOf[GtEq[_]], 4.b)
       checkBinaryFilterPredicate(
         '_1 < 2.b || '_1 > 3.b, classOf[Operators.Or], Seq(Row(1.b), Row(4.b)))
+
+      checkFilterPredicate(('_1 in(1.b, 2.b)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(1.b), Row(2.b)))
+      checkFilterPredicate(('_1 in(3.b, 4.b)).asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]], Seq(Row(3.b), Row(4.b)))
     }
   }
 
