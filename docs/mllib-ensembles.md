@@ -96,6 +96,8 @@ The test error is calculated to measure the algorithm accuracy.
 <div class="codetabs">
 
 <div data-lang="scala">
+Refer to the [`RandomForest` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) and [`RandomForestModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.RandomForestModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.tree.RandomForest
 import org.apache.spark.mllib.tree.model.RandomForestModel
@@ -136,6 +138,8 @@ val sameModel = RandomForestModel.load(sc, "myModelPath")
 </div>
 
 <div data-lang="java">
+Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/RandomForest.html) and [`RandomForestModel` Java docs](api/java/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
+
 {% highlight java %}
 import scala.Tuple2;
 import java.util.HashMap;
@@ -201,6 +205,7 @@ RandomForestModel sameModel = RandomForestModel.load(sc.sc(), "myModelPath");
 </div>
 
 <div data-lang="python">
+Refer to the [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForest) and [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForestModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.tree import RandomForest, RandomForestModel
@@ -247,6 +252,8 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 <div class="codetabs">
 
 <div data-lang="scala">
+Refer to the [`RandomForest` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) and [`RandomForestModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.RandomForestModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.tree.RandomForest
 import org.apache.spark.mllib.tree.model.RandomForestModel
@@ -287,6 +294,8 @@ val sameModel = RandomForestModel.load(sc, "myModelPath")
 </div>
 
 <div data-lang="java">
+Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/RandomForest.html) and [`RandomForestModel` Java docs](api/java/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
+
 {% highlight java %}
 import java.util.HashMap;
 import scala.Tuple2;
@@ -355,6 +364,7 @@ RandomForestModel sameModel = RandomForestModel.load(sc.sc(), "myModelPath");
 </div>
 
 <div data-lang="python">
+Refer to the [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForest) and [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForestModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.tree import RandomForest, RandomForestModel
@@ -480,6 +490,8 @@ The test error is calculated to measure the algorithm accuracy.
 <div class="codetabs">
 
 <div data-lang="scala">
+Refer to the [`GradientBoostedTrees` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.GradientBoostedTreesModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
@@ -519,6 +531,8 @@ val sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 </div>
 
 <div data-lang="java">
+Refer to the [`GradientBoostedTrees` Java docs](api/java/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Java docs](api/java/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
+
 {% highlight java %}
 import scala.Tuple2;
 import java.util.HashMap;
@@ -584,6 +598,7 @@ GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(sc.sc(), "m
 </div>
 
 <div data-lang="python">
+Refer to the [`GradientBoostedTrees` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTreesModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
@@ -628,6 +643,8 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 <div class="codetabs">
 
 <div data-lang="scala">
+Refer to the [`GradientBoostedTrees` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.GradientBoostedTreesModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
@@ -666,6 +683,8 @@ val sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 </div>
 
 <div data-lang="java">
+Refer to the [`GradientBoostedTrees` Java docs](api/java/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Java docs](api/java/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
+
 {% highlight java %}
 import scala.Tuple2;
 import java.util.HashMap;
@@ -737,6 +756,7 @@ GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(sc.sc(), "m
 </div>
 
 <div data-lang="python">
+Refer to the [`GradientBoostedTrees` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTreesModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel

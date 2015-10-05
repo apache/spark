@@ -102,6 +102,7 @@ The following code snippets illustrate how to load a sample dataset, train a bin
 data, and evaluate the performance of the algorithm by several binary evaluation metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS) and [`BinaryClassificationMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.BinaryClassificationMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -179,6 +180,7 @@ println("Area under ROC = " + auROC)
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionModel.html) and [`LogisticRegressionWithLBFGS` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -276,6 +278,7 @@ public class BinaryClassification {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`BinaryClassificationMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.BinaryClassificationMetrics) and [`LogisticRegressionWithLBFGS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionWithLBFGS) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
@@ -428,6 +431,7 @@ The following code snippets illustrate how to load a sample dataset, train a mul
 the data, and evaluate the performance of the algorithm by several multiclass classification evaluation metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`MulticlassMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MulticlassMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -501,6 +505,7 @@ println(s"Weighted false positive rate: ${metrics.weightedFalsePositiveRate}")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`MulticlassMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MulticlassMetrics.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -580,6 +585,7 @@ public class MulticlassClassification {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`MulticlassMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MulticlassMetrics) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
@@ -758,6 +764,7 @@ True classes:
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`MultilabelMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MultilabelMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
@@ -802,6 +809,7 @@ println(s"Subset accuracy = ${metrics.subsetAccuracy}")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`MultilabelMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MultilabelMetrics.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -864,6 +872,7 @@ public class MultilabelClassification {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`MultilabelMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MultilabelMetrics) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.evaluation import MultilabelMetrics
@@ -1016,6 +1025,7 @@ expanded world of non-positive weights are "the same as never having interacted 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RankingMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
@@ -1095,6 +1105,7 @@ println(s"R-squared = ${regressionMetrics.r2}")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) and [`RankingMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RankingMetrics.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -1256,6 +1267,7 @@ public class Ranking {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RankingMetrics) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.recommendation import ALS, Rating
@@ -1336,6 +1348,7 @@ The following code snippets illustrate how to load a sample dataset, train a lin
 and evaluate the performance of the algorithm by several regression metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -1379,6 +1392,7 @@ println(s"Explained variance = ${metrics.explainedVariance}")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -1455,6 +1469,7 @@ public class LinearRegression {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD

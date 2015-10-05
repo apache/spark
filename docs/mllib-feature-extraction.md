@@ -56,6 +56,9 @@ and [IDF](api/scala/index.html#org.apache.spark.mllib.feature.IDF).
 `HashingTF` takes an `RDD[Iterable[_]]` as the input.
 Each record could be an iterable of strings or other types.
 
+Refer to the [`HashingTF` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.HashingTF) for details on the API.
+
+
 {% highlight scala %}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
@@ -102,6 +105,9 @@ TF and IDF are implemented in [HashingTF](api/python/pyspark.mllib.html#pyspark.
 and [IDF](api/python/pyspark.mllib.html#pyspark.mllib.feature.IDF).
 `HashingTF` takes an RDD of list as the input.
 Each record could be an iterable of strings or other types.
+
+
+Refer to the [`HashingTF` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.HashingTF) for details on the API.
 
 {% highlight python %}
 from pyspark import SparkContext
@@ -184,6 +190,8 @@ Here we assume the extracted file is `text8` and in same directory as you run th
 
 <div class="codetabs">
 <div data-lang="scala">
+Refer to the [`Word2Vec` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Word2Vec) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark._
 import org.apache.spark.rdd._
@@ -208,6 +216,8 @@ val sameModel = Word2VecModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 <div data-lang="python">
+Refer to the [`Word2Vec` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Word2Vec) for more details on the API.
+
 {% highlight python %}
 from pyspark import SparkContext
 from pyspark.mllib.feature import Word2Vec
@@ -265,6 +275,8 @@ so that the new features have unit standard deviation and/or zero mean.
 
 <div class="codetabs">
 <div data-lang="scala">
+Refer to the [`StandardScaler` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.StandardScaler
@@ -289,6 +301,8 @@ val data2 = data.map(x => (x.label, scaler2.transform(Vectors.dense(x.features.t
 </div>
 
 <div data-lang="python">
+Refer to the [`StandardScaler` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.StandardScaler) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.linalg import Vectors
@@ -339,6 +353,8 @@ with $L^2$ norm, and $L^\infty$ norm.
 
 <div class="codetabs">
 <div data-lang="scala">
+Refer to the [`Normalizer` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Normalizer) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.Normalizer
@@ -359,6 +375,8 @@ val data2 = data.map(x => (x.label, normalizer2.transform(x.features)))
 </div>
 
 <div data-lang="python">
+Refer to the [`Normalizer` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Normalizer) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.linalg import Vectors
@@ -533,6 +551,9 @@ This example below demonstrates how to transform vectors using a transforming ve
 
 <div class="codetabs">
 <div data-lang="scala">
+
+Refer to the [`ElementwiseProduct` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.ElementwiseProduct
@@ -552,6 +573,8 @@ val transformedData2 = data.map(x => transformer.transform(x))
 </div>
 
 <div data-lang="java">
+Refer to the [`ChiSqSelector` Java docs](api/java/org/apache/spark/mllib/feature/ChiSqSelector.html) for details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 import org.apache.spark.api.java.JavaRDD;
@@ -581,6 +604,8 @@ JavaRDD<Vector> transformedData2 = data.map(
 </div>
 
 <div data-lang="python">
+Refer to the [`ElementwiseProduct` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.ElementwiseProduct) for more details on the API.
+
 {% highlight python %}
 from pyspark import SparkContext
 from pyspark.mllib.linalg import Vectors
@@ -618,6 +643,8 @@ for calculation a [Linear Regression]((mllib-linear-methods.html))
 
 <div class="codetabs">
 <div data-lang="scala">
+Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.PCA) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint
