@@ -1187,15 +1187,8 @@ object Client extends Logging {
    * @param conf Spark configuration.
    */
   def getUserClasspath(conf: SparkConf): Array[URI] = {
-    getUserClasspath(conf.getOption(CONF_SPARK_USER_JAR),
-      conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
-  }
-
-  private def getUserClasspath(
-      mainJar: Option[String],
-      secondaryJars: Option[String]): Array[URI] = {
-    val mainUri = getMainJarUri(mainJar)
-    val secondaryUris = getSecondaryJarUris(secondaryJars)
+    val mainUri = getMainJarUri(conf.getOption(CONF_SPARK_USER_JAR))
+    val secondaryUris = getSecondaryJarUris(conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
     (mainUri ++ secondaryUris).toArray
   }
 
