@@ -68,6 +68,11 @@ private[spark] abstract class MemoryManager {
   def releaseStorageMemory(numBytes: Long): Unit
 
   /**
+   * Release all storage memory acquired.
+   */
+  def releaseStorageMemory(): Unit
+
+  /**
    * Release N bytes of unroll memory.
    */
   def releaseUnrollMemory(numBytes: Long): Unit

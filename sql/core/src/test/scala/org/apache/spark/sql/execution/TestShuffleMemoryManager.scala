@@ -68,6 +68,7 @@ private class GrantEverythingMemoryManager extends MemoryManager {
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
   override def releaseExecutionMemory(numBytes: Long): Unit = { }
   override def releaseStorageMemory(numBytes: Long): Unit = { }
+  override def releaseStorageMemory(): Unit = { }
   override def releaseUnrollMemory(numBytes: Long): Unit = { }
   override def maxExecutionMemory: Long = Long.MaxValue
   override def maxStorageMemory: Long = Long.MaxValue

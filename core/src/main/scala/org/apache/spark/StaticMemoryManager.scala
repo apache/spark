@@ -107,12 +107,10 @@ private[spark] class StaticMemoryManager(
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
-    storageLock.synchronized {
-      val currentUnrollMemory = memoryStore.currentUnrollMemory
-      val maxNumBytesToFree = math.max(0, maxMemoryToEvictForUnroll - currentUnrollMemory)
-      val numBytesToFree = math.min(numBytes, maxNumBytesToFree)
-      acquireStorageMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
-    }
+    val currentUnrollMemory = memoryStore.currentUnrollMemory
+    val maxNumBytesToFree = math.max(0, maxMemoryToEvictForUnroll - currentUnrollMemory)
+    val numBytesToFree = math.min(numBytes, maxNumBytesToFree)
+    acquireStorageMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
   }
 
   /**
@@ -129,8 +127,9 @@ private[spark] class StaticMemoryManager(
       numBytesToAcquire: Long,
       numBytesToFree: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+    // Note: Keep this outside synchronized block to avoid potential deadlocks!
+    memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
     storageLock.synchronized {
-      memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
       assert(_storageMemoryUsed <= maxStorageMemory)
       val enoughMemory = _storageMemoryUsed + numBytesToAcquire <= maxStorageMemory
       val bytesToGrant = if (enoughMemory) numBytesToAcquire else 0
@@ -170,6 +169,15 @@ private[spark] class StaticMemoryManager(
   }
 
   /**
+   * Release all storage memory acquired.
+   */
+  override def releaseStorageMemory(): Unit = {
+    storageLock.synchronized {
+      _storageMemoryUsed = 0
+    }
+  }
+
+  /**
    * Release N bytes of unroll memory.
    */
   override def releaseUnrollMemory(numBytes: Long): Unit = {
@@ -179,15 +187,19 @@ private[spark] class StaticMemoryManager(
   /**
    * Amount of execution memory currently in use, in bytes.
    */
-  override def executionMemoryUsed: Long = executionLock.synchronized {
-    _executionMemoryUsed
+  override def executionMemoryUsed: Long = {
+    executionLock.synchronized {
+      _executionMemoryUsed
+    }
   }
 
   /**
    * Amount of storage memory currently in use, in bytes.
    */
-  override def storageMemoryUsed: Long = storageLock.synchronized {
-    _storageMemoryUsed
+  override def storageMemoryUsed: Long = {
+    storageLock.synchronized {
+      _storageMemoryUsed
+    }
   }
 
 }

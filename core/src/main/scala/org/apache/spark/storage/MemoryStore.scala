@@ -205,16 +205,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   override def remove(blockId: BlockId): Boolean = {
-    entries.synchronized {
-      val entry = entries.remove(blockId)
-      if (entry != null) {
-        memoryManager.releaseStorageMemory(entry.size)
-        logDebug(s"Block $blockId of size ${entry.size} dropped " +
-          s"from memory (free ${maxMemory - blocksMemoryUsed})")
-        true
-      } else {
-        false
-      }
+    val entry = entries.synchronized { entries.remove(blockId) }
+    if (entry != null) {
+      memoryManager.releaseStorageMemory(entry.size)
+      logDebug(s"Block $blockId of size ${entry.size} dropped " +
+        s"from memory (free ${maxMemory - blocksMemoryUsed})")
+      true
+    } else {
+      false
     }
   }
 
@@ -222,6 +220,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     entries.synchronized {
       entries.clear()
     }
+    memoryManager.releaseStorageMemory()
     logInfo("MemoryStore cleared")
   }
 
