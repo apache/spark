@@ -266,4 +266,3 @@ export("structField",
        "structType.structField",
        "print.structType")
 
-export("as.data.frame")
