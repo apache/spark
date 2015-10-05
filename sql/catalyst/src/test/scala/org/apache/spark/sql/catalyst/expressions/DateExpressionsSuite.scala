@@ -295,6 +295,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("add_months") {
     checkEvaluation(AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
+    checkEvaluation(AddMonths(Literal(Date.valueOf("2015-02-28")), Literal(12)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-28")))
     checkEvaluation(AddMonths(Literal(Date.valueOf("2016-03-30")), Literal(-1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
     checkEvaluation(
