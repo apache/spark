@@ -76,15 +76,13 @@ private[sql] class JSONRelation(
 
   override val needConversion: Boolean = false
 
-  private def createBaseRdd(
-      inputPaths: Array[FileStatus],
-      sources: Array[Path] = Array.empty): RDD[String] = {
+  private def createBaseRdd(inputPaths: Array[FileStatus]): RDD[String] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
     val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
     var paths = inputPaths.map(_.getPath)
     if (paths.isEmpty) {
-      paths = sources   // try with original sources
+      paths = cachedSourcePaths()   // try with original sources
     }
     if (paths.nonEmpty) {
       FileInputFormat.setInputPaths(job, paths: _*)
@@ -104,7 +102,7 @@ private[sql] class JSONRelation(
         name.startsWith("_") || name.startsWith(".")
       }.toArray
       InferSchema(
-        inputRDD.getOrElse(createBaseRdd(files, cachedSourcePaths())),
+        inputRDD.getOrElse(createBaseRdd(files)),
         samplingRatio,
         sqlContext.conf.columnNameOfCorruptRecord)
     }
