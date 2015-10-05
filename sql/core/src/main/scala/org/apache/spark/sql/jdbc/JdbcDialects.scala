@@ -310,7 +310,8 @@ case object DerbyDialect extends JdbcDialect {
     case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     // 31 is the maximum precision and 5 is the default scale for a Derby DECIMAL
-    case (t: DecimalType) if (t.precision > 31) => Some(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
+    case (t: DecimalType) if (t.precision > 31) =>
+      Some(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
     case _ => None
   }
 
