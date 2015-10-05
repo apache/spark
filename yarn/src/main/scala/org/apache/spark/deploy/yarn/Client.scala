@@ -1156,7 +1156,7 @@ object Client extends Logging {
       // in order to properly add the app jar when user classpath is first
       // we have to do the mainJar separate in order to send the right thing
       // into addFileToClasspath
-      val mainJar = 
+      val mainJar =
         if (args != null) {
           getMainJarUri(Option(args.userJar))
         } else {
@@ -1193,7 +1193,7 @@ object Client extends Logging {
   }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
-    mainJar.flatMap { path =>
+    mainJar.flatMap { path =
       val uri = new URI(path)
       if (uri.getScheme == LOCAL_SCHEME) Some(uri) else None
     }.orElse(Some(new URI(APP_JAR))) 
