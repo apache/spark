@@ -22,9 +22,11 @@ export("setJobGroup",
 
 exportClasses("DataFrame")
 
-exportMethods("arrange",
+exportMethods("as.data.frame",
+              "arrange",
               "cache",
               "collect",
+              "coltypes",
               "columns",
               "count",
               "crosstab",

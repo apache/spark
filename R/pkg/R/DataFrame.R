@@ -1881,3 +1881,31 @@ setMethod("as.data.frame",
             collect(x)
           }
 )
+
+#' Returns the column types of a DataFrame.
+#' 
+#' @name coltypes
+#' @title Get column types of a DataFrame
+#' @param x (DataFrame)
+#' @return value (character) A character vector with the column types of the given DataFrame
+#' @rdname coltypes
+setMethod("coltypes",
+          signature(x = "DataFrame"),
+          function(x) {
+            # TODO: This may be moved as a global parameter
+            # These are the supported data types and how they map to
+            # R's data types
+            DATA_TYPES <- c("string"="character",
+                            "double"="numeric",
+                            "int"="integer",
+                            "long"="integer",
+                            "boolean"="long"
+            )
+
+            # Get the data types of the DataFrame by invoking dtypes() function.
+            # Some post-processing is needed.
+            types <- as.character(t(as.data.frame(dtypes(x))[2, ]))
+
+            # Map Spark data types into R's data types
+            as.character(DATA_TYPES[types])
+          })

@@ -987,3 +987,7 @@ setGeneric("rbind", signature = "...")
 #' @rdname as.data.frame
 #' @export
 setGeneric("as.data.frame")
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) standardGeneric("coltypes"))
