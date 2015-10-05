@@ -78,6 +78,10 @@ private[sql] class BasicColumnBuilder[JvmType](
   }
 }
 
+private[sql] class NullColumnBuilder
+  extends BasicColumnBuilder[Any](new GenericColumnStats(NullType), NULL)
+  with NullableColumnBuilder
+
 private[sql] abstract class ComplexColumnBuilder[JvmType](
     columnStats: ColumnStats,
     columnType: ColumnType[JvmType])
@@ -110,16 +114,12 @@ private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringCol
 
 private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
 
-private[sql] class CompactDecimalColumnBuilder(
-    precision: Int,
-    scale: Int)
-  extends NativeColumnBuilder(
-    new DecimalColumnStats(precision, scale),
+private[sql] class CompactDecimalColumnBuilder(precision: Int, scale: Int)
+  extends NativeColumnBuilder(new DecimalColumnStats(precision, scale),
     COMPACT_DECIMAL(precision, scale))
 
 private[sql] class DecimalColumnBuilder(precision: Int, scale: Int)
-  extends ComplexColumnBuilder(new DecimalColumnStats(precision, scale),
-    DECIMAL(precision, scale))
+  extends ComplexColumnBuilder(new DecimalColumnStats(precision, scale), DECIMAL(precision, scale))
 
 private[sql] class StructColumnBuilder(dataType: DataType)
   extends ComplexColumnBuilder(new GenericColumnStats(dataType), STRUCT(dataType))
@@ -129,10 +129,6 @@ private[sql] class ArrayColumnBuilder(dataType: DataType)
 
 private[sql] class MapColumnBuilder(dataType: DataType)
   extends ComplexColumnBuilder(new GenericColumnStats(dataType), MAP(dataType))
-
-private[sql] class NullColumnBuilder
-  extends BasicColumnBuilder[Any](new GenericColumnStats(NullType), NULL)
-  with NullableColumnBuilder
 
 private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024

@@ -245,6 +245,7 @@ private[sql] class DecimalColumnStats(precision: Int, scale: Int) extends Column
       val value = row.getDecimal(ordinal, precision, scale)
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
+      // TODO: this is not right for DecimalType with precision > 18
       sizeInBytes += 8
     }
   }

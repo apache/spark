@@ -62,6 +62,10 @@ private[sql] abstract class BasicColumnAccessor[JvmType](
   protected def underlyingBuffer = buffer
 }
 
+private[sql] class NullColumnAccess(buffer: ByteBuffer)
+  extends BasicColumnAccessor[Any](buffer, NULL)
+  with NullableColumnAccessor
+
 private[sql] abstract class NativeColumnAccessor[T <: AtomicType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
@@ -99,7 +103,6 @@ private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
 
 private[sql] class CompactDecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
   extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(precision, scale))
-  with NullableColumnAccessor
 
 private[sql] class DecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
   extends BasicColumnAccessor[Decimal](buffer, DECIMAL(precision, scale))
@@ -115,10 +118,6 @@ private[sql] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: DataType)
 
 private[sql] class MapColumnAccessor(buffer: ByteBuffer, dataType: DataType)
   extends BasicColumnAccessor[MapData](buffer, MAP(dataType))
-  with NullableColumnAccessor
-
-private[sql] class NullColumnAccess(buffer: ByteBuffer)
-  extends BasicColumnAccessor[Any](buffer, NULL)
   with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
