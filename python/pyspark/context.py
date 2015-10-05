@@ -706,6 +706,25 @@ class SparkContext(object):
         # TODO: remove added .py or .zip files from the PYTHONPATH?
         self._jsc.sc().clearFiles()
 
+    def addModule(self, module):
+        """
+        Add a module to the spark context, the module must have already been
+        imported by the driver via __import__ semantics. Supports namespace
+        packages by simulating the loading __path__ as a set of modules from
+        the __path__ list in a single package.
+        """
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            tar_path = os.path.join(tmp_dir, module.__name__+'.tar.gz')
+            tar = tarfile.open(tar_path, "w:gz")
+            for mod in module.__path__[::-1]:
+                # adds in reverse to simulate namespace loading path
+                tar.add(mod, arcname=os.path.basename(mod))
+            tar.close()
+            self.addPyFile(tar_path)
+        finally:
+            shutil.rmtree(tmp_dir)
+
     def addPyFile(self, path):
         """
         Add a .py or .zip dependency for all tasks to be executed on this
@@ -730,20 +749,11 @@ class SparkContext(object):
         Raises ImportError if the requirement can't be found
         """
         import pip
-        tar_dir = tempfile.mkdtemp()
-        try:
-            for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
-                if not req.check_if_exists():
-                    pip.main(['install', req.req.__str__()])
-                mod = __import__(req.name)
-                mod_path = mod.__path__[0]
-                tar_path = os.path.join(tar_dir, req.name+'.tar.gz')
-                tar = tarfile.open(tar_path, "w:gz")
-                tar.add(mod_path, arcname=os.path.basename(mod_path))
-                tar.close()
-                self.addPyFile(tar_path)
-        finally:
-            shutil.rmtree(tar_dir)
+        for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
+            if not req.check_if_exists():
+                pip.main(['install', req.req.__str__()])
+            mod = __import__(req.name)
+            self.addModule(tmp_dir)
 
     def setCheckpointDir(self, dirName):
         """
