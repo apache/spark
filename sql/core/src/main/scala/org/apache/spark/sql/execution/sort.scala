@@ -49,7 +49,7 @@ case class Sort(
     child.execute().mapPartitions( { iterator =>
       val ordering = newOrdering(sortOrder, child.output)
       val sorter = new ExternalSorter[InternalRow, Null, InternalRow](ordering = Some(ordering))
-      sorter.insertAll(iterator.map(r => (r.copy(), null)))
+      sorter.insertAll(iterator.map(r => (r.copy(), null)), false)
       val baseIterator = sorter.iterator.map(_._1)
       val context = TaskContext.get()
       context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)

@@ -128,7 +128,8 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
 
   override def estimateSize: Long = metaBuffer.capacity * 4L + kvBuffer.capacity
 
-  override def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
+  override def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]],
+                                                            dropKeys: Boolean = false)
     : WritablePartitionedIterator = {
     sort(keyComparator)
     new WritablePartitionedIterator {

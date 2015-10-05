@@ -61,12 +61,16 @@ private[spark] class BlockStoreShuffleReader[K, C](
       // Note: the asKeyValueIterator below wraps a key/value iterator inside of a
       // NextIterator. The NextIterator makes sure that close() is called on the
       // underlying InputStream when all records have been read.
-      serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator
+      if(!handle.dropKeys) {
+        serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator
+      } else {
+        serializerInstance.deserializeStream(wrappedStream).asIterator
+      }
     }
 
     // Update the context task metrics for each record read.
     val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
-    val metricIter = CompletionIterator[(Any, Any), Iterator[(Any, Any)]](
+    val metricIter = CompletionIterator[Any, Iterator[Any]](
       recordIter.map(record => {
         readMetrics.incRecordsRead(1)
         record
@@ -74,7 +78,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       context.taskMetrics().updateShuffleReadMetrics())
 
     // An interruptible iterator must be used here in order to support task cancellation
-    val interruptibleIter = new InterruptibleIterator[(Any, Any)](context, metricIter)
+    val interruptibleIter = new InterruptibleIterator[Any](context, metricIter)
 
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
@@ -99,7 +103,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
         // Create an ExternalSorter to sort the data. Note that if spark.shuffle.spill is disabled,
         // the ExternalSorter won't spill to disk.
         val sorter = new ExternalSorter[K, C, C](ordering = Some(keyOrd), serializer = Some(ser))
-        sorter.insertAll(aggregatedIter)
+        sorter.insertAll(aggregatedIter, handle.dropKeys)
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.internalMetricsToAccumulators(

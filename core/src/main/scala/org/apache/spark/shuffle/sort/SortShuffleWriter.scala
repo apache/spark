@@ -53,7 +53,7 @@ private[spark] class SortShuffleWriter[K, V, C](
     sorter = if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
-        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer, dep.shuffleHandle.dropKeys)
     } else if (SortShuffleWriter.shouldBypassMergeSort(
         SparkEnv.get.conf, dep.partitioner.numPartitions, aggregator = None, keyOrdering = None)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
@@ -62,15 +62,15 @@ private[spark] class SortShuffleWriter[K, V, C](
       // together the spilled files, which would happen with the normal code path. The downside is
       // having multiple files open at a time and thus more memory allocated to buffers.
       new BypassMergeSortShuffleWriter[K, V](SparkEnv.get.conf, blockManager, dep.partitioner,
-        writeMetrics, Serializer.getSerializer(dep.serializer))
+        writeMetrics, Serializer.getSerializer(dep.serializer), dep.shuffleHandle.dropKeys)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
       new ExternalSorter[K, V, V](
-        aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
+        aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer, dep.shuffleHandle.dropKeys)
     }
-    sorter.insertAll(records)
+    sorter.insertAll(records, handle.dropKeys)
 
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately

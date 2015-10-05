@@ -45,14 +45,19 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
    * returned in order of their partition ID and then the given comparator.
    * This may destroy the underlying collection.
    */
-  def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
+  def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]],
+                                                   dropKeys: Boolean = false)
     : WritablePartitionedIterator = {
     val it = partitionedDestructiveSortedIterator(keyComparator)
     new WritablePartitionedIterator {
       private[this] var cur = if (it.hasNext) it.next() else null
 
       def writeNext(writer: DiskBlockObjectWriter): Unit = {
-        writer.write(cur._1._2, cur._2)
+        if (dropKeys) {
+          writer.write(cur._2)
+        } else {
+          writer.write(cur._1._2, cur._2)
+        }
         cur = if (it.hasNext) it.next() else null
       }
 

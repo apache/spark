@@ -118,7 +118,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
 
       // Ensure we spilled something and have to merge them later
       assert(sorter.numSpills === 0)
-      sorter.insertAll(data)
+      sorter.insertAll(data, false)
       assert(sorter.numSpills > 0)
 
       // Merging spilled files should not throw assertion error

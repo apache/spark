@@ -17,15 +17,14 @@
 
 package org.apache.spark.shuffle.sort;
 
-import java.io.File;
-import java.io.IOException;
-
+import org.apache.spark.TaskContext;
+import org.apache.spark.annotation.Private;
+import org.apache.spark.storage.BlockId;
 import scala.Product2;
 import scala.collection.Iterator;
 
-import org.apache.spark.annotation.Private;
-import org.apache.spark.TaskContext;
-import org.apache.spark.storage.BlockId;
+import java.io.File;
+import java.io.IOException;
 
 /**
  * Interface for objects that {@link SortShuffleWriter} uses to write its output files.
@@ -33,7 +32,7 @@ import org.apache.spark.storage.BlockId;
 @Private
 public interface SortShuffleFileWriter<K, V> {
 
-  void insertAll(Iterator<Product2<K, V>> records) throws IOException;
+  void insertAll(Iterator<Product2<K, V>> records, boolean dropKeys) throws IOException;
 
   /**
    * Write all the data added into this shuffle sorter into a file in the disk store. This is

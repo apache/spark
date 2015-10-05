@@ -52,6 +52,8 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
 
   private var mapSideCombine: Boolean = false
 
+  private var dropKeys: Boolean = false
+
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C] = {
     this.serializer = Option(serializer)
@@ -76,8 +78,15 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     this
   }
 
+  /** Set dropKeys flag for RDD's shuffle. */
+  def setDropKeys(dropKeys: Boolean): ShuffledRDD[K, V, C] = {
+    this.dropKeys = dropKeys
+    this
+  }
+
   override def getDependencies: Seq[Dependency[_]] = {
-    List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
+    List(new ShuffleDependency(prev, part, serializer, keyOrdering,
+      aggregator, mapSideCombine, dropKeys))
   }
 
   override val partitioner = Some(part)
