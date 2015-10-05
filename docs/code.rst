@@ -31,6 +31,15 @@ DAGs.
 .. autoclass:: airflow.models.BaseOperator
 
 
+BaseSensorOperator
+'''''''''''''''''''
+All sensors are derived from ``BaseSensorOperator``. All sensors inherit
+the ``timeout`` and ``poke_interval`` on top of the ``BaseOperator``
+attributes.
+
+.. autoclass:: airflow.operators.sensors.BaseSensorOperator
+
+
 Operator API
 ''''''''''''
 
@@ -163,7 +172,7 @@ Hooks
         S3Hook,
         SqliteHook
 
-Community Contributed Hooks
+Community contributed hooks
 '''''''''''''''''''''''''''
 
 .. automodule:: airflow.contrib.hooks
@@ -178,4 +187,12 @@ Executors are the mechanism by which task instances get run.
 
 .. automodule:: airflow.executors
     :show-inheritance:
-    :members: LocalExecutor, CeleryExecutor, SequentialExecutor, MesosExecutor
+    :members: LocalExecutor, CeleryExecutor, SequentialExecutor
+
+Community contributed executors
+'''''''''''''''''''''''''''''''
+
+.. automodule:: airflow.contrib.executors
+    :show-inheritance:
+    :members:
+        MesosExecutor
