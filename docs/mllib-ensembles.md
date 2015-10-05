@@ -9,12 +9,12 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Ensembles
 
 An [ensemble method](http://en.wikipedia.org/wiki/Ensemble_learning)
 is a learning algorithm which creates a model composed of a set of other base models.
-MLlib supports two major ensemble algorithms: [`GradientBoostedTrees`](mllib-ensembles.html#Gradient-Boosted-Trees-(GBTS)) and [`RandomForest`](mllib-ensembles.html#Random-Forests).
+MLlib supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest).
 Both use [decision trees](mllib-decision-tree.html) as their base models.
 
 ## Gradient-Boosted Trees vs. Random Forests
 
-Both [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting) and [Random Forests](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) are algorithms for learning ensembles of trees, but the training processes are different.  There are several practical trade-offs:
+Both [Gradient-Boosted Trees (GBTs)](mllib-ensembles.html#Gradient-Boosted-Trees-(GBTS)) and [Random Forests](mllib-ensembles.html#Random-Forests) are algorithms for learning ensembles of trees, but the training processes are different.  There are several practical trade-offs:
 
  * GBTs train one tree at a time, so they can take longer to train than random forests.  Random Forests can train multiple trees in parallel.
    * On the other hand, it is often reasonable to use smaller (shallower) trees with GBTs than with Random Forests, and training smaller trees takes less time.
