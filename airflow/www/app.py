@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from functools import wraps
 import inspect
-from itertools import product
+from itertools import chain, product
 import json
 import logging
 import os
@@ -991,7 +991,7 @@ class Airflow(BaseView):
                 start_date = execution_date
 
             if execution_date < start_date or end_date < start_date:
-                flash("Selected date before DAG start date",'error')
+                flash("Selected date before DAG start date", 'error')
                 return redirect(origin)
 
             start_date = execution_date if not past else start_date
@@ -1010,24 +1010,29 @@ class Airflow(BaseView):
                 TI.dag_id == dag_id,
                 TI.execution_date.in_(dates),
                 TI.task_id.in_(task_ids)).all()
+            tis_to_change = session.query(TI).filter(
+                TI.dag_id == dag_id,
+                TI.execution_date.in_(dates),
+                TI.task_id.in_(task_ids),
+                TI.state != State.SUCCESS).all()
             tasks = list(product(task_ids, dates))
+            tis_to_create = list(
+                set(tasks) -
+                set([(ti.task_id, ti.execution_date) for ti in tis]))
 
-            if len(tasks) > MAX_PERIODS:
+            tis_all_altered = list(chain(tis_to_change, tis_to_create))
+
+            if len(tis_all_altered) > MAX_PERIODS:
                 flash("Too many tasks at once (>{0})".format(
                     MAX_PERIODS), 'error')
                 return redirect(origin)
 
             if confirmed:
-
-                updated_tasks = []
-                for ti in tis:
-                    updated_tasks.append((ti.task_id, ti.execution_date))
+                for ti in tis_to_change:
                     ti.state = State.SUCCESS
-
                 session.commit()
 
-                to_insert = list(set(tasks) - set(updated_tasks))
-                for task_id, task_execution_date in to_insert:
+                for task_id, task_execution_date in tis_to_create:
                     ti = TI(
                         task=dag.get_task(task_id),
                         execution_date=task_execution_date,
@@ -1038,16 +1043,16 @@ class Airflow(BaseView):
                 session.commit()
                 session.close()
                 flash("Marked success on {} task instances".format(
-                    len(task_ids)))
+                    len(tis_all_altered)))
 
                 return redirect(origin)
             else:
-                if not task_ids:
+                if not tis_all_altered:
                     flash("No task instances to mark as successful", 'error')
                     response = redirect(origin)
                 else:
                     tis = []
-                    for task_id, task_execution_date in tasks:
+                    for task_id, task_execution_date in tis_all_altered:
                         tis.append(TI(
                             task=dag.get_task(task_id),
                             execution_date=task_execution_date,
