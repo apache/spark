@@ -753,7 +753,7 @@ class SparkContext(object):
             if not req.check_if_exists():
                 pip.main(['install', req.req.__str__()])
             mod = __import__(req.name)
-            self.addModule(tmp_dir)
+            self.addModule(mod)
 
     def setCheckpointDir(self, dirName):
         """
