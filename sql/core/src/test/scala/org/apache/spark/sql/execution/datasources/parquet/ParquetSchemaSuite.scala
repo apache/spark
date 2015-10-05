@@ -357,8 +357,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     val jsonString = """{"type":"struct","fields":[{"name":"c1","type":"integer","nullable":false,"metadata":{}},{"name":"c2","type":"binary","nullable":true,"metadata":{}}]}"""
     // scalastyle:on
 
-    val fromCaseClassString = ParquetTypesConverter.convertFromString(caseClassString)
-    val fromJson = ParquetTypesConverter.convertFromString(jsonString)
+    val fromCaseClassString = StructType.fromString(caseClassString)
+    val fromJson = StructType.fromString(jsonString)
 
     (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
       assert(a.name == b.name)
@@ -665,7 +665,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
-    "Backwards-compatibility: LIST with nullable element type - 2 - prior to 1.4.x",
+    "Backwards-compatibility: LIST with nullable element type - 2 - prior to 1.5.x",
     StructType(Seq(
       StructField(
         "f1",
@@ -703,7 +703,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
-    "Backwards-compatibility: LIST with non-nullable element type - 2 - prior to 1.4.x",
+    "Backwards-compatibility: LIST with non-nullable element type - 2 - prior to 1.5.x",
     StructType(Seq(
       StructField(
         "f1",
@@ -764,7 +764,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
-    "Backwards-compatibility: MAP with non-nullable value type - 3 - prior to 1.4.x",
+    "Backwards-compatibility: MAP with non-nullable value type - 3 - prior to 1.5.x",
     StructType(Seq(
       StructField(
         "f1",
@@ -868,7 +868,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
-    "Backwards-compatibility: MAP with non-nullable value type - 2 - prior to 1.4.x",
+    "Backwards-compatibility: MAP with non-nullable value type - 2 - prior to 1.5.x",
     StructType(Seq(
       StructField(
         "f1",
@@ -908,7 +908,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
-    "Backwards-compatibility: MAP with nullable value type - 3 - prior to 1.4.x",
+    "Backwards-compatibility: MAP with nullable value type - 3 - prior to 1.5.x",
     StructType(Seq(
       StructField(
         "f1",
@@ -987,7 +987,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = false)
 
   testSchema(
-    "DECIMAL(1, 0) - prior to 1.4.x",
+    "DECIMAL(1, 0) - prior to 1.5.x",
     StructType(Seq(StructField("f1", DecimalType(1, 0)))),
     """message root {
       |  optional fixed_len_byte_array(1) f1 (DECIMAL(1, 0));
@@ -998,7 +998,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true)
 
   testSchema(
-    "DECIMAL(8, 3) - prior to 1.4.x",
+    "DECIMAL(8, 3) - prior to 1.5.x",
     StructType(Seq(StructField("f1", DecimalType(8, 3)))),
     """message root {
       |  optional fixed_len_byte_array(4) f1 (DECIMAL(8, 3));
@@ -1009,7 +1009,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true)
 
   testSchema(
-    "DECIMAL(9, 3) - prior to 1.4.x",
+    "DECIMAL(9, 3) - prior to 1.5.x",
     StructType(Seq(StructField("f1", DecimalType(9, 3)))),
     """message root {
       |  optional fixed_len_byte_array(5) f1 (DECIMAL(9, 3));
@@ -1020,7 +1020,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true)
 
   testSchema(
-    "DECIMAL(18, 3) - prior to 1.4.x",
+    "DECIMAL(18, 3) - prior to 1.5.x",
     StructType(Seq(StructField("f1", DecimalType(18, 3)))),
     """message root {
       |  optional fixed_len_byte_array(8) f1 (DECIMAL(18, 3));
