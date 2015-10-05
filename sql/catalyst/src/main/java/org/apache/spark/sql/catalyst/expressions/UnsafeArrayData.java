@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
-import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -255,7 +254,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public InternalRow getStruct(int ordinal, int numFields) {
+  public UnsafeRow getStruct(int ordinal, int numFields) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -266,7 +265,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public ArrayData getArray(int ordinal) {
+  public UnsafeArrayData getArray(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -275,7 +274,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public MapData getMap(int ordinal) {
+  public UnsafeMapData getMap(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;

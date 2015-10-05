@@ -62,6 +62,8 @@ private[netty] class Inbox(
     val endpointRef: NettyRpcEndpointRef,
     val endpoint: RpcEndpoint) extends Logging {
 
+  inbox =>
+
   @GuardedBy("this")
   protected val messages = new LinkedList[InboxMessage]()
 
@@ -75,7 +77,7 @@ private[netty] class Inbox(
   private var workerCount = 0
 
   // OnStart should be the first message to process
-  synchronized {
+  inbox.synchronized {
     messages.add(OnStart)
   }
 
@@ -84,7 +86,7 @@ private[netty] class Inbox(
    */
   def process(dispatcher: Dispatcher): Unit = {
     var message: InboxMessage = null
-    synchronized {
+    inbox.synchronized {
       if (!enableConcurrent && workerCount != 0) {
         return
       }
@@ -126,14 +128,19 @@ private[netty] class Inbox(
           case OnStart => {
             endpoint.onStart()
             if (!endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
-              synchronized {
-                enableConcurrent = true
+              inbox.synchronized {
+                if (!stopped) {
+                  enableConcurrent = true
+                }
               }
             }
           }
 
           case OnStop =>
-            assert(synchronized { workerCount } == 1)
+            val _workCount = inbox.synchronized {
+              workerCount
+            }
+            assert(_workCount == 1, s"There should be only one worker but was ${_workCount}")
             dispatcher.removeRpcEndpointRef(endpoint)
             endpoint.onStop()
             assert(isEmpty, "OnStop should be the last message")
@@ -149,7 +156,7 @@ private[netty] class Inbox(
         }
       }
 
-      synchronized {
+      inbox.synchronized {
         // "enableConcurrent" will be set to false after `onStop` is called, so we should check it
         // every time.
         if (!enableConcurrent && workerCount != 1) {
@@ -168,7 +175,7 @@ private[netty] class Inbox(
 
   def post(message: InboxMessage): Unit = {
     val dropped =
-      synchronized {
+      inbox.synchronized {
         if (stopped) {
           // We already put "OnStop" into "messages", so we should drop further messages
           true
@@ -182,7 +189,7 @@ private[netty] class Inbox(
     }
   }
 
-  def stop(): Unit = synchronized {
+  def stop(): Unit = inbox.synchronized {
     // The following codes should be in `synchronized` so that we can make sure "OnStop" is the last
     // message
     if (!stopped) {
@@ -201,7 +208,7 @@ private[netty] class Inbox(
     logWarning(s"Drop ${message} because $endpointRef is stopped")
   }
 
-  def isEmpty: Boolean = synchronized { messages.isEmpty }
+  def isEmpty: Boolean = inbox.synchronized { messages.isEmpty }
 
   private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
     try {

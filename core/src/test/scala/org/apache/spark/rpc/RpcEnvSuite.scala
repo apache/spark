@@ -328,9 +328,6 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       override def onStop(): Unit = {
         selfOption = Option(self)
       }
-
-      override def onError(cause: Throwable): Unit = {
-      }
     })
 
     env.stop(endpointRef)

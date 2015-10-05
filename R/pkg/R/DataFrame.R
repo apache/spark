@@ -1075,12 +1075,20 @@ setMethod("subset", signature(x = "DataFrame"),
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
 #'   # Similar to R data frames columns can also be selected using `$`
-#'   df$age
+#'   df[,df$age]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
-            sdf <- callJMethod(x@sdf, "select", col, list(...))
-            dataFrame(sdf)
+            if (length(col) > 1) {
+              if (length(list(...)) > 0) {
+                stop("To select multiple columns, use a character vector or list for col")
+              }
+
+              select(x, as.list(col))
+            } else {
+              sdf <- callJMethod(x@sdf, "select", col, list(...))
+              dataFrame(sdf)
+            }
           })
 
 #' @rdname select
@@ -1848,3 +1856,28 @@ setMethod("crosstab",
             sct <- callJMethod(statFunctions, "crosstab", col1, col2)
             collect(dataFrame(sct))
           })
+
+
+#' This function downloads the contents of a DataFrame into an R's data.frame.
+#' Since data.frames are held in memory, ensure that you have enough memory
+#' in your system to accommodate the contents.
+#'
+#' @title Download data from a DataFrame into a data.frame
+#' @param x a DataFrame
+#' @return a data.frame
+#' @rdname as.data.frame
+#' @examples \dontrun{
+#'
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
+#' }
+setMethod("as.data.frame",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            # Check if additional parameters have been passed
+            if (length(list(...)) > 0) {
+              stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
+            }
+            collect(x)
+          }
+)
