@@ -185,6 +185,9 @@ private[spark] class DiskBlockObjectWriter(
     recordWritten()
   }
 
+  /**
+   * Writes an object.
+   */
   def write(obj: Any) {
     if (!initialized) {
       open()
