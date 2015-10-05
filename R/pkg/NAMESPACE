@@ -23,9 +23,11 @@ export("setJobGroup",
 exportClasses("DataFrame")
 
 exportMethods("arrange",
-              "attach",
+              "as.data.frame",
+              "attach", 
               "cache",
               "collect",
+              "coltypes",
               "columns",
               "count",
               "cov",
