@@ -1,0 +1,4 @@
+java_method(class,method[,arg1[,arg2..]]) calls method with reflection
+Synonyms: reflect
+Use this UDF to call Java methods by matching the argument signature
+

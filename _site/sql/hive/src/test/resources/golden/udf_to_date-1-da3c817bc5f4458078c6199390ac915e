@@ -1,0 +1,4 @@
+to_date(expr) - Extracts the date part of the date or datetime expression expr
+Example:
+   > SELECT to_date('2009-07-30 04:17:52') FROM src LIMIT 1;
+  '2009-07-30'

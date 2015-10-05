@@ -1,0 +1,189 @@
+<?xml version="1.1" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xml:lang="en">
+
+<head>
+  <title>Scala Development Tools</title>
+  <meta http-equiv="Content-Script-Type" content="text/javascript"/>
+  <meta http-equiv="Content-Style-Type" content="text/css"/>
+  <meta http-equiv="Content-Language" content="en"/>
+  <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+  <meta name="Copyright" content="(C) 2002-2012 LAMP/EPFL"/>
+  <meta name="Language" content="en"/>
+  <meta name="Description" content="The Scala Programming Language"/>
+  <meta name="Author" content="Stephane Micheloud"/>
+  <link rel="stylesheet" type="text/css" media="all" href="./css/style.css"/>
+</head>
+
+<body>
+<div style="float:left; width:20%;">
+  <a href="http://scala-lang.org/">
+  <img src="images/scala_logo.png" alt="Scala" width="80" height="55"/></a>
+</div>
+<div style="float:right; width:20%;">
+  &nbsp; <!-- Documentation Contents -->
+</div>
+<div style="text-align:center; margin:1em;">
+  <h2>Scala Tools and Utilities</h2>
+</div>
+<div style="clear:both;"/>
+
+<div style="background-color:#eeeeee; margin:1.6em; padding:0.4em;">
+
+<h3>General</h3>
+
+<ul class="ContentList">
+  <li>
+    <a href="#general"><b class="SansSerif">General Information</b></a>
+    <!--(file structure, classpath, how classes are found, changes)-->
+    (classpath, how classes are found)
+  </li>
+</ul>
+
+<h3>Standard Scala Tools and Utilities</h3>
+
+<ul class="ContentList">
+  <li>
+    <a href="#basic"><b class="SansSerif">Basic Tools</b></a> (<code>fsc</code>, 
+    <code>scala</code>, <code>scalac</code>, <code>scaladoc</code>,
+    <code>scalap</code>)
+  </li>
+</ul>
+</div>
+
+<p style="font-size: 90%; margin-left: 2em; margin-right: 2em;">
+  <b>NOTE</b> - Some tools have separate reference pages for Windows, Linux and Solaris
+  to accommodate minor differences in configuration and usage -- for example, the character
+  used to specify directory separators may be different.
+</p>
+
+<hr/>
+
+<h2 id="general">
+  General Information
+</h2>
+<p>
+  The following documents contain important information you will need to
+  know to get the most out of the SDK tools.
+</p>
+
+
+<table cellspacing="0" cellpadding="2">
+<!--
+<tr>
+  <td>
+    <b>JDK File Structure</B>
+  </td>
+  <td NOWRAP>
+    [<A href="solaris/jdkfiles.html">Solaris</A>]
+    [<A href="linux/jdkfiles.html">Linux</A>]
+    [<A href="windows/jdkfiles.html">Windows</A>]
+  </td>
+</tr>
+-->
+<tr>
+  <td>
+    <b>Setting the Classpath</B>
+  </td>
+  <td>
+    [<a class="external"
+    href="http://java.sun.com/j2se/1.5.0/docs/tooldocs/solaris/classpath.html">Solaris and Linux</a>]
+    [<a class="external"
+    href="http://java.sun.com/j2se/1.5.0/docs/tooldocs/windows/classpath.html">Windows</a>]
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <b>How Classes are Found</B>
+  </td>
+  <td>
+    [<a class="external"
+    href="http://java.sun.com/j2se/1.5.0/docs/tooldocs/findingclasses.html">Solaris, Linux and Windows</a>]
+  </td>
+</tr>
+</table>
+
+<hr>
+<h2 id="basic">
+  Basic Tools
+</h2>
+
+<p>
+  These tools are the foundation of the Scala SDK. They are the tools you
+  use to create and build applications.
+</p>
+
+<table class="basic">
+  <tr>
+    <th>Tool Name</th>
+    <th>Brief Description</th>
+    <th class="links">Links to Reference Pages</th>
+  </tr>
+  <tr>
+    <td width="13%" valign="top">
+      <span class="tool">fsc</span>
+    </td>
+    <td width="70%" valign="top">
+      The fast Scala compiler.
+    </td>
+    <td width="17%" valign="top" class="links">
+      [<a href="fsc.html">Solaris, Linux and Windows</a>]
+    </td>
+  </tr>
+  <tr>
+    <td width="13%" valign="top">
+      <span class="tool">scala</span>
+    </td>
+    <td width="70%" valign="top">
+      Run Scala code.
+    </td>
+    <td width="17%" valign="top" class="links">
+      [<a href="scala.html">Solaris, Linux and Windows</a>]
+    </td>
+  </tr>
+  <tr>
+    <td width="13%" valign="top">
+      <span class="tool">scalac</span>
+    </td>
+    <td width="70%" valign="top">
+      Compile Scala code ahead of time.
+    </td>
+    <td width="17%" valign="top" class="links">
+      [<a href="scalac.html">Solaris, Linux and Windows</a>]
+    </td>
+  </tr>
+  <tr>
+    <td width="13%" valign="top">
+      <span class="tool">scaladoc</span>
+    </td>
+    <td width="70%" valign="top">
+      The API document generator.
+    </td>
+    <td width="17%" valign="top" class="links">
+      [<a href="scaladoc.html">Solaris, Linux and Windows</a>]
+    </td>
+  </tr>
+  <tr>
+    <td width="13%" valign="top">
+      <span class="tool">scalap</span>
+    </td>
+    <td width="70%" valign="top">
+      The Scala class file decoder.
+    </td>
+    <td width="17%" valign="top" class="links">
+      [<a href="scalap.html">Solaris, Linux and Windows</a>]
+    </td>
+  </tr>
+</table>
+
+  <hr/>
+
+  <div style="font-size:x-small;">
+    Copyright (c) 2002-2012 <a href="http://www.epfl.ch/">EPFL</a>,
+    Lausanne, unless specified otherwise.<br/>
+    All rights reserved.
+  </div>
+
+</body>
+</html>

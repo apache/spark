@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+#
+# Copyright (C) 2012 Typesafe, Inc. <http://www.typesafe.com>
+#
+# Start script for zinc
+
+# flags
+unset debug_command
+
+# get the source location for this script; handles symlinks
+function get_script_path {
+  local source="${BASH_SOURCE[0]}"
+  while [ -h "$source" ] ; do
+    local linked="$(readlink "$source")"
+    local dir="$(cd -P $(dirname "$source") && cd -P $(dirname "$linked") && pwd)"
+    source="$dir/$(basename "$linked")"
+  done
+  echo ${source}
+}
+
+# script details
+declare -r script_path=$(get_script_path)
+declare -r script_name=$(basename "$script_path")
+declare -r script_dir="$(cd -P "$(dirname "$script_path")" && pwd)"
+
+# directories
+declare -r base_dir="$(cd "$script_dir/.." && pwd)"
+declare -r lib_dir="$base_dir/lib"
+
+# debug command before executing
+function exec_command {
+  if [ -n "$debug_command" ] ; then
+    echo "exec command:"
+    for arg in "$@"; do echo "$arg"; done
+    echo ""
+  fi
+  "$@"
+}
+
+# debug command before forking
+function fork_command {
+  if [ -n "$debug_command" ] ; then
+    echo "fork command:"
+    for arg in "$@"; do echo "$arg"; done
+    echo ""
+  fi
+  "$@" > /dev/null 2>&1 &
+}
+
+# nailgun settings
+declare nailgun_port=3030
+declare timeout=0
+unset nailed start status shutdown
+
+# arguments
+declare -a java_args
+declare -a args
+
+# process arguments
+while [[ $# -gt 0 ]] ; do
+  case "$1" in
+    -debug-command) debug_command=1; shift ;;
+
+    -nailed) nailed=1; shift ;;
+    -port) nailgun_port="$2"; shift 2 ;;
+    -start) start=1; shift ;;
+    -status) status=1; shift ;;
+    -shutdown) shutdown=1; shift ;;
+    -idle-timeout) timeout="$2"; shift 2 ;;
+
+    -D*)
+      java_args=("${java_args[@]}" "$1")
+      args=("${args[@]}" "$1")
+      shift ;;
+
+    -J*)
+      java_args=("${java_args[@]}" "${1:2}")
+      shift ;;
+
+    *)
+      args=("${args[@]}" "$1")
+      shift ;;
+  esac
+done
+
+# reset "$@"
+set -- "${args[@]}"
+
+# allow start, status, and shutdown without nailed
+[[ -n "$start" || -n "$status" || -n "$shutdown" ]] && nailed=1
+
+# allow setting of java command
+if [[ -z "$JAVACMD" && -n "$JAVA_HOME" && -x "$JAVA_HOME/bin/java" ]]; then
+  JAVACMD="$JAVA_HOME/bin/java"
+fi
+declare -r java_cmd="${JAVACMD:=java}"
+
+# java options with defaults
+declare optMode=""
+declare optXms=""
+declare optXmx=""
+declare optXXMaxPermSize=""
+declare optXXReservedCodeCacheSize=""
+
+# process java options
+# allows overriding defaults in JAVA_OPTS, ZINC_OPTS, or -J args
+declare all_opts=($JAVA_OPTS $ZINC_OPTS ${java_args[@]})
+declare -a other_opts
+for opt in ${all_opts[@]} ; do
+  case "$opt" in
+    -client) optMode="-client" ;;
+    -server) optMode="-server" ;;
+    -Xms*) optXms="$opt" ;;
+    -Xmx*) optXmx="$opt" ;;
+    -XX:MaxPermSize*) optXXMaxPermSize="$opt" ;;
+    -XX:ReservedCodeCacheSize*) optXXReservedCodeCacheSize="$opt" ;;
+    *) other_opts=("${other_opts[@]}" "$opt") ;;
+  esac
+done
+
+# set defaults where undefined
+[[ -n "$nailed" && -z "$optMode" ]] && optMode="-server"
+[[ -z "$optXms" && -z "$optXmx" ]] && optXms="-Xms1024m" && optXmx="-Xmx1024m"
+[[ -z "$optXXMaxPermSize" ]] && optXXMaxPermSize="-XX:MaxPermSize=384m"
+[[ -z "$optXXReservedCodeCacheSize" ]] && optXXReservedCodeCacheSize="-XX:ReservedCodeCacheSize=192m"
+
+# combined java options
+declare java_options=($optMode $optXms $optXmx $optXXMaxPermSize $optXXReservedCodeCacheSize ${other_opts[@]})
+
+function can_netcat {
+  # check nc command exists for port scanning
+  type -P nc > /dev/null 2>&1
+}
+
+function check_port_netcat {
+  nc -z -n -w 1 127.0.0.1 $1 > /dev/null 2>&1
+}
+
+function check_port_bash {
+  # will only work if bash has tcp redirects enabled
+  eval '6<>/dev/tcp/127.0.0.1/$1' > /dev/null 2>&1
+  exitcode="$?"
+  # close connections
+  exec 6>&-
+  exec 6<&-
+  [[ $exitcode -eq 0 ]]
+}
+
+function check_port {
+  if can_netcat ; then
+    check_port_netcat $1
+  else
+    check_port_bash $1
+  fi
+}
+
+# check cygwin
+declare cygwin=false
+if [[ "$OSTYPE" == "cygwin" ]]; then
+  cygwin=true
+fi
+
+function zinc_classpath {
+  local cp=""
+  for jar in "$lib_dir"/* ; do
+    if [[ -z "$cp" ]]; then
+      cp="$jar"
+    else
+      cp="$cp:$jar"
+    fi
+  done
+  if $cygwin ; then
+    cp="$(cygpath --windows --path "$cp")"
+  fi
+  echo $cp
+}
+
+# get platform-specific path
+function native_path {
+  local path="$1"
+  if $cygwin ; then
+    path="$(cygpath --windows "$path")"
+  fi
+  echo $path
+}
+
+declare -r home_path="$(native_path "$base_dir")"
+
+# check cygwin term for jline
+declare cygterm=false
+if $cygwin ; then
+  case "$TERM" in
+    rxvt* | xterm* | vt*) cygterm=true ;;
+  esac
+fi
+
+# force jline unix terminal under cygwin
+if $cygterm ; then
+  java_options=(${java_options[@]} "-Djline.terminal=jline.UnixTerminal")
+  stty -icanon min 1 -echo > /dev/null 2>&1
+fi
+
+function nailgun {
+  # start nailgun if not already running
+  if ! check_port $nailgun_port ; then
+    local classpath=$(zinc_classpath)
+    fork_command \
+      "$java_cmd" \
+      "${java_options[@]}" \
+      -Dzinc.home="$home_path" \
+      -classpath "$classpath" \
+      com.typesafe.zinc.Nailgun $nailgun_port $timeout
+    # give some time for startup
+    local attempts=50
+    while ! check_port $nailgun_port ; do
+      [[ $attempts -eq 0 ]] && return 1
+      attempts=$((attempts - 1))
+      sleep 0.1
+    done
+  fi
+  exec_command "$script_dir/nailgun" --nailgun-port $nailgun_port "$@"
+}
+
+if [ -n "$nailed" ] ; then
+  # run zinc via nailgun client
+  if [ -n "$shutdown" ] ; then
+    check_port $nailgun_port && nailgun shutdown
+    exitcode="$?"
+    [[ $exitcode -eq 0 || $exitcode -eq 227 ]]
+  elif [ -n "$status" ] ; then
+    check_port $nailgun_port && nailgun status
+  elif [ -n "$start" ] ; then
+    nailgun status
+  else
+    nailgun zinc "$@"
+  fi
+else
+  # run zinc directly
+  classpath=$(zinc_classpath)
+  exec_command \
+    "$java_cmd" \
+    "${java_options[@]}" \
+    -Dzinc.home="$home_path" \
+    -Djline.shutdownhook=false \
+    -classpath "$classpath" \
+    com.typesafe.zinc.Main "$@"
+fi
+
+exitcode="$?"
+
+if $cygterm ; then
+  stty icanon echo > /dev/null 2>&1
+fi
+
+exit $exitcode

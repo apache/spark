@@ -1,0 +1,1 @@
+SELECT sum(*) FROM src;

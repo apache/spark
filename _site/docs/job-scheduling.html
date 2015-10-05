@@ -1,0 +1,286 @@
+<ul id="markdown-toc">
+  <li><a href="#overview" id="markdown-toc-overview">Overview</a></li>
+  <li><a href="#scheduling-across-applications" id="markdown-toc-scheduling-across-applications">Scheduling Across Applications</a>    <ul>
+      <li><a href="#dynamic-resource-allocation" id="markdown-toc-dynamic-resource-allocation">Dynamic Resource Allocation</a>        <ul>
+          <li><a href="#configuration-and-setup" id="markdown-toc-configuration-and-setup">Configuration and Setup</a></li>
+          <li><a href="#resource-allocation-policy" id="markdown-toc-resource-allocation-policy">Resource Allocation Policy</a>            <ul>
+              <li><a href="#request-policy" id="markdown-toc-request-policy">Request Policy</a></li>
+              <li><a href="#remove-policy" id="markdown-toc-remove-policy">Remove Policy</a></li>
+            </ul>
+          </li>
+          <li><a href="#graceful-decommission-of-executors" id="markdown-toc-graceful-decommission-of-executors">Graceful Decommission of Executors</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#scheduling-within-an-application" id="markdown-toc-scheduling-within-an-application">Scheduling Within an Application</a>    <ul>
+      <li><a href="#fair-scheduler-pools" id="markdown-toc-fair-scheduler-pools">Fair Scheduler Pools</a></li>
+      <li><a href="#default-behavior-of-pools" id="markdown-toc-default-behavior-of-pools">Default Behavior of Pools</a></li>
+      <li><a href="#configuring-pool-properties" id="markdown-toc-configuring-pool-properties">Configuring Pool Properties</a></li>
+    </ul>
+  </li>
+</ul>
+
+<h1 id="overview">Overview</h1>
+
+<p>Spark has several facilities for scheduling resources between computations. First, recall that, as described
+in the <a href="cluster-overview.html">cluster mode overview</a>, each Spark application (instance of SparkContext)
+runs an independent set of executor processes. The cluster managers that Spark runs on provide
+facilities for <a href="#scheduling-across-applications">scheduling across applications</a>. Second,
+<em>within</em> each Spark application, multiple “jobs” (Spark actions) may be running concurrently
+if they were submitted by different threads. This is common if your application is serving requests
+over the network. Spark includes a <a href="#scheduling-within-an-application">fair scheduler</a> to schedule resources within each SparkContext.</p>
+
+<h1 id="scheduling-across-applications">Scheduling Across Applications</h1>
+
+<p>When running on a cluster, each Spark application gets an independent set of executor JVMs that only
+run tasks and store data for that application. If multiple users need to share your cluster, there are
+different options to manage allocation, depending on the cluster manager.</p>
+
+<p>The simplest option, available on all cluster managers, is <em>static partitioning</em> of resources. With
+this approach, each application is given a maximum amount of resources it can use, and holds onto them
+for its whole duration. This is the approach used in Spark’s <a href="spark-standalone.html">standalone</a>
+and <a href="running-on-yarn.html">YARN</a> modes, as well as the
+<a href="running-on-mesos.html#mesos-run-modes">coarse-grained Mesos mode</a>.
+Resource allocation can be configured as follows, based on the cluster type:</p>
+
+<ul>
+  <li><strong>Standalone mode:</strong> By default, applications submitted to the standalone mode cluster will run in
+FIFO (first-in-first-out) order, and each application will try to use all available nodes. You can limit
+the number of nodes an application uses by setting the <code>spark.cores.max</code> configuration property in it,
+or change the default for applications that don’t set this setting through <code>spark.deploy.defaultCores</code>.
+Finally, in addition to controlling cores, each application’s <code>spark.executor.memory</code> setting controls
+its memory use.</li>
+  <li><strong>Mesos:</strong> To use static partitioning on Mesos, set the <code>spark.mesos.coarse</code> configuration property to <code>true</code>,
+and optionally set <code>spark.cores.max</code> to limit each application’s resource share as in the standalone mode.
+You should also set <code>spark.executor.memory</code> to control the executor memory.</li>
+  <li><strong>YARN:</strong> The <code>--num-executors</code> option to the Spark YARN client controls how many executors it will allocate
+on the cluster, while <code>--executor-memory</code> and <code>--executor-cores</code> control the resources per executor.</li>
+</ul>
+
+<p>A second option available on Mesos is <em>dynamic sharing</em> of CPU cores. In this mode, each Spark application
+still has a fixed and independent memory allocation (set by <code>spark.executor.memory</code>), but when the
+application is not running tasks on a machine, other applications may run tasks on those cores. This mode
+is useful when you expect large numbers of not overly active applications, such as shell sessions from
+separate users. However, it comes with a risk of less predictable latency, because it may take a while for
+an application to gain back cores on one node when it has work to do. To use this mode, simply use a
+<code>mesos://</code> URL without setting <code>spark.mesos.coarse</code> to true.</p>
+
+<p>Note that none of the modes currently provide memory sharing across applications. If you would like to share
+data this way, we recommend running a single server application that can serve multiple requests by querying
+the same RDDs. In future releases, in-memory storage systems such as <a href="http://tachyon-project.org">Tachyon</a> will
+provide another approach to share RDDs.</p>
+
+<h2 id="dynamic-resource-allocation">Dynamic Resource Allocation</h2>
+
+<p>Spark 1.2 introduces the ability to dynamically scale the set of cluster resources allocated to
+your application up and down based on the workload. This means that your application may give
+resources back to the cluster if they are no longer used and request them again later when there
+is demand. This feature is particularly useful if multiple applications share resources in your
+Spark cluster. If a subset of the resources allocated to an application becomes idle, it can be
+returned to the cluster’s pool of resources and acquired by other applications. In Spark, dynamic
+resource allocation is performed on the granularity of the executor and can be enabled through
+<code>spark.dynamicAllocation.enabled</code>.</p>
+
+<p>This feature is currently disabled by default and available only on <a href="running-on-yarn.html">YARN</a>.
+A future release will extend this to <a href="spark-standalone.html">standalone mode</a> and
+<a href="running-on-mesos.html#mesos-run-modes">Mesos coarse-grained mode</a>. Note that although Spark on
+Mesos already has a similar notion of dynamic resource sharing in fine-grained mode, enabling
+dynamic allocation allows your Mesos application to take advantage of coarse-grained low-latency
+scheduling while sharing cluster resources efficiently.</p>
+
+<h3 id="configuration-and-setup">Configuration and Setup</h3>
+
+<p>All configurations used by this feature live under the <code>spark.dynamicAllocation.*</code> namespace.
+To enable this feature, your application must set <code>spark.dynamicAllocation.enabled</code> to <code>true</code>.
+Other relevant configurations are described on the
+<a href="configuration.html#dynamic-allocation">configurations page</a> and in the subsequent sections in
+detail.</p>
+
+<p>Additionally, your application must use an external shuffle service. The purpose of the service is
+to preserve the shuffle files written by executors so the executors can be safely removed (more
+detail described <a href="job-scheduling.html#graceful-decommission-of-executors">below</a>). To enable
+this service, set <code>spark.shuffle.service.enabled</code> to <code>true</code>. In YARN, this external shuffle service
+is implemented in <code>org.apache.spark.yarn.network.YarnShuffleService</code> that runs in each <code>NodeManager</code>
+in your cluster. To start this service, follow these steps:</p>
+
+<ol>
+  <li>Build Spark with the <a href="building-spark.html">YARN profile</a>. Skip this step if you are using a
+pre-packaged distribution.</li>
+  <li>Locate the <code>spark-&lt;version&gt;-yarn-shuffle.jar</code>. This should be under
+<code>$SPARK_HOME/network/yarn/target/scala-&lt;version&gt;</code> if you are building Spark yourself, and under
+<code>lib</code> if you are using a distribution.</li>
+  <li>Add this jar to the classpath of all <code>NodeManager</code>s in your cluster.</li>
+  <li>In the <code>yarn-site.xml</code> on each node, add <code>spark_shuffle</code> to <code>yarn.nodemanager.aux-services</code>,
+then set <code>yarn.nodemanager.aux-services.spark_shuffle.class</code> to
+<code>org.apache.spark.network.yarn.YarnShuffleService</code>. Additionally, set all relevant
+<code>spark.shuffle.service.*</code> <a href="configuration.html">configurations</a>.</li>
+  <li>Restart all <code>NodeManager</code>s in your cluster.</li>
+</ol>
+
+<h3 id="resource-allocation-policy">Resource Allocation Policy</h3>
+
+<p>At a high level, Spark should relinquish executors when they are no longer used and acquire
+executors when they are needed. Since there is no definitive way to predict whether an executor
+that is about to be removed will run a task in the near future, or whether a new executor that is
+about to be added will actually be idle, we need a set of heuristics to determine when to remove
+and request executors.</p>
+
+<h4 id="request-policy">Request Policy</h4>
+
+<p>A Spark application with dynamic allocation enabled requests additional executors when it has
+pending tasks waiting to be scheduled. This condition necessarily implies that the existing set
+of executors is insufficient to simultaneously saturate all tasks that have been submitted but
+not yet finished.</p>
+
+<p>Spark requests executors in rounds. The actual request is triggered when there have been pending
+tasks for <code>spark.dynamicAllocation.schedulerBacklogTimeout</code> seconds, and then triggered again
+every <code>spark.dynamicAllocation.sustainedSchedulerBacklogTimeout</code> seconds thereafter if the queue
+of pending tasks persists. Additionally, the number of executors requested in each round increases
+exponentially from the previous round. For instance, an application will add 1 executor in the
+first round, and then 2, 4, 8 and so on executors in the subsequent rounds.</p>
+
+<p>The motivation for an exponential increase policy is twofold. First, an application should request
+executors cautiously in the beginning in case it turns out that only a few additional executors is
+sufficient. This echoes the justification for TCP slow start. Second, the application should be
+able to ramp up its resource usage in a timely manner in case it turns out that many executors are
+actually needed.</p>
+
+<h4 id="remove-policy">Remove Policy</h4>
+
+<p>The policy for removing executors is much simpler. A Spark application removes an executor when
+it has been idle for more than <code>spark.dynamicAllocation.executorIdleTimeout</code> seconds. Note that,
+under most circumstances, this condition is mutually exclusive with the request condition, in that
+an executor should not be idle if there are still pending tasks to be scheduled.</p>
+
+<h3 id="graceful-decommission-of-executors">Graceful Decommission of Executors</h3>
+
+<p>Before dynamic allocation, a Spark executor exits either on failure or when the associated
+application has also exited. In both scenarios, all state associated with the executor is no
+longer needed and can be safely discarded. With dynamic allocation, however, the application
+is still running when an executor is explicitly removed. If the application attempts to access
+state stored in or written by the executor, it will have to perform a recompute the state. Thus,
+Spark needs a mechanism to decommission an executor gracefully by preserving its state before
+removing it.</p>
+
+<p>This requirement is especially important for shuffles. During a shuffle, the Spark executor first
+writes its own map outputs locally to disk, and then acts as the server for those files when other
+executors attempt to fetch them. In the event of stragglers, which are tasks that run for much
+longer than their peers, dynamic allocation may remove an executor before the shuffle completes,
+in which case the shuffle files written by that executor must be recomputed unnecessarily.</p>
+
+<p>The solution for preserving shuffle files is to use an external shuffle service, also introduced
+in Spark 1.2. This service refers to a long-running process that runs on each node of your cluster
+independently of your Spark applications and their executors. If the service is enabled, Spark
+executors will fetch shuffle files from the service instead of from each other. This means any
+shuffle state written by an executor may continue to be served beyond the executor’s lifetime.</p>
+
+<p>In addition to writing shuffle files, executors also cache data either on disk or in memory.
+When an executor is removed, however, all cached data will no longer be accessible. There is
+currently not yet a solution for this in Spark 1.2. In future releases, the cached data may be
+preserved through an off-heap storage similar in spirit to how shuffle files are preserved through
+the external shuffle service.</p>
+
+<h1 id="scheduling-within-an-application">Scheduling Within an Application</h1>
+
+<p>Inside a given Spark application (SparkContext instance), multiple parallel jobs can run simultaneously if
+they were submitted from separate threads. By “job”, in this section, we mean a Spark action (e.g. <code>save</code>,
+<code>collect</code>) and any tasks that need to run to evaluate that action. Spark’s scheduler is fully thread-safe
+and supports this use case to enable applications that serve multiple requests (e.g. queries for
+multiple users).</p>
+
+<p>By default, Spark’s scheduler runs jobs in FIFO fashion. Each job is divided into “stages” (e.g. map and
+reduce phases), and the first job gets priority on all available resources while its stages have tasks to
+launch, then the second job gets priority, etc. If the jobs at the head of the queue don’t need to use
+the whole cluster, later jobs can start to run right away, but if the jobs at the head of the queue are
+large, then later jobs may be delayed significantly.</p>
+
+<p>Starting in Spark 0.8, it is also possible to configure fair sharing between jobs. Under fair sharing,
+Spark assigns tasks between jobs in a “round robin” fashion, so that all jobs get a roughly equal share
+of cluster resources. This means that short jobs submitted while a long job is running can start receiving
+resources right away and still get good response times, without waiting for the long job to finish. This
+mode is best for multi-user settings.</p>
+
+<p>To enable the fair scheduler, simply set the <code>spark.scheduler.mode</code> property to <code>FAIR</code> when configuring
+a SparkContext:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">conf</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">SparkConf</span><span class="o">().</span><span class="n">setMaster</span><span class="o">(...).</span><span class="n">setAppName</span><span class="o">(...)</span>
+<span class="n">conf</span><span class="o">.</span><span class="n">set</span><span class="o">(</span><span class="s">&quot;spark.scheduler.mode&quot;</span><span class="o">,</span> <span class="s">&quot;FAIR&quot;</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">sc</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">SparkContext</span><span class="o">(</span><span class="n">conf</span><span class="o">)</span></code></pre></div>
+
+<h2 id="fair-scheduler-pools">Fair Scheduler Pools</h2>
+
+<p>The fair scheduler also supports grouping jobs into <em>pools</em>, and setting different scheduling options
+(e.g. weight) for each pool. This can be useful to create a “high-priority” pool for more important jobs,
+for example, or to group the jobs of each user together and give <em>users</em> equal shares regardless of how
+many concurrent jobs they have instead of giving <em>jobs</em> equal shares. This approach is modeled after the
+<a href="http://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/FairScheduler.html">Hadoop Fair Scheduler</a>.</p>
+
+<p>Without any intervention, newly submitted jobs go into a <em>default pool</em>, but jobs’ pools can be set by
+adding the <code>spark.scheduler.pool</code> “local property” to the SparkContext in the thread that’s submitting them.
+This is done as follows:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Assuming sc is your SparkContext variable</span>
+<span class="n">sc</span><span class="o">.</span><span class="n">setLocalProperty</span><span class="o">(</span><span class="s">&quot;spark.scheduler.pool&quot;</span><span class="o">,</span> <span class="s">&quot;pool1&quot;</span><span class="o">)</span></code></pre></div>
+
+<p>After setting this local property, <em>all</em> jobs submitted within this thread (by calls in this thread
+to <code>RDD.save</code>, <code>count</code>, <code>collect</code>, etc) will use this pool name. The setting is per-thread to make
+it easy to have a thread run multiple jobs on behalf of the same user. If you’d like to clear the
+pool that a thread is associated with, simply call:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="n">sc</span><span class="o">.</span><span class="n">setLocalProperty</span><span class="o">(</span><span class="s">&quot;spark.scheduler.pool&quot;</span><span class="o">,</span> <span class="kc">null</span><span class="o">)</span></code></pre></div>
+
+<h2 id="default-behavior-of-pools">Default Behavior of Pools</h2>
+
+<p>By default, each pool gets an equal share of the cluster (also equal in share to each job in the default
+pool), but inside each pool, jobs run in FIFO order. For example, if you create one pool per user, this
+means that each user will get an equal share of the cluster, and that each user’s queries will run in
+order instead of later queries taking resources from that user’s earlier ones.</p>
+
+<h2 id="configuring-pool-properties">Configuring Pool Properties</h2>
+
+<p>Specific pools’ properties can also be modified through a configuration file. Each pool supports three
+properties:</p>
+
+<ul>
+  <li><code>schedulingMode</code>: This can be FIFO or FAIR, to control whether jobs within the pool queue up behind
+each other (the default) or share the pool’s resources fairly.</li>
+  <li><code>weight</code>: This controls the pool’s share of the cluster relative to other pools. By default, all pools
+have a weight of 1. If you give a specific pool a weight of 2, for example, it will get 2x more
+resources as other active pools. Setting a high weight such as 1000 also makes it possible to implement
+<em>priority</em> between pools—in essence, the weight-1000 pool will always get to launch tasks first
+whenever it has jobs active.</li>
+  <li><code>minShare</code>: Apart from an overall weight, each pool can be given a <em>minimum shares</em> (as a number of
+CPU cores) that the administrator would like it to have. The fair scheduler always attempts to meet
+all active pools’ minimum shares before redistributing extra resources according to the weights.
+The <code>minShare</code> property can therefore be another way to ensure that a pool can always get up to a
+certain number of resources (e.g. 10 cores) quickly without giving it a high priority for the rest
+of the cluster. By default, each pool’s <code>minShare</code> is 0.</li>
+</ul>
+
+<p>The pool properties can be set by creating an XML file, similar to <code>conf/fairscheduler.xml.template</code>,
+and setting a <code>spark.scheduler.allocation.file</code> property in your
+<a href="configuration.html#spark-properties">SparkConf</a>.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="n">conf</span><span class="o">.</span><span class="n">set</span><span class="o">(</span><span class="s">&quot;spark.scheduler.allocation.file&quot;</span><span class="o">,</span> <span class="s">&quot;/path/to/file&quot;</span><span class="o">)</span></code></pre></div>
+
+<p>The format of the XML file is simply a <code>&lt;pool&gt;</code> element for each pool, with different elements
+within it for the various settings. For example:</p>
+
+<div class="highlight"><pre><code class="language-xml" data-lang="xml"><span class="cp">&lt;?xml version=&quot;1.0&quot;?&gt;</span>
+<span class="nt">&lt;allocations&gt;</span>
+  <span class="nt">&lt;pool</span> <span class="na">name=</span><span class="s">&quot;production&quot;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;schedulingMode&gt;</span>FAIR<span class="nt">&lt;/schedulingMode&gt;</span>
+    <span class="nt">&lt;weight&gt;</span>1<span class="nt">&lt;/weight&gt;</span>
+    <span class="nt">&lt;minShare&gt;</span>2<span class="nt">&lt;/minShare&gt;</span>
+  <span class="nt">&lt;/pool&gt;</span>
+  <span class="nt">&lt;pool</span> <span class="na">name=</span><span class="s">&quot;test&quot;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;schedulingMode&gt;</span>FIFO<span class="nt">&lt;/schedulingMode&gt;</span>
+    <span class="nt">&lt;weight&gt;</span>2<span class="nt">&lt;/weight&gt;</span>
+    <span class="nt">&lt;minShare&gt;</span>3<span class="nt">&lt;/minShare&gt;</span>
+  <span class="nt">&lt;/pool&gt;</span>
+<span class="nt">&lt;/allocations&gt;</span></code></pre></div>
+
+<p>A full example is also available in <code>conf/fairscheduler.xml.template</code>. Note that any pools not
+configured in the XML file will simply get default values for all settings (scheduling mode FIFO,
+weight 1, and minShare 0).</p>

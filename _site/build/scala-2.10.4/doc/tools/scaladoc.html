@@ -1,0 +1,200 @@
+<?xml version="1.1" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+<title>scaladoc man page</title>
+<meta http-equiv="Content-Language" content="en"/>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+<meta name="Author" content="Gilles Dubochet"/>
+<style type="text/css">
+  <!--
+  blockquote, pre { margin:1em 4em 1em 4em; }
+  dt { margin: 0.6em 0 0 0; }
+  p { margin:0.6em 2em 0.6em 2em; text-align:justify; }
+  //-->
+</style>
+</head>
+
+<body>
+<!-- header -->
+<div style="margin: 0 0 2em 0;">
+<div style="float:left;">
+scaladoc(1)
+</div>
+<div style="float:right;">
+scaladoc(1)
+</div>
+<div style="text-align:center;">
+USER COMMANDS
+</div>
+</div>
+
+<h3 id="name">NAME</h3>
+<p>
+<code><b>scaladoc</b></code> &#8211; Documentation generator for the <a href="http://scala-lang.org/">Scala 2</a> language</p>
+
+<h3 id="synopsis">SYNOPSIS</h3>
+<p>
+<code><b>scaladoc</b></code><code>  [ &lt;<i>options</i>&gt; ] &lt;<i>source files</i>&gt;</code></p>
+
+<h3 id="parameters">PARAMETERS</h3>
+<p>
+<ins><dl>
+<dt>
+<code>&lt;<i>options</i>&gt;</code>
+</dt>
+<dd>
+Command line options. See <a href="#options"><b>OPTIONS</b></a> below.</dd>
+<dt>
+<code>&lt;<i>source files</i>&gt;</code>
+</dt>
+<dd>
+One or more source files to be compiled (such as <code>MyClass.scala</code>).</dd>
+</dl></ins>
+</p>
+
+<h3 id="description">DESCRIPTION</h3>
+<p>
+The <code><b>scaladoc</b></code> tool reads class and object definitions, written in the <a href="http://scala-lang.org/">Scala 2</a> programming language, and generates their API as HTML files.</p>
+<p>
+By default, the generator puts each HTML file in the same directory as its source file. You can specify a separate destination directory with <code><b>&#8211;d</b> </code>(see <a href="#options"><b>OPTIONS</b></a>, below).</p>
+<p>
+The recognised format of comments in source is described in the <a href="https://wiki.scala-lang.org/display/SW/Scaladoc">online documentation</a></p>
+
+<h3 id="options">OPTIONS</h3>
+
+<h4 id="standard_options">Standard Options</h4>
+<p>
+<ins><dl>
+<dt>
+<code><b>&#8211;d</b> &lt;<i>directory</i>&gt; </code>
+</dt>
+<dd>
+Specify where to generate documentation.</dd>
+<dt>
+<code><b>&#8211;version</b> </code>
+</dt>
+<dd>
+Print product version and exit.</dd>
+<dt>
+<code><b>&#8211;help</b> </code>
+</dt>
+<dd>
+Print a synopsis of available options.</dd>
+</dl></ins>
+</p>
+
+<h4 id="documentation_options">Documentation Options</h4>
+<p>
+<ins><dl>
+<dt>
+<code><b>&#8211;doc-title</b> &lt;<i>title</i>&gt; </code>
+</dt>
+<dd>
+Define the overall title of the documentation, typically the name of the library being documented.</dd>
+<dt>
+<code><b>&#8211;doc-version</b> &lt;<i>version</i>&gt; </code>
+</dt>
+<dd>
+Define the overall version number of the documentation, typically the version of the library being documented.</dd>
+<dt>
+<code><b>&#8211;doc-source-url</b> &lt;<i>url</i>&gt; </code>
+</dt>
+<dd>
+Define a URL to be concatenated with source locations for link to source files.</dd>
+<dt>
+<code><b>&#8211;doc-external-doc</b> &lt;<i>external-doc</i>&gt; </code>
+</dt>
+<dd>
+Define a comma-separated list of classpath_entry_path#doc_URL pairs describing external dependencies.</dd>
+</dl></ins>
+</p>
+
+<h4 id="compiler_options">Compiler Options</h4>
+<p>
+<ins><dl>
+<dt>
+<code><b>&#8211;verbose</b> </code>
+</dt>
+<dd>
+Output messages about what the compiler is doing</dd>
+<dt>
+<code><b>&#8211;deprecation</b> </code>
+</dt>
+<dd>
+<div>
+Indicate whether source should be compiled with deprecation information; defaults to <code>off</code> (accepted values are: <code>on</code>, <code>off</code>, <code>yes</code> and <code>no</code>)
+</div>
+<div>
+Available since Scala version 2.2.1
+</div>
+</dd>
+<dt>
+<code><b>&#8211;classpath</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+<div>
+Specify where to find user class files (on Unix-based systems a colon-separated list of paths, on Windows-based systems, a semicolon-separate list of paths). This does not override the built-in (<code>"boot"</code>) search path.
+</div>
+<div>
+The default class path is the current directory. Setting the <code>CLASSPATH</code> variable or using the <code>-classpath</code> command-line option overrides that default, so if you want to include the current directory in the search path, you must include <code>"."</code> in the new settings.
+</div>
+</dd>
+<dt>
+<code><b>&#8211;sourcepath</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+Specify where to find input source files.</dd>
+<dt>
+<code><b>&#8211;bootclasspath</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+Override location of bootstrap class files (where to find the standard built-in classes, such as "<code>scala.List</code>").</dd>
+<dt>
+<code><b>&#8211;extdirs</b> &lt;<i>dirs</i>&gt; </code>
+</dt>
+<dd>
+Override location of installed extensions.</dd>
+<dt>
+<code><b>&#8211;encoding</b> &lt;<i>encoding</i>&gt; </code>
+</dt>
+<dd>
+<div>
+Specify character encoding used by source files.
+</div>
+<div>
+The default value is platform-specific (Linux: <code>"UTF8"</code>, Windows: <code>"Cp1252"</code>). Executing the following code in the Scala interpreter will return the default value on your system:
+</div>
+<div>
+<code><b>    scala&gt; </b></code><code>new java.io.InputStreamReader(System.in).getEncoding</code>
+</div>
+</dd>
+</dl></ins>
+</p>
+
+<h3 id="exit_status">EXIT STATUS</h3>
+<p>
+<code><b>scaladoc</b></code> returns a zero exit status if it succeeds at processing the specified input files. Non zero is returned in case of failure.</p>
+
+<h3 id="authors">AUTHORS</h3>
+<p>
+This version of Scaladoc was written by Gilles Dubochet with contributions by Pedro Furlanetto and Johannes Rudolph. It is based on the original Scaladoc (Sean McDirmid, Geoffrey Washburn, Vincent Cremet and Stéphane Micheloud), on vScaladoc (David Bernard), as well as on an unreleased version of Scaladoc 2 (Manohar Jonnalagedda).</p>
+
+<h3 id="see_also">SEE ALSO</h3>
+<p>
+<a href="fsc.html"><b>fsc</b>(1)</a>, <a href="scala.html"><b>scala</b>(1)</a>, <a href="scalac.html"><b>scalac</b>(1)</a>, <a href="scalap.html"><b>scalap</b>(1)</a></p>
+<!-- footer -->
+<div style="margin: 2em 0 0 0;">
+<div style="float:left;">
+version 2.0
+</div>
+<div style="float:right;">
+scaladoc(1)
+</div>
+<div style="text-align:center;">
+June 2010
+</div>
+</div>
+</body>
+</html>

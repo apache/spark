@@ -1,0 +1,5 @@
+E() - returns E 
+Synonyms: e
+Example:
+ > SELECT E() FROM src LIMIT 1;
+ 2.718281828459045

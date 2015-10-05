@@ -349,17 +349,10 @@ class BlockMatrix @Since("1.3.0") (
       }
       new BlockMatrix(addedBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
     } else {
-      throw new SparkException("Cannot add matrices with different block dimensions")
+      throw new SparkException("Cannot add matrices with different block dimensions." +
+        s"A.rowsPerBlock: ${this.rowsPerBlock}, B.rowsPerBlock: ${other.rowsPerBlock}")
     }
   }
-
-  /**
-   * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
-   * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
-   * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
-   * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
-   * some performance issues until support for multiplying two sparse matrices is added.
-   */
 
   /** subtracts two block matrices A.subtract(B) as A-B.  Works exactly as add
     *
@@ -367,7 +360,6 @@ class BlockMatrix @Since("1.3.0") (
     * @return BlockMatrix
     * @since 1.6.0
     */
-
   def subtract(other: BlockMatrix): BlockMatrix = {
     require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
       s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
@@ -383,7 +375,8 @@ class BlockMatrix @Since("1.3.0") (
         if (a.isEmpty) {
           new MatrixBlock((blockRowIndex, blockColIndex), b.head)
         } else if (b.isEmpty) {
-          new MatrixBlock((blockRowIndex, blockColIndex), a.head)
+          val result = -1.0 * b.head.toBreeze
+          new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
         } else {
           val result = a.head.toBreeze - b.head.toBreeze
           new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
@@ -391,7 +384,8 @@ class BlockMatrix @Since("1.3.0") (
       }
       new BlockMatrix(addedBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
     } else {
-      throw new SparkException("Cannot add matrices with different block dimensions")
+      throw new SparkException("Cannot subtract matrices with different block dimensions." +
+        s"A.rowsPerBlock: ${this.rowsPerBlock}, B.rowsPerBlock: ${other.rowsPerBlock}")
     }
   }
 
@@ -448,19 +442,20 @@ class BlockMatrix @Since("1.3.0") (
 
   /** Schur Complement of a BlockMatrix.  For a matrix that is in 4 partitions:
     *  A=[a11, a12; a21; a22], the Schur Complement S is S = a22 - (a21 * a11^-1 * a12).
-    * The Schur Complement is always (n-1) x (n-1), which is the size of a22.
+    * The Schur Complement is always (n-1) x (n-1), which is the size of a22. a11 is expected
+    * to fit into memory so that Breeze inversions can be computed.
     *
     * @return BlockMatrix Schur Complement as BlockMatrix
     * @since 1.6.0
   */
-    private[mllib] def SchurComplement: BlockMatrix = {
-     require(this.numRowBlocks == this.numColBlocks, "Block Matrix must be square.")
-     require(this.numRowBlocks > 1, "Block Matrix must be larger than one block.")
-     val topRange = (0, 0); val botRange = (1, this.numColBlocks - 1)
-     val a11 = this.subBlock(topRange, topRange)
-     val a12 = this.subBlock(topRange, botRange)
-     val a21 = this.subBlock(botRange, topRange)
-     val a22 = this.subBlock(botRange, botRange)
+  private[mllib] def SchurComplement: BlockMatrix = {
+    require(this.numRowBlocks == this.numColBlocks, "Block Matrix must be square.")
+    require(this.numRowBlocks > 1, "Block Matrix must be larger than one block.")
+    val topRange = (0, 0); val botRange = (1, this.numColBlocks - 1)
+    val a11 = this.subBlock(topRange, topRange)
+    val a12 = this.subBlock(topRange, botRange)
+    val a21 = this.subBlock(botRange, topRange)
+    val a22 = this.subBlock(botRange, botRange)
 
     val a11Brz = inv(a11.toBreeze) // note that intermediate a11 calcs derive from inv(a11)
     val a11Mtx = Matrices.dense(a11.numRows.toInt, a11.numCols.toInt, a11Brz.toArray)
@@ -471,21 +466,23 @@ class BlockMatrix @Since("1.3.0") (
     return S
   }
 
-  /** Returns a rectangular (sub)BlockMatrix with block ranges as specified.
+  /** Returns a rectangular (sub)BlockMatrix with block ranges as specified.  Block Ranges
+    * refer to a range of blocks that each contain a matrix.  The returned BlockMatrix
+    * is numbered so that the upper left block is indexed as (0,0).
     *
-    * @param blockRowRange The lower and upper row ranges, as (Int,Int)
-    * @param blockColRange The lower and upper col ranges, as (Int, Int)
+    *
+    * @param blockRowRange The lower and upper row range of blocks, as (Int,Int)
+    * @param blockColRange The lower and upper col range of blocks, as (Int, Int)
     * @return a BlockMatrix with (0,0) as the upper leftmost block index
     * @since 1.6.0
     */
-
   private [mllib] def subBlock(blockRowRange: (Int, Int), blockColRange: (Int, Int)):
           BlockMatrix = {
     //  Extracts BlockMatrix elements from a specified range of block indices
     //  Creating a Sub BlockMatrix of rectangular shape.
     //  Also reindexes so that the upper left block is always (0, 0)
 
-    // JNDB: Add a require statement ...rowMax<=size..
+    // TODO: add a require statement ...rowMax<=size..
     val rowMin = blockRowRange._1;    val rowMax = blockRowRange._2
     val colMin = blockColRange._1 ;   val colMax = blockColRange._2
     val extractedSeq = this.blocks.filter{ case((x, y), matrix) =>
@@ -541,8 +538,6 @@ class BlockMatrix @Since("1.3.0") (
     return extractedSeq
   }
 
-
-
   /** Computes the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
     * LU decomposition computes the Lower Triangular Matrix L, the Upper Triangular
     * Matrix U, along with a Permutation Matrix P, such that PA=LU.  The Permutation
@@ -566,7 +561,6 @@ class BlockMatrix @Since("1.3.0") (
     * @return P,L,U,Li,Ui as a Tuple of BlockMatrix
     * @since 1.6.0
   */
-
   private [mllib] def blockLUtoSolver:
           (BlockMatrix, BlockMatrix, BlockMatrix, BlockMatrix, BlockMatrix) = {
 
@@ -729,7 +723,6 @@ class BlockMatrix @Since("1.3.0") (
   * @return P,L,U as a Tuple of BlockMatrix
   * @since 1.6.0
 */
-
   def blockLU: (BlockMatrix, BlockMatrix, BlockMatrix) = {
       val PLU = this.blockLUtoSolver
       val P = PLU._1

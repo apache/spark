@@ -1,0 +1,234 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.navbar {
+  height: 50px;
+  font-size: 15px;
+  margin-bottom: 15px;
+  min-width: 1200px
+}
+
+.navbar .navbar-inner {
+  height: 50px;
+}
+
+.navbar .brand {
+  margin-right: 20px;
+  margin-bottom: 0;
+  margin-top: 0;
+  margin-left: 10px;
+  padding: 0;
+}
+
+.navbar .nav > li {
+  height: 50px;
+}
+
+.navbar .nav > li a {
+  height: 30px;
+  line-height: 2;
+}
+
+.navbar-text {
+  height: 50px;
+  line-height: 3.3;
+}
+
+table.sortable thead {
+  cursor: pointer;
+}
+
+table.sortable td {
+  word-wrap: break-word;
+  max-width: 600px;
+}
+
+.progress {
+  margin-bottom: 0px; position: relative
+}
+
+.progress-completed .bar,
+.progress .bar-completed {
+  background-color: #3EC0FF;
+  background-image: -moz-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#44CBFF), to(#34B0EE));
+  background-image: -webkit-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: -o-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: linear-gradient(to bottom, #64CBFF, #54B0EE);
+  background-repeat: repeat-x;
+  filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FF44CBFF', endColorstr='#FF34B0EE', GradientType=0);
+}
+
+.progress-running .bar,
+.progress .bar-running {
+  background-color: #A0DFFF;
+  background-image: -moz-linear-gradient(top, #A4EDFF, #94DDFF);
+  background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#A4EDFF), to(#94DDFF));
+  background-image: -webkit-linear-gradient(top, #A4EDFF, #94DDFF);
+  background-image: -o-linear-gradient(top, #A4EDFF, #94DDFF);
+  background-image: linear-gradient(to bottom, #A4EDFF, #94DDFF);
+  background-repeat: repeat-x;
+  filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
+}
+
+a.kill-link {
+  margin-right: 2px;
+  margin-left: 20px;
+  color: gray;
+  float: right;
+}
+
+span.expand-details {
+  font-size: 10pt;
+  cursor: pointer;
+  color: grey;
+  float: right;
+}
+
+span.rest-uri {
+  font-size: 10pt;
+  font-style: italic;
+  color: gray;
+}
+
+pre {
+  font-size: 12px;
+  line-height: 18px;
+  padding: 6px;
+  margin: 0;
+  border-radius: 3px;
+}
+
+.stage-details {
+  max-height: 100px;
+  overflow-y: auto;
+  margin: 0;
+  transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+}
+
+.stage-details.collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: none;
+}
+
+.description-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: nowrap;
+  display: block;
+}
+
+.description-input-full {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: normal;
+  display: block;
+}
+
+.stacktrace-details {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+}
+
+.stacktrace-details.collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: none;
+}
+
+span.expand-additional-metrics, span.expand-dag-viz {
+  cursor: pointer;
+}
+
+span.additional-metric-title {
+  cursor: pointer;
+}
+
+.additional-metrics.collapsed {
+  display: none;
+}
+
+.tooltip {
+  font-weight: normal;
+}
+
+.arrow-open {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #08c;
+  display: inline-block;
+  margin-bottom: 2px;
+}
+
+.arrow-closed {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 5px solid #08c;
+  display: inline-block;
+  margin-left: 2px;
+  margin-right: 3px;
+}
+
+.version {
+  line-height: 2.5;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
+}
+
+/* Hide all additional metrics by default. This is done here rather than using JavaScript to
+ * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
+.scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,
+.serialization_time, .getting_result_time, .peak_execution_memory {
+  display: none;
+}
+
+.accordion-inner {
+  background: #f5f5f5;
+}
+
+.accordion-inner pre {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+a.expandbutton {
+  cursor: pointer;
+}
+
+.executor-thread {
+  background: #E6E6E6;
+}
+
+.non-executor-thread {
+  background: #FAFAFA;
+}

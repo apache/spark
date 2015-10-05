@@ -1,0 +1,235 @@
+<ul id="markdown-toc">
+  <li><a href="#lu-factorization" id="markdown-toc-lu-factorization">LU Factorization</a></li>
+  <li><a href="#solving-a-linear-system-of-equations" id="markdown-toc-solving-a-linear-system-of-equations">Solving a Linear System of Equations</a></li>
+</ul>
+
+<h1 id="lu-factorization">LU Factorization</h1>
+
+<p>The LU decomposition is a well studied algorithm for decomposing a matrix into a lower diagonal matrix 
+$L$ and an upper diagonal matrix $U$, given as</p>
+
+<p><code>\begin{equation}
+    PA = LU\\
+        P \begin{pmatrix}
+            a_{11}&amp;\cdots  &amp;a_{1n} \\ 
+             \vdots&amp; \ddots &amp;\vdots \\ 
+             a_{m1}&amp;\cdots  &amp; a_{mn}
+        \end{pmatrix} = 
+        \begin{pmatrix}
+            \ell_{11}&amp;\ 0    &amp;0 \\ 
+             \vdots&amp; \ddots &amp;0 \\ 
+             \ell_{m1}&amp;\cdots  &amp; \ell_{mn}
+            \end{pmatrix}
+            \begin{pmatrix}
+               0&amp;\ \cdots    &amp;u_{1n} \\ 
+             \vdots&amp; \ddots &amp;\vdots\\ 
+            0&amp;\cdots  &amp; u_{mn}
+        \end{pmatrix},
+        \label{eq:generalLUFactorization}
+\end{equation}</code></p>
+
+<p>where $P$ is a row permutation matrix. <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>blockLU()</code></a> 
+returns a Tuple containing the $P,L$ and $U$ <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix</code></a> 
+objects.</p>
+
+<p>This algorithm is a highly stable method for inverting a matrix and solving linear systems of equations that appear in
+machine learning applications.  Larger linear equations of the type $AX=B$ are usually solved with SGD, BGFS, or other
+gradient based methods.  Solving these equations at scale to numerical precision should open up possiblities for new algorithms within MLlib, as well as other applications.<br />
+It scales as ~$N^3$, for a <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix</code></a> 
+with $N \times N$ blocks.</p>
+
+<p>Once the decomposition is computed, many other quantities can be easily derived.  The most important one, <br />
+<a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix.solve()</code></a>, and is 
+described in the next section.</p>
+
+<p><strong>Example</strong></p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.distributed.</span><span class="o">{</span><span class="nc">BlockMatrix</span><span class="o">}</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.</span><span class="o">{</span><span class="nc">Matrix</span><span class="k">=&gt;</span><span class="nc">SparkMatrix</span><span class="o">,</span><span class="nc">Matrices</span><span class="k">=&gt;</span><span class="nc">SparkMatrices</span><span class="o">}</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.</span><span class="o">{</span><span class="nc">DenseMatrix</span><span class="o">}</span>
+
+<span class="k">val</span> <span class="n">blocks</span><span class="k">:</span> <span class="kt">Seq</span><span class="o">[((</span><span class="kt">Int</span>, <span class="kt">Int</span><span class="o">)</span>, <span class="kt">SparkMatrix</span><span class="o">)]</span> <span class="k">=</span> <span class="nc">Seq</span><span class="o">(</span>
+  <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">,</span> <span class="mf">3.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">2.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">,</span> <span class="mf">3.0</span><span class="o">,</span> <span class="mf">5.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">3.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">,</span> <span class="mf">0.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">))),</span> 
+  <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">3.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">0.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">4.0</span><span class="o">))))</span>
+
+<span class="k">val</span> <span class="n">rowsPerBlock</span> <span class="k">=</span> <span class="mi">2</span><span class="o">;</span> <span class="k">val</span> <span class="n">colsPerBlock</span> <span class="k">=</span> <span class="mi">2</span><span class="o">;</span> 
+ <span class="k">val</span> <span class="n">A</span> <span class="k">=</span>  
+       <span class="k">new</span> <span class="nc">BlockMatrix</span><span class="o">(</span><span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="n">blocks</span><span class="o">),</span> <span class="n">rowsPerBlock</span><span class="o">,</span> <span class="n">colsPerBlock</span><span class="o">)</span>
+    
+<span class="k">val</span> <span class="nc">PLU</span> <span class="k">=</span> <span class="n">A</span><span class="o">.</span><span class="n">blockLU</span>
+<span class="k">val</span> <span class="n">P</span>  <span class="k">=</span> <span class="nc">PLU</span><span class="o">.</span><span class="n">_1</span>
+<span class="k">val</span> <span class="n">L</span>  <span class="k">=</span> <span class="nc">PLU</span><span class="o">.</span><span class="n">_2</span>
+<span class="k">val</span> <span class="n">U</span>  <span class="k">=</span> <span class="nc">PLU</span><span class="o">.</span><span class="n">_3</span>
+
+<span class="c1">// computing a fast residual...top and bottom matrices only</span>
+<span class="k">val</span> <span class="n">residual</span> <span class="k">=</span> <span class="n">L</span><span class="o">.</span><span class="n">multiply</span><span class="o">(</span><span class="n">U</span><span class="o">).</span><span class="n">subtract</span><span class="o">(</span><span class="n">P</span><span class="o">.</span><span class="n">multiply</span><span class="o">(</span><span class="n">A</span><span class="o">))</span>
+<span class="k">val</span> <span class="n">error</span> <span class="k">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">toLocalMatrix</span><span class="o">.</span><span class="n">toArray</span><span class="o">.</span><span class="n">reduce</span><span class="o">(</span><span class="k">_</span> <span class="o">+</span> <span class="nc">Math</span><span class="o">.</span><span class="n">abs</span><span class="o">(</span><span class="k">_</span><span class="o">)</span> <span class="o">)</span> 
+
+<span class="n">println</span><span class="o">(</span> <span class="s">&quot;error (sb ~6.7e-16): &quot;</span> <span class="o">+</span> <span class="n">error</span><span class="o">.</span><span class="n">toString</span> <span class="o">)</span></code></pre></div>
+
+<p><strong>How it Works</strong></p>
+
+<p>The LU decomposition of $A$ can be written as four block matrices, given as
+<code>\begin{align}
+    PA &amp; = LU\\
+        \begin{pmatrix}
+            P_1 A_{11}&amp;P_1 A_{12} \\ 
+            P_2 A_{21}&amp;P_2 A_{22}
+        \end{pmatrix} 
+        &amp; = \begin{pmatrix}
+            L_{11}&amp;0 \\ 
+            L_{21}&amp;L_{22}
+            \end{pmatrix}
+            \begin{pmatrix}
+                U_{11}&amp;U_{12} \\ 
+                0&amp;U_{22}
+        \end{pmatrix} \\
+        &amp; =         \begin{pmatrix}
+            L_{11}U_{11}&amp;L_{11}U_{12} \\ 
+            L_{21}U_{11}&amp;L_{21}U_{12}+L_{22}U_{22}
+            \end{pmatrix}.
+        \label{eq:basicLUBlockDecomposition}
+\end{align}</code></p>
+
+<p>Once the blocks are defined, we can then solve each matrix quadrant individually.</p>
+
+<p><code>\begin{align}
+P_1 A_{11} &amp; = L_{11}U_{11}               &amp; \Rightarrow  &amp; (P_{1},L_{11},U_{11})  &amp; = &amp; \text{LU}_{LOCAL}(A_{11}) \label{eq:A11Solve} \\
+P_1 A_{12} &amp; = L_{11}U_{12}               &amp; \Rightarrow  &amp; U_{12}               &amp; = &amp; L_{11}^{-1}P_1 A_{12} \label{eq:U12Solve} \\
+P_2 A_{21} &amp; = L_{21}U_{11}               &amp; \Rightarrow  &amp; L_{21}               &amp; = &amp;P_2 A_{21}U_{11}^{-1} \label{eq:L21Solve}\\
+P_2 A_{22} &amp; = L_{21}U_{12}+L_{22}U_{22}  &amp; \Rightarrow  &amp; (P_{2},L_{22},U_{22})  &amp; = &amp; \text{LU}_{RECURSIVE}(S) \label{eq:A22Solve}\\
+\end{align}</code></p>
+
+<p>where $A_{11}$ is chosen to be a single block, so that the Breeze library can be called to compute 
+$\eqref{eq:A11Solve}$.  The Breeze library will return the $P_{1},L_{11}$ and $U_{11}$ matrices.</p>
+
+<p>Equation $\eqref{eq:A22Solve}$ is a recursive call that generates successive calculations of the Schur Complement, 
+given as</p>
+
+<p><code>\begin{equation}
+S = A_{22} - L_{21} U_{12}.
+\label{eq:SchurComplementInitialForm}
+\end{equation}</code></p>
+
+<p>In this form, there is a dependency on the calculation of $\eqref{eq:A11Solve}$.  An equivalent form of the Schur 
+complement can be used by substituting equations $\eqref{eq:U12Solve}$ and $\eqref{eq:L21Solve}$, giving</p>
+
+<p><code>\begin{equation}
+S = A_{22} - A_{21} A_{11}^{-1} A_{12}, 
+\label{eq:SchurComplementFinalForm}
+\end{equation}</code></p>
+
+<p>which allows for the calculation of equation $\eqref{eq:A22Solve}$ with no dependency on equation 
+$\eqref{eq:A11Solve}$, resulting in a slight increase in parallelism at the expense of recomputing the inverse of
+$A_{11}$ on a separate process.</p>
+
+<p>Equations $\eqref{eq:U12Solve}$ and $\eqref{eq:L21Solve}$ are computed with 
+<a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix.multiply()</code></a> operations.<br />
+The Schur Complement in $\eqref{eq:A22Solve}$ is computed using $\eqref{eq:SchurComplementFinalForm}$ with a 
+<a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix.multiply()</code></a> 
+operation and passed recursively to the next iteration.  In this way, $P_2$ is never explicitly calculated, 
+but is built up as a set of $P_1$ matrices.  The computation completes when the Schur Complement is a single block.</p>
+
+<p>Instead of building the solution incrementally, and using more frequent but smaller block matrix operations, we construct large <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix</code></a> structures, and carry out the multiplication at the end of the calculation.  This should leverage the optimizations present in the <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix.multiply()</code></a> routine more effectively.  The matrices formed to carry out the operations are described int the in the figure below.</p>
+
+<p style="text-align: center;">
+  <img src="img/lu-factorization.png" title="LU Algorithm Description" alt="LU" width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+<p>The Matrix multiply operations shown in the figure are generalizations of equations $\eqref{eq:A11Solve}$, $\eqref{eq:U12Solve}$, and $\eqref{eq:L21Solve}$.</p>
+
+<h1 id="solving-a-linear-system-of-equations">Solving a Linear System of Equations</h1>
+<p><a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix.solve()</code></a> calls the LU Factorization
+method to solve the linear system of equations $AX=B$ for $X$.
+The method of forward subsitution solution is used.  This method is is described 
+<a href="https://en.wikipedia.org/wiki/Triangular_matrix#Forward_and_back_substitution"><code>here</code></a>, for elements of a matrix, and 
+and the generalization to blocks using <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix.solve()</code></a>
+is described briefly here.</p>
+
+<p>For a Linear system of equations $AX=B$, where $A$ is an $N \times N$ matrix, and $X$ and $B$ are<br />
+<a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix</code></a> objects of with $N$ 
+row blocks and $W$ column blocks.  $B$ can have any number of columns, including 1.  The number of row and columns 
+per block must be the same, however.  <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix.solve(B)</code></a><br />
+will return $X$ as a <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix</code></a> object
+with the same dimensions of $B$.</p>
+
+<p>The forward substitution equations are straightforward do obtain in two steps.  The equation $AX=PB$<br />
+can be expressed as $LUX=\widehat{B}$.  First, the solution to $LY=\widehat{B}$ for $Y$ is obtained, followed by 
+solving $UX=Y$ for $X$.</p>
+
+<p>Expanding $LY=\widehat{B}$ as <a href="api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix"><code>BlockMatrix.multiply()</code></a>
+operations gives</p>
+
+<p><code>\begin{align}
+\widehat{B}_m &amp;=&amp; \sum_{i=1}^{m}L_{m,i}Y_m \\
+ &amp;=&amp; L_{m,m}Y_m + \sum_{i=1}^{m-1}L_{m,i}Y_m. \\
+\end{align}</code></p>
+
+<p>The solution for the $m$th row of $Y$ (which contains $W$ column elements) in terms of previous rows with the following
+recurrence relation</p>
+
+<p><code>\begin{equation}
+Y_m = L_{m,m}^{-1}\left [  \widehat{B}_m-\sum_{i=1}^{m}L_{m,i}Y_m\right ].\\
+\end{equation}</code></p>
+
+<p>Once $Y$ is obtained, a similar method is applied to solve $UX=Y$.  Here we build the solution from the last row block, 
+so the indexing is reversed.  Letting $\widetilde{m}=N-m+1$ and expanding the multiplication terms gives</p>
+
+<p><code>\begin{align}
+Y_{\widetilde{m}} &amp;=&amp; \sum_{i=\widetilde{m}}^{N}U_{\widetilde{m},i}X_{\widetilde{m}} \\
+ &amp;=&amp; U_{\widetilde{m},\widetilde{m}}X_{\widetilde{m}} + \sum_{i=\widetilde{m}+1}^{N}U_{\widetilde{m},i}X_{\widetilde{m}}. \\
+\end{align}</code></p>
+
+<p>$X$ is obtained, starting with the bottom row block as $\widetilde{m}=N$ and incrementing to $\widetilde{m}=1$, using</p>
+
+<p><code>\begin{equation}
+X_\widetilde{m} = U_{\widetilde{m},\widetilde{m}}^{-1}\left[ Y_{\widetilde{m}}-\sum_{i=\widetilde{m}+1}^{N}U_{\widetilde{m},i}X_\widetilde{m}\right ].\\
+\end{equation}</code></p>
+
+<p><strong>Example</strong></p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">breeze.linalg.</span><span class="o">{</span><span class="nc">DenseMatrix</span> <span class="k">=&gt;</span> <span class="nc">BDM</span><span class="o">}</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.distributed.BlockMatrix</span>
+
+    <span class="c1">// square matrix, but not fully populated in edge blocks.</span>
+<span class="k">val</span> <span class="n">blocksForLU</span><span class="k">:</span> <span class="kt">Seq</span><span class="o">[((</span><span class="kt">Int</span>, <span class="kt">Int</span><span class="o">)</span>, <span class="kt">Matrix</span><span class="o">)]</span> <span class="k">=</span> <span class="nc">Seq</span><span class="o">(</span>
+  <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">,</span> <span class="mf">3.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">2.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">,</span> <span class="mf">3.0</span><span class="o">,</span> <span class="mf">5.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">3.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">,</span> <span class="mf">0.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">3.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">0.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">1.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">))),</span>
+  <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mf">4.0</span><span class="o">))))</span>
+
+<span class="k">val</span> <span class="n">A</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">BlockMatrix</span><span class="o">(</span><span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="n">blocksForLU</span><span class="o">),</span> <span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">B</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">BlockMatrix</span><span class="o">(</span><span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="nc">Seq</span><span class="o">(</span> <span class="c1">//5x7 B vector (7 columns of 5 row B)</span>
+      <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span> <span class="mi">0</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="o">-</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(-</span><span class="mi">2</span><span class="o">,</span> <span class="o">-</span><span class="mi">1</span><span class="o">,</span> <span class="o">-</span><span class="mi">3</span><span class="o">,</span> <span class="o">-</span><span class="mi">2</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(-</span><span class="mi">4</span><span class="o">,</span> <span class="o">-</span><span class="mi">3</span><span class="o">,</span> <span class="o">-</span><span class="mi">5</span><span class="o">,</span> <span class="o">-</span><span class="mi">4</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">0</span><span class="o">,</span> <span class="mi">3</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(-</span><span class="mi">5</span><span class="o">,</span> <span class="o">-</span><span class="mi">6</span><span class="o">,</span> <span class="o">-</span><span class="mi">7</span><span class="o">,</span> <span class="o">-</span><span class="mi">7</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span> <span class="mi">2</span><span class="o">,</span> <span class="mi">3</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span> <span class="mi">3</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="o">-</span><span class="mi">1</span><span class="o">,</span> <span class="mi">4</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(-</span><span class="mi">2</span><span class="o">,</span> <span class="o">-</span><span class="mi">1</span><span class="o">,</span> <span class="o">-</span><span class="mi">3</span><span class="o">,</span> <span class="o">-</span><span class="mi">2</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">1</span><span class="o">,</span> <span class="mi">3</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span><span class="mi">2</span><span class="o">,</span> <span class="mi">1</span><span class="o">,</span> <span class="mi">3</span><span class="o">,</span> <span class="mi">2</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">0</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span> <span class="mi">0</span><span class="o">,</span> <span class="mi">5</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">1</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span> <span class="mi">1</span><span class="o">,</span> <span class="mi">3</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span> <span class="mi">0</span><span class="o">,</span> <span class="mi">0</span><span class="o">))),</span>
+      <span class="o">((</span><span class="mi">2</span><span class="o">,</span> <span class="mi">3</span><span class="o">),</span> <span class="k">new</span> <span class="nc">DenseMatrix</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">2</span><span class="o">,</span> <span class="nc">Array</span><span class="o">(</span> <span class="mi">1</span><span class="o">,</span> <span class="mi">1</span><span class="o">))))),</span> <span class="mi">2</span><span class="o">,</span> <span class="mi">2</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">X</span> <span class="k">=</span> <span class="n">A</span><span class="o">.</span><span class="n">solve</span><span class="o">(</span><span class="n">B</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">residual</span> <span class="k">=</span> <span class="n">A</span><span class="o">.</span><span class="n">multiply</span><span class="o">(</span><span class="n">X</span><span class="o">).</span><span class="n">subtract</span><span class="o">(</span><span class="n">B</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">error</span> <span class="k">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">toLocalMatrix</span><span class="o">.</span><span class="n">toArray</span><span class="o">.</span><span class="n">reduce</span><span class="o">(</span><span class="k">_</span> <span class="o">+</span> <span class="nc">Math</span><span class="o">.</span><span class="n">abs</span><span class="o">(</span><span class="k">_</span><span class="o">))</span>
+<span class="n">println</span><span class="o">(</span><span class="s">&quot;error&quot;</span> <span class="o">+</span> <span class="n">error</span><span class="o">.</span><span class="n">toString</span><span class="o">)</span><span class="c1">//sb 2.25e-14</span></code></pre></div>
+

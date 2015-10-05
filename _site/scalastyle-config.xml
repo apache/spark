@@ -1,0 +1,253 @@
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<!--
+
+If you wish to turn off checking for a section of code, you can put a comment in the source
+before and after the section, with the following syntax:
+
+  // scalastyle:off
+  ...  // stuff that breaks the styles
+  // scalastyle:on
+
+You can also disable only one rule, by specifying its rule id, as specified in:
+  http://www.scalastyle.org/rules-0.7.0.html
+
+  // scalastyle:off no.finalize
+  override def finalize(): Unit = ...
+  // scalastyle:on no.finalize
+
+This file is divided into 3 sections:
+ (1) rules that we enforce.
+ (2) rules that we would like to enforce, but haven't cleaned up the codebase to turn on yet
+     (or we need to make the scalastyle rule more configurable).
+ (3) rules that we don't want to enforce.
+-->
+
+<scalastyle>
+  <name>Scalastyle standard configuration</name>
+
+  <!-- ================================================================================ -->
+  <!--                               rules we enforce                                   -->
+  <!-- ================================================================================ -->
+
+  <check level="error" class="org.scalastyle.file.FileTabChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="true">
+    <parameters>
+       <parameter name="header"><![CDATA[/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */]]></parameter>
+    </parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.SpacesAfterPlusChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.SpacesBeforePlusChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.file.FileLineLengthChecker" enabled="true">
+    <parameters>
+      <parameter name="maxLineLength"><![CDATA[100]]></parameter>
+      <parameter name="tabSize"><![CDATA[2]]></parameter>
+      <parameter name="ignoreImports">true</parameter>
+    </parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.ClassNamesChecker" enabled="true">
+    <parameters><parameter name="regex"><![CDATA[[A-Z][A-Za-z]*]]></parameter></parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.ObjectNamesChecker" enabled="true">
+    <parameters><parameter name="regex"><![CDATA[[A-Z][A-Za-z]*]]></parameter></parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.PackageObjectNamesChecker" enabled="true">
+    <parameters><parameter name="regex"><![CDATA[^[a-z][A-Za-z]*$]]></parameter></parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
+    <parameters><parameter name="maxParameters"><![CDATA[10]]></parameter></parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.NoFinalizeChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.CovariantEqualsChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.StructuralTypeChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.UppercaseLChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.IfBraceChecker" enabled="true">
+    <parameters>
+      <parameter name="singleLineAllowed"><![CDATA[true]]></parameter>
+      <parameter name="doubleLineAllowed"><![CDATA[true]]></parameter>
+    </parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.file.NewLineAtEofChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.EnsureSingleSpaceBeforeTokenChecker" enabled="true">
+   <parameters>
+     <parameter name="tokens">ARROW, EQUALS, ELSE, TRY, CATCH, FINALLY, LARROW, RARROW</parameter>
+   </parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.EnsureSingleSpaceAfterTokenChecker" enabled="true">
+    <parameters>
+     <parameter name="tokens">ARROW, EQUALS, COMMA, COLON, IF, ELSE, DO, WHILE, FOR, MATCH, TRY, CATCH, FINALLY, LARROW, RARROW</parameter>
+    </parameters>
+  </check>
+
+  <!-- ??? usually shouldn't be checked into the code base. -->
+  <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="true"></check>
+
+  <!-- As of SPARK-7558, all tests in Spark should extend o.a.s.SparkFunSuite instead of FunSuite directly -->
+  <check customId="funsuite" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">^FunSuite[A-Za-z]*$</parameter></parameters>
+    <customMessage>Tests must extend org.apache.spark.SparkFunSuite instead.</customMessage>
+  </check>
+
+  <!-- As of SPARK-7977 all printlns need to be wrapped in '// scalastyle:off/on println' -->
+  <check customId="println" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">^println$</parameter></parameters>
+    <customMessage><![CDATA[Are you sure you want to println? If yes, wrap the code block with
+      // scalastyle:off println
+      println(...)
+      // scalastyle:on println]]></customMessage>
+  </check>
+
+  <check customId="classforname" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Class\.forName</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use Class.forName? In most cases, you should use Utils.classForName instead.
+      If you must use Class.forName, wrap the code block with
+      // scalastyle:off classforname
+      Class.forName(...)
+      // scalastyle:on classforname
+    ]]></customMessage>
+  </check>
+
+  <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
+  <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">JavaConversions</parameter></parameters>
+    <customMessage>Instead of importing implicits in scala.collection.JavaConversions._, import
+    scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
+  </check>
+
+  <!-- As of SPARK-10330 JobContext methods should not be called directly -->
+  <check customId="jobcontext" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">^getConfiguration$|^getTaskAttemptID$</parameter></parameters>
+    <customMessage>Instead of calling .getConfiguration() or .getTaskAttemptID() directly,
+    use SparkHadoopUtil's getConfigurationFromJobContext() and getTaskAttemptIDFromTaskAttemptContext() methods.
+    </customMessage>
+  </check>
+
+  <!-- ================================================================================ -->
+  <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
+  <!-- ================================================================================ -->
+
+  <!-- We cannot turn the following two on, because it'd fail a lot of string interpolation use cases. -->
+  <!-- Ideally the following two rules should be configurable to rule out string interpolation. -->
+  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceBeforeLeftBracketChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceAfterLeftBracketChecker" enabled="false"></check>
+
+  <!-- This breaks symbolic method names so we don't turn it on. -->
+  <!-- Maybe we should update it to allow basic symbolic names, and then we are good to go. -->
+  <check level="error" class="org.scalastyle.scalariform.MethodNamesChecker" enabled="false">
+    <parameters>
+    <parameter name="regex"><![CDATA[^[a-z][A-Za-z0-9]*$]]></parameter>
+    </parameters>
+  </check>
+
+  <!-- Should turn this on, but we have a few places that need to be fixed first -->
+  <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="false"></check>
+
+  <!-- ================================================================================ -->
+  <!--                               rules we don't want                                -->
+  <!-- ================================================================================ -->
+
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="false">
+    <parameters><parameter name="illegalImports"><![CDATA[sun._,java.awt._]]></parameter></parameters>
+  </check>
+
+  <!-- We want the opposite of this: NewLineAtEofChecker -->
+  <check level="error" class="org.scalastyle.file.NoNewLineAtEofChecker" enabled="false"></check>
+
+  <!-- This one complains about all kinds of random things. Disable. -->
+  <check level="error" class="org.scalastyle.scalariform.SimplifyBooleanExpressionChecker" enabled="false"></check>
+
+  <!-- We use return quite a bit for control flows and guards -->
+  <check level="error" class="org.scalastyle.scalariform.ReturnChecker" enabled="false"></check>
+
+  <!-- We use null a lot in low level code and to interface with 3rd party code -->
+  <check level="error" class="org.scalastyle.scalariform.NullChecker" enabled="false"></check>
+
+  <!-- Doesn't seem super big deal here ... -->
+  <check level="error" class="org.scalastyle.scalariform.NoCloneChecker" enabled="false"></check>
+
+  <!-- Doesn't seem super big deal here ... -->
+  <check level="error" class="org.scalastyle.file.FileLengthChecker" enabled="false">
+    <parameters><parameter name="maxFileLength">800></parameter></parameters>
+  </check>
+
+  <!-- Doesn't seem super big deal here ... -->
+  <check level="error" class="org.scalastyle.scalariform.NumberOfTypesChecker" enabled="false">
+    <parameters><parameter name="maxTypes">30</parameter></parameters>
+  </check>
+
+  <!-- Doesn't seem super big deal here ... -->
+  <check level="error" class="org.scalastyle.scalariform.CyclomaticComplexityChecker" enabled="false">
+    <parameters><parameter name="maximum">10</parameter></parameters>
+  </check>
+
+  <!-- Doesn't seem super big deal here ... -->
+  <check level="error" class="org.scalastyle.scalariform.MethodLengthChecker" enabled="false">
+    <parameters><parameter name="maxLength">50</parameter></parameters>
+  </check>
+
+  <!-- Not exactly feasible to enforce this right now. -->
+  <!-- It is also infrequent that somebody introduces a new class with a lot of methods. -->
+  <check level="error" class="org.scalastyle.scalariform.NumberOfMethodsInTypeChecker" enabled="false">
+    <parameters><parameter name="maxMethods"><![CDATA[30]]></parameter></parameters>
+  </check>
+
+  <!-- Doesn't seem super big deal here, and we have a lot of magic numbers ... -->
+  <check level="error" class="org.scalastyle.scalariform.MagicNumberChecker" enabled="false">
+    <parameters><parameter name="ignore">-1,0,1,2,3</parameter></parameters>
+  </check>
+
+</scalastyle>

@@ -1,0 +1,5 @@
+lcase(str) - Returns str with all characters changed to lowercase
+Synonyms: lower
+Example:
+  > SELECT lcase('Facebook') FROM src LIMIT 1;
+  'facebook'

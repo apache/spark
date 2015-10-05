@@ -1,0 +1,187 @@
+<?xml version="1.1" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+<title>fsc man page</title>
+<meta http-equiv="Content-Language" content="en"/>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+<meta name="Author" content="Lex Spoon"/>
+<style type="text/css">
+  <!--
+  blockquote, pre { margin:1em 4em 1em 4em; }
+  dt { margin: 0.6em 0 0 0; }
+  p { margin:0.6em 2em 0.6em 2em; text-align:justify; }
+  //-->
+</style>
+</head>
+
+<body>
+<!-- header -->
+<div style="margin: 0 0 2em 0;">
+<div style="float:left;">
+fsc(1)
+</div>
+<div style="float:right;">
+fsc(1)
+</div>
+<div style="text-align:center;">
+USER COMMANDS
+</div>
+</div>
+
+<h3 id="name">NAME</h3>
+<p>
+<code><b>fsc</b></code> &#8211; Fast offline compiler for the <a href="http://scala-lang.org/">Scala 2</a> language</p>
+
+<h3 id="synopsis">SYNOPSIS</h3>
+<p>
+<code><b>fsc</b></code><code>  [ &lt;<i>options</i>&gt; ] &lt;<i>source files</i>&gt;</code></p>
+
+<h3 id="parameters">PARAMETERS</h3>
+<p>
+<ins><dl>
+<dt>
+<code>&lt;<i>options</i>&gt;</code>
+</dt>
+<dd>
+Command line options. See <a href="#options"><b>OPTIONS</b></a> below.</dd>
+<dt>
+<code>&lt;<i>source files</i>&gt;</code>
+</dt>
+<dd>
+One or more source files to be compiled (such as <code>MyClass.scala</code>).</dd>
+</dl></ins>
+</p>
+
+<h3 id="options">OPTIONS</h3>
+<p>
+The offline compiler supports <a href="scalac.html#options">all options of <code><b>scalac</b></code></a> plus the following:</p>
+<p>
+<ins><dl>
+<dt>
+<code><b>&#8211;reset</b> </code>
+</dt>
+<dd>
+Reset compile server caches.</dd>
+<dt>
+<code><b>&#8211;shutdown</b> </code>
+</dt>
+<dd>
+Shut down the compilation daemon.  The daemon attempts to restart itself as necessary, but sometimes an explicit shutdown is required. A common example is if jars on the class path have changed.</dd>
+<dt>
+<code><b>&#8211;server</b> &lt;<i>hostname:portnumber</i>&gt; </code>
+</dt>
+<dd>
+Specify compile server host at port number.  Usually this option is not needed.  Note that the hostname must be for a host that shares the same filesystem.</dd>
+<dt>
+<code><b>&#8211;J</b>&lt;<i>flag</i>&gt; </code>
+</dt>
+<dd>
+Pass <code>&lt;<i>flag</i>&gt;</code> directly to the Java VM for the compilation daemon.</dd>
+</dl></ins>
+</p>
+
+<h3 id="description">DESCRIPTION</h3>
+<p>
+The <code><b>fsc</b></code> tool submits Scala compilation jobs to a compilation daemon. The first time it is executed, the daemon is started automatically. On subsequent runs, the same daemon can be reused, thus resulting in a faster compilation. The tool is especially effective when repeatedly compiling with the same class paths, because the compilation daemon can reuse a compiler instance.</p>
+<p>
+The compilation daemon is smart enough to flush its cached compiler when the class path changes.  However, if the contents of the class path change, for example due to upgrading a library, then the daemon should be explicitly shut down with <code><b>-shutdown</b></code>.</p>
+<p>
+Note that the <a href="scala.html"><code><b>scala</b></code></a> script runner will also use the offline compiler by default, with the same advantages and caveats.</p>
+
+<h3 id="example">EXAMPLE</h3>
+<p>
+The following session shows a typical speed up due to using the offline compiler.</p>
+<pre>&gt; fsc -verbose -d /tmp test.scala
+\&amp;...
+[Port number: 32834]
+[Starting new Scala compile server instance]
+[Classpath = ...]
+[loaded directory path ... in 692ms]
+\&amp;...
+[parsing test.scala]
+\&amp;...
+[total in 943ms]
+
+&gt; fsc -verbose -d /tmp test.scala
+\&amp;...
+[Port number: 32834]
+[parsing test.scala]
+\&amp;...
+[total in 60ms]
+
+&gt; fsc -verbose -d /tmp test.scala
+\&amp;...
+[Port number: 32834]
+[parsing test.scala]
+\&amp;...
+[total in 42ms]
+
+&gt; fsc -verbose -shutdown
+[Scala compile server exited]
+</pre>
+
+<h3 id="environment">ENVIRONMENT</h3>
+<p>
+<ins><dl>
+<dt>
+<code><b>JAVACMD</b></code>
+</dt>
+<dd>
+Specify the <code><b>java</b></code> command to be used for running the Scala code.  Arguments may be specified as part of the environment variable; spaces, quotation marks, etc., will be passed directly to the shell for expansion.</dd>
+<dt>
+<code><b>JAVA_HOME</b></code>
+</dt>
+<dd>
+Specify JDK/JRE home directory. This directory is used to locate the <code><b>java</b></code> command unless <code><b>JAVACMD</b></code> variable set.</dd>
+<dt>
+<code><b>JAVA_OPTS</b></code>
+</dt>
+<dd>
+<div>
+Specify the options to be passed to the <code><b>java</b></code> command defined by <code><b>JAVACMD</b></code>.
+</div>
+<div>
+With Java 1.5 (or newer) one may for example configure the memory usage of the JVM as follows: <code>JAVA_OPTS="-Xmx512M -Xms16M -Xss16M"</code>
+</div>
+<div>
+With <a href="http://gcc.gnu.org/java/">GNU Java</a> one may configure the memory usage of the GIJ as follows: <code>JAVA_OPTS="--mx512m --ms16m"</code>
+</div>
+</dd>
+</dl></ins>
+</p>
+
+<h3 id="exit_status">EXIT STATUS</h3>
+<p>
+<code><b>fsc</b></code> returns a zero exit status if it succeeds to compile the specified input files. Non zero is returned in case of failure.</p>
+
+<h3 id="author">AUTHOR</h3>
+<p>
+Written by Martin Odersky and other members of the <a href="http://www.scala-lang.org/node/89">Scala team</a>.</p>
+
+<h3 id="reporting_bugs">REPORTING BUGS</h3>
+<p>
+Report bugs to <code>https://issues.scala-lang.org/</code>.</p>
+
+<h3 id="copyright">COPYRIGHT</h3>
+<p>
+This is open-source software, available to you under a BSD-like license. See accomponying "copyright" or "LICENSE" file for copying conditions. There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</p>
+
+<h3 id="see_also">SEE ALSO</h3>
+<p>
+<a href="scala.html"><b>scala</b>(1)</a>, <a href="scalac.html"><b>scalac</b>(1)</a>, <a href="scaladoc.html"><b>scaladoc</b>(1)</a>, <a href="scalap.html"><b>scalap</b>(1)</a></p>
+<!-- footer -->
+<div style="margin: 2em 0 0 0;">
+<div style="float:left;">
+version 0.5
+</div>
+<div style="float:right;">
+fsc(1)
+</div>
+<div style="text-align:center;">
+March 2012
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<p><code>\[
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\x}{\mathbf{x}}
+\newcommand{\y}{\mathbf{y}}
+\newcommand{\wv}{\mathbf{w}}
+\newcommand{\av}{\mathbf{\alpha}}
+\newcommand{\bv}{\mathbf{b}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\id}{\mathbf{I}}
+\newcommand{\ind}{\mathbf{1}}
+\newcommand{\0}{\mathbf{0}}
+\newcommand{\unit}{\mathbf{e}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\zero}{\mathbf{0}}
+\]</code></p>
+
+<p>Multilayer perceptron classifier (MLPC) is a classifier based on the <a href="https://en.wikipedia.org/wiki/Feedforward_neural_network">feedforward artificial neural network</a>. 
+MLPC consists of multiple layers of nodes. 
+Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes maps inputs to the outputs 
+by performing linear combination of the inputs with the node’s weights <code>$\wv$</code> and bias <code>$\bv$</code> and applying an activation function. 
+It can be written in matrix form for MLPC with <code>$K+1$</code> layers as follows:
+<code>\[
+\mathrm{y}(\x) = \mathrm{f_K}(...\mathrm{f_2}(\wv_2^T\mathrm{f_1}(\wv_1^T \x+b_1)+b_2)...+b_K)
+\]</code>
+Nodes in intermediate layers use sigmoid (logistic) function:
+<code>\[
+\mathrm{f}(z_i) = \frac{1}{1 + e^{-z_i}}
+\]</code>
+Nodes in the output layer use softmax function:
+<code>\[
+\mathrm{f}(z_i) = \frac{e^{z_i}}{\sum_{k=1}^N e^{z_k}}
+\]</code>
+The number of nodes <code>$N$</code> in the output layer corresponds to the number of classes.</p>
+
+<p>MLPC employes backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.</p>
+
+<p><strong>Examples</strong></p>
+
+<div class="codetabs">
+
+<div data-lang="scala">
+
+    <div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.ml.classification.MultilayerPerceptronClassifier</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.util.MLUtils</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.sql.Row</span>
+
+<span class="c1">// Load training data</span>
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="nc">MLUtils</span><span class="o">.</span><span class="n">loadLibSVMFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;data/mllib/sample_multiclass_classification_data.txt&quot;</span><span class="o">).</span><span class="n">toDF</span><span class="o">()</span>
+<span class="c1">// Split the data into train and test</span>
+<span class="k">val</span> <span class="n">splits</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">randomSplit</span><span class="o">(</span><span class="nc">Array</span><span class="o">(</span><span class="mf">0.6</span><span class="o">,</span> <span class="mf">0.4</span><span class="o">),</span> <span class="n">seed</span> <span class="k">=</span> <span class="mi">1234L</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">train</span> <span class="k">=</span> <span class="n">splits</span><span class="o">(</span><span class="mi">0</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">test</span> <span class="k">=</span> <span class="n">splits</span><span class="o">(</span><span class="mi">1</span><span class="o">)</span>
+<span class="c1">// specify layers for the neural network: </span>
+<span class="c1">// input layer of size 4 (features), two intermediate of size 5 and 4 and output of size 3 (classes)</span>
+<span class="k">val</span> <span class="n">layers</span> <span class="k">=</span> <span class="nc">Array</span><span class="o">[</span><span class="kt">Int</span><span class="o">](</span><span class="mi">4</span><span class="o">,</span> <span class="mi">5</span><span class="o">,</span> <span class="mi">4</span><span class="o">,</span> <span class="mi">3</span><span class="o">)</span>
+<span class="c1">// create the trainer and set its parameters</span>
+<span class="k">val</span> <span class="n">trainer</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">MultilayerPerceptronClassifier</span><span class="o">()</span>
+  <span class="o">.</span><span class="n">setLayers</span><span class="o">(</span><span class="n">layers</span><span class="o">)</span>
+  <span class="o">.</span><span class="n">setBlockSize</span><span class="o">(</span><span class="mi">128</span><span class="o">)</span>
+  <span class="o">.</span><span class="n">setSeed</span><span class="o">(</span><span class="mi">1234L</span><span class="o">)</span>
+  <span class="o">.</span><span class="n">setMaxIter</span><span class="o">(</span><span class="mi">100</span><span class="o">)</span>
+<span class="c1">// train the model</span>
+<span class="k">val</span> <span class="n">model</span> <span class="k">=</span> <span class="n">trainer</span><span class="o">.</span><span class="n">fit</span><span class="o">(</span><span class="n">train</span><span class="o">)</span>
+<span class="c1">// compute precision on the test set</span>
+<span class="k">val</span> <span class="n">result</span> <span class="k">=</span> <span class="n">model</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">test</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">predictionAndLabels</span> <span class="k">=</span> <span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="o">(</span><span class="s">&quot;prediction&quot;</span><span class="o">,</span> <span class="s">&quot;label&quot;</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">evaluator</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">MulticlassClassificationEvaluator</span><span class="o">()</span>
+  <span class="o">.</span><span class="n">setMetricName</span><span class="o">(</span><span class="s">&quot;precision&quot;</span><span class="o">)</span>
+<span class="n">println</span><span class="o">(</span><span class="s">&quot;Precision:&quot;</span> <span class="o">+</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate</span><span class="o">(</span><span class="n">predictionAndLabels</span><span class="o">))</span></code></pre></div>
+
+  </div>
+
+<div data-lang="java">
+
+    <div class="highlight"><pre><code class="language-java" data-lang="java"><span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaRDD</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.ml.classification.MultilayerPerceptronClassifier</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.regression.LabeledPoint</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.util.MLUtils</span><span class="o">;</span>
+
+<span class="c1">// Load training data</span>
+<span class="n">String</span> <span class="n">path</span> <span class="o">=</span> <span class="s">&quot;data/mllib/sample_multiclass_classification_data.txt&quot;</span><span class="o">;</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">MLUtils</span><span class="o">.</span><span class="na">loadLibSVMFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="n">path</span><span class="o">).</span><span class="na">toJavaRDD</span><span class="o">();</span>
+<span class="n">DataFrame</span> <span class="n">dataFrame</span> <span class="o">=</span> <span class="n">sqlContext</span><span class="o">.</span><span class="na">createDataFrame</span><span class="o">(</span><span class="n">data</span><span class="o">,</span> <span class="n">LabeledPoint</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
+<span class="c1">// Split the data into train and test</span>
+<span class="n">DataFrame</span><span class="o">[]</span> <span class="n">splits</span> <span class="o">=</span> <span class="n">dataFrame</span><span class="o">.</span><span class="na">randomSplit</span><span class="o">(</span><span class="k">new</span> <span class="kt">double</span><span class="o">[]{</span><span class="mf">0.6</span><span class="o">,</span> <span class="mf">0.4</span><span class="o">},</span> <span class="mi">1234L</span><span class="o">);</span>
+<span class="n">DataFrame</span> <span class="n">train</span> <span class="o">=</span> <span class="n">splits</span><span class="o">[</span><span class="mi">0</span><span class="o">];</span>
+<span class="n">DataFrame</span> <span class="n">test</span> <span class="o">=</span> <span class="n">splits</span><span class="o">[</span><span class="mi">1</span><span class="o">];</span>
+<span class="c1">// specify layers for the neural network:</span>
+<span class="c1">// input layer of size 4 (features), two intermediate of size 5 and 4 and output of size 3 (classes)</span>
+<span class="kt">int</span><span class="o">[]</span> <span class="n">layers</span> <span class="o">=</span> <span class="k">new</span> <span class="kt">int</span><span class="o">[]</span> <span class="o">{</span><span class="mi">4</span><span class="o">,</span> <span class="mi">5</span><span class="o">,</span> <span class="mi">4</span><span class="o">,</span> <span class="mi">3</span><span class="o">};</span>
+<span class="c1">// create the trainer and set its parameters</span>
+<span class="n">MultilayerPerceptronClassifier</span> <span class="n">trainer</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">MultilayerPerceptronClassifier</span><span class="o">()</span>
+  <span class="o">.</span><span class="na">setLayers</span><span class="o">(</span><span class="n">layers</span><span class="o">)</span>
+  <span class="o">.</span><span class="na">setBlockSize</span><span class="o">(</span><span class="mi">128</span><span class="o">)</span>
+  <span class="o">.</span><span class="na">setSeed</span><span class="o">(</span><span class="mi">1234L</span><span class="o">)</span>
+  <span class="o">.</span><span class="na">setMaxIter</span><span class="o">(</span><span class="mi">100</span><span class="o">);</span>
+<span class="c1">// train the model</span>
+<span class="n">MultilayerPerceptronClassificationModel</span> <span class="n">model</span> <span class="o">=</span> <span class="n">trainer</span><span class="o">.</span><span class="na">fit</span><span class="o">(</span><span class="n">train</span><span class="o">);</span>
+<span class="c1">// compute precision on the test set</span>
+<span class="n">DataFrame</span> <span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="na">transform</span><span class="o">(</span><span class="n">test</span><span class="o">);</span>
+<span class="n">DataFrame</span> <span class="n">predictionAndLabels</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="na">select</span><span class="o">(</span><span class="s">&quot;prediction&quot;</span><span class="o">,</span> <span class="s">&quot;label&quot;</span><span class="o">);</span>
+<span class="n">MulticlassClassificationEvaluator</span> <span class="n">evaluator</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">MulticlassClassificationEvaluator</span><span class="o">()</span>
+  <span class="o">.</span><span class="na">setMetricName</span><span class="o">(</span><span class="s">&quot;precision&quot;</span><span class="o">);</span>
+<span class="n">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">&quot;Precision = &quot;</span> <span class="o">+</span> <span class="n">evaluator</span><span class="o">.</span><span class="na">evaluate</span><span class="o">(</span><span class="n">predictionAndLabels</span><span class="o">));</span></code></pre></div>
+
+  </div>
+
+</div>

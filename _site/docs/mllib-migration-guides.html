@@ -1,0 +1,136 @@
+<p>The migration guide for the current Spark version is kept on the <a href="mllib-guide.html#migration-guide">MLlib Programming Guide main page</a>.</p>
+
+<h2 id="from-13-to-14">From 1.3 to 1.4</h2>
+
+<p>In the <code>spark.mllib</code> package, there were several breaking changes, but all in <code>DeveloperApi</code> or <code>Experimental</code> APIs:</p>
+
+<ul>
+  <li>Gradient-Boosted Trees
+    <ul>
+      <li><em>(Breaking change)</em> The signature of the <a href="api/scala/index.html#org.apache.spark.mllib.tree.loss.Loss"><code>Loss.gradient</code></a> method was changed.  This is only an issues for users who wrote their own losses for GBTs.</li>
+      <li><em>(Breaking change)</em> The <code>apply</code> and <code>copy</code> methods for the case class <a href="api/scala/index.html#org.apache.spark.mllib.tree.configuration.BoostingStrategy"><code>BoostingStrategy</code></a> have been changed because of a modification to the case class fields.  This could be an issue for users who use <code>BoostingStrategy</code> to set GBT parameters.</li>
+    </ul>
+  </li>
+  <li><em>(Breaking change)</em> The return value of <a href="api/scala/index.html#org.apache.spark.mllib.clustering.LDA"><code>LDA.run</code></a> has changed.  It now returns an abstract class <code>LDAModel</code> instead of the concrete class <code>DistributedLDAModel</code>.  The object of type <code>LDAModel</code> can still be cast to the appropriate concrete type, which depends on the optimization algorithm.</li>
+</ul>
+
+<p>In the <code>spark.ml</code> package, several major API changes occurred, including:</p>
+
+<ul>
+  <li><code>Param</code> and other APIs for specifying parameters</li>
+  <li><code>uid</code> unique IDs for Pipeline components</li>
+  <li>Reorganization of certain classes</li>
+</ul>
+
+<p>Since the <code>spark.ml</code> API was an alpha component in Spark 1.3, we do not list all changes here.
+However, since 1.4 <code>spark.ml</code> is no longer an alpha component, we will provide details on any API
+changes for future releases.</p>
+
+<h2 id="from-12-to-13">From 1.2 to 1.3</h2>
+
+<p>In the <code>spark.mllib</code> package, there were several breaking changes.  The first change (in <code>ALS</code>) is the only one in a component not marked as Alpha or Experimental.</p>
+
+<ul>
+  <li><em>(Breaking change)</em> In <a href="api/scala/index.html#org.apache.spark.mllib.recommendation.ALS"><code>ALS</code></a>, the extraneous method <code>solveLeastSquares</code> has been removed.  The <code>DeveloperApi</code> method <code>analyzeBlocks</code> was also removed.</li>
+  <li><em>(Breaking change)</em> <a href="api/scala/index.html#org.apache.spark.mllib.feature.StandardScalerModel"><code>StandardScalerModel</code></a> remains an Alpha component. In it, the <code>variance</code> method has been replaced with the <code>std</code> method.  To compute the column variance values returned by the original <code>variance</code> method, simply square the standard deviation values returned by <code>std</code>.</li>
+  <li><em>(Breaking change)</em> <a href="api/scala/index.html#org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD"><code>StreamingLinearRegressionWithSGD</code></a> remains an Experimental component.  In it, there were two changes:
+    <ul>
+      <li>The constructor taking arguments was removed in favor of a builder pattern using the default constructor plus parameter setter methods.</li>
+      <li>Variable <code>model</code> is no longer public.</li>
+    </ul>
+  </li>
+  <li><em>(Breaking change)</em> <a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a> remains an Experimental component.  In it and its associated classes, there were several changes:
+    <ul>
+      <li>In <code>DecisionTree</code>, the deprecated class method <code>train</code> has been removed.  (The object/static <code>train</code> methods remain.)</li>
+      <li>In <code>Strategy</code>, the <code>checkpointDir</code> parameter has been removed.  Checkpointing is still supported, but the checkpoint directory must be set before calling tree and tree ensemble training.</li>
+    </ul>
+  </li>
+  <li><code>PythonMLlibAPI</code> (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared <code>private[python]</code>.  This was never meant for external use.</li>
+  <li>In linear regression (including Lasso and ridge regression), the squared loss is now divided by 2.
+So in order to produce the same result as in 1.2, the regularization parameter needs to be divided by 2 and the step size needs to be multiplied by 2.</li>
+</ul>
+
+<p>In the <code>spark.ml</code> package, the main API changes are from Spark SQL.  We list the most important changes here:</p>
+
+<ul>
+  <li>The old <a href="http://spark.apache.org/docs/1.2.1/api/scala/index.html#org.apache.spark.sql.SchemaRDD">SchemaRDD</a> has been replaced with <a href="api/scala/index.html#org.apache.spark.sql.DataFrame">DataFrame</a> with a somewhat modified API.  All algorithms in Spark ML which used to use SchemaRDD now use DataFrame.</li>
+  <li>In Spark 1.2, we used implicit conversions from <code>RDD</code>s of <code>LabeledPoint</code> into <code>SchemaRDD</code>s by calling <code>import sqlContext._</code> where <code>sqlContext</code> was an instance of <code>SQLContext</code>.  These implicits have been moved, so we now call <code>import sqlContext.implicits._</code>.</li>
+  <li>Java APIs for SQL have also changed accordingly.  Please see the examples above and the <a href="sql-programming-guide.html">Spark SQL Programming Guide</a> for details.</li>
+</ul>
+
+<p>Other changes were in <code>LogisticRegression</code>:</p>
+
+<ul>
+  <li>The <code>scoreCol</code> output column (with default value “score”) was renamed to be <code>probabilityCol</code> (with default value “probability”).  The type was originally <code>Double</code> (for the probability of class 1.0), but it is now <code>Vector</code> (for the probability of each class, to support multiclass classification in the future).</li>
+  <li>In Spark 1.2, <code>LogisticRegressionModel</code> did not include an intercept.  In Spark 1.3, it includes an intercept; however, it will always be 0.0 since it uses the default settings for <a href="api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS">spark.mllib.LogisticRegressionWithLBFGS</a>.  The option to use an intercept will be added in the future.</li>
+</ul>
+
+<h2 id="from-11-to-12">From 1.1 to 1.2</h2>
+
+<p>The only API changes in MLlib v1.2 are in
+<a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a>,
+which continues to be an experimental API in MLlib 1.2:</p>
+
+<ol>
+  <li>
+    <p><em>(Breaking change)</em> The Scala API for classification takes a named argument specifying the number
+of classes.  In MLlib v1.1, this argument was called <code>numClasses</code> in Python and
+<code>numClassesForClassification</code> in Scala.  In MLlib v1.2, the names are both set to <code>numClasses</code>.
+This <code>numClasses</code> parameter is specified either via
+<a href="api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy"><code>Strategy</code></a>
+or via <a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a>
+static <code>trainClassifier</code> and <code>trainRegressor</code> methods.</p>
+  </li>
+  <li>
+    <p><em>(Breaking change)</em> The API for
+<a href="api/scala/index.html#org.apache.spark.mllib.tree.model.Node"><code>Node</code></a> has changed.
+This should generally not affect user code, unless the user manually constructs decision trees
+(instead of using the <code>trainClassifier</code> or <code>trainRegressor</code> methods).
+The tree <code>Node</code> now includes more information, including the probability of the predicted label
+(for classification).</p>
+  </li>
+  <li>
+    <p>Printing methods’ output has changed.  The <code>toString</code> (Scala/Java) and <code>__repr__</code> (Python) methods used to print the full model; they now print a summary.  For the full model, use <code>toDebugString</code>.</p>
+  </li>
+</ol>
+
+<p>Examples in the Spark distribution and examples in the
+<a href="mllib-decision-tree.html#examples">Decision Trees Guide</a> have been updated accordingly.</p>
+
+<h2 id="from-10-to-11">From 1.0 to 1.1</h2>
+
+<p>The only API changes in MLlib v1.1 are in
+<a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a>,
+which continues to be an experimental API in MLlib 1.1:</p>
+
+<ol>
+  <li>
+    <p><em>(Breaking change)</em> The meaning of tree depth has been changed by 1 in order to match
+the implementations of trees in
+<a href="http://scikit-learn.org/stable/modules/classes.html#module-sklearn.tree">scikit-learn</a>
+and in <a href="http://cran.r-project.org/web/packages/rpart/index.html">rpart</a>.
+In MLlib v1.0, a depth-1 tree had 1 leaf node, and a depth-2 tree had 1 root node and 2 leaf nodes.
+In MLlib v1.1, a depth-0 tree has 1 leaf node, and a depth-1 tree has 1 root node and 2 leaf nodes.
+This depth is specified by the <code>maxDepth</code> parameter in
+<a href="api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy"><code>Strategy</code></a>
+or via <a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a>
+static <code>trainClassifier</code> and <code>trainRegressor</code> methods.</p>
+  </li>
+  <li>
+    <p><em>(Non-breaking change)</em> We recommend using the newly added <code>trainClassifier</code> and <code>trainRegressor</code>
+methods to build a <a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a>,
+rather than using the old parameter class <code>Strategy</code>.  These new training methods explicitly
+separate classification and regression, and they replace specialized parameter types with
+simple <code>String</code> types.</p>
+  </li>
+</ol>
+
+<p>Examples of the new, recommended <code>trainClassifier</code> and <code>trainRegressor</code> are given in the
+<a href="mllib-decision-tree.html#examples">Decision Trees Guide</a>.</p>
+
+<h2 id="from-09-to-10">From 0.9 to 1.0</h2>
+
+<p>In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few
+breaking changes.  If your data is sparse, please store it in a sparse format instead of dense to
+take advantage of sparsity in both storage and computation. Details are described below.</p>
+

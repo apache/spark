@@ -39,12 +39,11 @@ objects.
 
 This algorithm is a highly stable method for inverting a matrix and solving linear systems of equations that appear in
 machine learning applications.  Larger linear equations of the type $AX=B$ are usually solved with SGD, BGFS, or other
-gradient based methods.  Solving these equations at scale to numerical precision should open up possiblities for new algorithms within MLlib, as well as other applications.  
-It scales as ~$N^3$, for a [`BlockMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) 
-with $N \times N$ blocks.
+gradient based methods.  Solving these equations at scale to numerical precision should open up possiblities for new 
+algorithms within MLlib, as well as other applications. 
 
-Once the decomposition is computed, many other quantities can be easily derived.  The most important one,   
-[`BlockMatrix.solve()`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix), and is 
+Once the decomposition is computed, many other quantities can be easily computed, including the solution to a 
+linear system of equations via [`BlockMatrix.solve()`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix), which is 
 described in the next section.
 
 **Example**
@@ -54,31 +53,21 @@ import org.apache.spark.mllib.linalg.distributed.{BlockMatrix}
 import org.apache.spark.mllib.linalg.{Matrix=>SparkMatrix,Matrices=>SparkMatrices}
 import org.apache.spark.mllib.linalg.{DenseMatrix}
 
-val blocks: Seq[((Int, Int), SparkMatrix)] = Seq(
-  ((0, 0), new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 2.0))),
-  ((0, 1), new DenseMatrix(2, 2, Array(2.0, 1.0, 3.0, 5.0))),
-  ((1, 0), new DenseMatrix(2, 2, Array(3.0, 2.0, 1.0, 1.0))),
-  ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))), 
-  ((0, 2), new DenseMatrix(2, 1, Array(1.0, 1.0))),
-  ((1, 2), new DenseMatrix(2, 1, Array(1.0, 3.0))),
-  ((2, 0), new DenseMatrix(1, 2, Array(1.0, 0.0))),
-  ((2, 1), new DenseMatrix(1, 2, Array(1.0, 2.0))),
-  ((2, 2), new DenseMatrix(1, 1, Array(4.0))))
+val blocks: RDD[(Int, Int), Matrix] = ... // an RDD of (i,j,m) matrix entries
 
 val rowsPerBlock = 2; val colsPerBlock = 2; 
- val A =  
-       new BlockMatrix(sc.parallelize(blocks), rowsPerBlock, colsPerBlock)
+ val A = new BlockMatrix(blocks, rowsPerBlock, colsPerBlock)
     
 val PLU = A.blockLU
 val P  = PLU._1
 val L  = PLU._2
 val U  = PLU._3
 
-// computing a fast residual...top and bottom matrices only
+// computing a residual...
 val residual = L.multiply(U).subtract(P.multiply(A))
 val error = residual.toLocalMatrix.toArray.reduce(_ + Math.abs(_) ) 
 
-println( "error (sb ~6.7e-16): " + error.toString )
+println( "error : " + error.toString )
 {% endhighlight %}
 
 **How it Works**
@@ -161,20 +150,20 @@ The Matrix multiply operations shown in the figure are generalizations of equati
 #Solving a Linear System of Equations
 [`BlockMatrix.solve()`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) calls the LU Factorization
 method to solve the linear system of equations $AX=B$ for $X$.
-The method of forward subsitution solution is used.  This method is is described 
+The method of forward substitution solution is used.  This method is is described 
 [`here`](https://en.wikipedia.org/wiki/Triangular_matrix#Forward_and_back_substitution), for elements of a matrix, and 
-and the generalization to blocks using [`BlockMatrix.solve()`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix)
+and the generalization to blocks for the [`BlockMatrix.solve()`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix)
 is described briefly here.  
 
 For a Linear system of equations $AX=B$, where $A$ is an $N \times N$ matrix, and $X$ and $B$ are  
 [`BlockMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) objects of with $N$ 
 row blocks and $W$ column blocks.  $B$ can have any number of columns, including 1.  The number of row and columns 
-per block must be the same, however.  [`BlockMatrix.solve(B)`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix)  
+per block (`rowsPerBlock` and `colsPerBlock`) must be the same, however.  [`BlockMatrix.solve(B)`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix)  
 will return $X$ as a [`BlockMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) object
 with the same dimensions of $B$.
 
-The forward substitution equations are straightforward do obtain in two steps.  The equation $AX=PB$  
-can be expressed as $LUX=\widehat{B}$.  First, the solution to $LY=\widehat{B}$ for $Y$ is obtained, followed by 
+The forward substitution equations are straightforward do obtain in two steps.  The equation $AX=B$  
+can be expressed as $LUX=\widehat{B}$, where $\widehat{B}=PB$.  First, the solution to $LY=\widehat{B}$ for $Y$ is obtained, followed by 
 solving $UX=Y$ for $X$.
 
 Expanding $LY=\widehat{B}$ as [`BlockMatrix.multiply()`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix)
@@ -213,36 +202,14 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed.BlockMatrix
 
-    // square matrix, but not fully populated in edge blocks.
-val blocksForLU: Seq[((Int, Int), Matrix)] = Seq(
-  ((0, 0), new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 2.0))),
-  ((0, 1), new DenseMatrix(2, 2, Array(2.0, 1.0, 3.0, 5.0))),
-  ((1, 0), new DenseMatrix(2, 2, Array(3.0, 2.0, 1.0, 1.0))),
-  ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
-  ((0, 2), new DenseMatrix(2, 1, Array(1.0, 1.0))),
-  ((1, 2), new DenseMatrix(2, 1, Array(1.0, 3.0))),
-  ((2, 0), new DenseMatrix(1, 2, Array(1.0, 0.0))),
-  ((2, 1), new DenseMatrix(1, 2, Array(1.0, 2.0))),
-  ((2, 2), new DenseMatrix(1, 1, Array(4.0))))
+val blocksforLU: RDD[(Int, Int), Matrix] = ... // an RDD of (i,j,m) matrix entries
 
-val A = new BlockMatrix(sc.parallelize(blocksForLU), 2, 2)
+val A = new BlockMatrix(blocks, 2, 2)
 
-val B = new BlockMatrix(sc.parallelize(Seq( //5x7 B vector (7 columns of 5 row B)
-      ((0, 0), new DenseMatrix(2, 2, Array( 0, 1, -1, 2))),
-      ((0, 1), new DenseMatrix(2, 2, Array(-2, -1, -3, -2))),
-      ((0, 2), new DenseMatrix(2, 2, Array(-4, -3, -5, -4))),
-      ((0, 3), new DenseMatrix(2, 2, Array(-5, -6, -7, -7))),
-      ((1, 0), new DenseMatrix(2, 2, Array( 2, 3, 1, 2))),
-      ((1, 1), new DenseMatrix(2, 2, Array( 3, 1, -1, 4))),
-      ((1, 2), new DenseMatrix(2, 2, Array(-2, -1, -3, -2))),
-      ((1, 3), new DenseMatrix(2, 2, Array(2, 1, 3, 2))),
-      ((2, 0), new DenseMatrix(1, 2, Array( 0, 5))),
-      ((2, 1), new DenseMatrix(1, 2, Array( 1, 3))),
-      ((2, 2), new DenseMatrix(1, 2, Array( 0, 0))),
-      ((2, 3), new DenseMatrix(1, 2, Array( 1, 1))))), 2, 2)
+val B: BlockMatrix = ....// a BlockMatrix with the same number of rows as A
 
 val X = A.solve(B)
 val residual = A.multiply(X).subtract(B)
 val error = residual.toLocalMatrix.toArray.reduce(_ + Math.abs(_))
-println("error" + error.toString)//sb 2.25e-14
+println("error" + error.toString) 
 {% endhighlight %}

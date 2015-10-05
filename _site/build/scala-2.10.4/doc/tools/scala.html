@@ -1,0 +1,233 @@
+<?xml version="1.1" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+<title>scala man page</title>
+<meta http-equiv="Content-Language" content="en"/>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+<meta name="Author" content="Stephane Micheloud"/>
+<style type="text/css">
+  <!--
+  blockquote, pre { margin:1em 4em 1em 4em; }
+  dt { margin: 0.6em 0 0 0; }
+  p { margin:0.6em 2em 0.6em 2em; text-align:justify; }
+  //-->
+</style>
+</head>
+
+<body>
+<!-- header -->
+<div style="margin: 0 0 2em 0;">
+<div style="float:left;">
+scala(1)
+</div>
+<div style="float:right;">
+scala(1)
+</div>
+<div style="text-align:center;">
+USER COMMANDS
+</div>
+</div>
+
+<h3 id="name">NAME</h3>
+<p>
+<code><b>scala</b></code> &#8211; Run code in the <a href="http://scala-lang.org/">Scala 2</a> language</p>
+
+<h3 id="synopsis">SYNOPSIS</h3>
+<p>
+<code><b>scala</b></code><code>  [ &lt;<i>option</i>&gt; ]... [ &lt;<i>torun</i>&gt; &lt;<i>argument</i>&gt;... ]</code></p>
+
+<h3 id="parameters">PARAMETERS</h3>
+<p>
+<ins><dl>
+<dt>
+<code>&lt;<i>compiler-option</i>&gt;</code>
+</dt>
+<dd>
+Any scalac option.  See <a href="scalac.html"><b>scalac</b>(1)</a>.</dd>
+<dt>
+<code><b>&#8211;howtorun:</b>&lt;<i>how</i>&gt; </code>
+</dt>
+<dd>
+How to execute &lt;<i>torun</i>&gt;, if it is present. Options for &lt;<i>how</i>&gt; are <code>guess</code> (the default), <code>script</code>, and <code>object</code>.</dd>
+<dt>
+<code><b>&#8211;i</b> </code>
+</dt>
+<dd>
+Requests that a file be pre-loaded.  It is only meaningful for interactive shells.</dd>
+<dt>
+<code><b>&#8211;e</b> </code>
+</dt>
+<dd>
+Requests that its argument be executed as Scala code.</dd>
+<dt>
+<code><b>&#8211;savecompiled</b> </code>
+</dt>
+<dd>
+Save this compiled version of scripts in order to speed up later executions of the same script.  When running a script, save the compiled version of in a file with the same name as the script but with an extension of <code>.jar</code>.  On subsequent runs of the same script, the pre-compiled <code>.jar</code> file will be used if it is newer than the script file.</dd>
+<dt>
+<code><b>&#8211;nocompdaemon</b> </code>
+</dt>
+<dd>
+Do not use the <code><b>fsc</b></code> offline compiler.</dd>
+<dt>
+<code><b>&#8211;D</b>property=value </code>
+</dt>
+<dd>
+Set a Java system property.  If no value is specified, then the property is set to the empty string.</dd>
+<dt>
+<code>&lt;<i>torun</i>&gt;</code>
+</dt>
+<dd>
+A top-level object or a script file to run.</dd>
+<dt>
+<code>&lt;<i>argument</i>&gt;</code>
+</dt>
+<dd>
+An arguments to pass to &lt;<i>torun</i>&gt;.</dd>
+</dl></ins>
+</p>
+
+<h3 id="description">DESCRIPTION</h3>
+<p>
+The <code><b>scala</b></code> utility runs Scala code using a Java runtime environment.  The Scala code to run is specified in one of three ways:</p>
+<ol>
+<li>With no arguments specified, a Scala shell starts and reads commands interactively.<li>With <code>-howtorun:object</code> specified, the fully qualified name of a top-level Scala object may be specified.  The object should previously have been compiled using <a href="scalac.html"><b>scalac</b>(1)</a>.<li>With <code>-howtorun:script</code> specified, a file containing Scala code may be specified.</ol>
+<p>
+If <code>-howtorun:</code> is left as the default (<code>guess</code>), then the <code><b>scala</b></code> command will check whether a file of the specified name exists.  If it does, then it will treat it as a script file; if it does not, then it will treat it as the name of an object.</p>
+<p>
+In all three cases, arbitrary scalac options may be specified. The most common option is to specify a classpath with <code>-classpath</code>, but see the <a href="scalac.html"><b>scalac</b>(1)</a> page for full details.   </p>
+<p>
+If an object is specified to run, then that object must be a top-level Scala object with the specified name.  The object must define a method <b>main</b> with the following signature:</p>
+<blockquote><p>
+<code><b>def</b> main(args: Array[String]): Unit</code></p></blockquote>
+<p>
+The method must return a <b>Unit</b> value, and it must accept a <b>String</b> array as a parameter.  All arguments specified on the command line will be passed as arguments to the <b>main</b> method.</p>
+<p>
+If a script file is specified to run, then the file is read and all Scala statements and declarations in the file are processed in order. Any arguments specified will be available via the <code>args</code>variable.</p>
+<p>
+Script files may have an optional header that is ignored if present.  There are two ways to format the header: either beginning with <code>#!</code> and ending with <code>!#</code>, or beginning with <code>::#!</code> and ending with <code>::!#</code>.</p>
+<p>
+Such a header must have each header boundary start at the beginning of a line.  Headers can be used to make stand-alone script files, as shown in the examples below.</p>
+<p>
+If <code>scala</code> is run from an sbaz(1) directory, then it will add to its classpath any jars installed in the lib directory of the sbaz directory.  Additionally, if no -classpath option is specified, then <code>scala</code> will add ".", the current directory, to the end of the classpath.</p>
+
+<h3 id="options">OPTIONS</h3>
+<p>
+If any compiler options are specified, they must be first in the command line and must be followed by a bare hypen ("-") character. If no arguments are specified after the optional compiler arguments, then an interactive Scala shell is started.  Otherwise, either a script file is run, or a pre-compiled Scala object is run.  It is possible to distinguish the last two cases by using an explicit <code>-object</code> or <code>-script</code> flag, but usually the program can guess correctly.</p>
+
+<h3 id="environment">ENVIRONMENT</h3>
+<p>
+<ins><dl>
+<dt>
+<code><b>JAVACMD</b></code>
+</dt>
+<dd>
+Specify the <code><b>java</b></code> command to be used for running the Scala code.  Arguments may be specified as part of the environment variable; spaces, quotation marks, etc., will be passed directly to the shell for expansion.</dd>
+<dt>
+<code><b>JAVA_HOME</b></code>
+</dt>
+<dd>
+Specify JDK/JRE home directory. This directory is used to locate the <code><b>java</b></code> command unless <code><b>JAVACMD</b></code> variable set.</dd>
+<dt>
+<code><b>JAVA_OPTS</b></code>
+</dt>
+<dd>
+<div>
+Specify the options to be passed to the <code><b>java</b></code> command defined by <code><b>JAVACMD</b></code>.
+</div>
+<div>
+With Java 1.5 (or newer) one may for example configure the memory usage of the JVM as follows: <code>JAVA_OPTS="-Xmx512M -Xms16M -Xss16M"</code>
+</div>
+<div>
+With <a href="http://gcc.gnu.org/java/">GNU Java</a> one may configure the memory usage of the GIJ as follows: <code>JAVA_OPTS="--mx512m --ms16m"</code>
+</div>
+</dd>
+</dl></ins>
+</p>
+
+<h3 id="examples">EXAMPLES</h3>
+<p>
+Here are some examples of running Scala code:</p>
+<p>
+<ins><dl>
+<dt>
+Execute a Scala program generated in the current directory
+</dt>
+<dd>
+<code><b>scala</b></code><code> hello.HelloWorld</code></dd>
+<dt>
+Execute a Scala program generated in a user-defined directory <b>classes</b>
+</dt>
+<dd>
+<code><b>scala</b></code><code> <code><b>&#8211;classpath</b> classes </code>hello.HelloWorld</code></dd>
+<dt>
+Execute a Scala program using a user-defined <code><b>java</b></code> command
+</dt>
+<dd>
+<code><b>env JAVACMD</b></code><code>=/usr/local/bin/cacao </code><code><b>scala</b></code><code> <code><b>&#8211;classpath</b> classes </code>hello.HelloWorld</code></dd>
+<dt>
+Execute a Scala program using JVM options
+</dt>
+<dd>
+<code><b>env JAVACMD</b></code><code>=java </code><code><b>JAVA_OPTS</b></code><code>="-Dmsg=hello -enableassertions" </code><code><b>scala</b></code><code> <code><b>&#8211;classpath</b> classes </code>hello.HelloWorld</code></dd>
+</dl></ins>
+</p>
+<p>
+Here is a complete Scala script for Unix: </p>
+<pre>#!/bin/sh
+exec scala "$0" "$@"
+!#
+Console.println("Hello, world!")
+argv.toList foreach Console.println</pre>
+<p>
+Here is a complete Scala script for MS Windows: </p>
+<pre>::#!
+@echo off
+call scala %0 %*
+goto :eof
+::!#
+Console.println("Hello, world!")
+argv.toList foreach Console.println</pre>
+<p>
+If you want to use the compilation cache to speed up multiple executions of the script, then add <code>-savecompiled</code> to the scala command:</p>
+<pre>#!/bin/sh
+exec scala -savecompiled "$0" "$@"
+!#
+Console.println("Hello, world!")
+argv.toList foreach Console.println</pre>
+
+<h3 id="exit_status">EXIT STATUS</h3>
+<p>
+The <code><b>scala</b></code> command returns a zero exit status if it succeeds. Non zero is returned in case of any error.  If a script or top-level object is executed and returns a value, then that return value is passed on to <code><b>scala</b></code>.</p>
+
+<h3 id="author">AUTHOR</h3>
+<p>
+Written by Martin Odersky and other members of the <a href="http://www.scala-lang.org/node/89">Scala team</a>.</p>
+
+<h3 id="reporting_bugs">REPORTING BUGS</h3>
+<p>
+Report bugs to <code>https://issues.scala-lang.org/</code>.</p>
+
+<h3 id="copyright">COPYRIGHT</h3>
+<p>
+This is open-source software, available to you under a BSD-like license. See accomponying "copyright" or "LICENSE" file for copying conditions. There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</p>
+
+<h3 id="see_also">SEE ALSO</h3>
+<p>
+<a href="fsc.html"><b>fsc</b>(1)</a>, <a href="scalac.html"><b>scalac</b>(1)</a>, <a href="scaladoc.html"><b>scaladoc</b>(1)</a>, <a href="scalap.html"><b>scalap</b>(1)</a></p>
+<!-- footer -->
+<div style="margin: 2em 0 0 0;">
+<div style="float:left;">
+version 0.5
+</div>
+<div style="float:right;">
+scala(1)
+</div>
+<div style="text-align:center;">
+April 2007
+</div>
+</div>
+</body>
+</html>

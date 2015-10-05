@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#
+# Copyright (C) 2012 Typesafe, Inc. <http://www.typesafe.com>
+#
+# Nailgun client wrapper
+
+# get the source location for this script; handles symlinks
+function get_script_path {
+  local source="${BASH_SOURCE[0]}"
+  while [ -h "$source" ] ; do
+    local linked="$(readlink "$source")"
+    local dir="$(cd -P $(dirname "$source") && cd -P $(dirname "$linked") && pwd)"
+    source="$dir/$(basename "$linked")"
+  done
+  echo ${source}
+}
+
+# script details
+declare -r script_path=$(get_script_path)
+declare -r script_name=$(basename "$script_path")
+declare -r script_dir="$(cd -P "$(dirname "$script_path")" && pwd)"
+
+# default ng command
+declare ng_cmd="ng"
+
+# check whether we have an ng command
+function ng_exists {
+  type -P $ng_cmd > /dev/null 2>&1
+}
+
+if ! ng_exists ; then
+  # choose bundled binary based on platform
+  declare -r una=$( uname -a | tr "[:upper:]" "[:lower:]" )
+  declare platform=""
+  case "$una" in
+    *cygwin*)        platform="win32" ;;
+    *mingw32*)       platform="win32" ;;
+    *darwin*x86_64*) platform="darwin64" ;;
+    *darwin*)        platform="darwin32" ;;
+    *linux*x86_64*)  platform="linux64" ;;
+    *linux*)         platform="linux32" ;;
+    *)               platform="unknown" ;;
+  esac
+  cmd="$script_dir/ng/$platform/ng"
+  [[ -x "$cmd" ]] && ng_cmd="$cmd"
+fi
+
+# run ng client command
+"$ng_cmd" "$@"

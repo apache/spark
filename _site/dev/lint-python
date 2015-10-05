@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+PATHS_TO_CHECK="./python/pyspark/ ./ec2/spark_ec2.py ./examples/src/main/python/ ./dev/sparktestsupport"
+PATHS_TO_CHECK="$PATHS_TO_CHECK ./dev/run-tests.py ./python/run-tests.py"
+PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
+PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
+PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
+
+cd "$SPARK_ROOT_DIR"
+
+# compileall: https://docs.python.org/2/library/compileall.html
+python -B -m compileall -q -l $PATHS_TO_CHECK > "$PEP8_REPORT_PATH"
+compile_status="${PIPESTATUS[0]}"
+
+# Get pep8 at runtime so that we don't rely on it being installed on the build server.
+#+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
+#+ TODOs:
+#+  - Download pep8 from PyPI. It's more "official".
+PEP8_VERSION="1.6.2"
+PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8-$PEP8_VERSION.py"
+PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/$PEP8_VERSION/pep8.py"
+
+if [ ! -e "$PEP8_SCRIPT_PATH" ]; then
+    curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
+    curl_status="$?"
+
+    if [ "$curl_status" -ne 0 ]; then
+        echo "Failed to download pep8.py from \"$PEP8_SCRIPT_REMOTE_PATH\"."
+        exit "$curl_status"
+    fi
+fi
+
+# Easy install pylint in /dev/pylint. To easy_install into a directory, the PYTHONPATH should
+# be set to the directory.
+# dev/pylint should be appended to the PATH variable as well.
+# Jenkins by default installs the pylint3 version, so for now this just checks the code quality
+# of python3.
+export "PYTHONPATH=$SPARK_ROOT_DIR/dev/pylint"
+export "PYLINT_HOME=$PYTHONPATH"
+export "PATH=$PYTHONPATH:$PATH"
+
+# if [ ! -d "$PYLINT_HOME" ]; then
+#     mkdir "$PYLINT_HOME"
+#     # Redirect the annoying pylint installation output.
+#     easy_install -d "$PYLINT_HOME" pylint==1.4.4 &>> "$PYLINT_INSTALL_INFO"
+#     easy_install_status="$?"
+#
+#     if [ "$easy_install_status" -ne 0 ]; then
+#         echo "Unable to install pylint locally in \"$PYTHONPATH\"."
+#         cat "$PYLINT_INSTALL_INFO"
+#         exit "$easy_install_status"
+#     fi
+#
+#     rm "$PYLINT_INSTALL_INFO"
+#
+# fi
+
+# There is no need to write this output to a file
+#+ first, but we do so so that the check status can
+#+ be output before the report, like with the
+#+ scalastyle and RAT checks.
+python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
+pep8_status="${PIPESTATUS[0]}"
+
+if [ "$compile_status" -eq 0 -a "$pep8_status" -eq 0 ]; then
+    lint_status=0
+else
+    lint_status=1
+fi
+
+if [ "$lint_status" -ne 0 ]; then
+    echo "PEP8 checks failed."
+    cat "$PEP8_REPORT_PATH"
+else
+    echo "PEP8 checks passed."
+fi
+
+rm "$PEP8_REPORT_PATH"
+
+# for to_be_checked in "$PATHS_TO_CHECK"
+# do
+#     pylint --rcfile="$SPARK_ROOT_DIR/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
+# done
+
+# if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+#     lint_status=1
+#     echo "Pylint checks failed."
+#     cat "$PYLINT_REPORT_PATH"
+# else
+#     echo "Pylint checks passed."
+# fi
+
+# rm "$PYLINT_REPORT_PATH"
+
+exit "$lint_status"

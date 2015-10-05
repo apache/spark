@@ -1,0 +1,193 @@
+.\" ##########################################################################
+.\" #                      __                                                #
+.\" #      ________ ___   / /  ___     Scala 2 On-line Manual Pages          #
+.\" #     / __/ __// _ | / /  / _ |    (c) 2002-2013, LAMP/EPFL              #
+.\" #   __\ \/ /__/ __ |/ /__/ __ |                                          #
+.\" #  /____/\___/_/ |_/____/_/ | |    http://scala-lang.org/                #
+.\" #                           |/                                           #
+.\" ##########################################################################
+.\"
+.\" Process this file with nroff -man scala.1
+.\"
+.TH scala 1  "April 2007" "version 0.5" "USER COMMANDS"
+.\"
+.\" ############################## NAME ###############################
+.\"
+.SH NAME
+.PP
+\fBscala\fR \- Run code in the Scala 2 language
+.\"
+.\" ############################## SYNOPSIS ###############################
+.\"
+.SH SYNOPSIS
+.PP
+\fBscala\fR  [ <\fIoption\fR> ]... [ <\fItorun\fR> <\fIargument\fR>... ]
+.\"
+.\" ############################## PARAMETERS ###############################
+.\"
+.SH PARAMETERS
+.PP
+.TP
+<\fIcompiler-option\fR>
+Any scalac option.  See \fBscalac\fR(1).
+.TP
+\fB\-howtorun:\fR<\fIhow\fR> 
+How to execute <\fItorun\fR>, if it is present. Options for <\fIhow\fR> are guess (the default), script, and object.
+.TP
+\fB\-i\fR 
+Requests that a file be pre-loaded.  It is only meaningful for interactive shells.
+.TP
+\fB\-e\fR 
+Requests that its argument be executed as Scala code.
+.TP
+\fB\-savecompiled\fR 
+Save this compiled version of scripts in order to speed up later executions of the same script.  When running a script, save the compiled version of in a file with the same name as the script but with an extension of .jar.  On subsequent runs of the same script, the pre-compiled .jar file will be used if it is newer than the script file.
+.TP
+\fB\-nocompdaemon\fR 
+Do not use the \fBfsc\fR offline compiler.
+.TP
+\fB\-D\fRproperty=value 
+Set a Java system property.  If no value is specified, then the property is set to the empty string.
+.TP
+<\fItorun\fR>
+A top-level object or a script file to run.
+.TP
+<\fIargument\fR>
+An arguments to pass to <\fItorun\fR>.
+.\"
+.\" ############################## DESCRIPTION ###############################
+.\"
+.SH DESCRIPTION
+.PP
+The \fBscala\fR utility runs Scala code using a Java runtime environment.  The Scala code to run is specified in one of three ways:
+.IP "   1."
+With no arguments specified, a Scala shell starts and reads commands interactively.
+.IP "   2."
+With -howtorun:object specified, the fully qualified name of a top-level Scala object may be specified.  The object should previously have been compiled using \fBscalac\fR(1).
+.IP "   3."
+With -howtorun:script specified, a file containing Scala code may be specified.
+.PP
+If -howtorun: is left as the default (guess), then the \fBscala\fR command will check whether a file of the specified name exists.  If it does, then it will treat it as a script file; if it does not, then it will treat it as the name of an object.
+.PP
+In all three cases, arbitrary scalac options may be specified. The most common option is to specify a classpath with -classpath, but see the \fBscalac\fR(1) page for full details.   
+.PP
+If an object is specified to run, then that object must be a top-level Scala object with the specified name.  The object must define a method \fBmain\fR with the following signature:
+.TP
+\fBdef\fR main(args: Array[String]): Unit
+.PP
+The method must return a \fBUnit\fR value, and it must accept a \fBString\fR array as a parameter.  All arguments specified on the command line will be passed as arguments to the \fBmain\fR method.
+.PP
+If a script file is specified to run, then the file is read and all Scala statements and declarations in the file are processed in order. Any arguments specified will be available via the argsvariable.
+.PP
+Script files may have an optional header that is ignored if present.  There are two ways to format the header: either beginning with #! and ending with !#, or beginning with ::#! and ending with ::!#.
+.PP
+Such a header must have each header boundary start at the beginning of a line.  Headers can be used to make stand-alone script files, as shown in the examples below.
+.PP
+If scala is run from an sbaz(1) directory, then it will add to its classpath any jars installed in the lib directory of the sbaz directory.  Additionally, if no -classpath option is specified, then scala will add ".", the current directory, to the end of the classpath.
+.\"
+.\" ############################## OPTIONS ###############################
+.\"
+.SH OPTIONS
+.PP
+If any compiler options are specified, they must be first in the command line and must be followed by a bare hypen ("-") character. If no arguments are specified after the optional compiler arguments, then an interactive Scala shell is started.  Otherwise, either a script file is run, or a pre-compiled Scala object is run.  It is possible to distinguish the last two cases by using an explicit -object or -script flag, but usually the program can guess correctly.
+.\"
+.\" ############################## ENVIRONMENT ###############################
+.\"
+.SH ENVIRONMENT
+.PP
+.TP
+\fBJAVACMD\fR
+Specify the \fBjava\fR command to be used for running the Scala code.  Arguments may be specified as part of the environment variable; spaces, quotation marks, etc., will be passed directly to the shell for expansion.
+.TP
+\fBJAVA_HOME\fR
+Specify JDK/JRE home directory. This directory is used to locate the \fBjava\fR command unless \fBJAVACMD\fR variable set.
+.TP
+\fBJAVA_OPTS\fR
+Specify the options to be passed to the \fBjava\fR command defined by \fBJAVACMD\fR.
+.IP
+With Java 1.5 (or newer) one may for example configure the memory usage of the JVM as follows: JAVA_OPTS="-Xmx512M -Xms16M -Xss16M"
+.IP
+With GNU Java one may configure the memory usage of the GIJ as follows: JAVA_OPTS="--mx512m --ms16m"
+.IP
+
+.\"
+.\" ############################## EXAMPLES ###############################
+.\"
+.SH EXAMPLES
+.PP
+Here are some examples of running Scala code:
+.PP
+.TP
+Execute a Scala program generated in the current directory
+\fBscala\fR hello.HelloWorld
+.TP
+Execute a Scala program generated in a user-defined directory \fBclasses\fR
+\fBscala\fR \fB\-classpath\fR classes hello.HelloWorld
+.TP
+Execute a Scala program using a user-defined \fBjava\fR command
+\fBenv JAVACMD\fR=/usr/local/bin/cacao \fBscala\fR \fB\-classpath\fR classes hello.HelloWorld
+.TP
+Execute a Scala program using JVM options
+\fBenv JAVACMD\fR=java \fBJAVA_OPTS\fR="-Dmsg=hello -enableassertions" \fBscala\fR \fB\-classpath\fR classes hello.HelloWorld
+.PP
+Here is a complete Scala script for Unix: 
+
+.nf
+#!/bin/sh
+exec scala "$0" "$@"
+!#
+Console.println("Hello, world!")
+argv.toList foreach Console.println
+.fi
+.PP
+Here is a complete Scala script for MS Windows: 
+
+.nf
+::#!
+@echo off
+call scala %0 %*
+goto :eof
+::!#
+Console.println("Hello, world!")
+argv.toList foreach Console.println
+.fi
+.PP
+If you want to use the compilation cache to speed up multiple executions of the script, then add -savecompiled to the scala command:
+
+.nf
+#!/bin/sh
+exec scala -savecompiled "$0" "$@"
+!#
+Console.println("Hello, world!")
+argv.toList foreach Console.println
+.fi
+.\"
+.\" ############################## EXIT STATUS ###############################
+.\"
+.SH "EXIT STATUS"
+.PP
+The \fBscala\fR command returns a zero exit status if it succeeds. Non zero is returned in case of any error.  If a script or top-level object is executed and returns a value, then that return value is passed on to \fBscala\fR.
+.\"
+.\" ############################## AUTHOR ###############################
+.\"
+.SH AUTHOR
+.PP
+Written by Martin Odersky and other members of the Scala team.
+.\"
+.\" ############################## REPORTING BUGS ###############################
+.\"
+.SH "REPORTING BUGS"
+.PP
+Report bugs to https://issues.scala-lang.org/.
+.\"
+.\" ############################## COPYRIGHT ###############################
+.\"
+.SH COPYRIGHT
+.PP
+This is open-source software, available to you under a BSD-like license. See accomponying "copyright" or "LICENSE" file for copying conditions. There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+.\"
+.\" ############################## SEE ALSO ###############################
+.\"
+.SH "SEE ALSO"
+.PP
+\fBfsc\fR(1), \fBscalac\fR(1), \fBscaladoc\fR(1), \fBscalap\fR(1)

@@ -1,0 +1,1 @@
+let fix = (\f -> f(fix f)) in (fix (\g n -> if n == 0 then 1 else n*(g(n-1)))) 5
