@@ -171,11 +171,11 @@ for fi in result:
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[AssociationRules](api/java/org/apache/spark/mllib/fpm/AssociationRules.html)
+[AssociationRules](api/scala/index.html#org.apache.spark.mllib.fpm.AssociationRules)
 implements a parallel rule generation algorithm for constructing rules
 that have a single item as the consequent.
 
-Refer to the [`AssociationRules` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.AssociationRules) for details on the API.
+Refer to the [`AssociationRules` Scala docs](api/java/org/apache/spark/mllib/fpm/AssociationRules.html) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.rdd.RDD
