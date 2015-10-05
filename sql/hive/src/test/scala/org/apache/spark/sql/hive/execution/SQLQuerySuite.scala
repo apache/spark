@@ -1248,4 +1248,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         """.stripMargin), Row("b", 6.0) :: Row("a", 7.0) :: Nil)
     }
   }
+
+  test("SPARK-10337: correctly handle hive views") {
+    withSQLConf("spark.sql.hive.nonNativeView" -> "true") {
+      sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+      sql("CREATE VIEW testView AS SELECT id FROM jt")
+      checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+    }
+  }
 }
