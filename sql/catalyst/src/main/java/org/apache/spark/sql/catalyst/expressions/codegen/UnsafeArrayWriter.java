@@ -33,34 +33,18 @@ public class UnsafeArrayWriter {
   // The offset of the global buffer where we start to write this array.
   private int startingOffset;
 
-  public void initialize(
-      BufferHolder holder,
-      int numElements,
-      boolean needHeader,
-      int fixedElementSize) {
-
+  public void initialize(BufferHolder holder, int numElements, int fixedElementSize) {
     // We need 4 bytes each element to store offset.
     final int fixedSize = 4 * numElements;
-
-    if (needHeader) {
-      // If header is required, we need extra 4 bytes to store the header.
-      holder.grow(fixedSize + 4);
-      // Writes the number of elements into first 4 bytes;
-      Platform.putInt(holder.buffer, holder.cursor, numElements);
-      holder.cursor += 4;
-    } else {
-      holder.grow(fixedSize);
-    }
 
     this.holder = holder;
     this.startingOffset = holder.cursor;
 
+    holder.grow(fixedSize);
     holder.cursor += fixedSize;
 
     // Grows the global buffer ahead for fixed size data.
-    if (fixedElementSize > 0) {
-      holder.grow(fixedElementSize * numElements);
-    }
+    holder.grow(fixedElementSize * numElements);
   }
 
   private long getElementOffset(int ordinal) {
@@ -77,8 +61,6 @@ public class UnsafeArrayWriter {
     final int relativeOffset = holder.cursor - startingOffset;
     Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
   }
-
-
 
   public void writeCompactDecimal(int ordinal, Decimal input, int precision, int scale) {
     // make sure Decimal object has the same scale as DecimalType
@@ -155,21 +137,11 @@ public class UnsafeArrayWriter {
 
   // If this array is already an UnsafeArray, we don't need to go through all elements, we can
   // directly write it.
-  public static void directWrite(
-      BufferHolder holder,
-      UnsafeArrayData input,
-      boolean needHeader) {
+  public static void directWrite(BufferHolder holder, UnsafeArrayData input) {
     final int numBytes = input.getSizeInBytes();
 
-    if (needHeader) {
-      // If header is required, we need extra 4 bytes to store the header.
-      holder.grow(numBytes + 4);
-      // Writes the number of elements into first 4 bytes;
-      Platform.putInt(holder.buffer, holder.cursor, input.numElements());
-      holder.cursor += 4;
-    } else {
-      holder.grow(numBytes);
-    }
+    // grow the global buffer before writing data.
+    holder.grow(numBytes);
 
     // Writes the array content to the variable length portion.
     input.writeToMemory(holder.buffer, holder.cursor);

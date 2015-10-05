@@ -95,8 +95,6 @@ public class UnsafeRowWriter {
     }
   }
 
-
-
   public void writeCompactDecimal(int ordinal, Decimal input, int precision, int scale) {
     // make sure Decimal object has the same scale as DecimalType
     if (input.changePrecision(precision, scale)) {

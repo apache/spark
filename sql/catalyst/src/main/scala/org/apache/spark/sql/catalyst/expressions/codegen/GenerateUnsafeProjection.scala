@@ -393,10 +393,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case _ => input
   }
 
-  val rowWriterClass = classOf[UnsafeRowWriter].getName
-  val arrayWriterClass = classOf[UnsafeArrayWriter].getName
+  private val rowWriterClass = classOf[UnsafeRowWriter].getName
+  private val arrayWriterClass = classOf[UnsafeArrayWriter].getName
 
-  // todo: if the nullability of field is correct, we can use it to save null check.
+  // TODO: if the nullability of field is correct, we can use it to save null check.
   private def writeStructToBuffer(
       ctx: CodeGenContext,
       input: String,
@@ -504,7 +504,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     """
   }
 
-  // todo: if the nullability of array element is correct, we can use it to save null check.
+  // TODO: if the nullability of array element is correct, we can use it to save null check.
   private def writeArrayToBuffer(
       ctx: CodeGenContext,
       input: String,
@@ -567,12 +567,22 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
+    val writeHeader = if (needHeader) {
+      // If header is required, we need to write the number of elements into first 4 bytes.
+      s"""
+        $bufferHolder.grow(4);
+        Platform.putInt($bufferHolder.buffer, $bufferHolder.cursor, $numElements);
+        $bufferHolder.cursor += 4;
+      """
+    } else ""
+
     s"""
+      final int $numElements = $input.numElements();
+      $writeHeader
       if ($input instanceof UnsafeArrayData) {
-        $arrayWriterClass.directWrite($bufferHolder, (UnsafeArrayData) $input, $needHeader);
+        $arrayWriterClass.directWrite($bufferHolder, (UnsafeArrayData) $input);
       } else {
-        final int $numElements = $input.numElements();
-        $arrayWriter.initialize($bufferHolder, $numElements, $needHeader, $fixedElementSize);
+        $arrayWriter.initialize($bufferHolder, $numElements, $fixedElementSize);
 
         for (int $index = 0; $index < $numElements; $index++) {
           if ($input.isNullAt($index)) {
@@ -586,7 +596,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     """
   }
 
-  // todo: if the nullability of value element is correct, we can use it to save null check.
+  // TODO: if the nullability of value element is correct, we can use it to save null check.
   private def writeMapToBuffer(
       ctx: CodeGenContext,
       input: String,
