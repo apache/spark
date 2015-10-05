@@ -47,7 +47,7 @@ into two clusters. The number of desired clusters is passed to the algorithm. We
 Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact the
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
-Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) for details on the API.
+Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`KMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeansModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
@@ -79,7 +79,7 @@ Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a 
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
 
-Refer to the [`KMeans` Java docs](api/java/org/apache/spark/mllib/clustering/KMeans.html) for details on the API.
+Refer to the [`KMeans` Java docs](api/java/org/apache/spark/mllib/clustering/KMeans.html) and [`KMeansModel` Java docs](api/java/org/apache/spark/mllib/clustering/KMeansModel.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.*;
@@ -136,7 +136,7 @@ data into two clusters. The number of desired clusters is passed to the algorith
 Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In
 fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
-Refer to the [`KMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeans) for more details on the API.
+Refer to the [`KMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeans) and [`KMeansModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeansModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.clustering import KMeans, KMeansModel
@@ -190,7 +190,7 @@ In the following example after loading and parsing data, we use a
 object to cluster the data into two clusters. The number of desired clusters is passed
 to the algorithm. We then output the parameters of the mixture model.
 
-Refer to the [`GaussianMixture` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) for details on the API.
+Refer to the [`GaussianMixture` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) and [`GaussianMixtureModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixtureModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.GaussianMixture
@@ -224,7 +224,7 @@ Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a 
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
 
-Refer to the [`GaussianMixture` Java docs](api/java/org/apache/spark/mllib/clustering/GaussianMixture.html) for details on the API.
+Refer to the [`GaussianMixture` Java docs](api/java/org/apache/spark/mllib/clustering/GaussianMixture.html) and [`GaussianMixtureModel` Java docs](api/java/org/apache/spark/mllib/clustering/GaussianMixtureModel.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.*;
@@ -336,7 +336,7 @@ Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel),
 which contains the computed clustering assignments.
 
-Refer to the [`PowerIterationClustering` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) for details on the API.
+Refer to the [`PowerIterationClustering` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
@@ -379,7 +379,7 @@ Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html)
 which contains the computed clustering assignments.
 
-Refer to the [`PowerIterationClustering` Java docs](api/java/org/apache/spark/mllib/clustering/PowerIterationClustering.html) for details on the API.
+Refer to the [`PowerIterationClustering` Java docs](api/java/org/apache/spark/mllib/clustering/PowerIterationClustering.html) and [`PowerIterationClusteringModel` Java docs](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -427,7 +427,7 @@ Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering),
 which contains the computed clustering assignments.
 
-Refer to the [`PowerIterationClustering` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering) for more details on the API.
+Refer to the [`PowerIterationClustering` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClusteringModel) for more details on the API.
 
 {% highlight python %}
 from __future__ import print_function
@@ -589,7 +589,7 @@ to the algorithm. We then output the topics, represented as probability distribu
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`LDA` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) for details on the API.
+Refer to the [`LDA` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) and [`DistributedLDAModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.DistributedLDAModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{LDA, DistributedLDAModel}
@@ -621,7 +621,7 @@ val sameModel = DistributedLDAModel.load(sc, "myLDAModel")
 </div>
 
 <div data-lang="java" markdown="1">
-Refer to the [`LDA` Java docs](api/java/org/apache/spark/mllib/clustering/LDA.html) for details on the API.
+Refer to the [`LDA` Java docs](api/java/org/apache/spark/mllib/clustering/LDA.html) and [`DistributedLDAModel` Java docs](api/java/org/apache/spark/mllib/clustering/DistributedLDAModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -687,7 +687,7 @@ public class JavaLDAExample {
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`LDA` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDA) for more details on the API.
+Refer to the [`LDA` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDA) and [`LDAModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDAModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.clustering import LDA, LDAModel
