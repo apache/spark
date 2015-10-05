@@ -122,7 +122,7 @@ private[sql] class MapColumnAccessor(buffer: ByteBuffer, dataType: DataType)
 
 private[sql] object ColumnAccessor {
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
-    val dup = buffer.order(ByteOrder.nativeOrder)
+    val dup = buffer.duplicate().order(ByteOrder.nativeOrder)
 
     dataType match {
       case NullType => new NullColumnAccess(dup)

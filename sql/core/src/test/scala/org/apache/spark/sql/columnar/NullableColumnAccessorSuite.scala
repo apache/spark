@@ -33,8 +33,6 @@ class TestNullableColumnAccessor[JvmType](
 object TestNullableColumnAccessor {
   def apply[JvmType](buffer: ByteBuffer, columnType: ColumnType[JvmType])
     : TestNullableColumnAccessor[JvmType] = {
-    // Skips the column type ID
-    buffer.getInt()
     new TestNullableColumnAccessor(buffer, columnType)
   }
 }
