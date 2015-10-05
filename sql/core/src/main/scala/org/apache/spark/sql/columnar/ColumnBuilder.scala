@@ -64,8 +64,8 @@ private[sql] class BasicColumnBuilder[JvmType](
     this.columnName = columnName
 
     // Reserves 4 bytes for column type ID
-    buffer = ByteBuffer.allocate(4 + size * columnType.defaultSize)
-    buffer.order(ByteOrder.nativeOrder()).putInt(columnType.typeId)
+    buffer = ByteBuffer.allocate(size * columnType.defaultSize)
+    buffer.order(ByteOrder.nativeOrder())
   }
 
   override def appendFrom(row: InternalRow, ordinal: Int): Unit = {
@@ -176,6 +176,8 @@ private[sql] object ColumnBuilder {
       case struct: StructType => new StructColumnBuilder(struct)
       case array: ArrayType => new ArrayColumnBuilder(array)
       case map: MapType => new MapColumnBuilder(map)
+      case udt: UserDefinedType[_] =>
+        return apply(udt.sqlType, initialSize, columnName, useCompression)
       case other =>
         throw new Exception(s"not suppported type: $other")
     }

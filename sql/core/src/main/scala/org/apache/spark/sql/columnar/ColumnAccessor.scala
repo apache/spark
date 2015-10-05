@@ -123,11 +123,7 @@ private[sql] class NullColumnAccess(buffer: ByteBuffer)
 
 private[sql] object ColumnAccessor {
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
-    val dup = buffer.duplicate().order(ByteOrder.nativeOrder)
-
-    // The first 4 bytes in the buffer indicate the column type.  This field is not used now,
-    // because we always know the data type of the column ahead of time.
-    dup.getInt()
+    val dup = buffer.order(ByteOrder.nativeOrder)
 
     dataType match {
       case NullType => new NullColumnAccess(dup)
@@ -147,6 +143,7 @@ private[sql] object ColumnAccessor {
       case struct: StructType => new StructColumnAccessor(dup, struct)
       case array: ArrayType => new ArrayColumnAccessor(dup, array)
       case map: MapType => new MapColumnAccessor(dup, map)
+      case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
       case other =>
         throw new Exception(s"not support type: $other")
     }
