@@ -1020,7 +1020,9 @@ class Airflow(BaseView):
                 set(tasks) -
                 set([(ti.task_id, ti.execution_date) for ti in tis]))
 
-            tis_all_altered = list(chain(tis_to_change, tis_to_create))
+            tis_all_altered = list(chain(
+                [(ti.task_id, ti.execution_date) for ti in tis_to_change],
+                tis_to_create))
 
             if len(tis_all_altered) > MAX_PERIODS:
                 flash("Too many tasks at once (>{0})".format(
