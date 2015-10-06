@@ -118,11 +118,11 @@ abstract class AggregationIterator(
     functions
   }
 
-  // Positions of those interpreted aggregate functions in allAggregateFunctions.
+  // Positions of those imperative aggregate functions in allAggregateFunctions.
   // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
-  // func2 and func3 are interpreted aggregate functions.
-  // InterpretedAggregateFunctionPositions will be [1, 2].
-  private[this] val allInterpretedAggregateFunctionPositions: Array[Int] = {
+  // func2 and func3 are imperative aggregate functions.
+  // ImperativeAggregateFunctionPositions will be [1, 2].
+  private[this] val allImperativeAggregateFunctionPositions: Array[Int] = {
     val positions = new ArrayBuffer[Int]()
     var i = 0
     while (i < allAggregateFunctions.length) {
@@ -139,24 +139,24 @@ abstract class AggregationIterator(
   private[this] val nonCompleteAggregateFunctions: Array[AggregateFunction2] =
     allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
 
-  // All interpreted aggregate functions with mode Partial, PartialMerge, or Final.
-  private[this] val nonCompleteInterpretedAggregateFunctions: Array[ImperativeAggregateFunction] =
+  // All imperative aggregate functions with mode Partial, PartialMerge, or Final.
+  private[this] val nonCompleteImperativeAggregateFunctions: Array[ImperativeAggregateFunction] =
     nonCompleteAggregateFunctions.collect { case func: ImperativeAggregateFunction => func }
 
   // The projection used to initialize buffer values for all expression-based aggregates.
   private[this] val expressionAggInitialProjection = {
     val initExpressions = allAggregateFunctions.flatMap {
       case ae: ExpressionAggregateFunction => ae.initialValues
-      // For the positions corresponding to interpreted aggregate functions, we'll use special
+      // For the positions corresponding to imperative aggregate functions, we'll use special
       // no-op expressions which are ignored during projection code-generation.
       case i: ImperativeAggregateFunction => Seq.fill(i.aggBufferAttributes.length)(NoOp)
     }
     newMutableProjection(initExpressions, Nil)()
   }
 
-  // All interpreted AggregateFunctions.
-  private[this] val allInterpretedAggregateFunctions: Array[ImperativeAggregateFunction] =
-    allInterpretedAggregateFunctionPositions
+  // All imperative AggregateFunctions.
+  private[this] val allImperativeAggregateFunctions: Array[ImperativeAggregateFunction] =
+    allImperativeAggregateFunctionPositions
       .map(allAggregateFunctions)
       .map(_.asInstanceOf[ImperativeAggregateFunction])
 
@@ -182,10 +182,10 @@ abstract class AggregationIterator(
           expressionAggUpdateProjection.target(currentBuffer)
           // Process all expression-based aggregate functions.
           expressionAggUpdateProjection(rowToBeProcessed(currentBuffer, row))
-          // Process all interpreted aggregate functions.
+          // Process all imperative aggregate functions.
           var i = 0
-          while (i < nonCompleteInterpretedAggregateFunctions.length) {
-            nonCompleteInterpretedAggregateFunctions(i).update(currentBuffer, row)
+          while (i < nonCompleteImperativeAggregateFunctions.length) {
+            nonCompleteImperativeAggregateFunctions(i).update(currentBuffer, row)
             i += 1
           }
         }
@@ -216,10 +216,10 @@ abstract class AggregationIterator(
         (currentBuffer: MutableRow, row: InternalRow) => {
           // Process all expression-based aggregate functions.
           expressionAggMergeProjection.target(currentBuffer)(rowToBeProcessed(currentBuffer, row))
-          // Process all interpreted aggregate functions.
+          // Process all imperative aggregate functions.
           var i = 0
-          while (i < nonCompleteInterpretedAggregateFunctions.length) {
-            nonCompleteInterpretedAggregateFunctions(i).merge(currentBuffer, row)
+          while (i < nonCompleteImperativeAggregateFunctions.length) {
+            nonCompleteImperativeAggregateFunctions(i).merge(currentBuffer, row)
             i += 1
           }
         }
@@ -228,8 +228,8 @@ abstract class AggregationIterator(
       case (Some(Final), Some(Complete)) =>
         val completeAggregateFunctions: Array[AggregateFunction2] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
-        // All interpreted aggregate functions with mode Complete.
-        val completeInterpretedAggregateFunctions: Array[ImperativeAggregateFunction] =
+        // All imperative aggregate functions with mode Complete.
+        val completeImperativeAggregateFunctions: Array[ImperativeAggregateFunction] =
           completeAggregateFunctions.collect { case func: ImperativeAggregateFunction => func }
 
         // The first initialInputBufferOffset values of the input aggregation buffer is
@@ -267,16 +267,16 @@ abstract class AggregationIterator(
           // For all aggregate functions with mode Complete, update buffers.
           completeExpressionAggUpdateProjection.target(currentBuffer)(input)
           var i = 0
-          while (i < completeInterpretedAggregateFunctions.length) {
-            completeInterpretedAggregateFunctions(i).update(currentBuffer, row)
+          while (i < completeImperativeAggregateFunctions.length) {
+            completeImperativeAggregateFunctions(i).update(currentBuffer, row)
             i += 1
           }
 
           // For all aggregate functions with mode Final, merge buffers.
           finalExpressionAggMergeProjection.target(currentBuffer)(input)
           i = 0
-          while (i < nonCompleteInterpretedAggregateFunctions.length) {
-            nonCompleteInterpretedAggregateFunctions(i).merge(currentBuffer, row)
+          while (i < nonCompleteImperativeAggregateFunctions.length) {
+            nonCompleteImperativeAggregateFunctions(i).merge(currentBuffer, row)
             i += 1
           }
         }
@@ -285,8 +285,8 @@ abstract class AggregationIterator(
       case (None, Some(Complete)) =>
         val completeAggregateFunctions: Array[AggregateFunction2] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
-        // All interpreted aggregate functions with mode Complete.
-        val completeInterpretedAggregateFunctions: Array[ImperativeAggregateFunction] =
+        // All imperative aggregate functions with mode Complete.
+        val completeImperativeAggregateFunctions: Array[ImperativeAggregateFunction] =
           completeAggregateFunctions.collect { case func: ImperativeAggregateFunction => func }
 
         val updateExpressions =
@@ -302,8 +302,8 @@ abstract class AggregationIterator(
           // For all aggregate functions with mode Complete, update buffers.
           completeExpressionAggUpdateProjection.target(currentBuffer)(input)
           var i = 0
-          while (i < completeInterpretedAggregateFunctions.length) {
-            completeInterpretedAggregateFunctions(i).update(currentBuffer, row)
+          while (i < completeImperativeAggregateFunctions.length) {
+            completeImperativeAggregateFunctions(i).update(currentBuffer, row)
             i += 1
           }
         }
@@ -368,12 +368,12 @@ abstract class AggregationIterator(
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           // Generate results for all expression-based aggregate functions.
           expressionAggEvalProjection.target(aggregateResult)(currentBuffer)
-          // Generate results for all interpreted aggregate functions.
+          // Generate results for all imperative aggregate functions.
           var i = 0
-          while (i < allInterpretedAggregateFunctions.length) {
+          while (i < allImperativeAggregateFunctions.length) {
             aggregateResult.update(
-              allInterpretedAggregateFunctionPositions(i),
-              allInterpretedAggregateFunctions(i).eval(currentBuffer))
+              allImperativeAggregateFunctionPositions(i),
+              allImperativeAggregateFunctions(i).eval(currentBuffer))
             i += 1
           }
           resultProjection(rowToBeEvaluated(currentGroupingKey, aggregateResult))
@@ -400,8 +400,8 @@ abstract class AggregationIterator(
   protected def initializeBuffer(buffer: MutableRow): Unit = {
     expressionAggInitialProjection.target(buffer)(EmptyRow)
     var i = 0
-    while (i < allInterpretedAggregateFunctions.length) {
-      allInterpretedAggregateFunctions(i).initialize(buffer)
+    while (i < allImperativeAggregateFunctions.length) {
+      allImperativeAggregateFunctions(i).initialize(buffer)
       i += 1
     }
   }
