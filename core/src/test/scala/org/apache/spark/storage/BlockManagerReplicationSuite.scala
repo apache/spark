@@ -54,7 +54,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
   private val serializer = new KryoSerializer(conf)
 
   // Implicitly convert strings to BlockIds for test clarity.
-  implicit private def StringToBlockId(value: String): BlockId = new TestBlockId(value)
+  private implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
 
   private def makeBlockManager(
       maxMem: Long,
