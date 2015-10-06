@@ -121,12 +121,10 @@ object EvaluatePython {
 
   def takeAndServe(df: DataFrame, n: Int): Int = {
     registerPicklers()
-    // This is an annoying hack - we should refactor the code so executeCollect and executeTake
-    // returns InternalRow rather than Row.
-    val converter = CatalystTypeConverters.createToCatalystConverter(df.schema)
-    val iter = new SerDeUtil.AutoBatchedPickler(df.take(n).iterator.map { row =>
-      EvaluatePython.toJava(converter(row).asInstanceOf[InternalRow], df.schema)
-    })
+    val iter = new SerDeUtil.AutoBatchedPickler(
+      df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
+        EvaluatePython.toJava(row, df.schema)
+      })
     PythonRDD.serveIterator(iter, s"serve-DataFrame")
   }
 
