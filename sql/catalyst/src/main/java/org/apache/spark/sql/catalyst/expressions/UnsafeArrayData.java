@@ -284,12 +284,11 @@ public class UnsafeArrayData extends ArrayData {
 
   @Override
   public int hashCode() {
-    int h = 31;
+    int result = 37;
     for (int i = 0; i < sizeInBytes; i++) {
-      h += Platform.getByte(baseObject, baseOffset + i);
-      h *= 31;
+      result = 37 * result + Platform.getByte(baseObject, baseOffset + i);
     }
-    return h;
+    return result;
   }
 
   @Override

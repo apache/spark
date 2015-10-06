@@ -30,8 +30,8 @@ import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
-private[scheduler] case class JobStarted(job: Job) extends JobSchedulerEvent
-private[scheduler] case class JobCompleted(job: Job) extends JobSchedulerEvent
+private[scheduler] case class JobStarted(job: Job, startTime: Long) extends JobSchedulerEvent
+private[scheduler] case class JobCompleted(job: Job, completedTime: Long) extends JobSchedulerEvent
 private[scheduler] case class ErrorReported(msg: String, e: Throwable) extends JobSchedulerEvent
 
 /**
@@ -143,8 +143,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private def processEvent(event: JobSchedulerEvent) {
     try {
       event match {
-        case JobStarted(job) => handleJobStart(job)
-        case JobCompleted(job) => handleJobCompletion(job)
+        case JobStarted(job, startTime) => handleJobStart(job, startTime)
+        case JobCompleted(job, completedTime) => handleJobCompletion(job, completedTime)
         case ErrorReported(m, e) => handleError(m, e)
       }
     } catch {
@@ -153,7 +153,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
   }
 
-  private def handleJobStart(job: Job) {
+  private def handleJobStart(job: Job, startTime: Long) {
     val jobSet = jobSets.get(job.time)
     val isFirstJobOfJobSet = !jobSet.hasStarted
     jobSet.handleJobStart(job)
@@ -162,12 +162,16 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       // correct "jobSet.processingStartTime".
       listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
     }
+    listenerBus.post(StreamingListenerOutputOperationStarted(
+      OutputOperationInfo(job.time, job.outputOpId, job.callSite, Some(startTime), None)))
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
-  private def handleJobCompletion(job: Job) {
+  private def handleJobCompletion(job: Job, completedTime: Long) {
     val jobSet = jobSets.get(job.time)
     jobSet.handleJobCompletion(job)
+    listenerBus.post(StreamingListenerOutputOperationCompleted(
+      OutputOperationInfo(job.time, job.outputOpId, job.callSite, None, Some(completedTime))))
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
     if (jobSet.hasCompleted) {
       jobSets.remove(jobSet.time)
@@ -210,7 +214,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
         // it's possible that when `post` is called, `eventLoop` happens to null.
         var _eventLoop = eventLoop
         if (_eventLoop != null) {
-          _eventLoop.post(JobStarted(job))
+          _eventLoop.post(JobStarted(job, clock.getTimeMillis()))
           // Disable checks for existing output directories in jobs launched by the streaming
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details.
@@ -219,7 +223,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           }
           _eventLoop = eventLoop
           if (_eventLoop != null) {
-            _eventLoop.post(JobCompleted(job))
+            _eventLoop.post(JobCompleted(job, clock.getTimeMillis()))
           }
         } else {
           // JobScheduler has been stopped.

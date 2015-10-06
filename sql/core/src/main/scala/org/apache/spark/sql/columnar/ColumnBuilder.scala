@@ -63,7 +63,6 @@ private[sql] class BasicColumnBuilder[JvmType](
     val size = if (initialSize == 0) DEFAULT_INITIAL_BUFFER_SIZE else initialSize
     this.columnName = columnName
 
-    // Reserves 4 bytes for column type ID
     buffer = ByteBuffer.allocate(size * columnType.defaultSize)
     buffer.order(ByteOrder.nativeOrder())
   }
