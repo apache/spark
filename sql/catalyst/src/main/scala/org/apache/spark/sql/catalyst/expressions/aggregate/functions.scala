@@ -90,9 +90,10 @@ case class Average(child: Expression) extends DeclarativeAggregate {
   }
 }
 
-abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate {
+abstract class CentralMomentAgg(child: Expression) extends AlgebraicAggregate {
 
-  def highestOrder: Int
+  // specify the maximum order moment needed for the computation
+  def maxMoment: Int
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -134,17 +135,19 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
     lazy val delta = Subtract(Cast(child, resultType), currentM1)
     lazy val deltaN = Divide(delta, updateM0)
 
-    lazy val updateM1: Expression = {
+    lazy val updateM1: Expression = if (maxMoment >= 1) {
       Add(currentM1, Divide(delta, updateM0))
+    } else {
+      Cast(Literal(0), resultType)
     }
 
-    lazy val updateM2: Expression = if (highestOrder >= 2) {
+    lazy val updateM2: Expression = if (maxMoment >= 2) {
       Add(currentM2, Multiply(deltaN * delta, Subtract(updateM0, Cast(Literal(1), resultType))))
     } else {
       Cast(Literal(0), resultType)
     }
 
-    lazy val updateM3: Expression = if (highestOrder >= 3) {
+    lazy val updateM3: Expression = if (maxMoment >= 3) {
       currentM3 + deltaN * deltaN * delta * (updateM0 - Cast(Literal(1), resultType)) *
         (updateM0 - Cast(Literal(2), resultType)) -
         deltaN * currentM2 * Cast(Literal(3), resultType)
@@ -152,7 +155,7 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
       Cast(Literal(0), resultType)
     }
 
-    lazy val updateM4: Expression = if (highestOrder >= 4) {
+    lazy val updateM4: Expression = if (maxMoment >= 4) {
       currentM4 + deltaN * deltaN * deltaN * delta * (updateM0 - Cast(Literal(1), resultType)) *
         (updateM0 * updateM0 - updateM0 * Cast(Literal(3), resultType) +
           Cast(Literal(3), resultType)) + deltaN * deltaN * currentM2 *
@@ -173,19 +176,23 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
   override val mergeExpressions = {
 
 
-    lazy val M0 = currentM0.left + currentM0.right
+    lazy val updateM0 = currentM0.left + currentM0.right
     lazy val delta = currentM1.right - currentM1.left
-    lazy val deltaN = delta / M0
+    lazy val deltaN = delta / updateM0
 
-    lazy val M1 = currentM1.left + delta * (currentM0.right / M0)
+    lazy val updateM1 = if (maxMoment >= 1) {
+      currentM1.left + delta * (currentM0.right / updateM0)
+    } else {
+      Cast(Literal(0), resultType)
+    }
 
-    lazy val M2 = if (highestOrder >= 2) {
+    lazy val updateM2 = if (maxMoment >= 2) {
       currentM2.left + currentM2.right + delta * deltaN * currentM0.left * currentM0.right
     } else {
       Cast(Literal(0), resultType)
     }
 
-    lazy val M3 = if (highestOrder >= 3) {
+    lazy val updateM3 = if (maxMoment >= 3) {
       currentM3.left + currentM3.right + deltaN * deltaN * delta * currentM0.left *
         currentM0.right * (currentM0.left - currentM0.right) +
         deltaN * (currentM0.left * currentM2.right - currentM0.right * currentM2.left) *
@@ -194,7 +201,7 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
       Cast(Literal(0), resultType)
     }
 
-    lazy val M4 = if (highestOrder >= 4) {
+    lazy val updateM4 = if (maxMoment >= 4) {
       currentM4.left + currentM4.right + deltaN * deltaN * deltaN * delta * currentM0.left *
         currentM0.right * (currentM0.left * currentM0.left - currentM0.left * currentM0.right +
         currentM0.right * currentM0.right) + deltaN * deltaN * Cast(Literal(6), resultType) *
@@ -208,24 +215,25 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
 
     Seq(
       /* currentM4 = */ If(IsNull(currentM4.left), currentM4.right,
-                          If(IsNull(currentM4.right), currentM4.left, M4)),
+                          If(IsNull(currentM4.right), currentM4.left, updateM4)),
       /* currentM3 = */ If(IsNull(currentM3.left), currentM3.right,
-                          If(IsNull(currentM3.right), currentM3.left, M3)),
+                          If(IsNull(currentM3.right), currentM3.left, updateM3)),
       /* currentM2 = */ If(IsNull(currentM2.left), currentM2.right,
-                          If(IsNull(currentM2.right), currentM2.left, M2)),
+                          If(IsNull(currentM2.right), currentM2.left, updateM2)),
       /* currentM1 = */ If(IsNull(currentM1.left), currentM1.right,
-                            If(IsNull(currentM1.right), currentM1.left, M1)),
+                            If(IsNull(currentM1.right), currentM1.left, updateM1)),
       /* currentM0 = */ If(IsNull(currentM0.left), currentM0.right,
-                            If(IsNull(currentM0.right), currentM0.left, M0))
+                            If(IsNull(currentM0.right), currentM0.left, updateM0))
     )
   }
 }
 
-//case class Average(child: Expression) extends StatisticalMoments(child) {
+//case class Average(child: Expression) extends CentralMomentAgg(child) {
 //
-//  override def highestOrder = 1
+//  override def maxMoment: Int = 1
 //
-//  override def prettyName = "average"
+//  override def prettyName: String = "average"
+//
 //  // average = M_1
 //  override val evaluateExpression: Expression = {
 //    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
@@ -234,24 +242,96 @@ abstract class StatisticalMoments(child: Expression) extends AlgebraicAggregate 
 //  }
 //}
 //
-//case class Variance(child: Expression) extends StatisticalMoments(child) {
+//case class Stddev(child: Expression) extends CentralMomentAgg(child) {
 //
-//  override def highestOrder = 2
+//  override def maxMoment: Int = 2
 //
-//  override def prettyName = "variance"
+//  override def prettyName: String = "stddev"
+//
+//  // stddev = sqrt(M_2 / (M_0 - 1))
+//  override val evaluateExpression: Expression = {
+//    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+//      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+//        Cast(Sqrt(currentM2 / (currentM0 - Cast(Literal(1), resultType))), resultType)))
+//  }
+//}
+//
+//case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
+//
+//  override def maxMoment: Int = 2
+//
+//  override def prettyName: String = "stddev_samp"
+//
+//  // stddev_samp = sqrt(M_2 / (M_0 - 1))
+//  override val evaluateExpression: Expression = {
+//    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+//      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+//        Cast(Sqrt(currentM2 / (currentM0 - Cast(Literal(1), resultType))), resultType)))
+//  }
+//}
+//
+//case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
+//
+//  override def maxMoment: Int = 2
+//
+//  override def prettyName: String = "stddev_pop"
+//
+//  // stddev_pop = sqrt(M_2 / M_0)
+//  override val evaluateExpression: Expression = {
+//    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+//      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+//        Cast(Sqrt(currentM2 / currentM0), resultType)))
+//  }
+//}
+//
+//case class Variance(child: Expression) extends CentralMomentAgg(child) {
+//
+//  override def maxMoment: Int = 2
+//
+//  override def prettyName: String = "variance"
+//
+//  // variance = M_2 / (M_0 - 1)
+//  override val evaluateExpression: Expression = {
+//    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+//      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+//          Cast(currentM2 / (currentM0 - Cast(Literal(1), resultType)), resultType)))
+//  }
+//}
+//
+//case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
+//
+//  override def maxMoment: Int = 2
+//
+//  override def prettyName: String = "var_pop"
+//
 //  // variance = M_2 / M_0
 //  override val evaluateExpression: Expression = {
 //    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
 //      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-//          Cast(currentM2 / currentM0, resultType)))
+//        Cast(currentM2 / currentM0, resultType)))
+//  }
+//}
+//
+//case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
+//
+//  override def maxMoment: Int = 2
+//
+//  override def prettyName: String = "var_samp"
+//
+//  // variance = M_2 / (M_0 - 1)
+//  override val evaluateExpression: Expression = {
+//    If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+//      If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+//        Cast(currentM2 / (currentM0 - Cast(Literal(1), resultType)), resultType)))
 //  }
 //}
 
-case class Skewness(child: Expression) extends StatisticalMoments(child) {
+case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 
-  override def highestOrder: Int = 3
+  override def maxMoment: Int = 3
 
   override def prettyName: String = "skewness"
+
   // TODO: protect against neg sqrt
   // skewness = sqrt(M_0) * M_3 / M_2^(3/2)
   override val evaluateExpression: Expression = {
@@ -263,12 +343,14 @@ case class Skewness(child: Expression) extends StatisticalMoments(child) {
   }
 }
 
-case class Kurtosis(child: Expression) extends StatisticalMoments(child) {
+case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 
-  override def highestOrder: Int = 4
+  override def maxMoment: Int = 4
 
   override def prettyName: String = "kurtosis"
+
   // kurtosis = M_0 * M_4 / M_2^2 - 3
+  // NOTE: this is the formula for excess kurtosis, which is default for R and NumPy
   override val evaluateExpression = {
     If(EqualTo(currentM0, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
       If(EqualTo(currentM0, Cast(Literal(1), resultType)), Cast(Literal(-3), resultType),
@@ -289,7 +371,7 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-    private val currentCount = AttributeReference("currentCount", LongType)()
+  private val currentCount = AttributeReference("currentCount", LongType)()
 
   override val aggBufferAttributes = currentCount :: Nil
 

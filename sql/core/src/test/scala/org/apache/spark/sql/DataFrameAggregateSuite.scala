@@ -242,7 +242,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(kurtosis('a)),
-      Row(0.0))
+      Row(-3.0))
   }
 
   test("null moments") {
