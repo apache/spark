@@ -279,7 +279,10 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     }
   }
 
-  private def failureReasonCell(failureReason: String, rowspan: Int): Seq[Node] = {
+  private def failureReasonCell(
+      failureReason: String,
+      rowspan: Int,
+      includeFirstLineInExpandDetails: Boolean = true): Seq[Node] = {
     val isMultiline = failureReason.indexOf('\n') >= 0
     // Display the first line by default
     val failureReasonSummary = StringEscapeUtils.escapeHtml4(
@@ -288,6 +291,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       } else {
         failureReason
       })
+    val failureDetails =
+      if (isMultiline && !includeFirstLineInExpandDetails) {
+        // Skip the first line
+        failureReason.substring(failureReason.indexOf('\n') + 1)
+      } else {
+        failureReason
+      }
     val details = if (isMultiline) {
       // scalastyle:off
       <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
@@ -295,7 +305,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         +details
       </span> ++
         <div class="stacktrace-details collapsed">
-          <pre>{failureReason}</pre>
+          <pre>{failureDetails}</pre>
         </div>
       // scalastyle:on
     } else {
@@ -329,7 +339,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         (outputOpId, outputOpIdAndSparkJobIds.map(_.sparkJobId).sorted)
       }
     val outputOps = (0 until batchUIData.numOutputOp).map { outputOpId =>
-      val status = batchUIData.failureReason.getOrElse(outputOpId, "Succeeded")
+      val status = batchUIData.failureReason.get(outputOpId).map { failure =>
+        if (failure.startsWith("org.apache.spark.SparkException")) {
+          "Failed due to Spark job error\n" + failure
+        } else {
+          "Failed\n" + failure
+        }
+      }.getOrElse("Succeeded")
       val sparkJobIds = outputOpIdToSparkJobIds.getOrElse(outputOpId, Seq.empty)
       (outputOpId, status, sparkJobIds)
     }
@@ -454,7 +470,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     if (status == "Succeeded") {
       <td rowspan={rowspan.toString}>Succeeded</td>
     } else {
-      failureReasonCell(status, rowspan)
+      failureReasonCell(status, rowspan, includeFirstLineInExpandDetails = false)
     }
   }
 }
