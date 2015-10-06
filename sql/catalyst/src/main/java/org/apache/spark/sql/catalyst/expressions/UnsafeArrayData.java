@@ -286,7 +286,11 @@ public class UnsafeArrayData extends ArrayData {
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    int result = 37;
+    for (int i = 0; i < sizeInBytes; i++) {
+      result = 37 * result + Platform.getByte(baseObject, baseOffset + i);
+    }
+    return result;
   }
 
   @Override

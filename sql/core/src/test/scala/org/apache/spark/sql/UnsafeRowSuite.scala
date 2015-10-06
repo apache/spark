@@ -130,4 +130,11 @@ class UnsafeRowSuite extends SparkFunSuite {
     assert(emptyRow.getInt(0) === unsafeRow.getInt(0))
     assert(emptyRow.getUTF8String(1) === unsafeRow.getUTF8String(1))
   }
+
+  test("calling hashCode on unsafe array returned by getArray(ordinal)") {
+    val row = InternalRow.apply(new GenericArrayData(Array(1L)))
+    val unsafeRow = UnsafeProjection.create(Array[DataType](ArrayType(LongType))).apply(row)
+    // Makes sure hashCode on unsafe array won't crash
+    unsafeRow.getArray(0).hashCode()
+  }
 }
