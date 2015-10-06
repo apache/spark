@@ -29,6 +29,7 @@ class Job(val time: Time, func: () => _) {
   private var _outputOpId: Int = _
   private var isSet = false
   private var _result: Try[_] = null
+  private var _callSite: String = "Unknown"
 
   def run() {
     _result = Try(func())
@@ -69,6 +70,12 @@ class Job(val time: Time, func: () => _) {
     _id = s"streaming job $time.$outputOpId"
     _outputOpId = outputOpId
   }
+
+  def setCallSite(callSite: String): Unit = {
+    _callSite = callSite
+  }
+
+  def callSite: String = _callSite
 
   override def toString: String = id
 }
