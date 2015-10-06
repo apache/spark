@@ -74,8 +74,8 @@ private[sql] object CompressionScheme {
 
   def columnHeaderSize(columnBuffer: ByteBuffer): Int = {
     val header = columnBuffer.duplicate().order(ByteOrder.nativeOrder)
-    val nullCount = header.getInt(4)
-    // Column type ID + null count + null positions
-    4 + 4 + 4 * nullCount
+    val nullCount = header.getInt()
+    // null count + null positions
+    4 + 4 * nullCount
   }
 }

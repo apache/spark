@@ -103,35 +103,23 @@ private[sql] class GenericColumnAccessor(buffer: ByteBuffer, dataType: DataType)
   extends BasicColumnAccessor[Array[Byte]](buffer, GENERIC(dataType))
   with NullableColumnAccessor
 
-private[sql] class DateColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, DATE)
-
-private[sql] class TimestampColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, TIMESTAMP)
-
 private[sql] object ColumnAccessor {
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
-    val dup = buffer.duplicate().order(ByteOrder.nativeOrder)
-
-    // The first 4 bytes in the buffer indicate the column type.  This field is not used now,
-    // because we always know the data type of the column ahead of time.
-    dup.getInt()
+    val buf = buffer.order(ByteOrder.nativeOrder)
 
     dataType match {
-      case BooleanType => new BooleanColumnAccessor(dup)
-      case ByteType => new ByteColumnAccessor(dup)
-      case ShortType => new ShortColumnAccessor(dup)
-      case IntegerType => new IntColumnAccessor(dup)
-      case DateType => new DateColumnAccessor(dup)
-      case LongType => new LongColumnAccessor(dup)
-      case TimestampType => new TimestampColumnAccessor(dup)
-      case FloatType => new FloatColumnAccessor(dup)
-      case DoubleType => new DoubleColumnAccessor(dup)
-      case StringType => new StringColumnAccessor(dup)
-      case BinaryType => new BinaryColumnAccessor(dup)
+      case BooleanType => new BooleanColumnAccessor(buf)
+      case ByteType => new ByteColumnAccessor(buf)
+      case ShortType => new ShortColumnAccessor(buf)
+      case IntegerType | DateType => new IntColumnAccessor(buf)
+      case LongType | TimestampType => new LongColumnAccessor(buf)
+      case FloatType => new FloatColumnAccessor(buf)
+      case DoubleType => new DoubleColumnAccessor(buf)
+      case StringType => new StringColumnAccessor(buf)
+      case BinaryType => new BinaryColumnAccessor(buf)
       case DecimalType.Fixed(precision, scale) if precision < 19 =>
-        new FixedDecimalColumnAccessor(dup, precision, scale)
-      case other => new GenericColumnAccessor(dup, other)
+        new FixedDecimalColumnAccessor(buf, precision, scale)
+      case other => new GenericColumnAccessor(buf, other)
     }
   }
 }

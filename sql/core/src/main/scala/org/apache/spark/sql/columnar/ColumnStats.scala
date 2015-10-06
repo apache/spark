@@ -266,7 +266,3 @@ private[sql] class GenericColumnStats(dataType: DataType) extends ColumnStats {
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
 }
-
-private[sql] class DateColumnStats extends IntColumnStats
-
-private[sql] class TimestampColumnStats extends LongColumnStats

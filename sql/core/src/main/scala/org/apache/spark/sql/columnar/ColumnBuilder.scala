@@ -63,9 +63,8 @@ private[sql] class BasicColumnBuilder[JvmType](
     val size = if (initialSize == 0) DEFAULT_INITIAL_BUFFER_SIZE else initialSize
     this.columnName = columnName
 
-    // Reserves 4 bytes for column type ID
-    buffer = ByteBuffer.allocate(4 + size * columnType.defaultSize)
-    buffer.order(ByteOrder.nativeOrder()).putInt(columnType.typeId)
+    buffer = ByteBuffer.allocate(size * columnType.defaultSize)
+    buffer.order(ByteOrder.nativeOrder())
   }
 
   override def appendFrom(row: InternalRow, ordinal: Int): Unit = {
@@ -121,11 +120,6 @@ private[sql] class FixedDecimalColumnBuilder(
 private[sql] class GenericColumnBuilder(dataType: DataType)
   extends ComplexColumnBuilder(new GenericColumnStats(dataType), GENERIC(dataType))
 
-private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
-
-private[sql] class TimestampColumnBuilder
-  extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
-
 private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
 
@@ -154,10 +148,8 @@ private[sql] object ColumnBuilder {
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
-      case IntegerType => new IntColumnBuilder
-      case DateType => new DateColumnBuilder
-      case LongType => new LongColumnBuilder
-      case TimestampType => new TimestampColumnBuilder
+      case IntegerType | DateType => new IntColumnBuilder
+      case LongType | TimestampType => new LongColumnBuilder
       case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder

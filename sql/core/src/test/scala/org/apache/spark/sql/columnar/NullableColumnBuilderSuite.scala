@@ -38,7 +38,7 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
   import ColumnarTestUtils._
 
   Seq(
-    BOOLEAN, BYTE, SHORT, INT, DATE, LONG, TIMESTAMP, FLOAT, DOUBLE,
+    BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
     STRING, BINARY, FIXED_DECIMAL(15, 10), GENERIC(ArrayType(StringType)))
     .foreach {
     testNullableColumnBuilder(_)
@@ -53,7 +53,6 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       val columnBuilder = TestNullableColumnBuilder(columnType)
       val buffer = columnBuilder.build()
 
-      assertResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
       assertResult(0, "Wrong null count")(buffer.getInt())
       assert(!buffer.hasRemaining)
     }
@@ -68,7 +67,6 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
 
       val buffer = columnBuilder.build()
 
-      assertResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
       assertResult(0, "Wrong null count")(buffer.getInt())
     }
 
@@ -84,7 +82,6 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
 
       val buffer = columnBuilder.build()
 
-      assertResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
       assertResult(4, "Wrong null count")(buffer.getInt())
 
       // For null positions
