@@ -97,7 +97,7 @@ abstract class AggregationIterator(
           // PartialMerge and Final.
           func match {
             case function: ImperativeAggregateFunction =>
-              function.withNewInputBufferOffset(inputBufferOffset)
+              function.withNewInputAggBufferOffset(inputBufferOffset)
             case _ =>
           }
           inputBufferOffset += func.bufferSchema.length

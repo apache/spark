@@ -398,15 +398,15 @@ private[sql] case class ScalaUDAF(
    * Sets the inputBufferOffset to newInputBufferOffset and then create a new instance of
    * `inputAggregateBuffer` based on this new inputBufferOffset.
    */
-  override def withNewInputBufferOffset(newInputBufferOffset: Int): Unit = {
-    super.withNewInputBufferOffset(newInputBufferOffset)
+  override def withNewInputAggBufferOffset(newInputBufferOffset: Int): Unit = {
+    super.withNewInputAggBufferOffset(newInputBufferOffset)
     // inputBufferOffset has been updated.
     inputAggregateBuffer =
       new InputAggregationBuffer(
         bufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
-        inputBufferOffset,
+        inputAggBufferOffset,
         null)
   }
 
@@ -422,14 +422,14 @@ private[sql] case class ScalaUDAF(
         bufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
-        mutableBufferOffset,
+        mutableAggBufferOffset,
         null)
     evalAggregateBuffer =
       new InputAggregationBuffer(
         bufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
-        mutableBufferOffset,
+        mutableAggBufferOffset,
         null)
   }
 

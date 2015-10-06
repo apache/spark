@@ -552,7 +552,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
   def initialize(buffer: MutableRow): Unit = {
     var word = 0
     while (word < numWords) {
-      buffer.setLong(mutableBufferOffset + word, 0)
+      buffer.setLong(mutableAggBufferOffset + word, 0)
       word += 1
     }
   }
@@ -576,7 +576,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
 
       // Get the word containing the register we are interested in.
       val wordOffset = idx / REGISTERS_PER_WORD
-      val word = buffer.getLong(mutableBufferOffset + wordOffset)
+      val word = buffer.getLong(mutableAggBufferOffset + wordOffset)
 
       // Extract the M[J] register value from the word.
       val shift = REGISTER_SIZE * (idx - (wordOffset * REGISTERS_PER_WORD))
@@ -585,7 +585,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
 
       // Assign the maximum number of leading zeros to the register.
       if (pw > Midx) {
-        buffer.setLong(mutableBufferOffset + wordOffset, (word & ~mask) | (pw << shift))
+        buffer.setLong(mutableAggBufferOffset + wordOffset, (word & ~mask) | (pw << shift))
       }
     }
   }
@@ -598,8 +598,8 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
-      val word1 = buffer1.getLong(mutableBufferOffset + wordOffset)
-      val word2 = buffer2.getLong(inputBufferOffset + wordOffset)
+      val word1 = buffer1.getLong(mutableAggBufferOffset + wordOffset)
+      val word2 = buffer2.getLong(inputAggBufferOffset + wordOffset)
       var word = 0L
       var i = 0
       var mask = REGISTER_WORD_MASK
@@ -609,7 +609,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
         i += 1
         idx += 1
       }
-      buffer1.setLong(mutableBufferOffset + wordOffset, word)
+      buffer1.setLong(mutableAggBufferOffset + wordOffset, word)
       wordOffset += 1
     }
   }
@@ -671,7 +671,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
-      val word = buffer.getLong(mutableBufferOffset + wordOffset)
+      val word = buffer.getLong(mutableAggBufferOffset + wordOffset)
       var i = 0
       var shift = 0
       while (idx < m && i < REGISTERS_PER_WORD) {

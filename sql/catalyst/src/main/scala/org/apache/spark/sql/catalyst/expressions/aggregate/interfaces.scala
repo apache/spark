@@ -92,6 +92,23 @@ private[sql] case class AggregateExpression2(
   override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
 }
 
+/**
+ * AggregateFunction2 is the superclass of two aggregation function interfaces:
+ *
+ *  - [[ImperativeAggregateFunction]] is for aggregation functions that are specified in terms of
+ *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
+ *  - [[ExpressionAggregateFunction]] is for aggregation functions that are specified using
+ *    Catalyst expressions.
+ *
+ * In both interfaces, aggregates must define the schema ([[bufferSchema]]) and attributes
+ * ([[bufferAttributes]]) of an aggregation buffer which is used to hold partial aggregate results.
+ * At runtime, multiple aggregate functions are evaluated by the same operator using a combined
+ * aggregation buffer which concatenates the aggregation buffers of the individual aggregate
+ * functions.
+ *
+ * Code which accepts [[AggregateFunction2]] instances should be prepared to handle both types of
+ * aggregate functions.
+ */
 sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInputTypes {
 
   /** An aggregate function is not foldable. */
@@ -116,91 +133,150 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
   def supportsPartial: Boolean = true
 }
 
+/**
+ * API for aggregation functions that are expressed in terms of imperative initialize(), update(),
+ * and merge() functions which operate on Row-based aggregation buffers.
+ *
+ * Within these functions, code should access fields of the mutable aggregation buffer by adding the
+ * bufferSchema-relative field number to `mutableAggBufferOffset` then using this new field number
+ * to access the buffer Row. This is necessary because this aggregation function's buffer is
+ * embedded inside of a larger shared aggregation buffer when an aggregation operator evaluates
+ * multiple aggregate functions at the same time.
+ *
+ * We need to perform similar field number arithmetic when merging multiple intermediate
+ * aggregate buffers together in `merge()` (in this case, use `inputAggBufferOffset` when accessing
+ * the input buffer).
+ */
 abstract class ImperativeAggregateFunction extends AggregateFunction2 {
 
   /**
-   * The offset of this function's start buffer value in the
-   * underlying shared mutable aggregation buffer.
-   * For example, we have two aggregate functions `avg(x)` and `avg(y)`, which share
-   * the same aggregation buffer. In this shared buffer, the position of the first
-   * buffer value of `avg(x)` will be 0 and the position of the first buffer value of `avg(y)`
-   * will be 2.
+   * The offset of this function's first buffer value in the underlying shared mutable aggregation
+   * buffer.
+   *
+   * For example, we have two aggregate functions `avg(x)` and `avg(y)`, which share the same
+   * aggregation buffer. In this shared buffer, the position of the first buffer value of `avg(x)`
+   * will be 0 and the position of the first buffer value of `avg(y)` will be 2:
+   *
+   *          avg(x) mutableAggBufferOffset = 0
+   *                  |
+   *                  v
+   *                  +--------+--------+--------+--------+
+   *                  |  sum1  | count1 |  sum2  | count2 |
+   *                  +--------+--------+--------+--------+
+   *                                    ^
+   *                                    |
+   *                     avg(y) mutableAggBufferOffset = 2
+   *
    */
-  protected var mutableBufferOffset: Int = 0
+  protected var mutableAggBufferOffset: Int = 0
 
-  def withNewMutableBufferOffset(newMutableBufferOffset: Int): Unit = {
-    mutableBufferOffset = newMutableBufferOffset
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Unit = {
+    mutableAggBufferOffset = newMutableAggBufferOffset
   }
 
   /**
-   * The offset of this function's start buffer value in the
-   * underlying shared input aggregation buffer. An input aggregation buffer is used
-   * when we merge two aggregation buffers and it is basically the immutable one
-   * (we merge an input aggregation buffer and a mutable aggregation buffer and
-   * then store the new buffer values to the mutable aggregation buffer).
-   * Usually, an input aggregation buffer also contain extra elements like grouping
-   * keys at the beginning. So, mutableBufferOffset and inputBufferOffset are often
-   * different.
-   * For example, we have a grouping expression `key``, and two aggregate functions
-   * `avg(x)` and `avg(y)`. In this shared input aggregation buffer, the position of the first
+   * The offset of this function's start buffer value in the underlying shared input aggregation
+   * buffer. An input aggregation buffer is used when we merge two aggregation buffers together in
+   * the `update()` function and is immutable (we merge an input aggregation buffer and a mutable
+   * aggregation buffer and then store the new buffer values to the mutable aggregation buffer).
+   *
+   * An input aggregation buffer may contain extra fields, such as grouping keys, at its start, so
+   * mutableAggBufferOffset and inputAggBufferOffset are often different.
+   *
+   * For example, say we have a grouping expression, `key`, and two aggregate functions,
+   * `avg(x)` and `avg(y)`. In the shared input aggregation buffer, the position of the first
    * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
-   * will be 3 (position 0 is used for the value of key`).
+   * will be 3 (position 0 is used for the value of `key`):
+   *
+   *          avg(x) inputAggBufferOffset = 1
+   *                   |
+   *                   v
+   *          +--------+--------+--------+--------+--------+
+   *          |  key   |  sum1  | count1 |  sum2  | count2 |
+   *          +--------+--------+--------+--------+--------+
+   *                                     ^
+   *                                     |
+   *                       avg(y) inputAggBufferOffset = 3
+   *
    */
-  protected var inputBufferOffset: Int = 0
+  protected var inputAggBufferOffset: Int = 0
 
-  def withNewInputBufferOffset(newInputBufferOffset: Int): Unit = {
-    inputBufferOffset = newInputBufferOffset
+  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Unit = {
+    inputAggBufferOffset = newInputAggBufferOffset
   }
 
   /**
-   * Initializes its aggregation buffer located in `buffer`.
-   * It will use bufferOffset to find the starting point of
-   * its buffer in the given `buffer` shared with other functions.
+   * Initializes the mutable aggregation buffer located in `mutableAggBuffer`.
+   *
+   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
    */
-  def initialize(buffer: MutableRow): Unit
+  def initialize(mutableAggBuffer: MutableRow): Unit
 
   /**
-   * Updates its aggregation buffer located in `buffer` based on the given `input`.
-   * It will use bufferOffset to find the starting point of its buffer in the given `buffer`
-   * shared with other functions.
+   * Updates its aggregation buffer, located in `mutableAggBuffer`, based on the given `inputRow`.
+   *
+   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
    */
-  def update(buffer: MutableRow, input: InternalRow): Unit
+  def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit
 
   /**
-   * Updates its aggregation buffer located in `buffer1` by combining intermediate results
-   * in the current buffer and intermediate results from another buffer `buffer2`.
-   * It will use bufferOffset to find the starting point of its buffer in the given `buffer1`
-   * and `buffer2`.
+   * Combines new intermediate results from the `inputAggBuffer` with the existing intermediate
+   * results in the `mutableAggBuffer.`
+   *
+   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
+   * Use `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
    */
-  def merge(buffer1: MutableRow, buffer2: InternalRow): Unit
+  def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit
 }
 
 /**
- * A helper class for aggregate functions that can be implemented in terms of Catalyst expressions.
+ * API for aggregation functions that are expressed in terms of Catalyst expressions.
+ *
+ * When implementing a new expression-based aggregate function, start by implementing
+ * `bufferAttributes`, defining attributes for the fields of the mutable aggregation buffer. You
+ * can then use these attributes when defining `updateExpressions`, `mergeExpressions`, and
+ * `evaluateExpressions`.
  */
 abstract class ExpressionAggregateFunction
   extends AggregateFunction2
   with Serializable
   with Unevaluable {
 
+  /**
+   * Expressions for initializing empty aggregation buffers.
+   */
   val initialValues: Seq[Expression]
+
+  /**
+   * Eexpressions for updating the mutable aggregation buffer based on an input row.
+   */
   val updateExpressions: Seq[Expression]
+
+  /**
+   * A sequence of expressions for merging two aggregation buffers together. When defining these
+   * expressions, you can use the syntax `attributeName.left` and `attributeName.right` to refer
+   * to the attributes corresponding to each of the buffers being merged (this magic is enabled
+   * by the [[RichAttribute]] implicit class).
+   */
   val mergeExpressions: Seq[Expression]
+
+  /**
+   * An expression which returns the final value for this aggregate function. Its data type should
+   * match this expression's [[dataType]].
+   */
   val evaluateExpression: Expression
 
   override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
 
-  /** An expresison-based aggregate's bufferSchema is derived from bufferAttributes. */
-  override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
+  /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
+  final override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
 
-  // TODO(josh): Do we need this?
   /**
    * A helper class for representing an attribute used in merging two
    * aggregation buffers. When merging two buffers, `bufferLeft` and `bufferRight`,
    * we merge buffer values and then update bufferLeft. A [[RichAttribute]]
    * of an [[AttributeReference]] `a` has two functions `left` and `right`,
    * which represent `a` in `bufferLeft` and `bufferRight`, respectively.
-   * @param a
    */
   implicit class RichAttribute(a: AttributeReference) {
     /** Represents this attribute at the mutable buffer side. */
