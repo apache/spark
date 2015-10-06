@@ -211,8 +211,7 @@ setMethod("cast",
 setMethod("%in%",
           signature(x = "Column"),
           function(x, table) {
-            table <- listToSeq(as.list(table))
-            jc <- callJMethod(x@jc, "in", table)
+            jc <- callJMethod(x@jc, "in", as.list(table))
             return(column(jc))
           })
 

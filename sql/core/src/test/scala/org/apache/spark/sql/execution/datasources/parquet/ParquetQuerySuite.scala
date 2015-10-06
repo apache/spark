@@ -22,6 +22,9 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -30,6 +33,7 @@ import org.apache.spark.util.Utils
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext {
+  import testImplicits._
 
   test("simple select queries") {
     withParquetTable((0 until 10).map(i => (i, i.toString)), "t") {
@@ -40,22 +44,22 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    ctx.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    sqlContext.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
     withParquetTable(data, "t") {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(ctx.table("t"), (data ++ data).map(Row.fromTuple))
+      checkAnswer(sqlContext.table("t"), (data ++ data).map(Row.fromTuple))
     }
-    ctx.catalog.unregisterTable(Seq("tmp"))
+    sqlContext.catalog.unregisterTable(Seq("tmp"))
   }
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    ctx.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    sqlContext.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
     withParquetTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
-      checkAnswer(ctx.table("t"), data.map(Row.fromTuple))
+      checkAnswer(sqlContext.table("t"), data.map(Row.fromTuple))
     }
-    ctx.catalog.unregisterTable(Seq("tmp"))
+    sqlContext.catalog.unregisterTable(Seq("tmp"))
   }
 
   test("self-join") {
@@ -118,9 +122,9 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     val schema = StructType(List(StructField("d", DecimalType(18, 0), false),
       StructField("time", TimestampType, false)).toArray)
     withTempPath { file =>
-      val df = ctx.createDataFrame(ctx.sparkContext.parallelize(data), schema)
+      val df = sqlContext.createDataFrame(sparkContext.parallelize(data), schema)
       df.write.parquet(file.getCanonicalPath)
-      val df2 = ctx.read.parquet(file.getCanonicalPath)
+      val df2 = sqlContext.read.parquet(file.getCanonicalPath)
       checkAnswer(df2, df.collect().toSeq)
     }
   }
@@ -129,12 +133,12 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
         val basePath = dir.getCanonicalPath
-        ctx.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
-        ctx.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
         // delete summary files, so if we don't merge part-files, one column will not be included.
         Utils.deleteRecursively(new File(basePath + "/foo=1/_metadata"))
         Utils.deleteRecursively(new File(basePath + "/foo=1/_common_metadata"))
-        assert(ctx.read.parquet(basePath).columns.length === expectedColumnNumber)
+        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
       }
     }
 
@@ -153,9 +157,9 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
         val basePath = dir.getCanonicalPath
-        ctx.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
-        ctx.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
-        assert(ctx.read.parquet(basePath).columns.length === expectedColumnNumber)
+        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
       }
     }
 
@@ -171,19 +175,19 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   test("SPARK-8990 DataFrameReader.parquet() should respect user specified options") {
     withTempPath { dir =>
       val basePath = dir.getCanonicalPath
-      ctx.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
-      ctx.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=a").toString)
+      sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+      sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=a").toString)
 
       // Disables the global SQL option for schema merging
       withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
         assertResult(2) {
           // Disables schema merging via data source option
-          ctx.read.option("mergeSchema", "false").parquet(basePath).columns.length
+          sqlContext.read.option("mergeSchema", "false").parquet(basePath).columns.length
         }
 
         assertResult(3) {
           // Enables schema merging via data source option
-          ctx.read.option("mergeSchema", "true").parquet(basePath).columns.length
+          sqlContext.read.option("mergeSchema", "true").parquet(basePath).columns.length
         }
       }
     }
@@ -193,7 +197,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     withTempPath { dir =>
       val basePath = dir.getCanonicalPath
       val schema = StructType(Array(StructField("name", DecimalType(10, 5), false)))
-      val rowRDD = sqlContext.sparkContext.parallelize(Array(Row(Decimal("67123.45"))))
+      val rowRDD = sparkContext.parallelize(Array(Row(Decimal("67123.45"))))
       val df = sqlContext.createDataFrame(rowRDD, schema)
       df.write.parquet(basePath)
 
@@ -203,9 +207,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("SPARK-10005 Schema merging for nested struct") {
-    val sqlContext = _sqlContext
-    import sqlContext.implicits._
-
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -230,54 +231,168 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
-  test("SPARK-10301 Clipping nested structs in requested schema") {
+  test("SPARK-10301 requested schema clipping - same schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sqlContext.range(1).selectExpr("NAMED_STRUCT('a', id, 'b', id + 1) AS s").coalesce(1)
+      df.write.parquet(path)
+
+      val userDefinedSchema =
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("a", LongType, nullable = true)
+              .add("b", LongType, nullable = true),
+            nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Row(Row(0L, 1L)))
+    }
+  }
+
+  // This test case is ignored because of parquet-mr bug PARQUET-370
+  ignore("SPARK-10301 requested schema clipping - schemas with disjoint sets of fields") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sqlContext.range(1).selectExpr("NAMED_STRUCT('a', id, 'b', id + 1) AS s").coalesce(1)
+      df.write.parquet(path)
+
+      val userDefinedSchema =
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("c", LongType, nullable = true)
+              .add("d", LongType, nullable = true),
+            nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Row(Row(null, null)))
+    }
+  }
+
+  test("SPARK-10301 requested schema clipping - requested schema contains physical schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sqlContext.range(1).selectExpr("NAMED_STRUCT('a', id, 'b', id + 1) AS s").coalesce(1)
+      df.write.parquet(path)
+
+      val userDefinedSchema =
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("a", LongType, nullable = true)
+              .add("b", LongType, nullable = true)
+              .add("c", LongType, nullable = true)
+              .add("d", LongType, nullable = true),
+            nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Row(Row(0L, 1L, null, null)))
+    }
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sqlContext.range(1).selectExpr("NAMED_STRUCT('a', id, 'd', id + 3) AS s").coalesce(1)
+      df.write.parquet(path)
+
+      val userDefinedSchema =
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("a", LongType, nullable = true)
+              .add("b", LongType, nullable = true)
+              .add("c", LongType, nullable = true)
+              .add("d", LongType, nullable = true),
+            nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Row(Row(0L, null, null, 3L)))
+    }
+  }
+
+  test("SPARK-10301 requested schema clipping - physical schema contains requested schema") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df = sqlContext
         .range(1)
-        .selectExpr("NAMED_STRUCT('a', id, 'b', id) AS s")
+        .selectExpr("NAMED_STRUCT('a', id, 'b', id + 1, 'c', id + 2, 'd', id + 3) AS s")
         .coalesce(1)
 
-      df.write.mode("append").parquet(path)
+      df.write.parquet(path)
 
-      val userDefinedSchema = new StructType()
-        .add("s", new StructType().add("a", LongType, nullable = true), nullable = true)
+      val userDefinedSchema =
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("a", LongType, nullable = true)
+              .add("b", LongType, nullable = true),
+            nullable = true)
 
       checkAnswer(
         sqlContext.read.schema(userDefinedSchema).parquet(path),
-        Row(Row(0)))
+        Row(Row(0L, 1L)))
     }
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-
-      val df1 = sqlContext
+      val df = sqlContext
         .range(1)
-        .selectExpr("NAMED_STRUCT('a', id, 'b', id) AS s")
+        .selectExpr("NAMED_STRUCT('a', id, 'b', id + 1, 'c', id + 2, 'd', id + 3) AS s")
         .coalesce(1)
 
-      val df2 = sqlContext
-        .range(1, 2)
-        .selectExpr("NAMED_STRUCT('b', id, 'c', id) AS s")
-        .coalesce(1)
+      df.write.parquet(path)
 
-      df1.write.parquet(path)
-      df2.write.mode(SaveMode.Append).parquet(path)
-
-      val userDefinedSchema = new StructType()
-        .add("s",
-          new StructType()
-            .add("a", LongType, nullable = true)
-            .add("c", LongType, nullable = true),
-          nullable = true)
+      val userDefinedSchema =
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("a", LongType, nullable = true)
+              .add("d", LongType, nullable = true),
+            nullable = true)
 
       checkAnswer(
         sqlContext.read.schema(userDefinedSchema).parquet(path),
-        Seq(
-          Row(Row(0, null)),
-          Row(Row(null, 1))))
+        Row(Row(0L, 3L)))
     }
+  }
 
+  test("SPARK-10301 requested schema clipping - schemas overlap but don't contain each other") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sqlContext
+        .range(1)
+        .selectExpr("NAMED_STRUCT('a', id, 'b', id + 1, 'c', id + 2) AS s")
+        .coalesce(1)
+
+      df.write.parquet(path)
+
+      val userDefinedSchema =
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("b", LongType, nullable = true)
+              .add("c", LongType, nullable = true)
+              .add("d", LongType, nullable = true),
+            nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Row(Row(1L, 2L, null)))
+    }
+  }
+
+  test("SPARK-10301 requested schema clipping - deeply nested struct") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -304,6 +419,134 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       checkAnswer(
         sqlContext.read.schema(userDefinedSchema).parquet(path),
         Row(Row(Seq(Row(0, null)))))
+    }
+  }
+
+  test("SPARK-10301 requested schema clipping - out of order") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df1 = sqlContext
+        .range(1)
+        .selectExpr("NAMED_STRUCT('a', id, 'b', id + 1, 'c', id + 2) AS s")
+        .coalesce(1)
+
+      val df2 = sqlContext
+        .range(1, 2)
+        .selectExpr("NAMED_STRUCT('c', id + 2, 'b', id + 1, 'd', id + 3) AS s")
+        .coalesce(1)
+
+      df1.write.parquet(path)
+      df2.write.mode(SaveMode.Append).parquet(path)
+
+      val userDefinedSchema = new StructType()
+        .add("s",
+          new StructType()
+            .add("a", LongType, nullable = true)
+            .add("b", LongType, nullable = true)
+            .add("d", LongType, nullable = true),
+          nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Seq(
+          Row(Row(0, 1, null)),
+          Row(Row(null, 2, 4))))
+    }
+  }
+
+  test("SPARK-10301 requested schema clipping - schema merging") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df1 = sqlContext
+        .range(1)
+        .selectExpr("NAMED_STRUCT('a', id, 'c', id + 2) AS s")
+        .coalesce(1)
+
+      val df2 = sqlContext
+        .range(1, 2)
+        .selectExpr("NAMED_STRUCT('a', id, 'b', id + 1, 'c', id + 2) AS s")
+        .coalesce(1)
+
+      df1.write.mode(SaveMode.Append).parquet(path)
+      df2.write.mode(SaveMode.Append).parquet(path)
+
+      checkAnswer(
+        sqlContext
+          .read
+          .option("mergeSchema", "true")
+          .parquet(path)
+          .selectExpr("s.a", "s.b", "s.c"),
+        Seq(
+          Row(0, null, 2),
+          Row(1, 2, 3)))
+    }
+  }
+
+  test("SPARK-10301 requested schema clipping - UDT") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = sqlContext
+        .range(1)
+        .selectExpr(
+          """NAMED_STRUCT(
+            |  'f0', CAST(id AS STRING),
+            |  'f1', NAMED_STRUCT(
+            |    'a', CAST(id + 1 AS INT),
+            |    'b', CAST(id + 2 AS LONG),
+            |    'c', CAST(id + 3.5 AS DOUBLE)
+            |  )
+            |) AS s
+          """.stripMargin)
+        .coalesce(1)
+
+      df.write.mode(SaveMode.Append).parquet(path)
+
+      val userDefinedSchema =
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("f1", new NestedStructUDT, nullable = true),
+            nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Row(Row(NestedStruct(1, 2L, 3.5D))))
+    }
+  }
+}
+
+object TestingUDT {
+  @SQLUserDefinedType(udt = classOf[NestedStructUDT])
+  case class NestedStruct(a: Integer, b: Long, c: Double)
+
+  class NestedStructUDT extends UserDefinedType[NestedStruct] {
+    override def sqlType: DataType =
+      new StructType()
+        .add("a", IntegerType, nullable = true)
+        .add("b", LongType, nullable = false)
+        .add("c", DoubleType, nullable = false)
+
+    override def serialize(obj: Any): Any = {
+      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      obj match {
+        case n: NestedStruct =>
+          row.setInt(0, n.a)
+          row.setLong(1, n.b)
+          row.setDouble(2, n.c)
+      }
+    }
+
+    override def userClass: Class[NestedStruct] = classOf[NestedStruct]
+
+    override def deserialize(datum: Any): NestedStruct = {
+      datum match {
+        case row: InternalRow =>
+          NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
+      }
     }
   }
 }

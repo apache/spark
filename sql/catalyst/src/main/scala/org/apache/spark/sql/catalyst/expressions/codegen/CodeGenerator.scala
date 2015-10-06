@@ -84,11 +84,11 @@ class CodeGenContext {
   /**
    * Holding all the functions those will be added into generated class.
    */
-  val addedFuntions: mutable.Map[String, String] =
+  val addedFunctions: mutable.Map[String, String] =
     mutable.Map.empty[String, String]
 
   def addNewFunction(funcName: String, funcCode: String): Unit = {
-    addedFuntions += ((funcName, funcCode))
+    addedFunctions += ((funcName, funcCode))
   }
 
   final val JAVA_BOOLEAN = "boolean"
@@ -272,6 +272,7 @@ class CodeGenContext {
    * 64kb code size limit in JVM
    *
    * @param row the variable name of row that is used by expressions
+   * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
     val blocks = new ArrayBuffer[String]()
@@ -298,8 +299,8 @@ class CodeGenContext {
            |  $body
            |}
          """.stripMargin
-         addNewFunction(name, code)
-         name
+        addNewFunction(name, code)
+        name
       }
 
       functions.map(name => s"$name($row);").mkString("\n")
@@ -337,7 +338,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   }
 
   protected def declareAddedFunctions(ctx: CodeGenContext): String = {
-    ctx.addedFuntions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
+    ctx.addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
   }
 
   /**

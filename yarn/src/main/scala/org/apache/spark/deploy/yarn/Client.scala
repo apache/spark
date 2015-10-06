@@ -86,7 +86,11 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
-  def stop(): Unit = yarnClient.stop()
+  def stop(): Unit = {
+    yarnClient.stop()
+    // Unset YARN mode system env variable, to allow switching between cluster types.
+    System.clearProperty("SPARK_YARN_MODE")
+  }
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
@@ -1045,7 +1049,10 @@ object Client extends Logging {
           s"in favor of the $CONF_SPARK_JAR configuration variable.")
       System.getenv(ENV_SPARK_JAR)
     } else {
-      SparkContext.jarOfClass(this.getClass).head
+      SparkContext.jarOfClass(this.getClass).getOrElse(throw new SparkException("Could not "
+        + "find jar containing Spark classes. The jar can be defined using the "
+        + "spark.yarn.jar configuration option. If testing Spark, either set that option or "
+        + "make sure SPARK_PREPEND_CLASSES is not set."))
     }
   }
 

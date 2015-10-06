@@ -239,7 +239,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       mapSideCombine: Boolean,
       serializer: Serializer): JavaPairRDD[K, C] = {
       implicit val ctag: ClassTag[C] = fakeClassTag
-    fromRDD(rdd.combineByKey(
+    fromRDD(rdd.combineByKeyWithClassTag(
       createCombiner,
       mergeValue,
       mergeCombiners,

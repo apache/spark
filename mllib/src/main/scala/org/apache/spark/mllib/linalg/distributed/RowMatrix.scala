@@ -24,7 +24,6 @@ import scala.collection.mutable.ListBuffer
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV, axpy => brzAxpy,
   svd => brzSvd, MatrixSingularException, inv}
 import breeze.numerics.{sqrt => brzSqrt}
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
@@ -110,7 +109,8 @@ class RowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the Gramian matrix `A^T A`.
+   * Computes the Gramian matrix `A^T A`. Note that this cannot be computed on matrices with
+   * more than 65535 columns.
    */
   @Since("1.0.0")
   def computeGramianMatrix(): Matrix = {
@@ -123,7 +123,7 @@ class RowMatrix @Since("1.0.0") (
     // Compute the upper triangular part of the gram matrix.
     val GU = rows.treeAggregate(new BDV[Double](new Array[Double](nt)))(
       seqOp = (U, v) => {
-        RowMatrix.dspr(1.0, v, U.data)
+        BLAS.spr(1.0, v, U.data)
         U
       }, combOp = (U1, U2) => U1 += U2)
 
@@ -151,7 +151,8 @@ class RowMatrix @Since("1.0.0") (
    *  - s is a Vector of size k, holding the singular values in descending order,
    *  - V is a Matrix of size n x k that satisfies V' * V = eye(k).
    *
-   * We assume n is smaller than m. The singular values and the right singular vectors are derived
+   * We assume n is smaller than m, though this is not strictly required.
+   * The singular values and the right singular vectors are derived
    * from the eigenvalues and the eigenvectors of the Gramian matrix A' * A. U, the matrix
    * storing the right singular vectors, is computed via matrix multiplication as
    * U = A * (V * S^-1^), if requested by user. The actual method to use is determined
@@ -321,7 +322,8 @@ class RowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the covariance matrix, treating each row as an observation.
+   * Computes the covariance matrix, treating each row as an observation. Note that this cannot
+   * be computed on matrices with more than 65535 columns.
    * @return a local dense matrix of size n x n
    */
   @Since("1.0.0")
@@ -374,6 +376,8 @@ class RowMatrix @Since("1.0.0") (
    * and the columns are in descending order of component variance.
    * The row data do not need to be "centered" first; it is not necessary for
    * the mean of each column to be 0.
+   *
+   * Note that this cannot be computed on matrices with more than 65535 columns.
    *
    * @param k number of top principal components.
    * @return a matrix of size n-by-k, whose columns are principal components
@@ -672,42 +676,6 @@ class RowMatrix @Since("1.0.0") (
 @Since("1.0.0")
 @Experimental
 object RowMatrix {
-
-  /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's DSPR.
-   *
-   * @param U the upper triangular part of the matrix packed in an array (column major)
-   */
-  private def dspr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
-    // TODO: Find a better home (breeze?) for this method.
-    val n = v.size
-    v match {
-      case DenseVector(values) =>
-        blas.dspr("U", n, alpha, values, 1, U)
-      case SparseVector(size, indices, values) =>
-        val nnz = indices.length
-        var colStartIdx = 0
-        var prevCol = 0
-        var col = 0
-        var j = 0
-        var i = 0
-        var av = 0.0
-        while (j < nnz) {
-          col = indices(j)
-          // Skip empty columns.
-          colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
-          col = indices(j)
-          av = alpha * values(j)
-          i = 0
-          while (i <= j) {
-            U(colStartIdx + indices(i)) += av * values(i)
-            i += 1
-          }
-          j += 1
-          prevCol = col
-        }
-    }
-  }
 
   /**
    * Fills a full square matrix from its upper triangular part.

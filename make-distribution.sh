@@ -198,6 +198,7 @@ fi
 
 # Copy license and ASF files
 cp "$SPARK_HOME/LICENSE" "$DISTDIR"
+cp -r "$SPARK_HOME/licenses" "$DISTDIR"
 cp "$SPARK_HOME/NOTICE" "$DISTDIR"
 
 if [ -e "$SPARK_HOME"/CHANGES.txt ]; then
