@@ -116,29 +116,6 @@ abstract class AbstractCommandBuilder {
     return cmd;
   }
 
-  /**
-   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
-   * set it.
-   */
-  void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
-    if (getJavaVendor() == JavaVendor.IBM) {
-      return;
-    }
-    String[] version = System.getProperty("java.version").split("\\.");
-    if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
-      return;
-    }
-
-    for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
-        return;
-      }
-    }
-
-    cmd.add("-XX:MaxPermSize=256m");
-  }
-
   void addOptionString(List<String> cmd, String options) {
     if (!isEmpty(options)) {
       for (String opt : parseOptionString(options)) {
