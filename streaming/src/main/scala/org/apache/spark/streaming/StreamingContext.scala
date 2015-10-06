@@ -565,12 +565,11 @@ class StreamingContext private[streaming] (
       }
     }
 
-    val enableDynamicAllocation =
-      sc.conf.getBoolean("spark.streaming.dynamicAllocation.enabled", defaultValue = false)
-
-    require(enableDynamicAllocation || !Utils.isDynamicAllocationEnabled(sc.conf),
-      "Dynamic allocation is not supported with Spark Streaming currently, since it " +
-        s"could lead to data loss in some cases. ")
+    if (Utils.isDynamicAllocationEnabled(sc.conf)) {
+      logWarning("Dynamic Allocation is enabled for this application. " +
+        "Enabling Dynamic allocation for Spark Streaming applications can cause data loss if " +
+        "Write Ahead Log is not enabled for non-replayable sources, like Flume.")
+    }
   }
 
   /**
