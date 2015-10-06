@@ -253,7 +253,7 @@ abstract class ExpressionAggregate
   val initialValues: Seq[Expression]
 
   /**
-   * Eexpressions for updating the mutable aggregation buffer based on an input row.
+   * Expressions for updating the mutable aggregation buffer based on an input row.
    */
   val updateExpressions: Seq[Expression]
 

@@ -531,23 +531,23 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    */
   private[this] val numWords = m / REGISTERS_PER_WORD + 1
 
-  def children: Seq[Expression] = Seq(child)
+  override def children: Seq[Expression] = Seq(child)
 
-  def nullable: Boolean = false
+  override def nullable: Boolean = false
 
-  def dataType: DataType = LongType
+  override def dataType: DataType = LongType
 
-  def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /** Allocate enough words to store all registers. */
-  val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
     AttributeReference(s"MS[$i]", LongType)()
   }
 
   /** Fill all words with zeros. */
-  def initialize(buffer: MutableRow): Unit = {
+  override def initialize(buffer: MutableRow): Unit = {
     var word = 0
     while (word < numWords) {
       buffer.setLong(mutableAggBufferOffset + word, 0)
@@ -560,7 +560,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    *
    * Variable names in the HLL++ paper match variable names in the code.
    */
-  def update(buffer: MutableRow, input: InternalRow): Unit = {
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
     val v = child.eval(input)
     if (v != null) {
       // Create the hashed value 'x'.
@@ -592,7 +592,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    * Merge the HLL buffers by iterating through the registers in both buffers and select the
    * maximum number of leading zeros for each register.
    */
-  def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
@@ -662,7 +662,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    *
    * Variable names in the HLL++ paper match variable names in the code.
    */
-  def eval(buffer: InternalRow): Any = {
+  override def eval(buffer: InternalRow): Any = {
     // Compute the inverse of indicator value 'z' and count the number of zeros 'V'.
     var zInverse = 0.0d
     var V = 0.0d
