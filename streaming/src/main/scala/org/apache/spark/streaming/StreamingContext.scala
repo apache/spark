@@ -44,7 +44,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{Utils, CallSite, ShutdownHookManager, ThreadUtils}
+import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -565,7 +565,10 @@ class StreamingContext private[streaming] (
       }
     }
 
-    require(!Utils.isDynamicAllocationEnabled(sc.conf),
+    val enableDynamicAllocation =
+      sc.conf.getBoolean("spark.streaming.dynamicAllocation.enabled", defaultValue = false)
+
+    require(enableDynamicAllocation || !Utils.isDynamicAllocationEnabled(sc.conf),
       "Dynamic allocation is not supported with Spark Streaming currently, since it " +
         s"could lead to data loss in some cases. ")
   }
