@@ -339,11 +339,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 
   private def makeMapWriter(mapType: MapType): ValueWriter = {
-    val keyType = mapType.keyType
-    val valueType = mapType.valueType
-    val keyWriter = makeWriter(keyType)
-    val valueWriter = makeWriter(valueType)
-    val mutableRow = new SpecificMutableRow(keyType :: valueType :: Nil)
+    val keyWriter = makeWriter(mapType.keyType)
+    val valueWriter = makeWriter(mapType.valueType)
     val repeatedGroupName = if (writeLegacyParquetFormat) {
       // Legacy mode:
       //
@@ -370,6 +367,9 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     (row: SpecializedGetters, ordinal: Int) => {
       val map = row.getMap(ordinal)
+      val keyArray = map.keyArray()
+      val valueArray = map.valueArray()
+
       consumeGroup {
         // Only creates the repeated field if the map is non-empty.
         if (map.numElements() > 0) {
@@ -377,16 +377,14 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
             var i = 0
             while (i < map.numElements()) {
               consumeGroup {
-                mutableRow.update(0, map.keyArray().get(i, keyType))
                 consumeField("key", 0) {
-                  keyWriter.apply(mutableRow, 0)
+                  keyWriter.apply(keyArray, i)
                 }
 
                 // Only creates the "value" field if the value if non-empty
                 if (!map.valueArray().isNullAt(i)) {
-                  mutableRow.update(1, map.valueArray().get(i, valueType))
                   consumeField("value", 1) {
-                    valueWriter.apply(mutableRow, 1)
+                    valueWriter.apply(valueArray, i)
                   }
                 }
               }
