@@ -410,8 +410,8 @@ private[sql] case class ScalaUDAF(
    * Sets the mutableBufferOffset to newMutableBufferOffset and then create a new instance of
    * `mutableAggregateBuffer` and `evalAggregateBuffer` based on this new mutableBufferOffset.
    */
-  override def withNewMutableBufferOffset(newMutableBufferOffset: Int): Unit = {
-    super.withNewMutableBufferOffset(newMutableBufferOffset)
+  override def withNewMutableAggBufferOffset(newMutableBufferOffset: Int): Unit = {
+    super.withNewMutableAggBufferOffset(newMutableBufferOffset)
     // mutableBufferOffset has been updated.
     mutableAggregateBuffer =
       new MutableAggregationBufferImpl(

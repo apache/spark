@@ -108,7 +108,7 @@ abstract class AggregationIterator(
       // because bindReference will create a new instance of the function.
       funcWithBoundReferences match {
         case function: ImperativeAggregateFunction =>
-          function.withNewMutableBufferOffset(mutableBufferOffset)
+          function.withNewMutableAggBufferOffset(mutableBufferOffset)
         case _ =>
       }
       mutableBufferOffset += funcWithBoundReferences.aggBufferSchema.length
