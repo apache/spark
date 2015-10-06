@@ -1133,8 +1133,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     conf.clear()
   }
 
-  // TODO: Enable this test once fix SPARK-10902
-  ignore("current_database with mutiple sessions") {
+  test("current_database with mutiple sessions") {
     sql("create database a")
     sql("use a")
     val s2 = newSession()

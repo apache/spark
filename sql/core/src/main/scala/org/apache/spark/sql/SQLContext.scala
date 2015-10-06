@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{execution => sparkexecution}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
@@ -313,7 +314,19 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def cacheTable(tableName: String): Unit = {
-    cacheManager.cacheQuery(this, table(tableName), Some(tableName))
+    cacheQuery(table(tableName), Some(tableName))
+  }
+
+  /**
+   * Caches the data produced by the logical representation of the given [[DataFrame]]. Unlike
+   * `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because recomputing
+   * the in-memory columnar representation of the underlying table is expensive.
+   */
+  private[sql] def cacheQuery(
+      query: DataFrame,
+      tableName: Option[String] = None,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK): Unit = {
+    cacheManager.cacheQuery(this, query, tableName, storageLevel)
   }
 
   /**

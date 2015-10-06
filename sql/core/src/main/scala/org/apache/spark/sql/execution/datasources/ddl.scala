@@ -138,7 +138,7 @@ case class RefreshTable(tableIdent: TableIdentifier)
       // Uncache the logicalPlan.
       sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
       // Cache it again.
-      sqlContext.cacheManager.cacheQuery(sqlContext, df, Some(tableIdent.table))
+      sqlContext.cacheQuery(df, Some(tableIdent.table))
     }
 
     Seq.empty[Row]

@@ -40,9 +40,11 @@ import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.{ParserDialect, SqlParser}
+import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, SqlParser}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck}
 import org.apache.spark.sql.execution.{CacheManager, ExecutedCommand, ExtractPythonUDFs, SetCommand}
 import org.apache.spark.sql.hive.client._
@@ -60,6 +62,19 @@ private[hive] class HiveQLDialect(sqlContext: HiveContext) extends ParserDialect
     sqlContext.executionHive.withHiveState {
       HiveQl.parseSql(sqlText)
     }
+  }
+}
+
+/**
+ * Returns the current database of metadataHive.
+ */
+private[hive] case class CurrentDatabase(ctx: HiveContext)
+  extends LeafExpression with CodegenFallback {
+  override def dataType: DataType = StringType
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def eval(input: InternalRow): Any = {
+    ctx.metadataHive.currentDatabase
   }
 }
 
@@ -422,6 +437,10 @@ class HiveContext private[hive](
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
     new HiveFunctionRegistry(FunctionRegistry.builtin.copy())
+
+  functionRegistry.registerFunction(
+    "current_database",
+    (expressions: Seq[Expression]) => new CurrentDatabase(this))
 
   /* An analyzer that uses the Hive metastore. */
   @transient
