@@ -1249,11 +1249,46 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-10337: correctly handle hive views") {
-    withSQLConf("spark.sql.hive.nonNativeView" -> "true") {
-      sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
-      sql("CREATE VIEW testView AS SELECT id FROM jt")
-      checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+  test("create hive view for json table") {
+    // json table is not hive-compatible, make sure the new flag fix it.
+    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+      withTable("jt") {
+        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+        sql("CREATE VIEW testView AS SELECT id FROM jt")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("create hive view for partitioned parquet table") {
+    // partitioned parquet table is not hive-compatible, make sure the new flag fix it.
+    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+      withTable("parTable") {
+        val df = Seq(1 -> "a").toDF("i", "j")
+        df.write.format("parquet").partitionBy("i").saveAsTable("parTable")
+        sql("CREATE VIEW testView AS SELECT i, j FROM parTable")
+        checkAnswer(sql("SELECT * FROM testView"), Row(1, "a"))
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("create hive view for joined tables") {
+    // make sure the new flag can handle some complex cases like join and schema change.
+    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+      withTable("jt1", "jt2") {
+        sqlContext.range(1, 10).toDF("id1").write.format("json").saveAsTable("jt1")
+        sqlContext.range(1, 10).toDF("id2").write.format("json").saveAsTable("jt2")
+        sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+
+        val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
+        df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+
+        sql("DROP VIEW testView")
+      }
     }
   }
 }

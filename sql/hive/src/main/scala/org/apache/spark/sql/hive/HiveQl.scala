@@ -582,7 +582,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
      case view @ Token("TOK_CREATEVIEW", children)
         if children.collect { case t @ Token("TOK_QUERY", _) => t }.nonEmpty =>
-
       val Seq(
         Some(viewNameParts),
         Some(query),
@@ -613,7 +612,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
         val schema = maybeColumns.map { cols =>
           BaseSemanticAnalyzer.getColumns(cols, true).asScala.map { field =>
-            HiveColumn(field.getName, field.getType, field.getComment)
+            // We can't specify column types when create view, so fill it with null first, and
+            // update it after the schema has been resolved later.
+            HiveColumn(field.getName, null, field.getComment)
           }
         }.getOrElse(Seq.empty[HiveColumn])
 
@@ -646,6 +647,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           serde = None,
           viewText = Some(originalText))
 
+        // We need to keep the original SQL string so that if `spark.sql.canonicalizeView` is false,
+        // we can fall back to use hive native command later.
+        // We can remove this when parser is configurable(can access SQLConf) in the future.
         val sql = context.getTokenRewriteStream
           .toString(view.getTokenStartIndex, view.getTokenStopIndex)
         CreateViewAsSelect(tableDesc, nodeToPlan(query, context), allowExisting.isDefined, sql)

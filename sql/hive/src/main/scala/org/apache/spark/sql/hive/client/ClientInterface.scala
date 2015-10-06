@@ -45,6 +45,7 @@ private[hive] case class HivePartition(
     values: Seq[String],
     storage: HiveStorageDescriptor)
 
+// The `hiveType` is nullable, for cases like CREATE VIEW that can't specify column types.
 private[hive] case class HiveColumn(name: String, hiveType: String, comment: String)
 private[hive] case class HiveTable(
     specifiedDatabase: Option[String],

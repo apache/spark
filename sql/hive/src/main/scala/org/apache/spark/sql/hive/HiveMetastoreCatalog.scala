@@ -591,7 +591,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       case p: LogicalPlan if p.resolved => p
 
       case CreateViewAsSelect(table, child, allowExisting, sql) =>
-        if (conf.nonNativeView) {
+        if (conf.canonicalizeView) {
           val (dbName, tblName) = processDatabaseAndTableName(
             table.specifiedDatabase.getOrElse(client.currentDatabase), table.name)
 

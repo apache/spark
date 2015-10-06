@@ -319,13 +319,14 @@ private[spark] object SQLConf {
     doc = "When true, some predicates will be pushed down into the Hive metastore so that " +
           "unmatching partitions can be eliminated earlier.")
 
-  val HIVE_NON_NATIVE_VIEW = booleanConf("spark.sql.hive.nonNativeView",
+  val CANONICALIZE_VIEW = booleanConf("spark.sql.canonicalizeView",
     defaultValue = Some(false),
     doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
           "Note that this function is experimental and should ony be used when you are using " +
           "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
           "view should be fully qualified, i.e. use `tbl1`.`col1` instead of `*` whenever " +
-          "possible, or you may get wrong result.")
+          "possible, or you may get wrong result.",
+    isPublic = false)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
@@ -479,7 +480,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  private[spark] def nonNativeView: Boolean = getConf(HIVE_NON_NATIVE_VIEW)
+  private[spark] def canonicalizeView: Boolean = getConf(CANONICALIZE_VIEW)
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 
