@@ -300,7 +300,10 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        return self.limit(num).collect()
+        with SCCallSiteSync(self._sc) as css:
+            port = self._sc._jvm.org.apache.spark.sql.execution.EvaluatePython.takeAndServe(
+                self._jdf, num)
+        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -927,6 +930,8 @@ class DataFrame(object):
     def dropDuplicates(self, subset=None):
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
+
+        :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([ \

@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -87,7 +86,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointI
   /**
    * If false, the algorithm will pass trees to executors to match instances with nodes.
    * If true, the algorithm will cache node IDs for each instance.
-   * Caching can speed up training of deeper trees.
+   * Caching can speed up training of deeper trees. Users can set how often should the
+   * cache be checkpointed or disable it by setting checkpointInterval.
    * (default = false)
    * @group expertParam
    */

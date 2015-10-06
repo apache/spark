@@ -19,9 +19,10 @@ package org.apache.spark.sql.columnar
 
 import scala.collection.immutable.HashSet
 import scala.util.Random
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.types.{DataType, Decimal, AtomicType}
+import org.apache.spark.sql.types.{AtomicType, Decimal}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ColumnarTestUtils {
@@ -43,9 +44,7 @@ object ColumnarTestUtils {
       case BYTE => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
       case SHORT => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
       case INT => Random.nextInt()
-      case DATE => Random.nextInt()
       case LONG => Random.nextLong()
-      case TIMESTAMP => Random.nextLong()
       case FLOAT => Random.nextFloat()
       case DOUBLE => Random.nextDouble()
       case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
