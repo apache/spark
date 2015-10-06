@@ -343,7 +343,12 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         if (failure.startsWith("org.apache.spark.SparkException")) {
           "Failed due to Spark job error\n" + failure
         } else {
-          "Failed\n" + failure
+          var nextLineIndex = failure.indexOf("\n")
+          if (nextLineIndex < 0) {
+            nextLineIndex = failure.size
+          }
+          val firstLine = failure.substring(0, nextLineIndex)
+          s"Failed due to error: $firstLine\n$failure"
         }
       }.getOrElse("Succeeded")
       val sparkJobIds = outputOpIdToSparkJobIds.getOrElse(outputOpId, Seq.empty)
