@@ -144,9 +144,9 @@ The ScalaTest plugin also supports running only a specific test suite as follows
 
     mvn -Dhadoop.version=... -DwildcardSuites=org.apache.spark.repl.ReplSuite test
 
-# Building module
+# Building submodules individually
 
-It's possible to build Spark sub-modules using the mvn -pl option.
+It's possible to build Spark sub-modules using the `mvn -pl` option.
 
 For instance, you can build the Spark Streaming module using:
 
@@ -154,7 +154,7 @@ For instance, you can build the Spark Streaming module using:
 mvn -pl :spark-streaming_2.10 clean install
 {% endhighlight %}
 
-where spark-streaming_2.10 is the artifactId as defined in streaming/pom.xml file.
+where `spark-streaming_2.10` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 # Continuous Compilation
 
