@@ -97,7 +97,7 @@ object Utils {
     // Check if we can use TungstenAggregate.
     val usesTungstenAggregate =
       child.sqlContext.conf.unsafeEnabled &&
-      aggregateExpressions.forall(_.aggregateFunction.isInstanceOf[ExpressionAggregateFunction]) &&
+      aggregateExpressions.forall(_.aggregateFunction.isInstanceOf[ExpressionAggregate]) &&
       supportsTungstenAggregate(
         groupingExpressions,
         aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
@@ -157,7 +157,7 @@ object Utils {
             // aggregateFunctionMap contains unique aggregate functions.
             val aggregateFunction =
               aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct)._1
-            aggregateFunction.asInstanceOf[ExpressionAggregateFunction].evaluateExpression
+            aggregateFunction.asInstanceOf[ExpressionAggregate].evaluateExpression
           case expression =>
             // We do not rely on the equality check at here since attributes may
             // different cosmetically. Instead, we use semanticEquals.
@@ -215,7 +215,7 @@ object Utils {
     val usesTungstenAggregate =
       child.sqlContext.conf.unsafeEnabled &&
         aggregateExpressions.forall(
-          _.aggregateFunction.isInstanceOf[ExpressionAggregateFunction]) &&
+          _.aggregateFunction.isInstanceOf[ExpressionAggregate]) &&
         supportsTungstenAggregate(
           groupingExpressions,
           aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
@@ -359,7 +359,7 @@ object Utils {
                 // aggregate functions that have not been rewritten.
                 aggregateFunctionMap(function, isDistinct)._1
               }
-            aggregateFunction.asInstanceOf[ExpressionAggregateFunction].evaluateExpression
+            aggregateFunction.asInstanceOf[ExpressionAggregate].evaluateExpression
           case expression =>
             // We do not rely on the equality check at here since attributes may
             // different cosmetically. Instead, we use semanticEquals.

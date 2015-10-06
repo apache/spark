@@ -554,7 +554,7 @@ private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
     isUDAFBridgeRequired: Boolean = false)
-  extends ImperativeAggregateFunction with HiveInspectors {
+  extends ImperativeAggregate with HiveInspectors {
 
   def this() = this(null, null)
 

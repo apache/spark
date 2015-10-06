@@ -95,9 +95,9 @@ private[sql] case class AggregateExpression2(
 /**
  * AggregateFunction2 is the superclass of two aggregation function interfaces:
  *
- *  - [[ImperativeAggregateFunction]] is for aggregation functions that are specified in terms of
+ *  - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
  *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
- *  - [[ExpressionAggregateFunction]] is for aggregation functions that are specified using
+ *  - [[ExpressionAggregate]] is for aggregation functions that are specified using
  *    Catalyst expressions.
  *
  * In both interfaces, aggregates must define the schema ([[aggBufferSchema]]) and attributes
@@ -152,7 +152,7 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
  * aggregate buffers together in `merge()` (in this case, use `inputAggBufferOffset` when accessing
  * the input buffer).
  */
-abstract class ImperativeAggregateFunction extends AggregateFunction2 {
+abstract class ImperativeAggregate extends AggregateFunction2 {
 
   /**
    * The offset of this function's first buffer value in the underlying shared mutable aggregation
@@ -242,7 +242,7 @@ abstract class ImperativeAggregateFunction extends AggregateFunction2 {
  * can then use these attributes when defining `updateExpressions`, `mergeExpressions`, and
  * `evaluateExpressions`.
  */
-abstract class ExpressionAggregateFunction
+abstract class ExpressionAggregate
   extends AggregateFunction2
   with Serializable
   with Unevaluable {
