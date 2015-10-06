@@ -279,8 +279,8 @@ object functions {
   def mean(columnName: String): Column = avg(columnName)
 
   /**
-   * Aggregate function: returns the average of the values in a group.
-   * Alias for avg.
+   * Aggregate function: returns the skewness of the values in a group.
+   * Alias for skewness.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -288,8 +288,8 @@ object functions {
   def skewness(e: Column): Column = Skewness(e.expr)
 
   /**
-   * Aggregate function: returns the average of the values in a group.
-   * Alias for avg.
+   * Aggregate function: returns the skewness of the values in a group.
+   * Alias for skewness.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -297,8 +297,8 @@ object functions {
   def skewness(columnName: String): Column = skewness(Column(columnName))
 
   /**
-   * Aggregate function: returns the average of the values in a group.
-   * Alias for avg.
+   * Aggregate function: returns the kurtosis of the values in a group.
+   * Alias for kurtosis.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -306,8 +306,8 @@ object functions {
   def kurtosis(e: Column): Column = Kurtosis(e.expr)
 
   /**
-   * Aggregate function: returns the average of the values in a group.
-   * Alias for avg.
+   * Aggregate function: returns the kurtosis of the values in a group.
+   * Alias for kurtosis.
    *
    * @group agg_funcs
    * @since 1.6.0

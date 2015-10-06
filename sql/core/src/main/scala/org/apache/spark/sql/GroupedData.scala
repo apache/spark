@@ -253,11 +253,11 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
+   * Compute the skewness for each numeric columns for each group. This is an alias for `skewness`.
    * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the average values for them.
+   * When specified columns are given, only compute the skewness values for them.
    *
-   * @since 1.3.0
+   * @since 1.6.0
    */
   @scala.annotation.varargs
   def skewness(colNames: String*): DataFrame = {
@@ -265,11 +265,11 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
+   * Compute the kurtosis for each numeric columns for each group. This is an alias for `kurtosis`.
    * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the average values for them.
+   * When specified columns are given, only compute the kurtosis values for them.
    *
-   * @since 1.3.0
+   * @since 1.6.0
    */
   @scala.annotation.varargs
   def kurtosis(colNames: String*): DataFrame = {
