@@ -125,8 +125,7 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
    * merged with mutable aggregation buffers in the merge() function or merge expressions).
    * These attributes are created automatically by cloning the [[aggBufferAttributes]].
    */
-  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
+  def inputAggBufferAttributes: Seq[AttributeReference]
 
   /**
    * Indicates if this function supports partial aggregation.
@@ -232,6 +231,9 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
    * Use `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
    */
   def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit
+
+  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
 }
 
 /**
@@ -273,6 +275,9 @@ abstract class ExpressionAggregate
 
   /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
   final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+
+  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
 
   /**
    * A helper class for representing an attribute used in merging two
