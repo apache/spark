@@ -565,14 +565,9 @@ class StreamingContext private[streaming] (
       }
     }
 
-    if (Utils.isDynamicAllocationEnabled(sc.conf)) {
-      val maxExecutors = sc.conf.getInt("spark.dynamicAllocation.maxExecutors", 2)
-      sc.conf.set("spark.dynamicAllocation.enabled", false.toString)
-      sc.conf.set("spark.executor.instances", maxExecutors.toString)
-      logWarning("Dynamic allocation is not supported with Spark Streaming currently, since it " +
-        s"could lead to data loss in some cases. " +
-        s"The number of executors is being set to $maxExecutors")
-    }
+    require(!Utils.isDynamicAllocationEnabled(sc.conf),
+      "Dynamic allocation is not supported with Spark Streaming currently, since it " +
+        s"could lead to data loss in some cases. ")
   }
 
   /**
