@@ -2312,9 +2312,12 @@ class Variable(Base):
 
     @classmethod
     @provide_session
-    def get(cls, key, session, deserialize_json=False):
+    def get(cls, key, session, deserialize_json=False, default_var=None):
         obj = session.query(cls).filter(cls.key == key).first()
-        v = obj.val
+        if obj is None and default_var is not None:
+            v = default_var
+        else:
+            v = obj.val
         if deserialize_json and v:
             v = json.loads(v)
         return v
