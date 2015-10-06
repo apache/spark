@@ -90,8 +90,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level, returnValues = true)
     } else {
-      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
+      val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+      tryToPut(blockId, bytes, bytes.limit, deserialized = false, droppedBlocks)
+      PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
     }
   }
 
@@ -104,15 +105,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
-    val putAttempt = tryToPut(blockId, () => bytes, size, deserialized = false)
+    val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+    val putSuccess = tryToPut(blockId, () => bytes, size, deserialized = false, droppedBlocks)
     val data =
-      if (putAttempt.success) {
+      if (putSuccess) {
         assert(bytes.limit == size)
         Right(bytes.duplicate())
       } else {
         null
       }
-    PutResult(size, data, putAttempt.droppedBlocks)
+    PutResult(size, data, droppedBlocks)
   }
 
   override def putArray(
@@ -120,14 +122,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       values: Array[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
+    val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     if (level.deserialized) {
       val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
-      val putAttempt = tryToPut(blockId, values, sizeEstimate, deserialized = true)
-      PutResult(sizeEstimate, Left(values.iterator), putAttempt.droppedBlocks)
+      tryToPut(blockId, values, sizeEstimate, deserialized = true, droppedBlocks)
+      PutResult(sizeEstimate, Left(values.iterator), droppedBlocks)
     } else {
       val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
+      tryToPut(blockId, bytes, bytes.limit, deserialized = false, droppedBlocks)
+      PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
     }
   }
 
@@ -320,8 +323,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       blockId: BlockId,
       value: Any,
       size: Long,
-      deserialized: Boolean): ResultWithDroppedBlocks = {
-    tryToPut(blockId, () => value, size, deserialized)
+      deserialized: Boolean,
+      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    tryToPut(blockId, () => value, size, deserialized, droppedBlocks)
   }
 
   /**
@@ -337,13 +341,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * blocks to free memory for one block, another thread may use up the freed space for
    * another block.
    *
-   * Return whether put was successful, along with the blocks dropped in the process.
+   * All blocks evicted in the process, if any, will be added to `droppedBlocks`.
+   *
+   * @return whether put was successful.
    */
   private def tryToPut(
       blockId: BlockId,
       value: () => Any,
       size: Long,
-      deserialized: Boolean): ResultWithDroppedBlocks = {
+      deserialized: Boolean,
+      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
 
     /* TODO: Its possible to optimize the locking by locking entries only when selecting blocks
      * to be dropped. Once the to-be-dropped blocks have been selected, and lock on entries has
@@ -351,12 +358,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
      * for freeing up more space for another block that needs to be put. Only then the actually
      * dropping of blocks (and writing to disk if necessary) can proceed in parallel. */
 
-    val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-
     accountingLock.synchronized {
       // Note: if we have previously unrolled this block successfully, then pending unroll
       // memory should be non-zero. This is the amount that we already reserved during the
       // unrolling process. In this case, we can just reuse this space to cache our block.
+      // This must be synchronized so the release and re-acquire can happen atomically.
       releasePendingUnrollMemoryForThisTask()
       val numBytesAcquired = memoryManager.acquireStorageMemory(blockId, size, droppedBlocks)
       val enoughMemory = numBytesAcquired == size
@@ -381,7 +387,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
         memoryManager.releaseStorageMemory(numBytesAcquired)
       }
-      ResultWithDroppedBlocks(enoughMemory, droppedBlocks)
+      enoughMemory
     }
   }
 
@@ -393,13 +399,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    *
    * @param blockId the ID of the block we are freeing space for
    * @param space the size of this block
-   * @param evictedBlocks a holder for blocks evicted in the process
-   * @return whether there is enough free space
+   * @param droppedBlocks a holder for blocks evicted in the process
+   * @return whether there is enough free space.
    */
   private[spark] def ensureFreeSpace(
       blockId: BlockId,
       space: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     accountingLock.synchronized {
       val freeMemory = maxMemory - memoryUsed
       val rddToAdd = getRddId(blockId)
@@ -450,7 +456,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }
             val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
-            droppedBlockStatus.foreach { status => evictedBlocks += ((blockId, status)) }
+            droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
           }
         }
         true
@@ -478,9 +484,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   def reserveUnrollMemoryForThisTask(
       blockId: BlockId,
       memory: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     accountingLock.synchronized {
-      val acquired = memoryManager.acquireUnrollMemory(blockId, memory, evictedBlocks)
+      val acquired = memoryManager.acquireUnrollMemory(blockId, memory, droppedBlocks)
       val success = acquired == memory
       if (success) {
         val taskAttemptId = currentTaskAttemptId()
@@ -518,10 +524,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   private def reservePendingUnrollMemoryForThisTask(
       blockId: BlockId,
       memory: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     val taskAttemptId = currentTaskAttemptId()
     accountingLock.synchronized {
-      val acquired = memoryManager.acquireUnrollMemory(blockId, memory, evictedBlocks)
+      val acquired = memoryManager.acquireUnrollMemory(blockId, memory, droppedBlocks)
       val success = acquired == memory
       if (success) {
         pendingUnrollMemoryMap(taskAttemptId) =
@@ -595,7 +601,3 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     logMemoryUsage()
   }
 }
-
-private[spark] case class ResultWithDroppedBlocks(
-    success: Boolean,
-    droppedBlocks: Seq[(BlockId, BlockStatus)])

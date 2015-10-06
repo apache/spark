@@ -63,8 +63,6 @@ class ShuffleMemoryManager protected (
    * in some situations, to make sure each task has a chance to ramp up to at least 1 / 2N of the
    * total memory pool (where N is the # of active tasks) before it is forced to spill. This can
    * happen if the number of tasks increases but an older task had a lot of memory already.
-   *
-   * @return `numBytes` if all bytes are acquired, else 0.
    */
   def tryToAcquire(numBytes: Long): Long = synchronized {
     val taskAttemptId = currentTaskAttemptId()
@@ -110,8 +108,8 @@ class ShuffleMemoryManager protected (
   }
 
   /**
-   * Acquire numBytes bytes for the current task from the memory manager.
-   * @return number of bytes actually acquired.
+   * Acquire N bytes of execution memory from the memory manager for the current task.
+   * @return number of bytes actually acquired (<= N).
    */
   private def acquire(numBytes: Long): Long = synchronized {
     val taskAttemptId = currentTaskAttemptId()
