@@ -41,6 +41,8 @@ case class BatchInfo(
 
   private var _failureReasons: Map[Int, String] = Map.empty
 
+  private var _numOutputOp: Int = 0
+
   @deprecated("Use streamIdToInputInfo instead", "1.5.0")
   def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
 
@@ -77,4 +79,12 @@ case class BatchInfo(
 
   /** Failure reasons corresponding to every output ops in the batch */
   private[streaming] def failureReasons = _failureReasons
+
+  /** Set the number of output operations in this batch */
+  private[streaming] def setNumOutputOp(numOutputOp: Int): Unit = {
+    _numOutputOp = numOutputOp
+  }
+
+  /** Return the number of output operations in this batch */
+  private[streaming] def numOutputOp: Int = _numOutputOp
 }

@@ -30,6 +30,8 @@ private[ui] case class BatchUIData(
     val submissionTime: Long,
     val processingStartTime: Option[Long],
     val processingEndTime: Option[Long],
+    val numOutputOp: Int,
+    val failureReason: Map[Int, String],
     var outputOpIdSparkJobIdPairs: Seq[OutputOpIdAndSparkJobId] = Seq.empty) {
 
   /**
@@ -69,7 +71,9 @@ private[ui] object BatchUIData {
       batchInfo.streamIdToInputInfo,
       batchInfo.submissionTime,
       batchInfo.processingStartTime,
-      batchInfo.processingEndTime
+      batchInfo.processingEndTime,
+      batchInfo.numOutputOp,
+      batchInfo.failureReasons
     )
   }
 }
