@@ -114,7 +114,8 @@ private[parquet] class CatalystPrimitiveConverter(val updater: ParentContainerUp
  * any "parent" container.
  *
  * @param parquetType Parquet schema of Parquet records
- * @param catalystType Spark SQL schema that corresponds to the Parquet record type
+ * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
+ *        types should have been expanded.
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class CatalystRowConverter(
@@ -130,6 +131,12 @@ private[parquet] class CatalystRowConverter(
        |Parquet schema:
        |$parquetType
        |Catalyst schema:
+       |${catalystType.prettyJson}
+     """.stripMargin)
+
+  assert(
+    !catalystType.existsRecursively(_.isInstanceOf[UserDefinedType[_]]),
+    s"""User-defined types in Catalyst schema should have already been expanded:
        |${catalystType.prettyJson}
      """.stripMargin)
 
@@ -267,13 +274,6 @@ private[parquet] class CatalystRowConverter(
         new CatalystRowConverter(parquetType.asGroupType(), t, new ParentContainerUpdater {
           override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
         })
-
-      case t: UserDefinedType[_] =>
-        val catalystTypeForUDT = t.sqlType
-        val nullable = parquetType.isRepetition(Repetition.OPTIONAL)
-        val field = StructField("udt", catalystTypeForUDT, nullable)
-        val parquetTypeForUDT = new CatalystSchemaConverter().convertField(field)
-        newConverter(parquetTypeForUDT, catalystTypeForUDT, updater)
 
       case _ =>
         throw new RuntimeException(

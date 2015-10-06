@@ -85,7 +85,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     val messageType = new CatalystSchemaConverter(configuration).convert(schema)
     val metadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
 
-    logDebug(
+    logInfo(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
          |${schema.prettyJson}
          |and corresponding Parquet message type:
