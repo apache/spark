@@ -109,14 +109,8 @@ private[sql] object NULL extends ColumnType[Any] {
   override def defaultSize: Int = 0
   override def append(v: Any, buffer: ByteBuffer): Unit = {}
   override def extract(buffer: ByteBuffer): Any = null
-
-  override def setField(row: MutableRow, ordinal: Int, value: Any): Unit = {
-    row.setNullAt(ordinal)
-  }
+  override def setField(row: MutableRow, ordinal: Int, value: Any): Unit = row.setNullAt(ordinal)
   override def getField(row: InternalRow, ordinal: Int): Any = null
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
-    to.setNullAt(toOrdinal)
-  }
 }
 
 private[sql] abstract class NativeColumnType[T <: AtomicType](
