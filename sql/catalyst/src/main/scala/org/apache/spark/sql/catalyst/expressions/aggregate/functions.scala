@@ -57,7 +57,7 @@ case class Average(child: Expression) extends ExpressionAggregateFunction {
   private val currentSum = AttributeReference("currentSum", sumDataType)()
   private val currentCount = AttributeReference("currentCount", LongType)()
 
-  override val bufferAttributes = currentSum :: currentCount :: Nil
+  override val aggBufferAttributes = currentSum :: currentCount :: Nil
 
   override val initialValues = Seq(
     /* currentSum = */ Cast(Literal(0), sumDataType),
@@ -101,7 +101,7 @@ case class Count(child: Expression) extends ExpressionAggregateFunction {
 
   private val currentCount = AttributeReference("currentCount", LongType)()
 
-  override val bufferAttributes = currentCount :: Nil
+  override val aggBufferAttributes = currentCount :: Nil
 
   override val initialValues = Seq(
     /* currentCount = */ Literal(0L)
@@ -135,7 +135,7 @@ case class First(child: Expression) extends ExpressionAggregateFunction {
 
   private val first = AttributeReference("first", child.dataType)()
 
-  override val bufferAttributes = first :: Nil
+  override val aggBufferAttributes = first :: Nil
 
   override val initialValues = Seq(
     /* first = */ Literal.create(null, child.dataType)
@@ -169,7 +169,7 @@ case class Last(child: Expression) extends ExpressionAggregateFunction {
 
   private val last = AttributeReference("last", child.dataType)()
 
-  override val bufferAttributes = last :: Nil
+  override val aggBufferAttributes = last :: Nil
 
   override val initialValues = Seq(
     /* last = */ Literal.create(null, child.dataType)
@@ -200,7 +200,7 @@ case class Max(child: Expression) extends ExpressionAggregateFunction {
 
   private val max = AttributeReference("max", child.dataType)()
 
-  override val bufferAttributes = max :: Nil
+  override val aggBufferAttributes = max :: Nil
 
   override val initialValues = Seq(
     /* max = */ Literal.create(null, child.dataType)
@@ -234,7 +234,7 @@ case class Min(child: Expression) extends ExpressionAggregateFunction {
 
   private val min = AttributeReference("min", child.dataType)()
 
-  override val bufferAttributes = min :: Nil
+  override val aggBufferAttributes = min :: Nil
 
   override val initialValues = Seq(
     /* min = */ Literal.create(null, child.dataType)
@@ -304,7 +304,7 @@ abstract class StddevAgg(child: Expression) extends ExpressionAggregateFunction 
   private val currentAvg = AttributeReference("currentAvg", resultType)()
   private val currentMk = AttributeReference("currentMk", resultType)()
 
-  override val bufferAttributes = preCount :: currentCount :: preAvg ::
+  override val aggBufferAttributes = preCount :: currentCount :: preAvg ::
                                   currentAvg :: currentMk :: Nil
 
   override val initialValues = Seq(
@@ -429,7 +429,7 @@ case class Sum(child: Expression) extends ExpressionAggregateFunction {
 
   private val zero = Cast(Literal(0), sumDataType)
 
-  override val bufferAttributes = currentSum :: Nil
+  override val aggBufferAttributes = currentSum :: Nil
 
   override val initialValues = Seq(
     /* currentSum = */ Literal.create(null, sumDataType)
@@ -539,12 +539,10 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
 
   def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
-
-  def cloneBufferAttributes: Seq[Attribute] = bufferAttributes.map(_.newInstance())
+  def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /** Allocate enough words to store all registers. */
-  val bufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
+  val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
     AttributeReference(s"MS[$i]", LongType)()
   }
 

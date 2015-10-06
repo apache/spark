@@ -100,7 +100,7 @@ abstract class AggregationIterator(
               function.withNewInputAggBufferOffset(inputBufferOffset)
             case _ =>
           }
-          inputBufferOffset += func.bufferSchema.length
+          inputBufferOffset += func.aggBufferSchema.length
           func
       }
       // Set mutableBufferOffset for this function. It is important that setting
@@ -111,7 +111,7 @@ abstract class AggregationIterator(
           function.withNewMutableBufferOffset(mutableBufferOffset)
         case _ =>
       }
-      mutableBufferOffset += funcWithBoundReferences.bufferSchema.length
+      mutableBufferOffset += funcWithBoundReferences.aggBufferSchema.length
       functions(i) = funcWithBoundReferences
       i += 1
     }
@@ -149,7 +149,7 @@ abstract class AggregationIterator(
       case ae: ExpressionAggregateFunction => ae.initialValues
       // For the positions corresponding to interpreted aggregate functions, we'll use special
       // no-op expressions which are ignored during projection code-generation.
-      case i: ImperativeAggregateFunction => Seq.fill(i.bufferAttributes.length)(NoOp)
+      case i: ImperativeAggregateFunction => Seq.fill(i.aggBufferAttributes.length)(NoOp)
     }
     newMutableProjection(initExpressions, Nil)()
   }
@@ -167,13 +167,13 @@ abstract class AggregationIterator(
   // Initializing functions used to process a row.
   protected val processRow: (MutableRow, InternalRow) => Unit = {
     val rowToBeProcessed = new JoinedRow
-    val aggregationBufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
+    val aggregationBufferSchema = allAggregateFunctions.flatMap(_.aggBufferAttributes)
     aggregationMode match {
       // Partial-only
       case (Some(Partial), None) =>
         val updateExpressions = nonCompleteAggregateFunctions.flatMap {
           case ae: ExpressionAggregateFunction => ae.updateExpressions
-          case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
+          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
         }
         val expressionAggUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
@@ -196,16 +196,16 @@ abstract class AggregationIterator(
           // If initialInputBufferOffset, the input value does not contain
           // grouping keys.
           // This part is pretty hacky.
-          allAggregateFunctions.flatMap(_.cloneBufferAttributes).toSeq
+          allAggregateFunctions.flatMap(_.inputAggBufferAttributes).toSeq
         } else {
-          groupingKeyAttributes ++ allAggregateFunctions.flatMap(_.cloneBufferAttributes)
+          groupingKeyAttributes ++ allAggregateFunctions.flatMap(_.inputAggBufferAttributes)
         }
         // val inputAggregationBufferSchema =
         //  groupingKeyAttributes ++
         //    allAggregateFunctions.flatMap(_.cloneBufferAttributes)
         val mergeExpressions = nonCompleteAggregateFunctions.flatMap {
           case ae: ExpressionAggregateFunction => ae.mergeExpressions
-          case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
+          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
         }
         // This projection is used to merge buffer values for all expression-based aggregates.
         val expressionAggMergeProjection =
@@ -237,19 +237,19 @@ abstract class AggregationIterator(
         val groupingAttributesAndDistinctColumns = valueAttributes.take(initialInputBufferOffset)
 
         val completeOffsetExpressions =
-          Seq.fill(completeAggregateFunctions.map(_.bufferAttributes.length).sum)(NoOp)
+          Seq.fill(completeAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
         // We do not touch buffer values of aggregate functions with the Final mode.
         val finalOffsetExpressions =
-          Seq.fill(nonCompleteAggregateFunctions.map(_.bufferAttributes.length).sum)(NoOp)
+          Seq.fill(nonCompleteAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
 
         val mergeInputSchema =
           aggregationBufferSchema ++
             groupingAttributesAndDistinctColumns ++
-            nonCompleteAggregateFunctions.flatMap(_.cloneBufferAttributes)
+            nonCompleteAggregateFunctions.flatMap(_.inputAggBufferAttributes)
         val mergeExpressions =
           nonCompleteAggregateFunctions.flatMap {
             case ae: ExpressionAggregateFunction => ae.mergeExpressions
-            case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
+            case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
           } ++ completeOffsetExpressions
         val finalExpressionAggMergeProjection =
           newMutableProjection(mergeExpressions, mergeInputSchema)()
@@ -257,7 +257,7 @@ abstract class AggregationIterator(
         val updateExpressions =
           finalOffsetExpressions ++ completeAggregateFunctions.flatMap {
             case ae: ExpressionAggregateFunction => ae.updateExpressions
-            case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
+            case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
           }
         val completeExpressionAggUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
@@ -292,7 +292,7 @@ abstract class AggregationIterator(
         val updateExpressions =
           completeAggregateFunctions.flatMap {
             case ae: ExpressionAggregateFunction => ae.updateExpressions
-            case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
+            case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
           }
         val completeExpressionAggUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
@@ -335,7 +335,7 @@ abstract class AggregationIterator(
         // Because we cannot copy a joinedRow containing a UnsafeRow (UnsafeRow does not
         // support generic getter), we create a mutable projection to output the
         // JoinedRow(currentGroupingKey, currentBuffer)
-        val bufferSchema = nonCompleteAggregateFunctions.flatMap(_.bufferAttributes)
+        val bufferSchema = nonCompleteAggregateFunctions.flatMap(_.aggBufferAttributes)
         val resultProjection =
           newMutableProjection(
             groupingKeyAttributes ++ bufferSchema,
@@ -351,7 +351,7 @@ abstract class AggregationIterator(
       // resultExpressions.
       case (Some(Final), None) | (Some(Final) | None, Some(Complete)) =>
         val bufferSchemata =
-          allAggregateFunctions.flatMap(_.bufferAttributes)
+          allAggregateFunctions.flatMap(_.aggBufferAttributes)
         val evalExpressions = allAggregateFunctions.map {
           case ae: ExpressionAggregateFunction => ae.evaluateExpression
           case agg: AggregateFunction2 => NoOp

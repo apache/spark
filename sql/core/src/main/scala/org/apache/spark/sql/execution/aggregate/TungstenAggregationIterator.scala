@@ -160,7 +160,7 @@ class TungstenAggregationIterator(
   // when we switch to sort-based aggregation, and when we create the re-used buffer for
   // sort-based aggregation).
   private def createNewAggregationBuffer(): UnsafeRow = {
-    val bufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
+    val bufferSchema = allAggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
@@ -175,7 +175,7 @@ class TungstenAggregationIterator(
   private def generateProcessRow(
       inputAttributes: Seq[Attribute]): (UnsafeRow, InternalRow) => Unit = {
 
-    val aggregationBufferAttributes = allAggregateFunctions.flatMap(_.bufferAttributes)
+    val aggregationBufferAttributes = allAggregateFunctions.flatMap(_.aggBufferAttributes)
     val joinedRow = new JoinedRow()
 
     aggregationMode match {
@@ -209,7 +209,7 @@ class TungstenAggregationIterator(
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
 
         val completeOffsetExpressions =
-          Seq.fill(completeAggregateFunctions.map(_.bufferAttributes.length).sum)(NoOp)
+          Seq.fill(completeAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
         val mergeExpressions =
           nonCompleteAggregateFunctions.flatMap(_.mergeExpressions) ++ completeOffsetExpressions
         val finalMergeProjection =
@@ -217,7 +217,7 @@ class TungstenAggregationIterator(
 
         // We do not touch buffer values of aggregate functions with the Final mode.
         val finalOffsetExpressions =
-          Seq.fill(nonCompleteAggregateFunctions.map(_.bufferAttributes.length).sum)(NoOp)
+          Seq.fill(nonCompleteAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
         val updateExpressions =
           finalOffsetExpressions ++ completeAggregateFunctions.flatMap(_.updateExpressions)
         val completeUpdateProjection =
@@ -262,7 +262,7 @@ class TungstenAggregationIterator(
   private def generateResultProjection(): (UnsafeRow, UnsafeRow) => UnsafeRow = {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
-    val bufferAttributes = allAggregateFunctions.flatMap(_.bufferAttributes)
+    val bufferAttributes = allAggregateFunctions.flatMap(_.aggBufferAttributes)
 
     aggregationMode match {
       // Partial-only or PartialMerge-only: every output row is basically the values of
@@ -329,7 +329,7 @@ class TungstenAggregationIterator(
   // all groups and their corresponding aggregation buffers for hash-based aggregation.
   private[this] val hashMap = new UnsafeFixedWidthAggregationMap(
     initialAggregationBuffer,
-    StructType.fromAttributes(allAggregateFunctions.flatMap(_.bufferAttributes)),
+    StructType.fromAttributes(allAggregateFunctions.flatMap(_.aggBufferAttributes)),
     StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
     TaskContext.get.taskMemoryManager(),
     SparkEnv.get.shuffleMemoryManager,
@@ -470,7 +470,7 @@ class TungstenAggregationIterator(
       // The originalInputAttributes are using cloneBufferAttributes. So, we need to use
       // allAggregateFunctions.flatMap(_.cloneBufferAttributes).
       val bufferExtractor = newMutableProjection(
-        allAggregateFunctions.flatMap(_.cloneBufferAttributes),
+        allAggregateFunctions.flatMap(_.inputAggBufferAttributes),
         originalInputAttributes)()
       bufferExtractor.target(buffer)
 
@@ -500,7 +500,7 @@ class TungstenAggregationIterator(
     // Basically the value of the KVIterator returned by externalSorter
     // will just aggregation buffer. At here, we use cloneBufferAttributes.
     val newInputAttributes: Seq[Attribute] =
-      allAggregateFunctions.flatMap(_.cloneBufferAttributes)
+      allAggregateFunctions.flatMap(_.inputAggBufferAttributes)
 
     // Set up new processRow and generateOutput.
     processRow = generateProcessRow(newInputAttributes)

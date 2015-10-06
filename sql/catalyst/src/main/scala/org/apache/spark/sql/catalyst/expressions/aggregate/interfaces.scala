@@ -83,7 +83,7 @@ private[sql] case class AggregateExpression2(
   override def references: AttributeSet = {
     val childReferences = mode match {
       case Partial | Complete => aggregateFunction.references.toSeq
-      case PartialMerge | Final => aggregateFunction.bufferAttributes
+      case PartialMerge | Final => aggregateFunction.aggBufferAttributes
     }
 
     AttributeSet(childReferences)
@@ -100,8 +100,8 @@ private[sql] case class AggregateExpression2(
  *  - [[ExpressionAggregateFunction]] is for aggregation functions that are specified using
  *    Catalyst expressions.
  *
- * In both interfaces, aggregates must define the schema ([[bufferSchema]]) and attributes
- * ([[bufferAttributes]]) of an aggregation buffer which is used to hold partial aggregate results.
+ * In both interfaces, aggregates must define the schema ([[aggBufferSchema]]) and attributes
+ * ([[aggBufferAttributes]]) of an aggregation buffer which is used to hold partial aggregate results.
  * At runtime, multiple aggregate functions are evaluated by the same operator using a combined
  * aggregation buffer which concatenates the aggregation buffers of the individual aggregate
  * functions.
@@ -115,22 +115,26 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
   final override def foldable: Boolean = false
 
   /** The schema of the aggregation buffer. */
-  def bufferSchema: StructType
+  def aggBufferSchema: StructType
 
-  /** Attributes of fields in bufferSchema. */
-  def bufferAttributes: Seq[AttributeReference]
+  /** Attributes of fields in aggBufferSchema. */
+  def aggBufferAttributes: Seq[AttributeReference]
 
-  /** Clones bufferAttributes. */
-  def cloneBufferAttributes: Seq[Attribute]
-
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+  /**
+   * Attributes of fields in input aggregation buffers (immutable aggregation buffers that are
+   * merged with mutable aggregation buffers in the merge() function or merge expressions).
+   * These attributes are created automatically by cloning the [[aggBufferAttributes]].
+   */
+  final lazy val inputAggBufferAttributes: Seq[Attribute] = aggBufferAttributes.map(_.newInstance())
 
   /**
    * Indicates if this function supports partial aggregation.
    * Currently Hive UDAF is the only one that doesn't support partial aggregation.
    */
   def supportsPartial: Boolean = true
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 
 /**
@@ -266,10 +270,8 @@ abstract class ExpressionAggregateFunction
    */
   val evaluateExpression: Expression
 
-  override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
-
   /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
-  final override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
+  final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /**
    * A helper class for representing an attribute used in merging two
@@ -283,7 +285,7 @@ abstract class ExpressionAggregateFunction
     def left: AttributeReference = a
 
     /** Represents this attribute at the input buffer side (the data value is read-only). */
-    def right: AttributeReference = cloneBufferAttributes(bufferAttributes.indexOf(a))
+    def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
 }
 

@@ -318,8 +318,6 @@ private[sql] class InputAggregationBuffer private[sql] (
 /**
  * The internal wrapper used to hook a [[UserDefinedAggregateFunction]] `udaf` in the
  * internal aggregation code path.
- * @param children
- * @param udaf
  */
 private[sql] case class ScalaUDAF(
     children: Seq[Expression],
@@ -339,11 +337,9 @@ private[sql] case class ScalaUDAF(
 
   override val inputTypes: Seq[DataType] = udaf.inputSchema.map(_.dataType)
 
-  override val bufferSchema: StructType = udaf.bufferSchema
+  override val aggBufferSchema: StructType = udaf.bufferSchema
 
-  override val bufferAttributes: Seq[AttributeReference] = bufferSchema.toAttributes
-
-  override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
+  override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
 
   private[this] lazy val childrenSchema: StructType = {
     val inputFields = children.zipWithIndex.map {
@@ -370,13 +366,13 @@ private[sql] case class ScalaUDAF(
     CatalystTypeConverters.createToScalaConverter(childrenSchema)
 
   private[this] lazy val bufferValuesToCatalystConverters: Array[Any => Any] = {
-    bufferSchema.fields.map { field =>
+    aggBufferSchema.fields.map { field =>
       CatalystTypeConverters.createToCatalystConverter(field.dataType)
     }
   }
 
   private[this] lazy val bufferValuesToScalaConverters: Array[Any => Any] = {
-    bufferSchema.fields.map { field =>
+    aggBufferSchema.fields.map { field =>
       CatalystTypeConverters.createToScalaConverter(field.dataType)
     }
   }
@@ -403,7 +399,7 @@ private[sql] case class ScalaUDAF(
     // inputBufferOffset has been updated.
     inputAggregateBuffer =
       new InputAggregationBuffer(
-        bufferSchema,
+        aggBufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
         inputAggBufferOffset,
@@ -419,14 +415,14 @@ private[sql] case class ScalaUDAF(
     // mutableBufferOffset has been updated.
     mutableAggregateBuffer =
       new MutableAggregationBufferImpl(
-        bufferSchema,
+        aggBufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
         mutableAggBufferOffset,
         null)
     evalAggregateBuffer =
       new InputAggregationBuffer(
-        bufferSchema,
+        aggBufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
         mutableAggBufferOffset,
