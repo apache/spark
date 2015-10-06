@@ -129,7 +129,7 @@ class TungstenAggregationIterator(
   }
 
   // All aggregate functions. TungstenAggregationIterator only handles expression-based aggregate.
-  // If there is any functions that is an InterpretedAggregateFunction, we throw an
+  // If there is any functions that is an ImperativeAggregateFunction, we throw an
   // IllegalStateException.
   private[this] val allAggregateFunctions: Array[ExpressionAggregateFunction] = {
     if (!allAggregateExpressions.forall(
