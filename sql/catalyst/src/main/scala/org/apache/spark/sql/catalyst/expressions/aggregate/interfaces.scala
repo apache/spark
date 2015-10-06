@@ -125,7 +125,8 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
    * merged with mutable aggregation buffers in the merge() function or merge expressions).
    * These attributes are created automatically by cloning the [[aggBufferAttributes]].
    */
-  final lazy val inputAggBufferAttributes: Seq[Attribute] = aggBufferAttributes.map(_.newInstance())
+  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
 
   /**
    * Indicates if this function supports partial aggregation.
