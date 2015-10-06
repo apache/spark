@@ -370,7 +370,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(100, 1, 50.5, 300, 100) :: Nil)
       // Aggregate with Code generation handling all null values
       testCodeGen(
-        "SELECT  sum('a'), avg('a'), stddev('a'), skewness('a'), kurtosis('a'), count(null) FROM testData",
+        "SELECT  sum('a'), avg('a'), stddev('a'), skewness('a')," +
+          "kurtosis('a'), count(null) FROM testData",
         Row(null, null, null, null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
@@ -537,7 +538,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("aggregates with nulls") {
     checkAnswer(
-      sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
+      sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
+        "AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
       Row(0, -1.5, 1, 3, 2, 1, 6, 3)
     )
   }
@@ -746,6 +748,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT STDDEV_SAMP(a) FROM testData2"),
       Row(math.sqrt(4/5.0))
+    )
   }
 
   test("skewness") {
@@ -769,6 +772,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("skewness and kurtosis agg") {
+    checkAnswer(
       sql("SELECT a, skewness(b), kurtosis(b)  FROM testData2 GROUP BY a"),
       (1 to 3).map(i => Row(i, 0.0, -2.0)))
   }

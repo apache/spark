@@ -233,7 +233,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("zero moments") {
-    val emptyTableData = Seq((1,2)).toDF("a", "b")
+    val emptyTableData = Seq((1, 2)).toDF("a", "b")
     assert(emptyTableData.count() === 1)
 
     checkAnswer(

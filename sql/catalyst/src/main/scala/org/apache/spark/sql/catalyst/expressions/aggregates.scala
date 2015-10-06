@@ -428,9 +428,8 @@ case class Average(child: Expression) extends UnaryExpression with PartialAggreg
     TypeUtils.checkForNumericExpr(child.dataType, "function average")
 }
 
+// placeholder so code will compile
 abstract class StatisticalMoments1(child: Expression) extends UnaryExpression with PartialAggregate1 {
-
-  override def prettyName: String = "kurtosis"
 
   override def nullable: Boolean = true
 
@@ -473,6 +472,7 @@ abstract class StatisticalMoments1(child: Expression) extends UnaryExpression wi
     TypeUtils.checkForNumericExpr(child.dataType, "function average")
 }
 
+// placeholder so code will compile
 case class Kurtosis(child: Expression) extends StatisticalMoments1(child) {
 
   override def prettyName: String = "kurtosis"
@@ -480,6 +480,7 @@ case class Kurtosis(child: Expression) extends StatisticalMoments1(child) {
   override def toString: String = s"KURTOSIS($child)"
 }
 
+// placeholder so code will compile
 case class Skewness(child: Expression) extends StatisticalMoments1(child) {
 
   override def prettyName: String = "skewness"
