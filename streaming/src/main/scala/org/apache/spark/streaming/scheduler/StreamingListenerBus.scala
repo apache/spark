@@ -43,6 +43,10 @@ private[spark] class StreamingListenerBus
         listener.onBatchStarted(batchStarted)
       case batchCompleted: StreamingListenerBatchCompleted =>
         listener.onBatchCompleted(batchCompleted)
+      case outputOperationStarted: StreamingListenerOutputOperationStarted =>
+        listener.onOutputOperationStarted(outputOperationStarted)
+      case outputOperationCompleted: StreamingListenerOutputOperationCompleted =>
+        listener.onOutputOperationCompleted(outputOperationCompleted)
       case _ =>
     }
   }
