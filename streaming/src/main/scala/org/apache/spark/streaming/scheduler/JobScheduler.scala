@@ -163,7 +163,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
     }
     listenerBus.post(StreamingListenerOutputOperationStarted(
-      OutputOperationInfo(job.outputOpId, job.callSite, Some(startTime), None)))
+      OutputOperationInfo(job.time, job.outputOpId, job.callSite, Some(startTime), None)))
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
@@ -171,7 +171,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     val jobSet = jobSets.get(job.time)
     jobSet.handleJobCompletion(job)
     listenerBus.post(StreamingListenerOutputOperationCompleted(
-      OutputOperationInfo(job.outputOpId, job.callSite, None, Some(completedTime))))
+      OutputOperationInfo(job.time, job.outputOpId, job.callSite, None, Some(completedTime))))
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
     if (jobSet.hasCompleted) {
       jobSets.remove(jobSet.time)

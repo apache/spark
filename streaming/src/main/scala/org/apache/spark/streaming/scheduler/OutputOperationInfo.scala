@@ -18,17 +18,20 @@
 package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.streaming.Time
 
 /**
  * :: DeveloperApi ::
  * Class having information on output operations.
+ * @param batchTime Time of the batch
  * @param id Id of this output operation. Different output operations have different ids in a batch.
- * @param description the description of this output operation.
+ * @param description The description of this output operation.
  * @param startTime Clock time of when the output operation started processing
  * @param endTime Clock time of when the output operation started processing
  */
 @DeveloperApi
 case class OutputOperationInfo(
+    batchTime: Time,
     id: Int,
     description: String,
     startTime: Option[Long],
