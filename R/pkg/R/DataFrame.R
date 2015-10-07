@@ -1850,4 +1850,3 @@ setMethod("as.data.frame",
             }
             collect(x)
           })
-
