@@ -180,7 +180,6 @@ class LinearRegression(override val uid: String)
 
       val model = new LinearRegressionModel(uid, weights, intercept)
       // Handle possible missing or invalid prediction columns
-      val predictionColOpt = get(predictionCol).orElse(getDefault(predictionCol))
       val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
 
       val trainingSummary = new LinearRegressionTrainingSummary(
@@ -272,7 +271,6 @@ class LinearRegression(override val uid: String)
 
     val model = copyValues(new LinearRegressionModel(uid, weights, intercept))
     // Handle possible missing or invalid prediction columns
-    val predictionColOpt = get(predictionCol).orElse(getDefault(predictionCol))
     val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
 
     val trainingSummary = new LinearRegressionTrainingSummary(
@@ -340,13 +338,12 @@ class LinearRegressionModel private[ml] (
    * of the current model.
    */
   private[regression] def findSummaryModelAndPredictionCol(): (LinearRegressionModel, String) = {
-    val predictionColOpt = get(predictionCol).orElse(getDefault(predictionCol)).filter(_ != "")
-    predictionColOpt match {
-      case Some(p) => (this, p)
-      case None => {
+    $(predictionCol) match {
+      case "" => {
         val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
         (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
       }
+      case p => (this, p)
     }
   }
 
