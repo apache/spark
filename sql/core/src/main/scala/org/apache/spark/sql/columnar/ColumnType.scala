@@ -374,6 +374,12 @@ private[sql] case class COMPACT_DECIMAL(precision: Int, scale: Int)
   }
 }
 
+private[sql] object COMPACT_DECIMAL {
+  def apply(dt: DecimalType): COMPACT_DECIMAL = {
+    COMPACT_DECIMAL(dt.precision, dt.scale)
+  }
+}
+
 private[sql] sealed abstract class ByteArrayColumnType[JvmType](val defaultSize: Int)
   extends ColumnType[JvmType] {
 
@@ -415,7 +421,7 @@ private[sql] object BINARY extends ByteArrayColumnType[Array[Byte]](16) {
 }
 
 private[sql] case class DECIMAL(precision: Int, scale: Int)
-  extends ByteArrayColumnType[Decimal](20) {
+  extends ByteArrayColumnType[Decimal](12) {
 
   override val dataType: DataType = DecimalType(precision, scale)
 
@@ -437,12 +443,18 @@ private[sql] case class DECIMAL(precision: Int, scale: Int)
   }
 }
 
-private[sql] case class STRUCT(dataType: DataType)
+private[sql] object DECIMAL {
+  def apply(dt: DecimalType): DECIMAL = {
+    DECIMAL(dt.precision, dt.scale)
+  }
+}
+
+private[sql] case class STRUCT(dataType: StructType)
   extends ByteArrayColumnType[InternalRow](20) {
 
   private val projection: UnsafeProjection =
-    UnsafeProjection.create(dataType.asInstanceOf[StructType])
-  private val numOfFields: Int = dataType.asInstanceOf[StructType].fields.size
+    UnsafeProjection.create(dataType)
+  private val numOfFields: Int = dataType.fields.size
 
   override def setField(row: MutableRow, ordinal: Int, value: InternalRow): Unit = {
     row.update(ordinal, value)
@@ -470,10 +482,10 @@ private[sql] case class STRUCT(dataType: DataType)
   override def clone(v: InternalRow): InternalRow = v.copy()
 }
 
-private[sql] case class ARRAY(dataType: DataType)
+private[sql] case class ARRAY(dataType: ArrayType)
   extends ByteArrayColumnType[ArrayData](16) {
 
-  private lazy val projection = UnsafeProjection.create(Array(dataType))
+  private lazy val projection = UnsafeProjection.create(Array[DataType](dataType))
   private val mutableRow = new GenericMutableRow(new Array[Any](1))
 
   override def setField(row: MutableRow, ordinal: Int, value: ArrayData): Unit = {
@@ -510,9 +522,9 @@ private[sql] case class ARRAY(dataType: DataType)
   override def clone(v: ArrayData): ArrayData = v.copy()
 }
 
-private[sql] case class MAP(dataType: DataType) extends ByteArrayColumnType[MapData](32) {
+private[sql] case class MAP(dataType: MapType) extends ByteArrayColumnType[MapData](32) {
 
-  private lazy val projection: UnsafeProjection = UnsafeProjection.create(Array(dataType))
+  private lazy val projection: UnsafeProjection = UnsafeProjection.create(Array[DataType](dataType))
   private val mutableRow = new GenericMutableRow(new Array[Any](1))
 
   override def setField(row: MutableRow, ordinal: Int, value: MapData): Unit = {
@@ -570,9 +582,8 @@ private[sql] object ColumnType {
       case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
-      case DecimalType.Fixed(precision, scale) if precision <= 18 =>
-        COMPACT_DECIMAL(precision, scale)
-      case DecimalType.Fixed(precision, scale) => DECIMAL(precision, scale)
+      case dt: DecimalType if dt.precision <= 18 => COMPACT_DECIMAL(dt)
+      case dt: DecimalType => DECIMAL(dt)
       case arr: ArrayType => ARRAY(arr)
       case map: MapType => MAP(map)
       case struct: StructType => STRUCT(struct)

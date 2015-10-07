@@ -236,6 +236,8 @@ private[sql] class BinaryColumnStats extends ColumnStats {
 }
 
 private[sql] class DecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {
+  def this(dt: DecimalType) = this(dt.precision, dt.scale)
+
   protected var upper: Decimal = null
   protected var lower: Decimal = null
 
@@ -254,7 +256,7 @@ private[sql] class DecimalColumnStats(precision: Int, scale: Int) extends Column
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class GenericColumnStats(dataType: DataType) extends ColumnStats {
+private[sql] class ObjectColumnStats(dataType: DataType) extends ColumnStats {
   val columnType = ColumnType(dataType)
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {

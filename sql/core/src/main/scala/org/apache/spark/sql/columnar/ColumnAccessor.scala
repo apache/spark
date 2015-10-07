@@ -101,22 +101,22 @@ private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
 
-private[sql] class CompactDecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
-  extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(precision, scale))
+private[sql] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
+  extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
 
-private[sql] class DecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
-  extends BasicColumnAccessor[Decimal](buffer, DECIMAL(precision, scale))
+private[sql] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
+  extends BasicColumnAccessor[Decimal](buffer, DECIMAL(dataType))
   with NullableColumnAccessor
 
-private[sql] class StructColumnAccessor(buffer: ByteBuffer, dataType: DataType)
+private[sql] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
   extends BasicColumnAccessor[InternalRow](buffer, STRUCT(dataType))
   with NullableColumnAccessor
 
-private[sql] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: DataType)
+private[sql] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
   extends BasicColumnAccessor[ArrayData](buffer, ARRAY(dataType))
   with NullableColumnAccessor
 
-private[sql] class MapColumnAccessor(buffer: ByteBuffer, dataType: DataType)
+private[sql] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
   extends BasicColumnAccessor[MapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
@@ -135,10 +135,8 @@ private[sql] object ColumnAccessor {
       case DoubleType => new DoubleColumnAccessor(buf)
       case StringType => new StringColumnAccessor(buf)
       case BinaryType => new BinaryColumnAccessor(buf)
-      case DecimalType.Fixed(precision, scale) if precision < 19 =>
-        new CompactDecimalColumnAccessor(buf, precision, scale)
-      case DecimalType.Fixed(precision, scale) =>
-        new DecimalColumnAccessor(buf, precision, scale)
+      case dt: DecimalType if dt.precision < 19 => new CompactDecimalColumnAccessor(buf, dt)
+      case dt: DecimalType => new DecimalColumnAccessor(buf, dt)
       case struct: StructType => new StructColumnAccessor(buf, struct)
       case array: ArrayType => new ArrayColumnAccessor(buf, array)
       case map: MapType => new MapColumnAccessor(buf, map)
