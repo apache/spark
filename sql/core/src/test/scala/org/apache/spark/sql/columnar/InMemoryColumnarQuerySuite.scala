@@ -157,7 +157,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     // Create a RDD for the schema
     val rdd =
-      sparkContext.parallelize((1 to 100), 10).map { i =>
+      sparkContext.parallelize((1 to 10000), 10).map { i =>
         Row(
           s"str${i}: test cache.",
           s"binary${i}: test cache.".getBytes("UTF-8"),
@@ -172,9 +172,9 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
           BigDecimal(Long.MaxValue.toString + ".12345"),
           new java.math.BigDecimal(s"${i % 9 + 1}" + ".23456"),
           new Date(i),
-          new Timestamp(i),
-          (1 to i).toSeq,
-          (0 to i).map(j => s"map_key_$j" -> (Long.MaxValue - j)).toMap,
+          new Timestamp(i * 1000000L),
+          (i to i + 10).toSeq,
+          (i to i + 10).map(j => s"map_key_$j" -> (Long.MaxValue - j)).toMap,
           Row((i - 0.25).toFloat, Seq(true, false, null)))
       }
     sqlContext.createDataFrame(rdd, schema).registerTempTable("InMemoryCache_different_data_types")
