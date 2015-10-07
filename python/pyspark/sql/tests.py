@@ -208,7 +208,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_row_with_special_column_names(self):
         rdd = self.sc.parallelize([1, 2, 1, 3])
-        df = self.sqlCtx.createDataFrame(rdd.map(lambda x: Row(id = x)))
+        df = self.sqlCtx.createDataFrame(rdd.map(lambda x: Row(id=x)))
         df = df.groupby("id").count()
         self.assertEqual(df.map(lambda x: x.count).collect(), [2, 1, 1])
 
