@@ -36,10 +36,11 @@ class ExternalListSuite extends SparkFunSuite with SharedSparkContext {
 
   override def beforeAll() {
     conf.set("spark.kryoserializer.buffer.max", "2046m")
+    conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     conf.set("spark.shuffle.spill.initialMemoryThreshold", "1")
     conf.set("spark.shuffle.spill.batchSize", "500")
     conf.set("spark.shuffle.memoryFraction", "0.04")
-    conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
+    conf.set("spark.groupBy.spill.enabled", "true")
     conf.set("spark.task.maxFailures", "1")
     conf.setAppName("test")
     super.beforeAll()
