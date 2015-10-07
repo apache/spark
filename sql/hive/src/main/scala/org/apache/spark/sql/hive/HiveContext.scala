@@ -99,6 +99,11 @@ class HiveContext private[hive](
 
   logDebug("create HiveContext")
 
+  /**
+   * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
+   * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
+   * and Hive client (both of execution and metadata) with existing HiveContext.
+   */
   override def newSession(): HiveContext = {
     new HiveContext(sc, cacheManager, executionHive.newSession(), metadataHive.newSession())
   }
