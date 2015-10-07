@@ -1211,9 +1211,9 @@ class Row(tuple):
 
     def __init__(self, *args, **kwargs):
         if hasattr(self, "__fields__") and "count" in self.__fields__:
-          self.__dict__["count"] = self.__getattr__("count")
+            self.__dict__["count"] = self.__getattr__("count")
         if hasattr(self, "__fields__") and "index" in self.__fields__:
-          self.__dict__["index"] = self.__getattr__("index")
+            self.__dict__["index"] = self.__getattr__("index")
 
     def asDict(self, recursive=False):
         """
