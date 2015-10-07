@@ -59,11 +59,11 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
-            $values[$i] = ${eval.primitive};
+            $values[$i] = ${eval.value};
           }
          """
       }.mkString("\n") +
-      s"final ArrayData ${ev.primitive} = new $arrayClass($values);"
+      s"final ArrayData ${ev.value} = new $arrayClass($values);"
   }
 
   override def prettyName: String = "array"
@@ -107,11 +107,11 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
-            $values[$i] = ${eval.primitive};
+            $values[$i] = ${eval.value};
           }
          """
       }.mkString("\n") +
-      s"final InternalRow ${ev.primitive} = new $rowClass($values);"
+      s"final InternalRow ${ev.value} = new $rowClass($values);"
   }
 
   override def prettyName: String = "struct"
@@ -176,11 +176,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
-            $values[$i] = ${eval.primitive};
+            $values[$i] = ${eval.value};
           }
          """
       }.mkString("\n") +
-      s"final InternalRow ${ev.primitive} = new $rowClass($values);"
+      s"final InternalRow ${ev.value} = new $rowClass($values);"
   }
 
   override def prettyName: String = "named_struct"
@@ -218,7 +218,7 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, children)
     ev.isNull = eval.isNull
-    ev.primitive = eval.primitive
+    ev.value = eval.value
     eval.code
   }
 
@@ -258,7 +258,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
     ev.isNull = eval.isNull
-    ev.primitive = eval.primitive
+    ev.value = eval.value
     eval.code
   }
 

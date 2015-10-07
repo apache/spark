@@ -67,7 +67,7 @@ case class NewSet(elementType: DataType) extends LeafExpression with CodegenFall
       case IntegerType | LongType =>
         ev.isNull = "false"
         s"""
-          ${ctx.javaType(dataType)} ${ev.primitive} = new ${ctx.javaType(dataType)}();
+          ${ctx.javaType(dataType)} ${ev.value} = new ${ctx.javaType(dataType)}();
         """
       case _ => super.genCode(ctx, ev)
     }
@@ -116,10 +116,10 @@ case class AddItemToSet(item: Expression, set: Expression)
         val htype = ctx.javaType(dataType)
 
         ev.isNull = "false"
-        ev.primitive = setEval.primitive
+        ev.value = setEval.value
         itemEval.code + setEval.code +  s"""
           if (!${itemEval.isNull} && !${setEval.isNull}) {
-           (($htype)${setEval.primitive}).add(${itemEval.primitive});
+           (($htype)${setEval.value}).add(${itemEval.value});
           }
          """
       case _ => super.genCode(ctx, ev)
@@ -167,10 +167,10 @@ case class CombineSets(left: Expression, right: Expression)
         val htype = ctx.javaType(dataType)
 
         ev.isNull = leftEval.isNull
-        ev.primitive = leftEval.primitive
+        ev.value = leftEval.value
         leftEval.code + rightEval.code + s"""
           if (!${leftEval.isNull} && !${rightEval.isNull}) {
-            ${leftEval.primitive}.union((${htype})${rightEval.primitive});
+            ${leftEval.value}.union((${htype})${rightEval.value});
           }
         """
       case _ => super.genCode(ctx, ev)

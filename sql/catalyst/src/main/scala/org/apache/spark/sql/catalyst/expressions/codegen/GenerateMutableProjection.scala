@@ -49,7 +49,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
             if (${evaluationCode.isNull}) {
               ${ctx.setColumn("mutableRow", e.dataType, i, null)};
             } else {
-              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.value)};
             }
           """
         } else {
@@ -58,12 +58,12 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
             if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);
             } else {
-              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.value)};
             }
           """
         }
     }
-    val allProjections = ctx.splitExpressions("i", projectionCodes)
+    val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
 
     val code = s"""
       public Object generate($exprType[] expr) {
@@ -94,7 +94,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         }
 
         public Object apply(Object _i) {
-          InternalRow i = (InternalRow) _i;
+          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allProjections
           return mutableRow;
         }

@@ -60,15 +60,15 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     s"""
       ${condEval.code}
       boolean ${ev.isNull} = false;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${condEval.isNull} && ${condEval.primitive}) {
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${condEval.isNull} && ${condEval.value}) {
         ${trueEval.code}
         ${ev.isNull} = ${trueEval.isNull};
-        ${ev.primitive} = ${trueEval.primitive};
+        ${ev.value} = ${trueEval.value};
       } else {
         ${falseEval.code}
         ${ev.isNull} = ${falseEval.isNull};
-        ${ev.primitive} = ${falseEval.primitive};
+        ${ev.value} = ${falseEval.value};
       }
     """
   }
@@ -166,11 +166,11 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
       s"""
         if (!$got) {
           ${cond.code}
-          if (!${cond.isNull} && ${cond.primitive}) {
+          if (!${cond.isNull} && ${cond.value}) {
             $got = true;
             ${res.code}
             ${ev.isNull} = ${res.isNull};
-            ${ev.primitive} = ${res.primitive};
+            ${ev.value} = ${res.value};
           }
         }
       """
@@ -182,7 +182,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
         if (!$got) {
           ${res.code}
           ${ev.isNull} = ${res.isNull};
-          ${ev.primitive} = ${res.primitive};
+          ${ev.value} = ${res.value};
         }
       """
     } else {
@@ -192,7 +192,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     s"""
       boolean $got = false;
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       $cases
       $other
     """
@@ -267,11 +267,11 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
       s"""
         if (!$got) {
           ${cond.code}
-          if (!${cond.isNull} && ${ctx.genEqual(key.dataType, keyEval.primitive, cond.primitive)}) {
+          if (!${cond.isNull} && ${ctx.genEqual(key.dataType, keyEval.value, cond.value)}) {
             $got = true;
             ${res.code}
             ${ev.isNull} = ${res.isNull};
-            ${ev.primitive} = ${res.primitive};
+            ${ev.value} = ${res.value};
           }
         }
       """
@@ -283,7 +283,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
         if (!$got) {
           ${res.code}
           ${ev.isNull} = ${res.isNull};
-          ${ev.primitive} = ${res.primitive};
+          ${ev.value} = ${res.value};
         }
       """
     } else {
@@ -293,7 +293,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     s"""
       boolean $got = false;
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       ${keyEval.code}
       if (!${keyEval.isNull}) {
         $cases
@@ -351,15 +351,15 @@ case class Least(children: Seq[Expression]) extends Expression {
     def updateEval(i: Int): String =
       s"""
         if (!${evalChildren(i).isNull} && (${ev.isNull} ||
-          ${ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} < 0)) {
+          ${ctx.genComp(dataType, evalChildren(i).value, ev.value)} < 0)) {
           ${ev.isNull} = false;
-          ${ev.primitive} = ${evalChildren(i).primitive};
+          ${ev.value} = ${evalChildren(i).value};
         }
       """
     s"""
       ${evalChildren.map(_.code).mkString("\n")}
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       ${children.indices.map(updateEval).mkString("\n")}
     """
   }
@@ -406,15 +406,15 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     def updateEval(i: Int): String =
       s"""
         if (!${evalChildren(i).isNull} && (${ev.isNull} ||
-          ${ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} > 0)) {
+          ${ctx.genComp(dataType, evalChildren(i).value, ev.value)} > 0)) {
           ${ev.isNull} = false;
-          ${ev.primitive} = ${evalChildren(i).primitive};
+          ${ev.value} = ${evalChildren(i).value};
         }
       """
     s"""
       ${evalChildren.map(_.code).mkString("\n")}
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       ${children.indices.map(updateEval).mkString("\n")}
     """
   }
