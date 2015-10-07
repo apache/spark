@@ -172,7 +172,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
               "antitonic/decreasing (false).")
     featureIndex = \
         Param(Params._dummy(), "featureIndex",
-              "The index of the feature if featuresCol is a vector column, no effect otherwise. ")
+              "The index of the feature if featuresCol is a vector column, no effect otherwise.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
