@@ -165,8 +165,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
       Loader.checkSchema[Data](dataFrame.schema)
 
       val features = dataArray.map {
-        case Row(feature: Int) =>
-          (feature)
+        case Row(feature: Int) => (feature)
       }.collect()
 
       return new ChiSqSelectorModel(features)
