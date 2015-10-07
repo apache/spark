@@ -40,7 +40,7 @@ object Utils {
   def planAggregateWithoutPartial(
       groupingExpressions: Seq[Expression],
       aggregateExpressions: Seq[AggregateExpression2],
-      aggregateFunctionMap: Map[(AggregateFunction2, Boolean), Attribute],
+      aggregateFunctionToAttribute: Map[(AggregateFunction2, Boolean), Attribute],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
@@ -58,13 +58,13 @@ object Utils {
 
     val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
     val completeAggregateAttributes = completeAggregateExpressions.map {
-      expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)
+      expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
     }
 
     val rewrittenResultExpressions = resultExpressions.map { expr =>
       expr.transformDown {
         case agg: AggregateExpression2 =>
-          aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct)
+          aggregateFunctionToAttribute(agg.aggregateFunction, agg.isDistinct)
         case expression =>
           // We do not rely on the equality check at here since attributes may
           // different cosmetically. Instead, we use semanticEquals.
@@ -90,7 +90,7 @@ object Utils {
   def planAggregateWithoutDistinct(
       groupingExpressions: Seq[Expression],
       aggregateExpressions: Seq[AggregateExpression2],
-      aggregateFunctionMap: Map[(AggregateFunction2, Boolean), Attribute],
+      aggregateFunctionToAttribute: Map[(AggregateFunction2, Boolean), Attribute],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use TungstenAggregate.
@@ -149,7 +149,7 @@ object Utils {
     // The attributes of the final aggregation buffer, which is presented as input to the result
     // projection:
     val finalAggregateAttributes = finalAggregateExpressions.map {
-      expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)
+      expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
     }
 
     // The original `resultExpressions` are a set of expressions which may reference aggregate
@@ -163,7 +163,7 @@ object Utils {
         case AggregateExpression2(aggregateFunction, _, isDistinct) =>
           // The final aggregation buffer's attributes will be `finalAggregationAttributes`, so
           // replace each aggregate expression by its corresponding attribute in that set:
-          aggregateFunctionMap(aggregateFunction, isDistinct)
+          aggregateFunctionToAttribute(aggregateFunction, isDistinct)
         case expression =>
           // Since we're using `namedGroupingAttributes` to extract the grouping key columns, we
           // need to replace grouping key expressions with their corresponding attributes.
@@ -205,7 +205,7 @@ object Utils {
       groupingExpressions: Seq[Expression],
       functionsWithDistinct: Seq[AggregateExpression2],
       functionsWithoutDistinct: Seq[AggregateExpression2],
-      aggregateFunctionMap: Map[(AggregateFunction2, Boolean), Attribute],
+      aggregateFunctionToAttribute: Map[(AggregateFunction2, Boolean), Attribute],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
@@ -315,7 +315,7 @@ object Utils {
     // The attributes of the final aggregation buffer, which is presented as input to the result
     // projection:
     val finalAggregateAttributes = finalAggregateExpressions.map {
-      expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)
+      expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
     }
     // Create a map to store those rewritten aggregate functions. We always need to use
     // both function and its corresponding isDistinct flag as the key because function itself
@@ -341,7 +341,7 @@ object Utils {
         val rewrittenAggregateExpression =
           AggregateExpression2(rewrittenAggregateFunction, Complete, true)
 
-        val aggregateFunctionAttribute = aggregateFunctionMap(agg.aggregateFunction, true)
+        val aggregateFunctionAttribute = aggregateFunctionToAttribute(agg.aggregateFunction, true)
         (rewrittenAggregateExpression, aggregateFunctionAttribute)
     }.unzip
 
@@ -356,7 +356,7 @@ object Utils {
         case AggregateExpression2(aggregateFunction, _, isDistinct) =>
           // The final aggregation buffer's attributes will be `finalAggregationAttributes`, so
           // replace each aggregate expression by its corresponding attribute in that set:
-          aggregateFunctionMap(aggregateFunction, isDistinct)
+          aggregateFunctionToAttribute(aggregateFunction, isDistinct)
         case expression =>
           // Since we're using `namedGroupingAttributes` to extract the grouping key columns, we
           // need to replace grouping key expressions with their corresponding attributes.

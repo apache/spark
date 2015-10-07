@@ -203,7 +203,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }.toSet.toSeq
             // For those distinct aggregate expressions, we create a map from the
             // aggregate function to the corresponding attribute of the function.
-            val aggregateFunctionMap = aggregateExpressions.map { agg =>
+            val aggregateFunctionToAttribute = aggregateExpressions.map { agg =>
               val aggregateFunction = agg.aggregateFunction
               val attribute = Alias(aggregateFunction, aggregateFunction.toString)().toAttribute
               (aggregateFunction, agg.isDistinct) -> attribute
@@ -228,7 +228,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   aggregate.Utils.planAggregateWithoutPartial(
                     groupingExpressions,
                     aggregateExpressions,
-                    aggregateFunctionMap,
+                    aggregateFunctionToAttribute,
                     resultExpressions,
                     planLater(child))
                 }
@@ -236,7 +236,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 aggregate.Utils.planAggregateWithoutDistinct(
                   groupingExpressions,
                   aggregateExpressions,
-                  aggregateFunctionMap,
+                  aggregateFunctionToAttribute,
                   resultExpressions,
                   planLater(child))
               } else {
@@ -244,7 +244,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   groupingExpressions,
                   functionsWithDistinct,
                   functionsWithoutDistinct,
-                  aggregateFunctionMap,
+                  aggregateFunctionToAttribute,
                   resultExpressions,
                   planLater(child))
               }
