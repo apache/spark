@@ -137,8 +137,7 @@ private[hive] class IsolatedClientLoader(
     (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
     name.startsWith("java.lang.") ||
     name.startsWith("java.net") ||
-    sharedPrefixes.exists(name.startsWith) ||
-    name.startsWith("[")
+    sharedPrefixes.exists(name.startsWith)
 
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
@@ -152,29 +151,10 @@ private[hive] class IsolatedClientLoader(
   /** The classloader that is used to load an isolated version of Hive. */
   private[hive] var classLoader: ClassLoader = if (isolationOn) {
     new URLClassLoader(allJars, rootClassLoader) {
-      val cache = new java.util.concurrent.ConcurrentHashMap[String, Class[_]]
-
       override def loadClass(name: String, resolve: Boolean): Class[_] = {
-        var clazz = findLoadedClass(name)
-        if (clazz == null) {
-          clazz = cache.get(name)
-          if (clazz == null) {
-            // always assume resolve is false at this point - we'll resolve later
-            clazz = doLoadClass(name, resolve = false)
-            val clazz2 = cache.putIfAbsent(name, clazz)
-            // check if someone else beat us to updating the cache entry
-            if (clazz2 != null) {
-              // if so then we should use the cached entry to be consistent
-              clazz = clazz2
-            }
-          }
-          if (resolve) {
-            resolveClass(clazz)
-          }
-        }
-        clazz
+        val loaded = findLoadedClass(name)
+        if (loaded == null) doLoadClass(name, resolve) else loaded
       }
-
       def doLoadClass(name: String, resolve: Boolean): Class[_] = {
         val classFileName = name.replaceAll("\\.", "/") + ".class"
         if (isBarrierClass(name)) {
@@ -198,6 +178,8 @@ private[hive] class IsolatedClientLoader(
 
   private[hive] def addJar(path: String): Unit = synchronized {
     val jarURL = new java.io.File(path).toURI.toURL
+    // TODO: we should avoid of stacking classloaders (use a single URLClassLoader and add jars
+    // to that)
     classLoader = new java.net.URLClassLoader(Array(jarURL), classLoader)
   }
 
@@ -233,5 +215,9 @@ private[hive] class IsolatedClientLoader(
     }
   }
 
+  /**
+   * The place holder for shared Hive client for all the HiveContext sessions (they share an
+   * IsolatedClientLoader).
+   */
   private[hive] var cachedHive: Any = null
 }

@@ -220,6 +220,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
         queries.foreach(statement.execute)
 
+        val plan = statement.executeQuery("explain select * from test_table")
+        plan.next()
+        plan.next()
+        assert(plan.getString(1).contains("InMemoryColumnarTableScan"))
+
         val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
         val buf1 = new collection.mutable.ArrayBuffer[Int]()
         while (rs1.next()) {
@@ -301,15 +306,18 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
           statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
         }
 
-        // TODO need to figure out how to determine if the data loaded from cache
-        val rs2 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
-        val buf2 = new collection.mutable.ArrayBuffer[Int]()
-        while (rs2.next()) {
-          buf2 += rs2.getInt(1)
-        }
-        rs2.close()
+        val plan = statement.executeQuery("explain select key from test_map ORDER BY key DESC")
+        plan.next()
+        plan.next()
+        assert(plan.getString(1).contains("InMemoryColumnarTableScan"))
 
-        assert(buf2 === data)
+        val rs = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+        val buf = new collection.mutable.ArrayBuffer[Int]()
+        while (rs.next()) {
+          buf += rs.getInt(1)
+        }
+        rs.close()
+        assert(buf === data)
       },
 
       // switch another database

@@ -117,7 +117,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     new this.QueryExecution(plan)
 
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
     // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
     override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)

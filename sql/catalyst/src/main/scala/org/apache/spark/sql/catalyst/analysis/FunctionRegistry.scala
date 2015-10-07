@@ -54,10 +54,8 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   override def registerFunction(
       name: String,
       info: ExpressionInfo,
-      builder: FunctionBuilder): Unit = {
-    synchronized {
-      functionBuilders.put(name, (info, builder))
-    }
+      builder: FunctionBuilder): Unit = synchronized {
+    functionBuilders.put(name, (info, builder))
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
@@ -73,18 +71,14 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.iterator.map(_._1).toList.sorted
   }
 
-  override def lookupFunction(name: String): Option[ExpressionInfo] = {
-    synchronized {
-      functionBuilders.get(name).map(_._1)
-    }
+  override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
+    functionBuilders.get(name).map(_._1)
   }
 
-  def copy(): SimpleFunctionRegistry = {
+  def copy(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
-    synchronized {
-      functionBuilders.iterator.foreach { case (name, (info, builder)) =>
-        registry.registerFunction(name, info, builder)
-      }
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+      registry.registerFunction(name, info, builder)
     }
     registry
   }

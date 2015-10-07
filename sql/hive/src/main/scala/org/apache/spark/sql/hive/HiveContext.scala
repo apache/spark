@@ -50,6 +50,7 @@ import org.apache.spark.sql.execution.{CacheManager, ExecutedCommand, ExtractPyt
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkContext}
 
@@ -74,7 +75,7 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def eval(input: InternalRow): Any = {
-    ctx.metadataHive.currentDatabase
+    UTF8String.fromString(ctx.metadataHive.currentDatabase)
   }
 }
 
@@ -435,9 +436,11 @@ class HiveContext private[hive](
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
-  override protected[sql] lazy val functionRegistry: FunctionRegistry =
+  override protected[sql] val functionRegistry: FunctionRegistry =
     new HiveFunctionRegistry(FunctionRegistry.builtin.copy())
 
+  // The Hive UDF current_database() is foldable, will be evaluated by optimizer, but the optimizer
+  // can't access the SessionState of metadataHive.
   functionRegistry.registerFunction(
     "current_database",
     (expressions: Seq[Expression]) => new CurrentDatabase(this))

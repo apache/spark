@@ -30,7 +30,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListener}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.errors.DialectException
@@ -45,7 +45,6 @@ import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{execution => sparkexecution}
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
@@ -75,7 +74,9 @@ class SQLContext private[sql](
 
   /**
    * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
-   * registered functions, but share the same SparkContext and CacheManager.
+   * registered functions, but sharing the same SparkContext and CacheManager.
+   *
+   * @since 1.6.0
    */
   def newSession(): SQLContext = {
     new SQLContext(sparkContext, cacheManager)
@@ -151,12 +152,11 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  // TODO how to handle the temp table per user session?
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+  protected[sql] val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -314,19 +314,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def cacheTable(tableName: String): Unit = {
-    cacheQuery(table(tableName), Some(tableName))
-  }
-
-  /**
-   * Caches the data produced by the logical representation of the given [[DataFrame]]. Unlike
-   * `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because recomputing
-   * the in-memory columnar representation of the underlying table is expensive.
-   */
-  private[sql] def cacheQuery(
-      query: DataFrame,
-      tableName: Option[String] = None,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK): Unit = {
-    cacheManager.cacheQuery(this, query, tableName, storageLevel)
+    cacheManager.cacheQuery(table(tableName), Some(tableName))
   }
 
   /**
@@ -1197,16 +1185,16 @@ class SQLContext private[sql](
 
 /**
  * This SQLContext object contains utility functions to create a singleton SQLContext instance,
- * or to get the last created SQLContext instance.
+ * or to get the created SQLContext instance.
  */
 object SQLContext {
 
   private val INSTANTIATION_LOCK = new Object()
 
   /**
-   * The active SQLContext for threads.
+   * The active SQLContext for the current thread.
    */
-  private val activeContexts: InheritableThreadLocal[SQLContext] =
+  private val activeContext: InheritableThreadLocal[SQLContext] =
     new InheritableThreadLocal[SQLContext]
 
   /**
@@ -1223,7 +1211,7 @@ object SQLContext {
    * If there an active SQLContext for current thread, it will returned instead of the global one.
    */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
-    val ctx = activeContexts.get()
+    val ctx = activeContext.get()
     if (ctx != null) {
       return ctx
     }
@@ -1256,18 +1244,21 @@ object SQLContext {
     }
   }
 
-  /*
-    * Set a SQLContext for current thread
-    */
+  /**
+   * Changes the SQLContext that will be returned in this thread and its children when
+   * SQLContext.getOrCreate() is called. This can be used to ensure that a given thread receives
+   * a SQLContext with an isolated session, instead of the global (first created) context.
+   */
   def setActive(ctx: SQLContext): Unit = {
-    activeContexts.set(ctx)
+    activeContext.set(ctx)
   }
 
   /**
-   * Clear the active SQLContext for current thread
+   * Clears the active SQLContext for current thread. Subsequent calls to getOrCreate will
+   * return the first created context instead of a thread-local override.
    */
   def clearActive(): Unit = {
-    activeContexts.remove()
+    activeContext.remove()
   }
 
   /**

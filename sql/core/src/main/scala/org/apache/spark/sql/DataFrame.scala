@@ -1468,7 +1468,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def persist(): this.type = {
-    sqlContext.cacheQuery(this)
+    sqlContext.cacheManager.cacheQuery(this)
     this
   }
 
@@ -1483,7 +1483,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def persist(newLevel: StorageLevel): this.type = {
-    sqlContext.cacheQuery(this, None, newLevel)
+    sqlContext.cacheManager.cacheQuery(this, None, newLevel)
     this
   }
 
