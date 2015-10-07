@@ -147,6 +147,8 @@ class LinearRegressionModel(JavaModel):
 class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                          HasWeightCol):
     """
+    .. note:: Experimental
+
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
 
@@ -155,8 +157,6 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> ir = IsotonicRegression()
-    >>> ir.getIsotonic()
-    True
     >>> model = ir.fit(df)
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
@@ -169,11 +169,10 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     isotonic = \
         Param(Params._dummy(), "isotonic",
               "whether the output sequence should be isotonic/increasing (true) or" +
-              "antitonic/decreasing (false). (default true)")
+              "antitonic/decreasing (false).")
     featureIndex = \
         Param(Params._dummy(), "featureIndex",
-              "The index of the feature if featuresCol is a vector column, no effect otherwise. " +
-              "(default 0)")
+              "The index of the feature if featuresCol is a vector column, no effect otherwise. ")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -188,11 +187,11 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         self.isotonic = \
             Param(self, "isotonic",
                   "whether the output sequence should be isotonic/increasing (true) or" +
-                  "antitonic/decreasing (false). (default true)")
+                  "antitonic/decreasing (false).")
         self.featureIndex = \
             Param(self, "featureIndex",
                   "The index of the feature if featuresCol is a vector column, no effect " +
-                  "otherwise. (default 0)")
+                  "otherwise.")
         self._setDefault(isotonic=True, featureIndex=0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -224,7 +223,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         return self.getOrDefault(self.isotonic)
 
-    def setFeautreIndex(self, value):
+    def setFeatureIndex(self, value):
         """
         Sets the value of :py:attr:`featureIndex`.
         """
@@ -240,6 +239,8 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
 class IsotonicRegressionModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by IsotonicRegression.
     """
 
