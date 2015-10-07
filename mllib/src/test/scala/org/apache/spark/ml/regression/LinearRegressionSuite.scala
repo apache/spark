@@ -476,7 +476,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val modelNoPredictionColFieldNames = modelNoPredictionCol.summary.predictions.schema.fieldNames
     assert((dataset.schema.fieldNames.toSet).subsetOf(
       modelNoPredictionColFieldNames.toSet))
-    assert(!modelNoPredictionColFieldNames.find(s => s.startsWith("prediction_")).isEmpty)
+    assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
 
     // Residuals in [[LinearRegressionResults]] should equal those manually computed
     val expectedResiduals = dataset.select("features", "label")
