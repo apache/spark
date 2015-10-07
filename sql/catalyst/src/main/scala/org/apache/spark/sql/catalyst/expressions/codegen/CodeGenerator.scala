@@ -100,7 +100,7 @@ class CodeGenContext {
   final val JAVA_DOUBLE = "double"
 
   /** The variable name of the input row in generated code. */
-  final val INPUT_ROW = "inputRow"
+  final val INPUT_ROW = "i"
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -117,19 +117,19 @@ class CodeGenContext {
   /**
    * Returns the specialized code to access a value from `inputRow` at `ordinal`.
    */
-  def getValue(inputRow: String, dataType: DataType, ordinal: String): String = {
+  def getValue(input: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$inputRow.get${primitiveTypeName(jt)}($ordinal)"
-      case t: DecimalType => s"$inputRow.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-      case StringType => s"$inputRow.getUTF8String($ordinal)"
-      case BinaryType => s"$inputRow.getBinary($ordinal)"
-      case CalendarIntervalType => s"$inputRow.getInterval($ordinal)"
-      case t: StructType => s"$inputRow.getStruct($ordinal, ${t.size})"
-      case _: ArrayType => s"$inputRow.getArray($ordinal)"
-      case _: MapType => s"$inputRow.getMap($ordinal)"
+      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+      case StringType => s"$input.getUTF8String($ordinal)"
+      case BinaryType => s"$input.getBinary($ordinal)"
+      case CalendarIntervalType => s"$input.getInterval($ordinal)"
+      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
+      case _: ArrayType => s"$input.getArray($ordinal)"
+      case _: MapType => s"$input.getMap($ordinal)"
       case NullType => "null"
-      case _ => s"($jt)$inputRow.get($ordinal, null)"
+      case _ => s"($jt)$input.get($ordinal, null)"
     }
   }
 
@@ -395,7 +395,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
-      evaluator.setDebuggingInformation(true, true, true)
+      evaluator.setDebuggingInformation(false, true, false)
       withLineNums
     })
 
