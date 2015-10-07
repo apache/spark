@@ -91,11 +91,9 @@ class KMeansModel(Saveable, Loader):
     ... except OSError:
     ...     pass
 
-    >>> data = array([-383.1, 31.2, 32.2, 367.3]).reshape(2, 2)
-    >>> model = KMeans.train(
-    ...     sc.parallelize(data), 3, maxIterations=0, runs=1, initializationMode="random",
-    ...     seed=50, initializationSteps=5, epsilon=1e-4,
-    ...     initialModel = KMeansModel([(-1000.0,-1000.0),(5.0,5.0),(1000.0,1000.0)]))
+    >>> data = array([-383.1, -382.9, 28.7, 31.2, 366.2, 367.3]).reshape(3, 2)
+    >>> model = KMeans.train(sc.parallelize(data), 3, maxIterations=0,
+    ...     initialModel = KMeansModel([(-1000.0, -1000.0),(5.0, 5.0),(1000.0, 1000.0)]))
     >>> model.clusterCenters
     [array([-1000., -1000.]), array([ 5.,  5.]), array([ 1000.,  1000.])]
     """
@@ -155,9 +153,9 @@ class KMeans(object):
               seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
         """Train a k-means clustering model."""
         clusterInitialModel = []
-        if initialModel is not None and not isinstance(initialModel, KMeansModel):
-            raise Exception("initialModel needs to be of type KMeansModel")
-        if initialModel is not None and isinstance(initialModel, KMeansModel):
+        if initialModel is not None:
+            if not isinstance(initialModel, KMeansModel):
+                raise Exception("initialModel needs to be of type KMeansModel")
             clusterInitialModel = [_convert_to_vector(c) for c in initialModel.clusterCenters]
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
                               runs, initializationMode, seed, initializationSteps, epsilon,
