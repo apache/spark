@@ -127,7 +127,9 @@ object Utils {
         requiredChildDistributionExpressions = None: Option[Seq[Expression]],
         groupingExpressions = namedGroupingExpressions.map(_._2),
         nonCompleteAggregateExpressions = partialAggregateExpressions,
+        nonCompleteAggregateAttributes = partialAggregateAttributes,
         completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
         resultExpressions = partialResultExpressions,
         child = child)
     } else {
@@ -145,49 +147,46 @@ object Utils {
 
     // 2. Create an Aggregate Operator for final aggregations.
     val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
-    val finalAggregateAttributes =
-      finalAggregateExpressions.map {
-        expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)._2
-      }
+    // The attributes of the final aggregation buffer, which is presented as input to the result
+    // projection:
+    val finalAggregateAttributes = finalAggregateExpressions.map {
+      expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)._2
+    }
+
+    // The original `resultExpressions` are a set of expressions which may reference aggregate
+    // expressions, grouping column values, and constants. When aggregate operator emits output
+    // rows, we will use `resultExpressions` to generate an output projection which takes the
+    // grouping columns and final aggregate result buffer as input. Thus, we must re-write the
+    // result expressions so that their attributes match up with the attributes of the final
+    // result projection's input row:
+    val rewrittenResultExpressions = resultExpressions.map { expr =>
+      expr.transformDown {
+        case AggregateExpression2(aggregateFunction, _, isDistinct) =>
+          // The final aggregation buffer's attributes will be `finalAggregationAttributes`, so
+          // replace each aggregate expression by its corresponding attribute in that set:
+          aggregateFunctionMap(aggregateFunction, isDistinct)._2
+        case expression =>
+          // Since we're using `namedGroupingAttributes` to extract the grouping key columns, we
+          // need to replace grouping key expressions with their corresponding attributes.
+          // We do not rely on the equality check at here since attributes may differ cosmetically.
+          // Instead, we use semanticEquals.
+          groupExpressionMap.collectFirst {
+            case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+          }.getOrElse(expression)
+      }.asInstanceOf[NamedExpression]
+    }
 
     val finalAggregate = if (usesTungstenAggregate) {
-      val rewrittenResultExpressions = resultExpressions.map { expr =>
-        expr.transformDown {
-          case agg: AggregateExpression2 =>
-            // aggregateFunctionMap contains unique aggregate functions.
-            val aggregateFunction =
-              aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct)._1
-            aggregateFunction.asInstanceOf[DeclarativeAggregate].evaluateExpression
-          case expression =>
-            // We do not rely on the equality check at here since attributes may
-            // different cosmetically. Instead, we use semanticEquals.
-            groupExpressionMap.collectFirst {
-              case (expr, ne) if expr semanticEquals expression => ne.toAttribute
-            }.getOrElse(expression)
-        }.asInstanceOf[NamedExpression]
-      }
-
       TungstenAggregate(
         requiredChildDistributionExpressions = Some(namedGroupingAttributes),
         groupingExpressions = namedGroupingAttributes,
         nonCompleteAggregateExpressions = finalAggregateExpressions,
+        nonCompleteAggregateAttributes = finalAggregateAttributes,
         completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
         resultExpressions = rewrittenResultExpressions,
         child = partialAggregate)
     } else {
-      val rewrittenResultExpressions = resultExpressions.map { expr =>
-        expr.transformDown {
-          case agg: AggregateExpression2 =>
-            aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct)._2
-          case expression =>
-            // We do not rely on the equality check at here since attributes may
-            // different cosmetically. Instead, we use semanticEquals.
-            groupExpressionMap.collectFirst {
-              case (expr, ne) if expr semanticEquals expression => ne.toAttribute
-            }.getOrElse(expression)
-        }.asInstanceOf[NamedExpression]
-      }
-
       SortBasedAggregate(
         requiredChildDistributionExpressions = Some(namedGroupingAttributes),
         groupingExpressions = namedGroupingAttributes,
@@ -263,7 +262,9 @@ object Utils {
         requiredChildDistributionExpressions = None: Option[Seq[Expression]],
         groupingExpressions = partialAggregateGroupingExpressions,
         nonCompleteAggregateExpressions = partialAggregateExpressions,
+        nonCompleteAggregateAttributes = partialAggregateAttributes,
         completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
         resultExpressions = partialAggregateResult,
         child = child)
     } else {
@@ -292,7 +293,9 @@ object Utils {
         requiredChildDistributionExpressions = Some(namedGroupingAttributes),
         groupingExpressions = namedGroupingAttributes ++ distinctColumnAttributes,
         nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
+        nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
         completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
         resultExpressions = partialMergeAggregateResult,
         child = partialAggregate)
     } else {
@@ -310,6 +313,8 @@ object Utils {
 
     // 3. Create an Aggregate Operator for partial merge aggregations.
     val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
+    // The attributes of the final aggregation buffer, which is presented as input to the result
+    // projection:
     val finalAggregateAttributes =
       finalAggregateExpressions.map {
         expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)._2
@@ -343,52 +348,41 @@ object Utils {
         (rewrittenAggregateExpression -> aggregateFunctionAttribute)
     }.unzip
 
-    val finalAndCompleteAggregate = if (usesTungstenAggregate) {
-      val rewrittenResultExpressions = resultExpressions.map { expr =>
-        expr.transform {
-          case agg: AggregateExpression2 =>
-            val function = agg.aggregateFunction
-            val isDistinct = agg.isDistinct
-            val aggregateFunction =
-              if (rewrittenAggregateFunctions.contains(function, isDistinct)) {
-                // If this function has been rewritten, we get the rewritten version from
-                // rewrittenAggregateFunctions.
-                rewrittenAggregateFunctions(function, isDistinct)
-              } else {
-                // Oterwise, we get it from aggregateFunctionMap, which contains unique
-                // aggregate functions that have not been rewritten.
-                aggregateFunctionMap(function, isDistinct)._1
-              }
-            aggregateFunction.asInstanceOf[DeclarativeAggregate].evaluateExpression
-          case expression =>
-            // We do not rely on the equality check at here since attributes may
-            // different cosmetically. Instead, we use semanticEquals.
-            groupExpressionMap.collectFirst {
-              case (expr, ne) if expr semanticEquals expression => ne.toAttribute
-            }.getOrElse(expression)
-        }.asInstanceOf[NamedExpression]
-      }
+    // The original `resultExpressions` are a set of expressions which may reference aggregate
+    // expressions, grouping column values, and constants. When aggregate operator emits output
+    // rows, we will use `resultExpressions` to generate an output projection which takes the
+    // grouping columns and final aggregate result buffer as input. Thus, we must re-write the
+    // result expressions so that their attributes match up with the attributes of the final
+    // result projection's input row:
+    val rewrittenResultExpressions = resultExpressions.map { expr =>
+      expr.transform {  // TODO(josh): why is this transform instead of transformDown
+        case AggregateExpression2(aggregateFunction, _, isDistinct) =>
+          // The final aggregation buffer's attributes will be `finalAggregationAttributes`, so
+          // replace each aggregate expression by its corresponding attribute in that set:
+          aggregateFunctionMap(aggregateFunction, isDistinct)._2
+        case expression =>
+          // Since we're using `namedGroupingAttributes` to extract the grouping key columns, we
+          // need to replace grouping key expressions with their corresponding attributes.
+          // We do not rely on the equality check at here since attributes may differ cosmetically.
+          // Instead, we use semanticEquals.
+          groupExpressionMap.collectFirst {
+            case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+          }.getOrElse(expression)
+      }.asInstanceOf[NamedExpression]
+    }
 
+
+    val finalAndCompleteAggregate = if (usesTungstenAggregate) {
       TungstenAggregate(
         requiredChildDistributionExpressions = Some(namedGroupingAttributes),
         groupingExpressions = namedGroupingAttributes,
         nonCompleteAggregateExpressions = finalAggregateExpressions,
+        nonCompleteAggregateAttributes = finalAggregateAttributes,
         completeAggregateExpressions = completeAggregateExpressions,
+        completeAggregateAttributes = completeAggregateAttributes,
         resultExpressions = rewrittenResultExpressions,
         child = partialMergeAggregate)
     } else {
-      val rewrittenResultExpressions = resultExpressions.map { expr =>
-        expr.transform {
-          case agg: AggregateExpression2 =>
-            aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct)._2
-          case expression =>
-            // We do not rely on the equality check at here since attributes may
-            // different cosmetically. Instead, we use semanticEquals.
-            groupExpressionMap.collectFirst {
-              case (expr, ne) if expr semanticEquals expression => ne.toAttribute
-            }.getOrElse(expression)
-        }.asInstanceOf[NamedExpression]
-      }
       SortBasedAggregate(
         requiredChildDistributionExpressions = Some(namedGroupingAttributes),
         groupingExpressions = namedGroupingAttributes,
