@@ -27,7 +27,7 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '+', '-', and '.'.
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data DataFrame for training
 #' @param family Error distribution. "gaussian" -> linear regression, "binomial" -> logistic reg.
 #' @param lambda Regularization parameter
@@ -41,7 +41,8 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
 #' df <- createDataFrame(sqlContext, iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df)
+#' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
+#' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
           function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0) {
@@ -56,10 +57,10 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 #'
 #' Makes predictions from a model produced by glm(), similarly to R's predict().
 #'
-#' @param model A fitted MLlib model
+#' @param object A fitted MLlib model
 #' @param newData DataFrame for testing
 #' @return DataFrame containing predicted values
-#' @rdname glm
+#' @rdname predict
 #' @export
 #' @examples
 #'\dontrun{
@@ -76,10 +77,10 @@ setMethod("predict", signature(object = "PipelineModel"),
 #'
 #' Returns the summary of a model produced by glm(), similarly to R's summary().
 #'
-#' @param model A fitted MLlib model
+#' @param x A fitted MLlib model
 #' @return a list with a 'coefficient' component, which is the matrix of coefficients. See
 #'         summary.glm for more information.
-#' @rdname glm
+#' @rdname summary
 #' @export
 #' @examples
 #'\dontrun{

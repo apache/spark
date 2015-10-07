@@ -88,6 +88,17 @@ abstract class JdbcDialect {
   def quoteIdentifier(colName: String): String = {
     s""""$colName""""
   }
+
+  /**
+   * Get the SQL query that should be used to find if the given table exists. Dialects can
+   * override this method to return a query that works best in a particular database.
+   * @param table  The name of the table.
+   * @return The SQL query to use for checking the table.
+   */
+  def getTableExistsQuery(table: String): String = {
+    s"SELECT * FROM $table WHERE 1=0"
+  }
+
 }
 
 /**
@@ -125,6 +136,9 @@ object JdbcDialects {
 
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
+  registerDialect(DB2Dialect)
+  registerDialect(MsSqlServerDialect)
+
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -197,6 +211,11 @@ case object PostgresDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case _ => None
   }
+
+  override def getTableExistsQuery(table: String): String = {
+    s"SELECT 1 FROM $table LIMIT 1"
+  }
+
 }
 
 /**
@@ -220,5 +239,42 @@ case object MySQLDialect extends JdbcDialect {
 
   override def quoteIdentifier(colName: String): String = {
     s"`$colName`"
+  }
+
+  override def getTableExistsQuery(table: String): String = {
+    s"SELECT 1 FROM $table LIMIT 1"
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Default DB2 dialect, mapping string/boolean on write to valid DB2 types.
+ * By default string, and boolean gets mapped to db2 invalid types TEXT, and BIT(1).
+ */
+@DeveloperApi
+case object DB2Dialect extends JdbcDialect {
+
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:db2")
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
+    case BooleanType => Some(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case _ => None
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Default Microsoft SQL Server dialect, mapping the datetimeoffset types to a String on read.
+ */
+@DeveloperApi
+case object MsSqlServerDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (typeName.contains("datetimeoffset")) {
+      // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
+      Some(StringType)
+    } else None
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -85,9 +85,24 @@ object SamplePushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes operations to either side of a Union, Intersect or Except.
+ * Pushes certain operations to both sides of a Union, Intersect or Except operator.
+ * Operations that are safe to pushdown are listed as follows.
+ * Union:
+ * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
+ * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
+ * we will not be able to pushdown Projections.
+ *
+ * Intersect:
+ * It is not safe to pushdown Projections through it because we need to get the
+ * intersect of rows by comparing the entire rows. It is fine to pushdown Filters
+ * with deterministic condition.
+ *
+ * Except:
+ * It is not safe to pushdown Projections through it because we need to get the
+ * intersect of rows by comparing the entire rows. It is fine to pushdown Filters
+ * with deterministic condition.
  */
-object SetOperationPushDown extends Rule[LogicalPlan] {
+object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -114,48 +129,65 @@ object SetOperationPushDown extends Rule[LogicalPlan] {
     result.asInstanceOf[A]
   }
 
+  /**
+   * Splits the condition expression into small conditions by `And`, and partition them by
+   * deterministic, and finally recombine them by `And`. It returns an expression containing
+   * all deterministic expressions (the first field of the returned Tuple2) and an expression
+   * containing all non-deterministic expressions (the second field of the returned Tuple2).
+   */
+  private def partitionByDeterministic(condition: Expression): (Expression, Expression) = {
+    val andConditions = splitConjunctivePredicates(condition)
+    andConditions.partition(_.deterministic) match {
+      case (deterministic, nondeterministic) =>
+        deterministic.reduceOption(And).getOrElse(Literal(true)) ->
+        nondeterministic.reduceOption(And).getOrElse(Literal(true))
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Push down filter into union
     case Filter(condition, u @ Union(left, right)) =>
+      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
       val rewrites = buildRewrites(u)
-      Union(
-        Filter(condition, left),
-        Filter(pushToRight(condition, rewrites), right))
+      Filter(nondeterministic,
+        Union(
+          Filter(deterministic, left),
+          Filter(pushToRight(deterministic, rewrites), right)
+        )
+      )
 
-    // Push down projection into union
-    case Project(projectList, u @ Union(left, right)) =>
-      val rewrites = buildRewrites(u)
-      Union(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
+    // Push down deterministic projection through UNION ALL
+    case p @ Project(projectList, u @ Union(left, right)) =>
+      if (projectList.forall(_.deterministic)) {
+        val rewrites = buildRewrites(u)
+        Union(
+          Project(projectList, left),
+          Project(projectList.map(pushToRight(_, rewrites)), right))
+      } else {
+        p
+      }
 
-    // Push down filter into intersect
+    // Push down filter through INTERSECT
     case Filter(condition, i @ Intersect(left, right)) =>
+      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
       val rewrites = buildRewrites(i)
-      Intersect(
-        Filter(condition, left),
-        Filter(pushToRight(condition, rewrites), right))
+      Filter(nondeterministic,
+        Intersect(
+          Filter(deterministic, left),
+          Filter(pushToRight(deterministic, rewrites), right)
+        )
+      )
 
-    // Push down projection into intersect
-    case Project(projectList, i @ Intersect(left, right)) =>
-      val rewrites = buildRewrites(i)
-      Intersect(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
-
-    // Push down filter into except
+    // Push down filter through EXCEPT
     case Filter(condition, e @ Except(left, right)) =>
+      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
       val rewrites = buildRewrites(e)
-      Except(
-        Filter(condition, left),
-        Filter(pushToRight(condition, rewrites), right))
-
-    // Push down projection into except
-    case Project(projectList, e @ Except(left, right)) =>
-      val rewrites = buildRewrites(e)
-      Except(
-        Project(projectList, left),
-        Project(projectList.map(pushToRight(_, rewrites)), right))
+      Filter(nondeterministic,
+        Except(
+          Filter(deterministic, left),
+          Filter(pushToRight(deterministic, rewrites), right)
+        )
+      )
   }
 }
 
@@ -165,6 +197,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] {
  *
  *  - Inserting Projections beneath the following operators:
  *   - Aggregate
+ *   - Generate
  *   - Project <- Join
  *   - LeftSemiJoin
  */
@@ -177,6 +210,21 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
+
+    // Eliminate attributes that are not needed to calculate the Generate.
+    case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>
+      g.copy(child = Project(g.references.toSeq, g.child))
+
+    case p @ Project(_, g: Generate) if g.join && p.references.subsetOf(g.generatedSet) =>
+      p.copy(child = g.copy(join = false))
+
+    case p @ Project(projectList, g: Generate) if g.join =>
+      val neededChildOutput = p.references -- g.generatorOutput ++ g.references
+      if (neededChildOutput == g.child.outputSet) {
+        p
+      } else {
+        Project(projectList, g.copy(child = Project(neededChildOutput.toSeq, g.child)))
+      }
 
     case p @ Project(projectList, a @ Aggregate(groupingExpressions, aggregateExpressions, child))
         if (a.outputSet -- p.references).nonEmpty =>
@@ -212,10 +260,21 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case Project(projectList, Limit(exp, child)) =>
       Limit(exp, Project(projectList, child))
 
-    // Push down project if possible when the child is sort
-    case p @ Project(projectList, s @ Sort(_, _, grandChild))
-      if s.references.subsetOf(p.outputSet) =>
-      s.copy(child = Project(projectList, grandChild))
+    // Push down project if possible when the child is sort.
+    case p @ Project(projectList, s @ Sort(_, _, grandChild)) =>
+      if (s.references.subsetOf(p.outputSet)) {
+        s.copy(child = Project(projectList, grandChild))
+      } else {
+        val neededReferences = s.references ++ p.references
+        if (neededReferences == grandChild.outputSet) {
+          // No column we can prune, return the original plan.
+          p
+        } else {
+          // Do not use neededReferences.toSeq directly, should respect grandChild's output order.
+          val newProjectList = grandChild.output.filter(neededReferences.contains)
+          p.copy(child = s.copy(child = Project(newProjectList, grandChild)))
+        }
+      }
 
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
@@ -260,8 +319,11 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
         val substitutedProjection = projectList1.map(_.transform {
           case a: Attribute => aliasMap.getOrElse(a, a)
         }).asInstanceOf[Seq[NamedExpression]]
-
-        Project(substitutedProjection, child)
+        // collapse 2 projects may introduce unnecessary Aliases, trim them here.
+        val cleanedProjection = substitutedProjection.map(p =>
+          CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+        )
+        Project(cleanedProjection, child)
       }
   }
 }
@@ -353,7 +415,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         case _ => e
       }
 
-      case e: StringComparison => e.children match {
+      case e: StringPredicate => e.children match {
         case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
@@ -376,12 +438,6 @@ object ConstantFolding extends Rule[LogicalPlan] {
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
-
-      // Fold "literal in (item1, item2, ..., literal, ...)" into true directly.
-      case In(Literal(v, _), list) if list.exists {
-          case Literal(candidate, _) if candidate == v => true
-          case _ => false
-        } => Literal.create(true, BooleanType)
     }
   }
 }
@@ -421,6 +477,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case (_, Literal(false, BooleanType)) => Literal(false)
         // a && a  =>  a
         case (l, r) if l fastEquals r => l
+        // a && (not(a) || b) => a && b
+        case (l, Or(l1, r)) if (Not(l) == l1) => And(l, r)
+        case (l, Or(r, l1)) if (Not(l) == l1) => And(l, r)
+        case (Or(l, l1), r) if (l1 == Not(r)) => And(l, r)
+        case (Or(l1, l), r) if (l1 == Not(r)) => And(l, r)
         // (a || b) && (a || c)  =>  a || (b && c)
         case _ =>
           // 1. Split left and right to get the disjunctive predicates,
@@ -499,6 +560,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case LessThan(l, r) => GreaterThanOrEqual(l, r)
         // not(l <= r)  =>  l > r
         case LessThanOrEqual(l, r) => GreaterThan(l, r)
+        // not(l || r) => not(l) && not(r)
+        case Or(l, r) => And(Not(l), Not(r))
+        // not(l && r) => not(l) or not(r)
+        case And(l, r) => Or(Not(l), Not(r))
         // not(not(e))  =>  e
         case Not(e) => e
         case _ => not

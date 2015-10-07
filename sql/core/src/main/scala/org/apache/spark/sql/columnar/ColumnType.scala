@@ -38,9 +38,6 @@ private[sql] sealed abstract class ColumnType[JvmType] {
   // The catalyst data type of this column.
   def dataType: DataType
 
-  // A unique ID representing the type.
-  def typeId: Int
-
   // Default size in bytes for one element of type T (e.g. 4 for `Int`).
   def defaultSize: Int
 
@@ -107,7 +104,6 @@ private[sql] sealed abstract class ColumnType[JvmType] {
 
 private[sql] abstract class NativeColumnType[T <: AtomicType](
     val dataType: T,
-    val typeId: Int,
     val defaultSize: Int)
   extends ColumnType[T#InternalType] {
 
@@ -117,7 +113,7 @@ private[sql] abstract class NativeColumnType[T <: AtomicType](
   def scalaTag: TypeTag[dataType.InternalType] = dataType.tag
 }
 
-private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
+private[sql] object INT extends NativeColumnType(IntegerType, 4) {
   override def append(v: Int, buffer: ByteBuffer): Unit = {
     buffer.putInt(v)
   }
@@ -145,7 +141,7 @@ private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
   }
 }
 
-private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
+private[sql] object LONG extends NativeColumnType(LongType, 8) {
   override def append(v: Long, buffer: ByteBuffer): Unit = {
     buffer.putLong(v)
   }
@@ -173,7 +169,7 @@ private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
   }
 }
 
-private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
+private[sql] object FLOAT extends NativeColumnType(FloatType, 4) {
   override def append(v: Float, buffer: ByteBuffer): Unit = {
     buffer.putFloat(v)
   }
@@ -201,7 +197,7 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
   }
 }
 
-private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
+private[sql] object DOUBLE extends NativeColumnType(DoubleType, 8) {
   override def append(v: Double, buffer: ByteBuffer): Unit = {
     buffer.putDouble(v)
   }
@@ -229,7 +225,7 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
   }
 }
 
-private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
+private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
   override def append(v: Boolean, buffer: ByteBuffer): Unit = {
     buffer.put(if (v) 1: Byte else 0: Byte)
   }
@@ -255,7 +251,7 @@ private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
   }
 }
 
-private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
+private[sql] object BYTE extends NativeColumnType(ByteType, 1) {
   override def append(v: Byte, buffer: ByteBuffer): Unit = {
     buffer.put(v)
   }
@@ -283,7 +279,7 @@ private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
   }
 }
 
-private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
+private[sql] object SHORT extends NativeColumnType(ShortType, 2) {
   override def append(v: Short, buffer: ByteBuffer): Unit = {
     buffer.putShort(v)
   }
@@ -311,7 +307,7 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
   }
 }
 
-private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
+private[sql] object STRING extends NativeColumnType(StringType, 8) {
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     row.getUTF8String(ordinal).numBytes() + 4
   }
@@ -339,48 +335,13 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
-}
 
-private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
-  override def extract(buffer: ByteBuffer): Int = {
-    buffer.getInt
-  }
-
-  override def append(v: Int, buffer: ByteBuffer): Unit = {
-    buffer.putInt(v)
-  }
-
-  override def getField(row: InternalRow, ordinal: Int): Int = {
-    row.getInt(ordinal)
-  }
-
-  def setField(row: MutableRow, ordinal: Int, value: Int): Unit = {
-    row(ordinal) = value
-  }
-}
-
-private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
-  override def extract(buffer: ByteBuffer): Long = {
-    buffer.getLong
-  }
-
-  override def append(v: Long, buffer: ByteBuffer): Unit = {
-    buffer.putLong(v)
-  }
-
-  override def getField(row: InternalRow, ordinal: Int): Long = {
-    row.getLong(ordinal)
-  }
-
-  override def setField(row: MutableRow, ordinal: Int, value: Long): Unit = {
-    row(ordinal) = value
-  }
+  override def clone(v: UTF8String): UTF8String = v.clone()
 }
 
 private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   extends NativeColumnType(
     DecimalType(precision, scale),
-    10,
     FIXED_DECIMAL.defaultSize) {
 
   override def extract(buffer: ByteBuffer): Decimal = {
@@ -408,9 +369,7 @@ private[sql] object FIXED_DECIMAL {
   val defaultSize = 8
 }
 
-private[sql] sealed abstract class ByteArrayColumnType(
-    val typeId: Int,
-    val defaultSize: Int)
+private[sql] sealed abstract class ByteArrayColumnType(val defaultSize: Int)
   extends ColumnType[Array[Byte]] {
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
@@ -429,7 +388,7 @@ private[sql] sealed abstract class ByteArrayColumnType(
   }
 }
 
-private[sql] object BINARY extends ByteArrayColumnType(11, 16) {
+private[sql] object BINARY extends ByteArrayColumnType(16) {
 
   def dataType: DataType = BooleanType
 
@@ -445,7 +404,7 @@ private[sql] object BINARY extends ByteArrayColumnType(11, 16) {
 // Used to process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
-private[sql] case class GENERIC(dataType: DataType) extends ByteArrayColumnType(12, 16) {
+private[sql] case class GENERIC(dataType: DataType) extends ByteArrayColumnType(16) {
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
     row.update(ordinal, SparkSqlSerializer.deserialize[Any](value))
   }
@@ -461,10 +420,8 @@ private[sql] object ColumnType {
       case BooleanType => BOOLEAN
       case ByteType => BYTE
       case ShortType => SHORT
-      case IntegerType => INT
-      case DateType => DATE
-      case LongType => LONG
-      case TimestampType => TIMESTAMP
+      case IntegerType | DateType => INT
+      case LongType | TimestampType => LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
       case StringType => STRING

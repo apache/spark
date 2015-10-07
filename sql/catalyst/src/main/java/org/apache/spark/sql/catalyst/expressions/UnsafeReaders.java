@@ -17,24 +17,30 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 public class UnsafeReaders {
 
+  /**
+   * Reads in unsafe array according to the format described in `UnsafeArrayData`.
+   */
   public static UnsafeArrayData readArray(Object baseObject, long baseOffset, int numBytes) {
     // Read the number of elements from first 4 bytes.
-    final int numElements = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset);
+    final int numElements = Platform.getInt(baseObject, baseOffset);
     final UnsafeArrayData array = new UnsafeArrayData();
     // Skip the first 4 bytes.
     array.pointTo(baseObject, baseOffset + 4, numElements, numBytes - 4);
     return array;
   }
 
+  /**
+   * Reads in unsafe map according to the format described in `UnsafeMapData`.
+   */
   public static UnsafeMapData readMap(Object baseObject, long baseOffset, int numBytes) {
     // Read the number of elements from first 4 bytes.
-    final int numElements = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset);
+    final int numElements = Platform.getInt(baseObject, baseOffset);
     // Read the numBytes of key array in second 4 bytes.
-    final int keyArraySize = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + 4);
+    final int keyArraySize = Platform.getInt(baseObject, baseOffset + 4);
     final int valueArraySize = numBytes - 8 - keyArraySize;
 
     final UnsafeArrayData keyArray = new UnsafeArrayData();

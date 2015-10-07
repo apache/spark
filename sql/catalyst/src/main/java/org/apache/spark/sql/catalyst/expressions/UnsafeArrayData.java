@@ -20,9 +20,8 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
-import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -59,7 +58,7 @@ public class UnsafeArrayData extends ArrayData {
   private int sizeInBytes;
 
   private int getElementOffset(int ordinal) {
-    return PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + ordinal * 4L);
+    return Platform.getInt(baseObject, baseOffset + ordinal * 4L);
   }
 
   private int getElementSize(int offset, int ordinal) {
@@ -157,7 +156,7 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return false;
-    return PlatformDependent.UNSAFE.getBoolean(baseObject, baseOffset + offset);
+    return Platform.getBoolean(baseObject, baseOffset + offset);
   }
 
   @Override
@@ -165,7 +164,7 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return 0;
-    return PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + offset);
+    return Platform.getByte(baseObject, baseOffset + offset);
   }
 
   @Override
@@ -173,7 +172,7 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return 0;
-    return PlatformDependent.UNSAFE.getShort(baseObject, baseOffset + offset);
+    return Platform.getShort(baseObject, baseOffset + offset);
   }
 
   @Override
@@ -181,7 +180,7 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return 0;
-    return PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
+    return Platform.getInt(baseObject, baseOffset + offset);
   }
 
   @Override
@@ -189,7 +188,7 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return 0;
-    return PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
+    return Platform.getLong(baseObject, baseOffset + offset);
   }
 
   @Override
@@ -197,7 +196,7 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return 0;
-    return PlatformDependent.UNSAFE.getFloat(baseObject, baseOffset + offset);
+    return Platform.getFloat(baseObject, baseOffset + offset);
   }
 
   @Override
@@ -205,7 +204,7 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return 0;
-    return PlatformDependent.UNSAFE.getDouble(baseObject, baseOffset + offset);
+    return Platform.getDouble(baseObject, baseOffset + offset);
   }
 
   @Override
@@ -215,7 +214,7 @@ public class UnsafeArrayData extends ArrayData {
     if (offset < 0) return null;
 
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      final long value = PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
+      final long value = Platform.getLong(baseObject, baseOffset + offset);
       return Decimal.apply(value, precision, scale);
     } else {
       final byte[] bytes = getBinary(ordinal);
@@ -241,12 +240,7 @@ public class UnsafeArrayData extends ArrayData {
     if (offset < 0) return null;
     final int size = getElementSize(offset, ordinal);
     final byte[] bytes = new byte[size];
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset + offset,
-      bytes,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      size);
+    Platform.copyMemory(baseObject, baseOffset + offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
     return bytes;
   }
 
@@ -255,14 +249,13 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
-    final int months = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
-    final long microseconds =
-      PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
+    final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
+    final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
     return new CalendarInterval(months, microseconds);
   }
 
   @Override
-  public InternalRow getStruct(int ordinal, int numFields) {
+  public UnsafeRow getStruct(int ordinal, int numFields) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -273,7 +266,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public ArrayData getArray(int ordinal) {
+  public UnsafeArrayData getArray(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -282,7 +275,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public MapData getMap(int ordinal) {
+  public UnsafeMapData getMap(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -292,7 +285,11 @@ public class UnsafeArrayData extends ArrayData {
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    int result = 37;
+    for (int i = 0; i < sizeInBytes; i++) {
+      result = 37 * result + Platform.getByte(baseObject, baseOffset + i);
+    }
+    return result;
   }
 
   @Override
@@ -307,27 +304,16 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   public void writeToMemory(Object target, long targetOffset) {
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset,
-      target,
-      targetOffset,
-      sizeInBytes
-    );
+    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
   }
 
   @Override
   public UnsafeArrayData copy() {
     UnsafeArrayData arrayCopy = new UnsafeArrayData();
     final byte[] arrayDataCopy = new byte[sizeInBytes];
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset,
-      arrayDataCopy,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      sizeInBytes
-    );
-    arrayCopy.pointTo(arrayDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numElements, sizeInBytes);
+    Platform.copyMemory(
+      baseObject, baseOffset, arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    arrayCopy.pointTo(arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, numElements, sizeInBytes);
     return arrayCopy;
   }
 }

@@ -32,7 +32,6 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.hive.common.FileUtils
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -45,7 +44,7 @@ import org.apache.spark.util.SerializableJobConf
  * It is based on [[SparkHadoopWriter]].
  */
 private[hive] class SparkHiveWriterContainer(
-    @transient jobConf: JobConf,
+    jobConf: JobConf,
     fileSinkConf: FileSinkDesc)
   extends Logging
   with SparkHadoopMapRedUtil
@@ -122,7 +121,7 @@ private[hive] class SparkHiveWriterContainer(
   }
 
   protected def commit() {
-    SparkHadoopMapRedUtil.commitTask(committer, taskContext, jobID, splitID, attemptID)
+    SparkHadoopMapRedUtil.commitTask(committer, taskContext, jobID, splitID)
   }
 
   private def setIDs(jobId: Int, splitId: Int, attemptId: Int) {
@@ -163,7 +162,7 @@ private[spark] object SparkHiveDynamicPartitionWriterContainer {
 }
 
 private[spark] class SparkHiveDynamicPartitionWriterContainer(
-    @transient jobConf: JobConf,
+    jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
     dynamicPartColNames: Array[String])
   extends SparkHiveWriterContainer(jobConf, fileSinkConf) {
@@ -194,10 +193,10 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     // Better solution is to add a step similar to what Hive FileSinkOperator.jobCloseOp does:
     // calling something like Utilities.mvFileToFinalPath to cleanup the output directory and then
     // load it with loadDynamicPartitions/loadPartition/loadTable.
-    val oldMarker = jobConf.getBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, true)
-    jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, false)
+    val oldMarker = conf.value.getBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, true)
+    conf.value.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, false)
     super.commitJob()
-    jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
+    conf.value.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
   }
 
   override def getLocalFileWriter(row: InternalRow, schema: StructType)

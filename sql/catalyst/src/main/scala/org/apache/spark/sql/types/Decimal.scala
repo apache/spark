@@ -145,7 +145,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  def toJavaBigDecimal: java.math.BigDecimal = toBigDecimal.underlying()
+  def toJavaBigDecimal: java.math.BigDecimal = {
+    if (decimalVal.ne(null)) {
+      decimalVal.underlying()
+    } else {
+      java.math.BigDecimal.valueOf(longVal, _scale)
+    }
+  }
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
@@ -267,7 +273,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
       Decimal(longVal + that.longVal, Math.max(precision, that.precision), scale)
     } else {
-      Decimal(toBigDecimal + that.toBigDecimal, precision, scale)
+      Decimal(toBigDecimal + that.toBigDecimal)
     }
   }
 
@@ -275,7 +281,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
       Decimal(longVal - that.longVal, Math.max(precision, that.precision), scale)
     } else {
-      Decimal(toBigDecimal - that.toBigDecimal, precision, scale)
+      Decimal(toBigDecimal - that.toBigDecimal)
     }
   }
 

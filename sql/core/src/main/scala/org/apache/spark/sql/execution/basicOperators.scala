@@ -40,11 +40,20 @@ import org.apache.spark.{HashPartitioner, SparkEnv}
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
+
   @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    val reusableProjection = buildProjection()
-    iter.map(reusableProjection)
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = longMetric("numRows")
+    child.execute().mapPartitions { iter =>
+      val reusableProjection = buildProjection()
+      iter.map { row =>
+        numRows += 1
+        reusableProjection(row)
+      }
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -56,19 +65,30 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
  */
 case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
 
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
+
   override def outputsUnsafeRows: Boolean = true
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    this.transformAllExpressions {
-      case CreateStruct(children) => CreateStructUnsafe(children)
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+  /** Rewrite the project list to use unsafe expressions as needed. */
+  protected val unsafeProjectList = projectList.map(_ transform {
+    case CreateStruct(children) => CreateStructUnsafe(children)
+    case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+  })
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = longMetric("numRows")
+    child.execute().mapPartitions { iter =>
+      val project = UnsafeProjection.create(unsafeProjectList, child.output)
+      iter.map { row =>
+        numRows += 1
+        project(row)
+      }
     }
-    val project = UnsafeProjection.create(projectList, child.output)
-    iter.map(project)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -117,7 +137,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
  *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
- * @param child the QueryPlan
+ * @param child the SparkPlan
  */
 @DeveloperApi
 case class Sample(
@@ -183,7 +203,7 @@ case class Limit(limit: Int, child: SparkPlan)
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def executeCollect(): Array[Row] = child.executeTake(limit)
+  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val rdd: RDD[_ <: Product2[Boolean, InternalRow]] = if (sortBasedShuffleOn) {
@@ -218,7 +238,10 @@ case class TakeOrderedAndProject(
     projectList: Option[Seq[NamedExpression]],
     child: SparkPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val projectOutput = projectList.map(_.map(_.toAttribute))
+    projectOutput.getOrElse(child.output)
+  }
 
   override def outputPartitioning: Partitioning = SinglePartition
 
@@ -234,9 +257,8 @@ case class TakeOrderedAndProject(
     projection.map(data.map(_)).getOrElse(data)
   }
 
-  override def executeCollect(): Array[Row] = {
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    collectData().map(converter(_).asInstanceOf[Row])
+  override def executeCollect(): Array[InternalRow] = {
+    collectData()
   }
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
@@ -244,6 +266,13 @@ case class TakeOrderedAndProject(
   protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(collectData(), 1)
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
+
+  override def simpleString: String = {
+    val orderByString = sortOrder.mkString("[", ",", "]")
+    val outputString = output.mkString("[", ",", "]")
+
+    s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
+  }
 }
 
 /**

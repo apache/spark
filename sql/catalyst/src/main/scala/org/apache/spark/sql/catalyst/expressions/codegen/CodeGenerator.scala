@@ -28,7 +28,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
 
 
@@ -84,11 +84,11 @@ class CodeGenContext {
   /**
    * Holding all the functions those will be added into generated class.
    */
-  val addedFuntions: mutable.Map[String, String] =
+  val addedFunctions: mutable.Map[String, String] =
     mutable.Map.empty[String, String]
 
   def addNewFunction(funcName: String, funcCode: String): Unit = {
-    addedFuntions += ((funcName, funcCode))
+    addedFunctions += ((funcName, funcCode))
   }
 
   final val JAVA_BOOLEAN = "boolean"
@@ -272,6 +272,7 @@ class CodeGenContext {
    * 64kb code size limit in JVM
    *
    * @param row the variable name of row that is used by expressions
+   * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
     val blocks = new ArrayBuffer[String]()
@@ -298,8 +299,8 @@ class CodeGenContext {
            |  $body
            |}
          """.stripMargin
-         addNewFunction(name, code)
-         name
+        addNewFunction(name, code)
+        name
       }
 
       functions.map(name => s"$name($row);").mkString("\n")
@@ -337,7 +338,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   }
 
   protected def declareAddedFunctions(ctx: CodeGenContext): String = {
-    ctx.addedFuntions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
+    ctx.addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
   }
 
   /**
@@ -371,7 +372,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(
-      classOf[PlatformDependent].getName,
+      classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
       classOf[UTF8String].getName,

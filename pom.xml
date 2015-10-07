@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.10</artifactId>
-  <version>1.5.0-SNAPSHOT</version>
+  <version>1.6.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -87,7 +87,7 @@
 
   <modules>
     <module>core</module>
-    <module>bagel</module>
+    <module>bagel</module> <!-- Deprecated -->
     <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>
@@ -104,6 +104,7 @@
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
     <module>external/mqtt</module>
+    <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
@@ -151,7 +152,7 @@
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
     <aws.java.sdk.version>1.9.16</aws.java.sdk.version>
-    <aws.kinesis.client.version>1.2.1</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.3.0</aws.kinesis.client.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.3.2</commons.httpclient.version>
     <!--  commons-httpclient/commons-httpclient-->
@@ -431,7 +432,7 @@
         <version>${commons-lang3.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.commons</groupId>
+        <groupId>commons-lang</groupId>
         <artifactId>commons-lang</artifactId>
         <version>${commons-lang2.version}</version>
       </dependency>
@@ -652,6 +653,11 @@
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <!-- Guava is excluded because of SPARK-6149.  The Guava version referenced in this module is
@@ -1416,6 +1422,10 @@
             <artifactId>libthrift</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
           </exclusion>
@@ -1597,7 +1607,7 @@
         <groupId>com.twitter</groupId>
         <artifactId>parquet-hadoop-bundle</artifactId>
         <version>${hive.parquet.version}</version>
-        <scope>runtime</scope>
+        <scope>compile</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.flume</groupId>
@@ -1886,6 +1896,8 @@
                 launched by the tests have access to the correct test-time classpath.
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+              <SPARK_PREPEND_CLASSES>1</SPARK_PREPEND_CLASSES>
+              <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
@@ -1894,6 +1906,7 @@
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
+              <spark.master.rest.enabled>false</spark.master.rest.enabled>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
@@ -1922,6 +1935,8 @@
                 launched by the tests have access to the correct test-time classpath.
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+              <SPARK_PREPEND_CLASSES>1</SPARK_PREPEND_CLASSES>
+              <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
@@ -2377,44 +2392,6 @@
         <module>yarn</module>
         <module>network/yarn</module>
       </modules>
-    </profile>
-
-    <profile>
-      <id>mapr3</id>
-      <properties>
-        <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
-        <yarn.version>2.4.1-mapr-1408</yarn.version>
-        <hbase.version>0.98.4-mapr-1408</hbase.version>
-        <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>mapr4</id>
-      <properties>
-        <hadoop.version>2.4.1-mapr-1408</hadoop.version>
-        <yarn.version>2.4.1-mapr-1408</yarn.version>
-        <hbase.version>0.98.4-mapr-1408</hbase.version>
-        <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
-      </properties>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.curator</groupId>
-          <artifactId>curator-recipes</artifactId>
-          <version>${curator.version}</version>
-          <exclusions>
-            <exclusion>
-              <groupId>org.apache.zookeeper</groupId>
-              <artifactId>zookeeper</artifactId>
-            </exclusion>
-          </exclusions>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.zookeeper</groupId>
-          <artifactId>zookeeper</artifactId>
-          <version>3.4.5-mapr-1406</version>
-        </dependency>
-      </dependencies>
     </profile>
 
     <profile>

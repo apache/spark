@@ -44,7 +44,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -199,6 +199,8 @@ class StreamingContext private[streaming] (
   private var state: StreamingContextState = INITIALIZED
 
   private val startSite = new AtomicReference[CallSite](null)
+
+  private[streaming] def getStartSite(): CallSite = startSite.get()
 
   private var shutdownHookRef: AnyRef = _
 
@@ -588,12 +590,20 @@ class StreamingContext private[streaming] (
     state match {
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
-        sparkContext.setCallSite(startSite.get)
         StreamingContext.ACTIVATION_LOCK.synchronized {
           StreamingContext.assertNoOtherContextIsActive()
           try {
             validate()
-            scheduler.start()
+
+            // Start the streaming scheduler in a new thread, so that thread local properties
+            // like call sites and job groups can be reset without affecting those of the
+            // current thread.
+            ThreadUtils.runInNewThread("streaming-start") {
+              sparkContext.setCallSite(startSite.get)
+              sparkContext.clearJobGroup()
+              sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
+              scheduler.start()
+            }
             state = StreamingContextState.ACTIVE
           } catch {
             case NonFatal(e) =>
@@ -604,7 +614,7 @@ class StreamingContext private[streaming] (
           }
           StreamingContext.setActiveContext(this)
         }
-        shutdownHookRef = Utils.addShutdownHook(
+        shutdownHookRef = ShutdownHookManager.addShutdownHook(
           StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
         // Registering Streaming Metrics at the start of the StreamingContext
         assert(env.metricsSystem != null)
@@ -617,6 +627,7 @@ class StreamingContext private[streaming] (
         throw new IllegalStateException("StreamingContext has already been stopped")
     }
   }
+
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
@@ -691,7 +702,7 @@ class StreamingContext private[streaming] (
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()
           if (shutdownHookRef != null) {
-            Utils.removeShutdownHook(shutdownHookRef)
+            ShutdownHookManager.removeShutdownHook(shutdownHookRef)
           }
           logInfo("StreamingContext stopped successfully")
       }
@@ -725,7 +736,7 @@ object StreamingContext extends Logging {
    */
   private val ACTIVATION_LOCK = new Object()
 
-  private val SHUTDOWN_HOOK_PRIORITY = Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY + 1
+  private val SHUTDOWN_HOOK_PRIORITY = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY + 1
 
   private val activeContext = new AtomicReference[StreamingContext](null)
 
@@ -735,7 +746,7 @@ object StreamingContext extends Logging {
         throw new IllegalStateException(
           "Only one StreamingContext may be started in this JVM. " +
             "Currently running StreamingContext was started at" +
-            activeContext.get.startSite.get.longForm)
+            activeContext.get.getStartSite().longForm)
       }
     }
   }

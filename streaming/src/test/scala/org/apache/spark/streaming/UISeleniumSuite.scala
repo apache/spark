@@ -121,7 +121,7 @@ class UISeleniumSuite
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
-            "Total Delay (?)")
+            "Total Delay (?)", "Output Ops: Succeeded/Total")
         }
 
         val batchLinks =
@@ -138,7 +138,7 @@ class UISeleniumSuite
         summaryText should contain ("Total delay:")
 
         findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
-          List("Output Op Id", "Description", "Duration", "Job Id", "Duration",
+          List("Output Op Id", "Description", "Duration", "Status", "Job Id", "Duration",
             "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total", "Error")
         }
 

@@ -43,6 +43,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
    * Must be >= 2.
    *
    * (default = 20)
+   * @group param
    */
   val maxCategories = new IntParam(this, "maxCategories",
     "Threshold for the number of values a categorical feature can take (>= 2)." +
@@ -341,7 +342,7 @@ class VectorIndexerModel private[ml] (
     val newField = prepOutputField(dataset.schema)
     val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
     val newCol = transformUDF(dataset($(inputCol)))
-    dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
+    dataset.withColumn($(outputCol), newCol, newField.metadata)
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -405,6 +406,6 @@ class VectorIndexerModel private[ml] (
 
   override def copy(extra: ParamMap): VectorIndexerModel = {
     val copied = new VectorIndexerModel(uid, numFeatures, categoryMaps)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }
