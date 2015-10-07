@@ -1189,16 +1189,6 @@ class Row(tuple):
     <Row(name, age)>
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
-
-    Some special column names such as aggregated column count, should
-    work properly.
-
-    >>> from pyspark.sql import Row
-    >>> rdd = sc.parallelize([1, 2, 1, 3])
-    >>> df = sqlContext.createDataFrame(rdd.map(lambda x: Row(id = x)))
-    >>> df = df.groupby("id").count()
-    >>> df.map(lambda x: x.count).collect()
-    [2, 1, 1]
     """
 
     def __new__(self, *args, **kwargs):
@@ -1219,11 +1209,11 @@ class Row(tuple):
         else:
             raise ValueError("No args or kwargs")
 
-    def __init__(self, *args, **kwargs):
-        if hasattr(self, "__fields__") and "count" in self.__fields__:
-            self.__dict__["count"] = self.__getattr__("count")
-        if hasattr(self, "__fields__") and "index" in self.__fields__:
-            self.__dict__["index"] = self.__getattr__("index")
+    def count(self):
+        self.__getattr__("count")
+
+    def index(self):
+        self.__getattr__("index")
 
     def asDict(self, recursive=False):
         """
@@ -1291,10 +1281,6 @@ class Row(tuple):
         if key != '__fields__':
             raise Exception("Row is read-only")
         self.__dict__[key] = value
-        if "count" in self.__fields__:
-            self.__dict__["count"] = self.__getattr__("count")
-        if "index" in self.__fields__:
-            self.__dict__["index"] = self.__getattr__("index")
 
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""
