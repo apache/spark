@@ -224,10 +224,10 @@ exportMethods("agg")
 export("sparkRSQL.init",
        "sparkRHive.init")
 
-export("cacheTable",
+export("as.DataFrame",
+       "cacheTable",
        "clearCache",
        "createDataFrame",
-       "as.DataFrame",
        "createExternalTable",
        "dropTempTable",
        "jsonFile",
