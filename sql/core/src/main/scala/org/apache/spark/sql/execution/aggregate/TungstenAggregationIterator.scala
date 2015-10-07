@@ -131,15 +131,15 @@ class TungstenAggregationIterator(
   // All aggregate functions. TungstenAggregationIterator only handles expression-based aggregate.
   // If there is any functions that is an ImperativeAggregateFunction, we throw an
   // IllegalStateException.
-  private[this] val allAggregateFunctions: Array[ExpressionAggregate] = {
+  private[this] val allAggregateFunctions: Array[DeclarativeAggregate] = {
     if (!allAggregateExpressions.forall(
-        _.aggregateFunction.isInstanceOf[ExpressionAggregate])) {
+        _.aggregateFunction.isInstanceOf[DeclarativeAggregate])) {
       throw new IllegalStateException(
         "Only ExpressionAggregateFunctions should be passed in TungstenAggregationIterator.")
     }
 
     allAggregateExpressions
-      .map(_.aggregateFunction.asInstanceOf[ExpressionAggregate])
+      .map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
       .toArray
   }
 
@@ -203,9 +203,9 @@ class TungstenAggregationIterator(
 
       // Final-Complete
       case (Some(Final), Some(Complete)) =>
-        val nonCompleteAggregateFunctions: Array[ExpressionAggregate] =
+        val nonCompleteAggregateFunctions: Array[DeclarativeAggregate] =
           allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
-        val completeAggregateFunctions: Array[ExpressionAggregate] =
+        val completeAggregateFunctions: Array[DeclarativeAggregate] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
 
         val completeOffsetExpressions =
@@ -235,7 +235,7 @@ class TungstenAggregationIterator(
 
       // Complete-only
       case (None, Some(Complete)) =>
-        val completeAggregateFunctions: Array[ExpressionAggregate] =
+        val completeAggregateFunctions: Array[DeclarativeAggregate] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
 
         val updateExpressions =

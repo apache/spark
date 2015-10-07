@@ -97,7 +97,7 @@ private[sql] case class AggregateExpression2(
  *
  *  - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
  *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
- *  - [[ExpressionAggregate]] is for aggregation functions that are specified using
+ *  - [[DeclarativeAggregate]] is for aggregation functions that are specified using
  *    Catalyst expressions.
  *
  * In both interfaces, aggregates must define the schema ([[aggBufferSchema]]) and attributes
@@ -244,7 +244,7 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
  * can then use these attributes when defining `updateExpressions`, `mergeExpressions`, and
  * `evaluateExpressions`.
  */
-abstract class ExpressionAggregate
+abstract class DeclarativeAggregate
   extends AggregateFunction2
   with Serializable
   with Unevaluable {

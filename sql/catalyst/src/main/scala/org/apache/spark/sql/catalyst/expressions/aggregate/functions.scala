@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
-case class Average(child: Expression) extends ExpressionAggregate {
+case class Average(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -88,7 +88,7 @@ case class Average(child: Expression) extends ExpressionAggregate {
   }
 }
 
-case class Count(child: Expression) extends ExpressionAggregate {
+case class Count(child: Expression) extends DeclarativeAggregate {
   override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = false
@@ -118,7 +118,7 @@ case class Count(child: Expression) extends ExpressionAggregate {
   override val evaluateExpression = Cast(currentCount, LongType)
 }
 
-case class First(child: Expression) extends ExpressionAggregate {
+case class First(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -152,7 +152,7 @@ case class First(child: Expression) extends ExpressionAggregate {
   override val evaluateExpression = first
 }
 
-case class Last(child: Expression) extends ExpressionAggregate {
+case class Last(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -186,7 +186,7 @@ case class Last(child: Expression) extends ExpressionAggregate {
   override val evaluateExpression = last
 }
 
-case class Max(child: Expression) extends ExpressionAggregate {
+case class Max(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -220,7 +220,7 @@ case class Max(child: Expression) extends ExpressionAggregate {
   override val evaluateExpression = max
 }
 
-case class Min(child: Expression) extends ExpressionAggregate {
+case class Min(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -277,7 +277,7 @@ case class StddevSamp(child: Expression) extends StddevAgg(child) {
 
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-abstract class StddevAgg(child: Expression) extends ExpressionAggregate {
+abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -397,7 +397,7 @@ abstract class StddevAgg(child: Expression) extends ExpressionAggregate {
   }
 }
 
-case class Sum(child: Expression) extends ExpressionAggregate {
+case class Sum(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
