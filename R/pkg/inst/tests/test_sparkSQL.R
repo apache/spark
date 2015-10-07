@@ -673,6 +673,13 @@ test_that("select with column", {
   expect_equal(columns(df3), c("x"))
   expect_equal(count(df3), 3)
   expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
+
+  df4 <- select(df, c("name", "age"))
+  expect_equal(columns(df4), c("name", "age"))
+  expect_equal(count(df4), 3)
+
+  expect_error(select(df, c("name", "age"), "name"),
+                "To select multiple columns, use a character vector or list for col")
 })
 
 test_that("subsetting", {
@@ -1325,6 +1332,13 @@ test_that("crosstab() on a DataFrame", {
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
   expect_equal(grepl("Table Not Found: blah", retError), TRUE)
+})
+
+test_that("Method as.data.frame as a synonym for collect()", {
+  irisDF <- createDataFrame(sqlContext, iris)
+  expect_equal(as.data.frame(irisDF), collect(irisDF))
+  irisDF2 <- irisDF[irisDF$Species == "setosa", ]
+  expect_equal(as.data.frame(irisDF2), collect(irisDF2))
 })
 
 unlink(parquetPath)

@@ -28,7 +28,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonRunner, PythonBroadcast, PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -117,6 +118,15 @@ private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
 object EvaluatePython {
   def apply(udf: PythonUDF, child: LogicalPlan): EvaluatePython =
     new EvaluatePython(udf, child, AttributeReference("pythonUDF", udf.dataType)())
+
+  def takeAndServe(df: DataFrame, n: Int): Int = {
+    registerPicklers()
+    val iter = new SerDeUtil.AutoBatchedPickler(
+      df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
+        EvaluatePython.toJava(row, df.schema)
+      })
+    PythonRDD.serveIterator(iter, s"serve-DataFrame")
+  }
 
   /**
    * Helper for converting from Catalyst type to java type suitable for Pyrolite.

@@ -245,7 +245,7 @@ object SparkPlanTest {
           }
       }
     )
-    resolvedPlan.executeCollect().toSeq
+    resolvedPlan.executeCollectPublic().toSeq
   }
 }
 

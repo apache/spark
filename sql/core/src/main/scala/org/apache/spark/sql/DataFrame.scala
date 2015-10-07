@@ -1415,7 +1415,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def collect(): Array[Row] = withNewExecutionId {
-    queryExecution.executedPlan.executeCollect()
+    queryExecution.executedPlan.executeCollectPublic()
   }
 
   /**
@@ -1564,7 +1564,7 @@ class DataFrame private[sql](
    */
   def toJSON: RDD[String] = {
     val rowSchema = this.schema
-    this.mapPartitions { iter =>
+    queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
@@ -1595,7 +1595,7 @@ class DataFrame private[sql](
    */
   def inputFiles: Array[String] = {
     val files: Seq[String] = logicalPlan.collect {
-      case LogicalRelation(fsBasedRelation: FileRelation) =>
+      case LogicalRelation(fsBasedRelation: FileRelation, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
         fr.inputFiles
