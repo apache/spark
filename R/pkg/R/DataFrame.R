@@ -1292,8 +1292,8 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @param x A DataFrame to be sorted.
 #' @param col A character or Column object vector indicating the fields to sort on
 #' @param ... Additional sorting fields
-#' @param decreasing A logical argument indicating sorting order for columns which are specified
-#'                   with their string names
+#' @param decreasing A logical argument indicating sorting order for columns when
+#'                   a character vector is specified for col
 #' @return A DataFrame where all elements are sorted.
 #' @rdname arrange
 #' @name arrange
