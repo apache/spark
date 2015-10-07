@@ -31,6 +31,8 @@ Here's the list of the subpackages and what they enable:
 +-------------+------------------------------------+------------------------------------------------+
 |  samba      |  ``pip install airflow[samba]``    | ``Hive2SambaOperator``                         |
 +-------------+------------------------------------+------------------------------------------------+
+|  hive       |  ``pip install airflow[hive]``     | All Hive related operators                     |
++-------------+------------------------------------+------------------------------------------------+
 |  jdbc       |  ``pip install airflow[jdbc]``     | JDBC hooks and operators                       |
 +-------------+------------------------------------+------------------------------------------------+
 |  hdfs       |  ``pip install airflow[hdfs]``     | HDFS hooks and operators                       |
