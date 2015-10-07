@@ -23,7 +23,7 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Generates byte code that produces a [[MutableRow]] object (not a [[UnsafeRow]]) that can update
+ * Generates byte code that produces a [[MutableRow]] object (not an [[UnsafeRow]]) that can update
  * itself based on a new input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection] {

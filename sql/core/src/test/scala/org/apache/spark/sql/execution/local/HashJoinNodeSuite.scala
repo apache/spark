@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution.local
 
+import org.mockito.Mockito.{mock, when}
+
+import org.apache.spark.broadcast.TorrentBroadcast
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Expression}
+import org.apache.spark.sql.catalyst.expressions.{InterpretedMutableProjection, UnsafeProjection, Expression}
 import org.apache.spark.sql.execution.joins.{HashedRelation, BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.test.SharedSQLContext
 
-
-class HashJoinNodeSuite extends LocalNodeTest with SharedSQLContext {
+class HashJoinNodeSuite extends LocalNodeTest {
 
   // Test all combinations of the two dimensions: with/out unsafe and build sides
   private val maybeUnsafeAndCodegen = Seq(false, true)
@@ -44,26 +45,21 @@ class HashJoinNodeSuite extends LocalNodeTest with SharedSQLContext {
       buildKeys: Seq[Expression],
       buildNode: LocalNode): HashedRelation = {
 
-    // Check if we are in the Unsafe mode.
     val isUnsafeMode =
       conf.codegenEnabled &&
         conf.unsafeEnabled &&
         UnsafeProjection.canSupport(buildKeys)
 
-    // Create projection used for extracting keys
     val buildSideKeyGenerator =
       if (isUnsafeMode) {
         UnsafeProjection.create(buildKeys, buildNode.output)
       } else {
-        buildNode.newMutableProjection(buildKeys, buildNode.output)()
+        new InterpretedMutableProjection(buildKeys, buildNode.output)
       }
 
-    // Setup the node.
     buildNode.prepare()
     buildNode.open()
-    // Build the HashedRelation
     val hashedRelation = HashedRelation(buildNode, buildSideKeyGenerator)
-    // Close the node.
     buildNode.close()
 
     hashedRelation
@@ -104,7 +100,8 @@ class HashJoinNodeSuite extends LocalNodeTest with SharedSQLContext {
         val resolvedBuildNode = resolveExpressions(buildNode)
         val resolvedBuildKeys = resolveExpressions(buildKeys, resolvedBuildNode)
         val hashedRelation = buildHashedRelation(conf, resolvedBuildKeys, resolvedBuildNode)
-        val broadcastHashedRelation = sqlContext.sparkContext.broadcast(hashedRelation)
+        val broadcastHashedRelation = mock(classOf[TorrentBroadcast[HashedRelation]])
+        when(broadcastHashedRelation.value).thenReturn(hashedRelation)
 
         val hashJoinNode =
           BroadcastHashJoinNode(

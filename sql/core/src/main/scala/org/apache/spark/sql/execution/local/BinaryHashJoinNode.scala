@@ -58,7 +58,6 @@ case class BinaryHashJoinNode(
   }
 
   protected override def doOpen(): Unit = {
-    // buildNode's prepare has been called in this.prepare.
     buildNode.open()
     val hashedRelation = HashedRelation(buildNode, buildSideKeyGenerator)
     // We have built the HashedRelation. So, close buildNode.

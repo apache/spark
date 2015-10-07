@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.joins._
 
 /**
- * A node for inner hash equi-join. [[BinaryHashJoinNode]] and [[BroadcastHashJoinNode]]
- * are based on this.
+ * An abstract node for sharing common functionality among different implementations of
+ * inner hash equi-join, notably [[BinaryHashJoinNode]] and [[BroadcastHashJoinNode]].
  *
  * Much of this code is similar to [[org.apache.spark.sql.execution.joins.HashJoin]].
  */
@@ -60,21 +60,21 @@ trait HashJoinNode {
     }
   }
 
-  /** Sets the HashedRelation used by this node. */
+  /**
+   * Sets the HashedRelation used by this node. This method needs to be called after
+   * before the first `next` gets called.
+   */
   protected def withHashedRelation(hashedRelation: HashedRelation): Unit = {
     hashed = hashedRelation
   }
 
   /**
-   * For nodes that extends this, they can use doOpen to add operations needed in the open method.
-   * The implementation of this method should invoke its children's open methods.
+   * Custom open implementation to be overridden by subclasses.
    */
   protected def doOpen(): Unit
 
   override def open(): Unit = {
-    // First, call doOpen to invoke custom operations for a node.
     doOpen()
-    // Second, initialize common internal states.
     joinRow = new JoinedRow
     resultProjection = {
       if (isUnsafeMode) {
