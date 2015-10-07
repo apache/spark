@@ -761,6 +761,13 @@ class Analyzer(
       }.isDefined
     }
 
+    private def hasAggregation(expr: NamedExpression): Boolean = {
+      expr.find {
+        case agg: AggregateExpression => true
+        case _ => false
+      }.isDefined
+    }
+
     /**
      * From a Seq of [[NamedExpression]]s, extract expressions containing window expressions and
      * other regular expressions that do not contain any window expression. For example, for
@@ -831,6 +838,13 @@ class Analyzer(
             val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
             extractedExprBuffer += withName
             withName.toAttribute
+
+          case ne: Alias if hasWindowFunction(ne) && !hasAggregation(ne) =>
+            ne.children.map(_.transform {
+              case e: NamedExpression => extractExpr(e)
+            })
+            ne
+
         }.asInstanceOf[NamedExpression]
       }
 
