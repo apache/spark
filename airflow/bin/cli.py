@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 from __future__ import print_function
-from builtins import input
-import argparse
-import dateutil.parser
-from datetime import datetime
 import logging
 import os
 import subprocess
 import sys
+
+from builtins import input
+import argparse
+import dateutil.parser
 
 import airflow
 from airflow import jobs, settings, utils
@@ -15,7 +15,6 @@ from airflow.configuration import conf
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow.models import DagBag, TaskInstance, DagPickle
 from airflow.utils import AirflowException
-
 
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 
@@ -358,6 +357,13 @@ def flower(args):
     sp.wait()
 
 
+def kerberos(args):
+    print(settings.HEADER)
+    log_to_stdout()
+    import airflow.security.kerberos
+    airflow.security.kerberos.run()
+
+
 def get_parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')
@@ -593,5 +599,15 @@ def get_parser():
 
     parser_version = subparsers.add_parser('version', help="Show version")
     parser_version.set_defaults(func=version)
+
+    ht = "Start a kerberos ticket renewer"
+    parser_kerberos = subparsers.add_parser('kerberos', help=ht)
+    parser_kerberos.add_argument(
+        "-kt", "--keytab", help="keytab",
+        nargs='?', default=conf.get('kerberos', 'keytab'))
+    parser_kerberos.add_argument(
+        "principal", help="kerberos principal",
+        nargs='?', default=conf.get('kerberos', 'principal'))
+    parser_kerberos.set_defaults(func=kerberos)
 
     return parser

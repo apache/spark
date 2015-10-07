@@ -63,5 +63,6 @@ Content
     cli
     scheduler
     plugins
+    security
     faq 
     code

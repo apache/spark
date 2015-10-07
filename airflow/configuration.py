@@ -46,6 +46,7 @@ defaults = {
         'parallelism': 32,
         'load_examples': True,
         'plugins_folder': None,
+        'security': None,
         'donot_pickle': False,
     },
     'webserver': {
@@ -75,6 +76,13 @@ defaults = {
     'smtp': {
         'smtp_starttls': True,
     },
+    'kerberos': {
+        'ccache': '/tmp/airflow_krb5_ccache',
+        'principal': 'airflow',                 # gets augmented with fqdn
+        'reinit_frequency': '3600',
+        'kinit_path': 'kinit',
+        'keytab': 'airflow.keytab',
+    }
 }
 
 DEFAULT_CONFIG = """\

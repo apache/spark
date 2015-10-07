@@ -17,7 +17,8 @@ import pyhs2
 from airflow.utils import AirflowException
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils import TemporaryDirectory
-
+from airflow.configuration import conf
+import airflow.security.utils as utils
 
 class HiveCliHook(BaseHook):
     """
@@ -35,11 +36,13 @@ class HiveCliHook(BaseHook):
 
     def __init__(
             self,
-            hive_cli_conn_id="hive_cli_default"):
+            hive_cli_conn_id="hive_cli_default",
+            run_as=None):
         conn = self.get_connection(hive_cli_conn_id)
         self.hive_cli_params = conn.extra_dejson.get('hive_cli_params', '')
         self.use_beeline = conn.extra_dejson.get('use_beeline', False)
         self.conn = conn
+        self.run_as = run_as
 
     def run_cli(self, hql, schema=None, verbose=True):
         """
@@ -62,20 +65,39 @@ class HiveCliHook(BaseHook):
                 fname = f.name
                 hive_bin = 'hive'
                 cmd_extra = []
+
                 if self.use_beeline:
                     hive_bin = 'beeline'
-                    jdbc_url = (
-                        "jdbc:hive2://"
-                        "{0}:{1}/{2}"
-                        ";auth=noSasl"
-                    ).format(conn.host, conn.port, conn.schema)
+                    if conf.get('core', 'security') == 'kerberos':
+                        template = conn.extra_dejson.get('principal',"hive/_HOST@EXAMPLE.COM")
+                        template = utils.replace_hostname_pattern(utils.get_components(template))
+
+                        proxy_user = ""
+                        if conn.extra_dejson.get('proxy_user') == "login" and conn.login:
+                            proxy_user = "hive.server2.proxy.user={0}".format(conn.login)
+                        elif conn.extra_dejson.get('proxy_user') == "owner" and self.run_as:
+                            proxy_user = "hive.server2.proxy.user={0}".format(self.run_as)
+
+                        jdbc_url = (
+                            "jdbc:hive2://"
+                            "{0}:{1}/{2}"
+                            ";principal={3}{4}"
+                        ).format(conn.host, conn.port, conn.schema, template, proxy_user)
+                    else:
+                        jdbc_url = (
+                            "jdbc:hive2://"
+                            "{0}:{1}/{2}"
+                            ";auth=noSasl"
+                        ).format(conn.host, conn.port, conn.schema)
+
                     cmd_extra += ['-u', jdbc_url]
                     if conn.login:
                         cmd_extra += ['-n', conn.login]
                     if conn.password:
                         cmd_extra += ['-p', conn.password]
-                    cmd_extra += ['-p', conn.login]
+
                 hive_cmd = [hive_bin, '-f', fname] + cmd_extra
+
                 if self.hive_cli_params:
                     hive_params_list = self.hive_cli_params.split()
                     hive_cmd.extend(hive_params_list)
@@ -98,7 +120,6 @@ class HiveCliHook(BaseHook):
                     raise AirflowException(stdout)
 
                 return stdout
-
 
     def test_hql(self, hql):
         """
@@ -141,8 +162,7 @@ class HiveCliHook(BaseHook):
                         context = '\n'.join(query.split('\n')[begin:end])
                         logging.info("Context :\n {0}".format(context))
                 else:
-                    logging.info("SUCCESS")               
-
+                    logging.info("SUCCESS")
 
     def load_file(
             self,
@@ -370,10 +390,14 @@ class HiveServer2Hook(BaseHook):
 
     def get_conn(self):
         db = self.get_connection(self.hiveserver2_conn_id)
+        auth_mechanism = db.extra_dejson.get('authMechanism', 'NOSASL')
+        if conf.get('core', 'security') == 'kerberos':
+            auth_mechanism = db.extra_dejson.get('authMechanism', 'KERBEROS')
+
         return pyhs2.connect(
             host=db.host,
             port=db.port,
-            authMechanism=db.extra_dejson.get('authMechanism', 'NOSASL'),
+            authMechanism=auth_mechanism,
             user=db.login,
             database=db.schema or 'default')
 
