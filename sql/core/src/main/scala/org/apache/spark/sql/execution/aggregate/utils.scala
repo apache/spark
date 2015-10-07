@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, SparkPlan}
@@ -317,11 +315,7 @@ object Utils {
     val finalAggregateAttributes = finalAggregateExpressions.map {
       expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
     }
-    // Create a map to store those rewritten aggregate functions. We always need to use
-    // both function and its corresponding isDistinct flag as the key because function itself
-    // does not knows if it is has distinct keyword or now.
-    val rewrittenAggregateFunctions =
-      mutable.Map.empty[(AggregateFunction2, Boolean), AggregateFunction2]
+
     val (completeAggregateExpressions, completeAggregateAttributes) = functionsWithDistinct.map {
       // Children of an AggregateFunction with DISTINCT keyword has already
       // been evaluated. At here, we need to replace original children
@@ -331,9 +325,6 @@ object Utils {
           case expr if distinctColumnExpressionMap.contains(expr) =>
             distinctColumnExpressionMap(expr).toAttribute
         }.asInstanceOf[AggregateFunction2]
-        // Because we have rewritten the aggregate function, we use rewrittenAggregateFunctions
-        // to track the old version and the new version of this function.
-        rewrittenAggregateFunctions += (aggregateFunction, true) -> rewrittenAggregateFunction
         // We rewrite the aggregate function to a non-distinct aggregation because
         // its input will have distinct arguments.
         // We just keep the isDistinct setting to true, so when users look at the query plan,
