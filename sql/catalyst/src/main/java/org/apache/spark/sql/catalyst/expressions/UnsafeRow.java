@@ -446,7 +446,7 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public ArrayData getArray(int ordinal) {
+  public UnsafeArrayData getArray(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
     } else {
@@ -458,7 +458,7 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public MapData getMap(int ordinal) {
+  public UnsafeMapData getMap(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
     } else {
