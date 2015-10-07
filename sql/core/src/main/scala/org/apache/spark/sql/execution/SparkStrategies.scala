@@ -195,12 +195,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         converted match {
           case None => Nil // Cannot convert to new aggregation code path.
           case Some(logical.Aggregate(groupingExpressions, resultExpressions, child)) =>
-            // Extracts all distinct aggregate expressions from the resultExpressions.
+            // A single aggregate expression might appear multiple times in resultExpressions.
+            // In order to avoid evaluating an individual aggregate function multiple times, we'll
+            // build a set of the distinct aggregate expressions and build a function which can
+            // be used to re-write expressions so that they reference the single copy of the
+            // aggregate function which actually gets computed.
             val aggregateExpressions = resultExpressions.flatMap { expr =>
               expr.collect {
                 case agg: AggregateExpression2 => agg
               }
-            }.toSet.toSeq
+            }.distinct
             // For those distinct aggregate expressions, we create a map from the
             // aggregate function to the corresponding attribute of the function.
             val aggregateFunctionToAttribute = aggregateExpressions.map { agg =>
