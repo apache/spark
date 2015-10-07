@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.hive
 
+import java.util
+
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable, Hive, HiveUtils, HiveStorageHandler}
+import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
@@ -287,6 +289,29 @@ class HadoopTableReader(
   }
 }
 
+private[hive] object HiveTableUtil {
+
+  // copied from PlanUtils.configureJobPropertiesForStorageHandler(tableDesc)
+  // that calls Hive.get() which tries to access metastore, but it's not valid in runtime
+  // it would be fixed in next version of hive but till then, we should use this instead
+  def configureJobPropertiesForStorageHandler(
+      tableDesc: TableDesc, jobConf: JobConf, input: Boolean) {
+    val property = tableDesc.getProperties.getProperty(META_TABLE_STORAGE)
+    val storageHandler = HiveUtils.getStorageHandler(jobConf, property)
+    if (storageHandler != null) {
+      val jobProperties = new util.LinkedHashMap[String, String]
+      if (input) {
+        storageHandler.configureInputJobProperties(tableDesc, jobProperties)
+      } else {
+        storageHandler.configureOutputJobProperties(tableDesc, jobProperties)
+      }
+      if (!jobProperties.isEmpty) {
+        tableDesc.setJobProperties(jobProperties)
+      }
+    }
+  }
+}
+
 private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
@@ -295,7 +320,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
     FileInputFormat.setInputPaths(jobConf, Seq[Path](new Path(path)): _*)
     if (tableDesc != null) {
-      PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc)
+      HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, true)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
     }
     val bufferSize = System.getProperty("spark.buffer.size", "65536")
