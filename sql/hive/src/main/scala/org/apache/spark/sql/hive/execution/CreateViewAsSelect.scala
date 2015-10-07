@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.hive.ql.metadata.HiveUtils.{unparseIdentifier => verbose}
-
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.hive.{HiveMetastoreTypes, HiveContext}
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 
-private[hive]
-case class CreateViewAsSelect(
+/**
+ * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
+ * depending on Hive meta-store.
+ * Note that this class can NOT canonicalize the view SQL string entirely, which is different from
+ * Hive and may not work for some cases like create view on self join.
+ */
+private[hive] case class CreateViewAsSelect(
     tableDesc: HiveTable,
     childSchema: Seq[Attribute],
     allowExisting: Boolean) extends RunnableCommand {
@@ -47,6 +50,7 @@ case class CreateViewAsSelect(
         throw new AnalysisException(s"$database.$viewName already exists.")
       }
     } else {
+      // setup column types according to the schema of child.
       val schema = if (tableDesc.schema == Nil) {
         childSchema.map { attr =>
           HiveColumn(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
@@ -58,6 +62,10 @@ case class CreateViewAsSelect(
       }
 
       val columnNames = childSchema.map(f => verbose(f.name))
+
+      // When user specified column names for view, we should create a project to do the renaming.
+      // When no column name specified, we still need to create a project to declare the columns
+      // we need, to make us more robust to top level `*`s.
       val projectList = if (tableDesc.schema == Nil) {
         columnNames.mkString(", ")
       } else {
@@ -74,4 +82,7 @@ case class CreateViewAsSelect(
 
     Seq.empty[Row]
   }
+
+  // escape backtick with double-backtick in column name and wrap it with backtick.
+  private def verbose(name: String) = s"`${name.replaceAll("`", "``")}`"
 }

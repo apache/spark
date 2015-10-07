@@ -1249,6 +1249,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("correctly parse CREATE VIEW statement") {
+    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+      withTable("jt") {
+        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
+        df.write.format("json").saveAsTable("jt")
+        sql(
+          """CREATE VIEW IF NOT EXIST
+            |default.testView (c1 'comment', c2 'comment')
+            |COMMENT 'comment'
+            |TBLPROPERTIES ('a' = 'b')
+            |AS SELECT * FROM jt""".stripMargin)
+        checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
   test("create hive view for json table") {
     // json table is not hive-compatible, make sure the new flag fix it.
     withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {

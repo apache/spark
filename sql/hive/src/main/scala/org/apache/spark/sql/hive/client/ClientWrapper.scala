@@ -360,8 +360,11 @@ private[hive] class ClientWrapper(
     tbl.setTableType(HTableType.VIRTUAL_VIEW)
     tbl.setSerializationLib(null)
     tbl.clearSerDeInfo()
+
+    // We will save the same SQL string to original and expanded text, which is different from Hive.
     tbl.setViewOriginalText(view.viewText.get)
     tbl.setViewExpandedText(view.viewText.get)
+
     tbl.setFields(view.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
     view.properties.foreach { case (k, v) => tbl.setProperty(k, v) }
 

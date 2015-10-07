@@ -358,8 +358,9 @@ private[hive] object HiveQl extends Logging {
     }
   }
 
-  protected def getClauses(clauseNames: Seq[String], nodeList: Seq[ASTNode])
-      : Seq[Option[ASTNode]] = {
+  protected def getClauses(
+      clauseNames: Seq[String],
+      nodeList: Seq[ASTNode]): Seq[Option[ASTNode]] = {
     var remainingNodes = nodeList
     val clauses = clauseNames.map { clauseName =>
       val (matches, nonMatches) = remainingNodes.partition(_.getText.toUpperCase == clauseName)
