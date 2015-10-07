@@ -345,6 +345,28 @@ class CoreTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+
+    def test_complex_template(self):
+        class OperatorSubclass(operators.BaseOperator):
+            template_fields = ['some_templated_field']
+            def __init__(self, some_templated_field, *args, **kwargs):
+                super(OperatorSubclass, self).__init__(*args, **kwargs)
+                self.some_templated_field = some_templated_field
+            def execute(*args, **kwargs):
+                pass
+        def test_some_templated_field_template_render(context):
+            self.assertEqual(context['ti'].task.some_templated_field['bar'][1], context['ds'])
+        t = OperatorSubclass(
+            task_id='test_complex_template',
+            provide_context=True,
+            some_templated_field={
+                'foo':'123',
+                'bar':['baz', '{{ ds }}']
+            },
+            on_success_callback=test_some_templated_field_template_render,
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
     def test_import_examples(self):
         self.assertEqual(len(self.dagbag.dags), NUM_EXAMPLE_DAGS)
 
