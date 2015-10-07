@@ -194,7 +194,12 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
   override def guarantees(other: Partitioning): Boolean = false
 }
 
-case class RandomPartitioning(numPartitions: Int) extends Partitioning {
+/**
+ * Represents a partitioning where rows are distributed evenly across output partitions
+ * by starting from a random target partition number and distributing rows in a round-robin
+ * fashion. This partitioning is used when implementing the DataFrame.repartition() operator.
+ */
+case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning {
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case _ => false

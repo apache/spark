@@ -337,7 +337,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           "logical distinct operator should have been replaced by aggregate in the optimizer")
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
-          execution.Exchange(RandomPartitioning(numPartitions), planLater(child)) :: Nil
+          execution.Exchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
         } else {
           execution.Coalesce(numPartitions, planLater(child)) :: Nil
         }

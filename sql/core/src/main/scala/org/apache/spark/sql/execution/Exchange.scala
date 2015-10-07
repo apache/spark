@@ -142,7 +142,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
-      case RandomPartitioning(numPartitions) => new HashPartitioner(numPartitions)
+      case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
@@ -165,7 +165,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
-      case RandomPartitioning(numPartitions) =>
+      case RoundRobinPartitioning(numPartitions) =>
         // Distributes elements evenly across output partitions, starting from a random partition.
         var position = new Random(TaskContext.get().partitionId()).nextInt(numPartitions)
         (row: InternalRow) => {
