@@ -34,6 +34,7 @@ case class TungstenAggregate(
     nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression2],
     completeAggregateAttributes: Seq[Attribute],
+    initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
@@ -82,6 +83,7 @@ case class TungstenAggregate(
         nonCompleteAggregateAttributes,
         completeAggregateExpressions,
         completeAggregateAttributes,
+        initialInputBufferOffset,
         resultExpressions,
         newMutableProjection,
         child.output,

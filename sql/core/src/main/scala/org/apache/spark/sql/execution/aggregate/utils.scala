@@ -94,6 +94,7 @@ object Utils {
         nonCompleteAggregateAttributes = partialAggregateAttributes,
         completeAggregateExpressions = Nil,
         completeAggregateAttributes = Nil,
+        initialInputBufferOffset = 0,
         resultExpressions = partialResultExpressions,
         child = child)
     } else {
@@ -125,6 +126,7 @@ object Utils {
         nonCompleteAggregateAttributes = finalAggregateAttributes,
         completeAggregateExpressions = Nil,
         completeAggregateAttributes = Nil,
+        initialInputBufferOffset = groupingExpressions.length,
         resultExpressions = resultExpressions,
         child = partialAggregate)
     } else {
@@ -196,6 +198,7 @@ object Utils {
         nonCompleteAggregateAttributes = partialAggregateAttributes,
         completeAggregateExpressions = Nil,
         completeAggregateAttributes = Nil,
+        initialInputBufferOffset = 0,
         resultExpressions = partialAggregateResult,
         child = child)
     } else {
@@ -227,6 +230,7 @@ object Utils {
         nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
         completeAggregateExpressions = Nil,
         completeAggregateAttributes = Nil,
+        initialInputBufferOffset = (groupingAttributes ++ distinctColumnAttributes).length,
         resultExpressions = partialMergeAggregateResult,
         child = partialAggregate)
     } else {
@@ -278,6 +282,7 @@ object Utils {
         nonCompleteAggregateAttributes = finalAggregateAttributes,
         completeAggregateExpressions = completeAggregateExpressions,
         completeAggregateAttributes = completeAggregateAttributes,
+        initialInputBufferOffset = (groupingAttributes ++ distinctColumnAttributes).length,
         resultExpressions = resultExpressions,
         child = partialMergeAggregate)
     } else {
