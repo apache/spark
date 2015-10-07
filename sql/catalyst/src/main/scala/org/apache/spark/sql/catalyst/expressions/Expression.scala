@@ -174,7 +174,7 @@ abstract class Expression extends TreeNode[Expression] {
     }.toString
   }
 
-  override def toString: String = prettyName + productIterator.mkString("(", ",", ")")
+  override def toString: String = prettyName + children.mkString("(", ",", ")")
 }
 
 
