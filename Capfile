@@ -11,9 +11,9 @@ set :gateway, nil
 set :keep_releases, 5
 set :branch, fetch(:branch, `git symbolic-ref --short HEAD`.gsub("\s",""))
 
-DATANODES = (2..69).map {|i| "dn%02d.chi.shopify.com" % i }
+DATANODES = (2..73).map {|i| "dn%02d.chi.shopify.com" % i }
 OTHERNODES = ["hadoop-etl1.chi.shopify.com", "hadoop-misc4.chi.shopify.com", "reportify-etl4.chi.shopify.com", "streams2.chi.shopify.com"]
-BROKEN = ["dn48.chi.shopify.com", "dn49.chi.shopify.com", "dn57.chi.shopify.com", "dn58.chi.shopify.com"] # Node is down don't try to send code
+BROKEN = ["dn48.chi.shopify.com", "dn57.chi.shopify.com", "dn58.chi.shopify.com"] # Node is down don't try to send code
 
 task :production do
   role :app, *(DATANODES + OTHERNODES - BROKEN)
