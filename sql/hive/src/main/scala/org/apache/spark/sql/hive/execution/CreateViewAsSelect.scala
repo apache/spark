@@ -26,9 +26,9 @@ import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 /**
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
  * depending on Hive meta-store.
- * Note that this class can NOT canonicalize the view SQL string entirely, which is different from
- * Hive and may not work for some cases like create view on self join.
  */
+// TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is different
+// from Hive and may not work for some cases like create view on self join.
 private[hive] case class CreateViewAsSelect(
     tableDesc: HiveTable,
     childSchema: Seq[Attribute],

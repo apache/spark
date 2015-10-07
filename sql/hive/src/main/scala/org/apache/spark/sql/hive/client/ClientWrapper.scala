@@ -361,7 +361,8 @@ private[hive] class ClientWrapper(
     tbl.setSerializationLib(null)
     tbl.clearSerDeInfo()
 
-    // We will save the same SQL string to original and expanded text, which is different from Hive.
+    // TODO: we will save the same SQL string to original and expanded text, which is different
+    // from Hive.
     tbl.setViewOriginalText(view.viewText.get)
     tbl.setViewExpandedText(view.viewText.get)
 

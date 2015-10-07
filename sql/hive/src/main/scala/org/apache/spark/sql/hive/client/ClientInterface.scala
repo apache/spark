@@ -19,13 +19,12 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 import java.util.{Map => JMap}
+import javax.annotation.Nullable
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 
-private[hive] case class HiveDatabase(
-    name: String,
-    location: String)
+private[hive] case class HiveDatabase(name: String, location: String)
 
 private[hive] abstract class TableType { val name: String }
 private[hive] case object ExternalTable extends TableType { override val name = "EXTERNAL_TABLE" }
@@ -45,8 +44,7 @@ private[hive] case class HivePartition(
     values: Seq[String],
     storage: HiveStorageDescriptor)
 
-// The `hiveType` is nullable, for cases like CREATE VIEW that can't specify column types.
-private[hive] case class HiveColumn(name: String, hiveType: String, comment: String)
+private[hive] case class HiveColumn(name: String, @Nullable hiveType: String, comment: String)
 private[hive] case class HiveTable(
     specifiedDatabase: Option[String],
     name: String,
