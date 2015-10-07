@@ -1450,7 +1450,8 @@ setMethod("join",
 setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y, by.x = NULL, by.y = NULL, by = intersect(names(x), names(y)),
-                   all.x = FALSE, all.y = FALSE, all = FALSE, suffixes=c("_x","_y"), sort=FALSE, ... ) {
+                   all.x = FALSE, all.y = FALSE, all = FALSE,
+                   suffixes=c("_x","_y"), sort=FALSE, ... ) {
 
             if (missing(x) | missing(y)) {
               stop("x and y has to be specified")
@@ -1474,7 +1475,7 @@ setMethod("merge",
 
             # join expression is based on by.x, by.y if both by.x and by.y are not missing
             # and by if by.x or by.y are missing or have different lengths
-            if (length(by.x)>0 & length(by.x) == length(by.y)) {
+            if (length(by.x) > 0 & length(by.x) == length(by.y)) {
               joinX <- by.x
               joinY <- by.y
             } else if (length(by) > 0) {
@@ -1490,7 +1491,7 @@ setMethod("merge",
               colNameX <- namesX[[i]]
               colX <- getColumn(x, colNameX)
               if (namesX[i] %in% by) {
-                newJoinX <- paste(colNameX, suffixes[1], sep='')
+                newJoinX <- paste(colNameX, suffixes[1], sep = "")
                 colX <- alias(colX, newJoinX)
               }
               colX
@@ -1502,13 +1503,13 @@ setMethod("merge",
               colNameY <- namesY[[i]]
               colY <- getColumn(y, colNameY)
               if (namesY[i] %in% by) {
-                newJoinY <- paste(colNameY, suffixes[2], sep='')
+                newJoinY <- paste(colNameY, suffixes[2], sep = "")
                 colY <- alias(colY, newJoinY)
               }
               colY
             })
 
-            # selecting columns with their aliases from dataframes             
+            # selecting columns with their aliases from dataframes
             xsel <- select(x, colsX)
             ysel <- select(y, colsY)
 
@@ -1516,11 +1517,11 @@ setMethod("merge",
               colX <- joinX[[i]]
               colY <- joinY[[i]]
 
-              if (colX %in% by) { 
-                colX <- paste(colX, suffixes[1], sep='')
+              if (colX %in% by) {
+                colX <- paste(colX, suffixes[1], sep = "")
               }
-              if (colY %in% by){
-                colY <- paste(colY, suffixes[2], sep='')
+              if (colY %in% by) {
+                colY <- paste(colY, suffixes[2], sep = "")
               }
 
               colX <- getColumn(xsel, colX)
@@ -1533,7 +1534,7 @@ setMethod("merge",
             for (i in 1:length(joinColumns)) {
               if (i == 1) {
                 joinExpr <- joinColumns[[i]]
-              } else {  
+              } else {
                 joinExpr <- joinExpr & joinColumns[[i]]
               }
             }
@@ -1543,7 +1544,7 @@ setMethod("merge",
             # sort the results by 'by' columns if sort=TRUE
             if (sort & length(by) > 0) {
               columns <- lapply(seq_len(length(joinRes)), function(i) {
-                colNameWithSuffix <- paste(by[[i]], suffixes[2], sep='')
+                colNameWithSuffix <- paste(by[[i]], suffixes[2], sep = "")
                 asc(getColumn(joinRes, colNameWithSuffix))
               })
               joinRes <- do.call("arrange",c(joinRes,columns))
