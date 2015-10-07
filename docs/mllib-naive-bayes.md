@@ -38,6 +38,8 @@ smoothing parameter `lambda` as input, an optional model type parameter (default
 [NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
 can be used for evaluation and prediction.
 
+Refer to the [`NaiveBayes` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes) and [`NaiveBayesModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.mllib.linalg.Vectors
@@ -72,6 +74,8 @@ multinomial naive Bayes. It takes a Scala RDD of
 optionally smoothing parameter `lambda` as input, and output a
 [NaiveBayesModel](api/java/org/apache/spark/mllib/classification/NaiveBayesModel.html), which
 can be used for evaluation and prediction.
+
+Refer to the [`NaiveBayes` Java docs](api/java/org/apache/spark/mllib/classification/NaiveBayes.html) and [`NaiveBayesModel` Java docs](api/java/org/apache/spark/mllib/classification/NaiveBayesModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -117,6 +121,8 @@ smoothing parameter `lambda` as input, and output a
 used for evaluation and prediction.
 
 Note that the Python API does not yet support model save/load but will in the future.
+
+Refer to the [`NaiveBayes` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayes) and [`NaiveBayesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayesModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel

@@ -50,6 +50,7 @@ example illustrates how to mine frequent itemsets and association rules
 Rules](mllib-frequent-pattern-mining.html#association-rules) for
 details) from `transactions`.
 
+Refer to the [`FPGrowth` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.rdd.RDD
@@ -91,6 +92,8 @@ example illustrates how to mine frequent itemsets and association rules
 (see [Association
 Rules](mllib-frequent-pattern-mining.html#association-rules) for
 details) from `transactions`.
+
+Refer to the [`FPGrowth` Java docs](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) for details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -144,6 +147,8 @@ Calling `FPGrowth.train` with transactions returns an
 [`FPGrowthModel`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.
 
+Refer to the [`FPGrowth` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowth) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.fpm import FPGrowth
 
@@ -169,6 +174,8 @@ for fi in result:
 [AssociationRules](api/scala/index.html#org.apache.spark.mllib.fpm.AssociationRules)
 implements a parallel rule generation algorithm for constructing rules
 that have a single item as the consequent.
+
+Refer to the [`AssociationRules` Scala docs](api/java/org/apache/spark/mllib/fpm/AssociationRules.html) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.rdd.RDD
@@ -198,6 +205,8 @@ results.collect().foreach { rule =>
 [AssociationRules](api/java/org/apache/spark/mllib/fpm/AssociationRules.html)
 implements a parallel rule generation algorithm for constructing rules
 that have a single item as the consequent.
+
+Refer to the [`AssociationRules` Java docs](api/java/org/apache/spark/mllib/fpm/AssociationRules.html) for details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -267,6 +276,8 @@ Calling `PrefixSpan.run` returns a
 [`PrefixSpanModel`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel)
 that stores the frequent sequences with their frequencies.
 
+Refer to the [`PrefixSpan` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) and [`PrefixSpanModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.fpm.PrefixSpan
 
@@ -295,6 +306,8 @@ PrefixSpan algorithm.
 Calling `PrefixSpan.run` returns a
 [`PrefixSpanModel`](api/java/org/apache/spark/mllib/fpm/PrefixSpanModel.html)
 that stores the frequent sequences with their frequencies.
+
+Refer to the [`PrefixSpan` Java docs](api/java/org/apache/spark/mllib/fpm/PrefixSpan.html) and [`PrefixSpanModel` Java docs](api/java/org/apache/spark/mllib/fpm/PrefixSpanModel.html) for details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
