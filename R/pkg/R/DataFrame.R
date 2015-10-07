@@ -1442,16 +1442,16 @@ setMethod("join",
 #' df1 <- jsonFile(sqlContext, path)
 #' df2 <- jsonFile(sqlContext, path2)
 #' merge(df1, df2) # Performs a Cartesian
-#' merge(df1, df2, by="col1") # Performs an inner join based on expression
-#' merge(df1, df2, by.x="col1", by.y="col2", all.y=TRUE)
-#' merge(df1, df2, by.x="col1", by.y="col2", all.x=TRUE)
-#' merge(df1, df2, by.x="col1", by.y="col2", all.x=TRUE, all.y=TRUE)
+#' merge(df1, df2, by = "col1") # Performs an inner join based on expression
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.y = TRUE)
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE)
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE, all.y = TRUE)
 #' }
 setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y, by.x = NULL, by.y = NULL, by = intersect(names(x), names(y)),
                    all.x = FALSE, all.y = FALSE, all = FALSE,
-                   suffixes=c("_x","_y"), sort=FALSE, ... ) {
+                   suffixes = c("_x","_y"), sort = FALSE, ... ) {
 
             if (missing(x) | missing(y)) {
               stop("x and y has to be specified")
@@ -1461,7 +1461,7 @@ setMethod("merge",
               stop("suffixes must have length 2")
             }
 
-            # Join type is identified based on the values of all, all.x and all.y
+            # join type is identified based on the values of all, all.x and all.y
             # default join type is inner, according to R it should be natural but since it
             # is not supported in spark inner join is used
             joinType <- "inner"
@@ -1509,7 +1509,8 @@ setMethod("merge",
               colY
             })
 
-            # selecting columns with their aliases from dataframes
+            # selects columns with their aliases from dataframes
+            # in case same column names are present in both data frames
             xsel <- select(x, colsX)
             ysel <- select(y, colsY)
 
@@ -1541,7 +1542,7 @@ setMethod("merge",
 
             joinRes <- join(xsel, ysel, joinExpr, joinType)
 
-            # sort the results by 'by' columns if sort=TRUE
+            # sorts the results by 'by' columns if sort = TRUE
             if (sort & length(by) > 0) {
               columns <- lapply(seq_len(length(joinRes)), function(i) {
                 colNameWithSuffix <- paste(by[[i]], suffixes[2], sep = "")
