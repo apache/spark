@@ -156,6 +156,11 @@ class ParamsSuite extends SparkFunSuite {
     solver.clearMaxIter()
     assert(!solver.isSet(maxIter))
 
+    // Re-set and clear maxIter using the generic clear API
+    solver.setMaxIter(10)
+    solver.clear(maxIter)
+    assert(!solver.isSet(maxIter))
+
     val copied = solver.copy(ParamMap(solver.maxIter -> 50))
     assert(copied.uid === solver.uid)
     assert(copied.getInputCol === solver.getInputCol)
