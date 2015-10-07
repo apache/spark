@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.catalyst.expressions.ScalaUDF
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the filters that we can push down to the data sources.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -37,6 +39,14 @@ abstract class Filter
 case class EqualTo(attribute: String, value: Any) extends Filter
 
 /**
+ * A filter that evaluates to `true` iff the attribute evaluates to a value with `udf`
+ * equal to `value`.
+ *
+ * @since 1.6.0
+ */
+case class UDFEqualTo(attribute: String, udf: ScalaUDF, value: Any) extends Filter
+
+/**
  * Performs equality comparison, similar to [[EqualTo]]. However, this differs from [[EqualTo]]
  * in that it returns `true` (rather than NULL) if both inputs are NULL, and `false`
  * (rather than NULL) if one of the input is NULL and the other is not NULL.
@@ -54,12 +64,28 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter
 case class GreaterThan(attribute: String, value: Any) extends Filter
 
 /**
+ * A filter that evaluates to `true` iff the attribute evaluates to a value with `udf`
+ * greater than `value`.
+ *
+ * @since 1.6.0
+ */
+case class UDFGreaterThan(attribute: String, udf: ScalaUDF, value: Any) extends Filter
+
+/**
  * A filter that evaluates to `true` iff the attribute evaluates to a value
  * greater than or equal to `value`.
  *
  * @since 1.3.0
  */
 case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the attribute evaluates to a value with `udf`
+ * greater than or equal to `value`.
+ *
+ * @since 1.6.0
+ */
+case class UDFGreaterThanOrEqual(attribute: String, udf: ScalaUDF, value: Any) extends Filter
 
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to a value
@@ -70,12 +96,28 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter
 case class LessThan(attribute: String, value: Any) extends Filter
 
 /**
+ * A filter that evaluates to `true` iff the attribute evaluates to a value with `udf`
+ * less than `value`.
+ *
+ * @since 1.6.0
+ */
+case class UDFLessThan(attribute: String, udf: ScalaUDF, value: Any) extends Filter
+
+/**
  * A filter that evaluates to `true` iff the attribute evaluates to a value
  * less than or equal to `value`.
  *
  * @since 1.3.0
  */
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the attribute evaluates to a value with `udf`
+ * less than `value`.
+ *
+ * @since 1.6.0
+ */
+case class UDFLessThanOrEqual(attribute: String, udf: ScalaUDF, value: Any) extends Filter
 
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to one of the values in the array.

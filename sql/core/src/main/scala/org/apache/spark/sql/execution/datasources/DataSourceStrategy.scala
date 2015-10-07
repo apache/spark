@@ -353,6 +353,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case expressions.EqualTo(Literal(v, t), a: Attribute) =>
         Some(sources.EqualTo(a.name, convertToScala(v, t)))
 
+      case expressions.EqualTo(u @ ScalaUDF(f, d, c, i), Literal(v, t))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFEqualTo(c(0).asInstanceOf[Attribute].name, u, convertToScala(v, t)))
+      case expressions.EqualTo(Literal(v, t), u @ ScalaUDF(f, d, c, i))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFEqualTo(c(0).asInstanceOf[Attribute].name, u, convertToScala(v, t)))
+
       case expressions.EqualNullSafe(a: Attribute, Literal(v, t)) =>
         Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
       case expressions.EqualNullSafe(Literal(v, t), a: Attribute) =>
@@ -363,20 +370,52 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case expressions.GreaterThan(Literal(v, t), a: Attribute) =>
         Some(sources.LessThan(a.name, convertToScala(v, t)))
 
+      case expressions.GreaterThan(u @ ScalaUDF(f, d, c, i), Literal(v, t))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFGreaterThan(c(0).asInstanceOf[Attribute].name, u, convertToScala(v, t)))
+      case expressions.GreaterThan(Literal(v, t), u @ ScalaUDF(f, d, c, i))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFLessThan(c(0).asInstanceOf[Attribute].name, u, convertToScala(v, t)))
+
       case expressions.LessThan(a: Attribute, Literal(v, t)) =>
         Some(sources.LessThan(a.name, convertToScala(v, t)))
       case expressions.LessThan(Literal(v, t), a: Attribute) =>
         Some(sources.GreaterThan(a.name, convertToScala(v, t)))
+
+      case expressions.LessThan(u @ ScalaUDF(f, d, c, i), Literal(v, t))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFLessThan(c(0).asInstanceOf[Attribute].name, u, convertToScala(v, t)))
+      case expressions.LessThan(Literal(v, t), u @ ScalaUDF(f, d, c, i))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFGreaterThan(c(0).asInstanceOf[Attribute].name, u, convertToScala(v, t)))
 
       case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, t)) =>
         Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
       case expressions.GreaterThanOrEqual(Literal(v, t), a: Attribute) =>
         Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
 
+      case expressions.GreaterThanOrEqual(u @ ScalaUDF(f, d, c, i), Literal(v, t))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFGreaterThanOrEqual(c(0).asInstanceOf[Attribute].name,
+            u, convertToScala(v, t)))
+      case expressions.GreaterThanOrEqual(Literal(v, t), u @ ScalaUDF(f, d, c, i))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFLessThanOrEqual(c(0).asInstanceOf[Attribute].name,
+            u, convertToScala(v, t)))
+
       case expressions.LessThanOrEqual(a: Attribute, Literal(v, t)) =>
         Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
       case expressions.LessThanOrEqual(Literal(v, t), a: Attribute) =>
         Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
+
+      case expressions.LessThanOrEqual(u @ ScalaUDF(f, d, c, i), Literal(v, t))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFLessThanOrEqual(c(0).asInstanceOf[Attribute].name,
+            u, convertToScala(v, t)))
+      case expressions.LessThanOrEqual(Literal(v, t), u @ ScalaUDF(f, d, c, i))
+        if c.size == 1 && c(0).isInstanceOf[Attribute] =>
+          Some(sources.UDFGreaterThanOrEqual(c(0).asInstanceOf[Attribute].name,
+            u, convertToScala(v, t)))
 
       case expressions.InSet(a: Attribute, set) =>
         val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
