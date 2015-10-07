@@ -23,9 +23,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.joins.{HashedRelation, BuildLeft, BuildRight, BuildSide}
 
 /**
- * A wrapper of [[HashJoinNode]]. It will build the [[HashedRelation]] according to the value of
- * `buildSide`. The actual work of this node will be delegated to the [[HashJoinNode]]
- * that is created in `open`.
+ * A [[HashJoinNode]] that builds the [[HashedRelation]] according to the value of
+ * `buildSide`. The actual work of this node is defined in [[HashJoinNode]].
  */
 case class BinaryHashJoinNode(
     conf: SQLConf,
@@ -33,29 +32,24 @@ case class BinaryHashJoinNode(
     rightKeys: Seq[Expression],
     buildSide: BuildSide,
     left: LocalNode,
-    right: LocalNode) extends BinaryLocalNode(conf) {
+    right: LocalNode)
+  extends BinaryLocalNode(conf) with HashJoinNode {
 
-  private[this] lazy val (buildNode, buildKeys, streamedNode, streamedKeys) = buildSide match {
-    case BuildLeft => (left, leftKeys, right, rightKeys)
-    case BuildRight => (right, rightKeys, left, leftKeys)
+  protected override val (streamedNode, streamedKeys) = buildSide match {
+    case BuildLeft => (right, rightKeys)
+    case BuildRight => (left, leftKeys)
   }
 
-  private[this] val hashJoinNode: HashJoinNode = {
-    HashJoinNode(
-      conf = conf,
-      streamedKeys = streamedKeys,
-      streamedNode = streamedNode,
-      buildSide = buildSide,
-      buildOutput = buildNode.output,
-      isWrapped = true)
+  private val (buildNode, buildKeys) = buildSide match {
+    case BuildLeft => (left, leftKeys)
+    case BuildRight => (right, rightKeys)
   }
+
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  private[this] def isUnsafeMode: Boolean = {
-    (codegenEnabled && unsafeEnabled && UnsafeProjection.canSupport(buildKeys))
-  }
-
-  private[this] def buildSideKeyGenerator: Projection = {
+  private def buildSideKeyGenerator: Projection = {
+    // We are expecting the data types of buildKeys and streamedKeys are the same.
+    assert(buildKeys.map(_.dataType) == streamedKeys.map(_.dataType))
     if (isUnsafeMode) {
       UnsafeProjection.create(buildKeys, buildNode.output)
     } else {
@@ -63,40 +57,21 @@ case class BinaryHashJoinNode(
     }
   }
 
-  override def open(): Unit = {
+  protected override def doOpen(): Unit = {
     // buildNode's prepare has been called in this.prepare.
     buildNode.open()
     val hashedRelation = HashedRelation(buildNode, buildSideKeyGenerator)
     // We have built the HashedRelation. So, close buildNode.
     buildNode.close()
 
-    // Call the open of streamedNode.
     streamedNode.open()
     // Set the HashedRelation used by the HashJoinNode.
-    hashJoinNode.withHashedRelation(hashedRelation)
-    // Setup this HashJoinNode. We still call these in case there is any setup work
-    // that needs to be done in this HashJoinNode. Because isWrapped is true,
-    // prepare and open will not propagate to the child of streamedNode.
-    hashJoinNode.prepare()
-    hashJoinNode.open()
-  }
-
-  override def next(): Boolean = {
-    hashJoinNode.next()
-  }
-
-  override def fetch(): InternalRow = {
-    hashJoinNode.fetch()
+    withHashedRelation(hashedRelation)
   }
 
   override def close(): Unit = {
-    // Close the internal HashJoinNode.  We still call this in case there is any teardown work
-    // that needs to be done in this HashJoinNode. Because isWrapped is true,
-    // prepare and open will not propagate to the child of streamedNode.
-    hashJoinNode.close()
-    // Now, close the streamedNode.
-    streamedNode.close()
     // Please note that we do not need to call the close method of our buildNode because
     // it has been called in this.open.
+    streamedNode.close()
   }
 }

@@ -17,41 +17,23 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * A node for inner hash equi-join. It can be used individually or wrapped by other
- * inner hash equi-join nodes such as [[BinaryHashJoinNode]]. This node takes a already
- * built [[HashedRelation]] and a [[LocalNode]] representing the streamed side.
- * If this node is used individually, `isWrapped` should be set to false.
- * If this node is wrapped in another node, `isWrapped` should be set to true
- * and the node wrapping this node should call `prepare`, `open`, and `close` on
- * the `streamedNode`.
+ * A node for inner hash equi-join. [[BinaryHashJoinNode]] and [[BroadcastHashJoinNode]]
+ * are based on this.
  *
  * Much of this code is similar to [[org.apache.spark.sql.execution.joins.HashJoin]].
  */
-case class HashJoinNode(
-    conf: SQLConf,
-    streamedKeys: Seq[Expression],
-    streamedNode: LocalNode,
-    buildSide: BuildSide,
-    buildOutput: Seq[Attribute],
-    isWrapped: Boolean) extends UnaryLocalNode(conf) {
+trait HashJoinNode {
 
-  override val child = streamedNode
+  self: LocalNode =>
 
-  // Because we do not pass in the buildNode, we take the output of buildNode to
-  // create the inputSet properly.
-  override def inputSet: AttributeSet = AttributeSet(child.output ++ buildOutput)
-
-  override def output: Seq[Attribute] = buildSide match {
-    case BuildRight => streamedNode.output ++ buildOutput
-    case BuildLeft => buildOutput ++ streamedNode.output
-  }
+  protected def streamedKeys: Seq[Expression]
+  protected def streamedNode: LocalNode
+  protected def buildSide: BuildSide
 
   private[this] var currentStreamedRow: InternalRow = _
   private[this] var currentHashMatches: Seq[InternalRow] = _
@@ -63,11 +45,14 @@ case class HashJoinNode(
   private[this] var hashed: HashedRelation = _
   private[this] var joinKeys: Projection = _
 
-  private[this] def isUnsafeMode: Boolean = {
-    (codegenEnabled && unsafeEnabled && UnsafeProjection.canSupport(schema))
+  protected def isUnsafeMode: Boolean = {
+    (codegenEnabled &&
+      unsafeEnabled &&
+      UnsafeProjection.canSupport(schema) &&
+      UnsafeProjection.canSupport(streamedKeys))
   }
 
-  private[this] def streamSideKeyGenerator: Projection = {
+  private def streamSideKeyGenerator: Projection = {
     if (isUnsafeMode) {
       UnsafeProjection.create(streamedKeys, streamedNode.output)
     } else {
@@ -76,22 +61,20 @@ case class HashJoinNode(
   }
 
   /** Sets the HashedRelation used by this node. */
-  def withHashedRelation(hashedRelation: HashedRelation): Unit = {
+  protected def withHashedRelation(hashedRelation: HashedRelation): Unit = {
     hashed = hashedRelation
   }
 
-  override def prepare(): Unit = {
-    if (!isWrapped) {
-      // This node is used individually, we should propagate prepare call.
-      super.prepare()
-    }
-  }
+  /**
+   * For nodes that extends this, they can use doOpen to add operations needed in the open method.
+   * The implementation of this method should invoke its children's open methods.
+   */
+  protected def doOpen(): Unit
 
   override def open(): Unit = {
-    if (!isWrapped) {
-      // This node is used individually, we should propagate open call.
-      streamedNode.open()
-    }
+    // First, call doOpen to invoke custom operations for a node.
+    doOpen()
+    // Second, initialize common internal states.
     joinRow = new JoinedRow
     resultProjection = {
       if (isUnsafeMode) {
@@ -142,12 +125,5 @@ case class HashJoinNode(
       case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
     }
     resultProjection(ret)
-  }
-
-  override def close(): Unit = {
-    if (!isWrapped) {
-      // This node is used individually, we should propagate close call.
-      streamedNode.close()
-    }
   }
 }

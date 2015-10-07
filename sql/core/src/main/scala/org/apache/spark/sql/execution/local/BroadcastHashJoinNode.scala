@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide, HashedRelation}
 
 /**
- * A wrapper of [[HashJoinNode]] for broadcast join. The actual work of this node will be
- * delegated to the [[HashJoinNode]] that is created in `open`.
+ * A [[HashJoinNode]] for broadcast join. It takes a streamedNode and a broadcast
+ * [[HashedRelation]]. The actual work of this node is defined in [[HashJoinNode]].
  */
 case class BroadcastHashJoinNode(
     conf: SQLConf,
@@ -33,19 +33,10 @@ case class BroadcastHashJoinNode(
     streamedNode: LocalNode,
     buildSide: BuildSide,
     buildOutput: Seq[Attribute],
-    hashedRelation: Broadcast[HashedRelation]) extends UnaryLocalNode(conf) {
+    hashedRelation: Broadcast[HashedRelation])
+  extends UnaryLocalNode(conf) with HashJoinNode {
 
   override val child = streamedNode
-
-  private[this] val hashJoinNode: HashJoinNode = {
-    HashJoinNode(
-      conf = conf,
-      streamedKeys = streamedKeys,
-      streamedNode = streamedNode,
-      buildSide = buildSide,
-      buildOutput = buildOutput,
-      isWrapped = true)
-  }
 
   // Because we do not pass in the buildNode, we take the output of buildNode to
   // create the inputSet properly.
@@ -56,32 +47,13 @@ case class BroadcastHashJoinNode(
     case BuildLeft => buildOutput ++ streamedNode.output
   }
 
-  override def open(): Unit = {
-    // Call the open of streamedNode.
+  protected override def doOpen(): Unit = {
     streamedNode.open()
     // Set the HashedRelation used by the HashJoinNode.
-    hashJoinNode.withHashedRelation(hashedRelation.value)
-    // Setup this HashJoinNode. We still call these in case there is any setup work
-    // that needs to be done in this HashJoinNode. Because isWrapped is true,
-    // prepare and open will not propagate to the child of streamedNode.
-    hashJoinNode.prepare()
-    hashJoinNode.open()
-  }
-
-  override def next(): Boolean = {
-    hashJoinNode.next()
-  }
-
-  override def fetch(): InternalRow = {
-    hashJoinNode.fetch()
+    withHashedRelation(hashedRelation.value)
   }
 
   override def close(): Unit = {
-    // Close the internal HashJoinNode.  We still call this in case there is any teardown work
-    // that needs to be done in this HashJoinNode. Because isWrapped is true,
-    // prepare and open will not propagate to the child of streamedNode.
-    hashJoinNode.close()
-    // Now, close the streamedNode.
     streamedNode.close()
   }
 }
