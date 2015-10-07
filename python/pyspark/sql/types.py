@@ -1209,11 +1209,11 @@ class Row(tuple):
         else:
             raise ValueError("No args or kwargs")
 
-    def count(self):
-        self.__getattr__("count")
-
-    def index(self):
-        self.__getattr__("index")
+    def __init__(self, *args, **kwargs):
+        if hasattr(self, "__fields__") and "count" in self.__fields__:
+          self.__dict__["count"] = self.__getattr__("count")
+        if hasattr(self, "__fields__") and "index" in self.__fields__:
+          self.__dict__["index"] = self.__getattr__("index")
 
     def asDict(self, recursive=False):
         """
@@ -1281,6 +1281,10 @@ class Row(tuple):
         if key != '__fields__':
             raise Exception("Row is read-only")
         self.__dict__[key] = value
+        if "count" in self.__fields__:
+            self.__dict__["count"] = self.__getattr__("count")
+        if "index" in self.__fields__:
+            self.__dict__["index"] = self.__getattr__("index")
 
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""
