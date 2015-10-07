@@ -37,8 +37,8 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   test("defaultSize") {
     val checks = Map(
-      BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, DATE -> 4,
-      LONG -> 8, TIMESTAMP -> 8, FLOAT -> 4, DOUBLE -> 8,
+      BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4,
+      LONG -> 8, FLOAT -> 4, DOUBLE -> 8,
       STRING -> 8, BINARY -> 16, FIXED_DECIMAL(15, 10) -> 8,
       MAP_GENERIC -> 16)
 
@@ -66,9 +66,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(BYTE, Byte.MaxValue, 1)
     checkActualSize(SHORT, Short.MaxValue, 2)
     checkActualSize(INT, Int.MaxValue, 4)
-    checkActualSize(DATE, Int.MaxValue, 4)
     checkActualSize(LONG, Long.MaxValue, 8)
-    checkActualSize(TIMESTAMP, Long.MaxValue, 8)
     checkActualSize(FLOAT, Float.MaxValue, 4)
     checkActualSize(DOUBLE, Double.MaxValue, 8)
     checkActualSize(STRING, UTF8String.fromString("hello"), 4 + "hello".getBytes("utf-8").length)
@@ -93,11 +91,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   testNativeColumnType(INT)(_.putInt(_), _.getInt)
 
-  testNativeColumnType(DATE)(_.putInt(_), _.getInt)
-
   testNativeColumnType(LONG)(_.putLong(_), _.getLong)
-
-  testNativeColumnType(TIMESTAMP)(_.putLong(_), _.getLong)
 
   testNativeColumnType(FLOAT)(_.putFloat(_), _.getFloat)
 

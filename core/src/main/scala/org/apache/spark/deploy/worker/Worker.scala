@@ -24,7 +24,6 @@ import java.util.{UUID, Date}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
 import scala.util.Random
@@ -330,7 +329,7 @@ private[deploy] class Worker(
         registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(
           new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
-              self.send(ReregisterWithMaster)
+              Option(self).foreach(_.send(ReregisterWithMaster))
             }
           },
           INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
@@ -428,7 +427,9 @@ private[deploy] class Worker(
           // application finishes.
           val appLocalDirs = appDirectories.get(appId).getOrElse {
             Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              Utils.createDirectory(dir, namePrefix = "executor").getAbsolutePath()
+              val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+              Utils.chmod700(appDir)
+              appDir.getAbsolutePath()
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs

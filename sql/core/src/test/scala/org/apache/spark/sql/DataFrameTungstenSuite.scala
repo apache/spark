@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 /**
@@ -27,14 +27,12 @@ import org.apache.spark.sql.types._
  * This is here for now so I can make sure Tungsten project is tested without refactoring existing
  * end-to-end test infra. In the long run this should just go away.
  */
-class DataFrameTungstenSuite extends QueryTest with SQLTestUtils {
-
-  override lazy val sqlContext: SQLContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
+class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("test simple types") {
     withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {
-      val df = sqlContext.sparkContext.parallelize(Seq((1, 2))).toDF("a", "b")
+      val df = sparkContext.parallelize(Seq((1, 2))).toDF("a", "b")
       assert(df.select(struct("a", "b")).first().getStruct(0) === Row(1, 2))
     }
   }
@@ -42,7 +40,7 @@ class DataFrameTungstenSuite extends QueryTest with SQLTestUtils {
   test("test struct type") {
     withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {
       val struct = Row(1, 2L, 3.0F, 3.0)
-      val data = sqlContext.sparkContext.parallelize(Seq(Row(1, struct)))
+      val data = sparkContext.parallelize(Seq(Row(1, struct)))
 
       val schema = new StructType()
         .add("a", IntegerType)
@@ -62,7 +60,7 @@ class DataFrameTungstenSuite extends QueryTest with SQLTestUtils {
     withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {
       val innerStruct = Row(1, "abcd")
       val outerStruct = Row(1, 2L, 3.0F, 3.0, innerStruct, "efg")
-      val data = sqlContext.sparkContext.parallelize(Seq(Row(1, outerStruct)))
+      val data = sparkContext.parallelize(Seq(Row(1, outerStruct)))
 
       val schema = new StructType()
         .add("a", IntegerType)

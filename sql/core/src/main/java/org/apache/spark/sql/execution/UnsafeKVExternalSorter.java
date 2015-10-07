@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.KVIterator;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -82,11 +82,18 @@ public final class UnsafeKVExternalSorter {
         pageSizeBytes);
     } else {
       // Insert the records into the in-memory sorter.
+      // We will use the number of elements in the map as the initialSize of the
+      // UnsafeInMemorySorter. Because UnsafeInMemorySorter does not accept 0 as the initialSize,
+      // we will use 1 as its initial size if the map is empty.
+      // TODO: track pointer array memory used by this in-memory sorter! (SPARK-10474)
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        taskMemoryManager, recordComparator, prefixComparator, map.numElements());
+        taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
-      final int numKeyFields = keySchema.size();
+      // We cannot use the destructive iterator here because we are reusing the existing memory
+      // pages in BytesToBytesMap to hold records during sorting.
+      // The only new memory we are allocating is the pointer/prefix array.
       BytesToBytesMap.BytesToBytesMapIterator iter = map.iterator();
+      final int numKeyFields = keySchema.size();
       UnsafeRow row = new UnsafeRow();
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
@@ -154,6 +161,13 @@ public final class UnsafeKVExternalSorter {
   }
 
   /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    return sorter.getPeakMemoryUsedBytes();
+  }
+
+  /**
    * Marks the current page as no-more-space-available, and as a result, either allocate a
    * new page or spill when we see the next record.
    */
@@ -212,9 +226,8 @@ public final class UnsafeKVExternalSorter {
           int recordLen = underlying.getRecordLength();
 
           // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
-          int keyLen = PlatformDependent.UNSAFE.getInt(baseObj, recordOffset);
+          int keyLen = Platform.getInt(baseObj, recordOffset);
           int valueLen = recordLen - keyLen - 4;
-
           key.pointTo(baseObj, recordOffset + 4, numKeyFields, keyLen);
           value.pointTo(baseObj, recordOffset + 4 + keyLen, numValueFields, valueLen);
 

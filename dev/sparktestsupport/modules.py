@@ -134,7 +134,7 @@ streaming = Module(
 # files in streaming_kinesis_asl are changed, so that if Kinesis experiences an outage, we don't
 # fail other PRs.
 streaming_kinesis_asl = Module(
-    name="kinesis-asl",
+    name="streaming-kinesis-asl",
     dependencies=[],
     source_file_regexes=[
         "extras/kinesis-asl/",
@@ -147,7 +147,7 @@ streaming_kinesis_asl = Module(
         "ENABLE_KINESIS_TESTS": "1"
     },
     sbt_test_goals=[
-        "kinesis-asl/test",
+        "streaming-kinesis-asl/test",
     ]
 )
 
@@ -181,6 +181,7 @@ streaming_mqtt = Module(
     dependencies=[streaming],
     source_file_regexes=[
         "external/mqtt",
+        "external/mqtt-assembly",
     ],
     sbt_test_goals=[
         "streaming-mqtt/test",
@@ -306,6 +307,7 @@ pyspark_streaming = Module(
         streaming,
         streaming_kafka,
         streaming_flume_assembly,
+        streaming_mqtt,
         streaming_kinesis_asl
     ],
     source_file_regexes=[

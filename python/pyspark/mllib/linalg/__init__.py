@@ -25,6 +25,7 @@ SciPy is available in their environment.
 
 import sys
 import array
+import struct
 
 if sys.version >= '3':
     basestring = str
@@ -120,6 +121,13 @@ def _format_float(f, digits=4):
 
 def _format_float_list(l):
     return [_format_float(x) for x in l]
+
+
+def _double_to_long_bits(value):
+    if np.isnan(value):
+        value = float('nan')
+    # pack double into 64 bits, then unpack as long int
+    return struct.unpack('Q', struct.pack('d', value))[0]
 
 
 class VectorUDT(UserDefinedType):
@@ -232,6 +240,7 @@ class Vector(object):
     def toArray(self):
         """
         Convert the vector into an numpy.ndarray
+
         :return: numpy.ndarray
         """
         raise NotImplementedError
@@ -293,11 +302,14 @@ class DenseVector(Vector):
         return DenseVector, (self.array.tostring(),)
 
     def numNonzeros(self):
+        """
+        Number of nonzero elements. This scans all active values and count non zeros
+        """
         return np.count_nonzero(self.array)
 
     def norm(self, p):
         """
-        Calculte the norm of a DenseVector.
+        Calculates the norm of a DenseVector.
 
         >>> a = DenseVector([0, -1, 2, -3])
         >>> a.norm(2)
@@ -389,6 +401,16 @@ class DenseVector(Vector):
         return np.dot(diff, diff)
 
     def toArray(self):
+        """
+        Returns an numpy.ndarray
+        """
+        return self.array
+
+    @property
+    def values(self):
+        """
+        Returns a list of values
+        """
         return self.array
 
     def __getitem__(self, item):
@@ -404,10 +426,30 @@ class DenseVector(Vector):
         return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
-        return isinstance(other, DenseVector) and np.array_equal(self.array, other.array)
+        if isinstance(other, DenseVector):
+            return np.array_equal(self.array, other.array)
+        elif isinstance(other, SparseVector):
+            if len(self) != other.size:
+                return False
+            return Vectors._equals(list(xrange(len(self))), self.array, other.indices, other.values)
+        return False
 
     def __ne__(self, other):
         return not self == other
+
+    def __hash__(self):
+        size = len(self)
+        result = 31 + size
+        nnz = 0
+        i = 0
+        while i < size and nnz < 128:
+            if self.array[i] != 0:
+                result = 31 * result + i
+                bits = _double_to_long_bits(self.array[i])
+                result = 31 * result + (bits ^ (bits >> 32))
+                nnz += 1
+            i += 1
+        return result
 
     def __getattr__(self, item):
         return getattr(self.array, item)
@@ -447,8 +489,8 @@ class SparseVector(Vector):
 
         :param size: Size of the vector.
         :param args: Active entries, as a dictionary {index: value, ...},
-          a list of tuples [(index, value), ...], or a list of strictly i
-          ncreasing indices and a list of corresponding values [index, ...],
+          a list of tuples [(index, value), ...], or a list of strictly
+          increasing indices and a list of corresponding values [index, ...],
           [value, ...]. Inactive entries are treated as zeros.
 
         >>> SparseVector(4, {1: 1.0, 3: 5.5})
@@ -489,11 +531,14 @@ class SparseVector(Vector):
                     raise TypeError("indices array must be sorted")
 
     def numNonzeros(self):
+        """
+        Number of nonzero elements. This scans all active values and count non zeros.
+        """
         return np.count_nonzero(self.values)
 
     def norm(self, p):
         """
-        Calculte the norm of a SparseVector.
+        Calculates the norm of a SparseVector.
 
         >>> a = SparseVector(4, [0, 1], [3., -4.])
         >>> a.norm(1)
@@ -704,20 +749,14 @@ class SparseVector(Vector):
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
-        """
-        Test SparseVectors for equality.
-
-        >>> v1 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        >>> v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
-        >>> v1 == v2
-        True
-        >>> v1 != v2
-        False
-        """
-        return (isinstance(other, self.__class__)
-                and other.size == self.size
-                and np.array_equal(other.indices, self.indices)
-                and np.array_equal(other.values, self.values))
+        if isinstance(other, SparseVector):
+            return other.size == self.size and np.array_equal(other.indices, self.indices) \
+                and np.array_equal(other.values, self.values)
+        elif isinstance(other, DenseVector):
+            if self.size != len(other):
+                return False
+            return Vectors._equals(self.indices, self.values, list(xrange(len(other))), other.array)
+        return False
 
     def __getitem__(self, index):
         inds = self.indices
@@ -739,6 +778,19 @@ class SparseVector(Vector):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        result = 31 + self.size
+        nnz = 0
+        i = 0
+        while i < len(self.values) and nnz < 128:
+            if self.values[i] != 0:
+                result = 31 * result + int(self.indices[i])
+                bits = _double_to_long_bits(self.values[i])
+                result = 31 * result + (bits ^ (bits >> 32))
+                nnz += 1
+            i += 1
+        return result
+
 
 class Vectors(object):
 
@@ -758,7 +810,7 @@ class Vectors(object):
         values (sorted by index).
 
         :param size: Size of the vector.
-        :param args: Non-zero entries, as a dictionary, list of tupes,
+        :param args: Non-zero entries, as a dictionary, list of tuples,
                      or two sorted lists containing indices and values.
 
         >>> Vectors.sparse(4, {1: 1.0, 3: 5.5})
@@ -840,6 +892,31 @@ class Vectors(object):
     @staticmethod
     def zeros(size):
         return DenseVector(np.zeros(size))
+
+    @staticmethod
+    def _equals(v1_indices, v1_values, v2_indices, v2_values):
+        """
+        Check equality between sparse/dense vectors,
+        v1_indices and v2_indices assume to be strictly increasing.
+        """
+        v1_size = len(v1_values)
+        v2_size = len(v2_values)
+        k1 = 0
+        k2 = 0
+        all_equal = True
+        while all_equal:
+            while k1 < v1_size and v1_values[k1] == 0:
+                k1 += 1
+            while k2 < v2_size and v2_values[k2] == 0:
+                k2 += 1
+
+            if k1 >= v1_size or k2 >= v2_size:
+                return k1 >= v1_size and k2 >= v2_size
+
+            all_equal = v1_indices[k1] == v2_indices[k2] and v1_values[k1] == v2_values[k2]
+            k1 += 1
+            k2 += 1
+        return all_equal
 
 
 class Matrix(object):

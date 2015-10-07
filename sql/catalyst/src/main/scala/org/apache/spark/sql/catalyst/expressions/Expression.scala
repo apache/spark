@@ -276,7 +276,7 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"${ev.primitive} = ${f(eval)};"
+      s"${ev.value} = ${f(eval)};"
     })
   }
 
@@ -292,10 +292,10 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     val eval = child.gen(ctx)
-    val resultCode = f(eval.primitive)
+    val resultCode = f(eval.value)
     eval.code + s"""
       boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $resultCode
       }
@@ -357,7 +357,7 @@ abstract class BinaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: (String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"${ev.primitive} = ${f(eval1, eval2)};"
+      s"${ev.value} = ${f(eval1, eval2)};"
     })
   }
 
@@ -375,11 +375,11 @@ abstract class BinaryExpression extends Expression {
       f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val resultCode = f(eval1.primitive, eval2.primitive)
+    val resultCode = f(eval1.value, eval2.value)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${eval2.code}
         if (!${eval2.isNull}) {
@@ -444,7 +444,7 @@ abstract class TernaryExpression extends Expression {
   override def nullable: Boolean = children.exists(_.nullable)
 
   /**
-   * Default behavior of evaluation according to the default nullability of BinaryExpression.
+   * Default behavior of evaluation according to the default nullability of TernaryExpression.
    * If subclass of BinaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
@@ -463,7 +463,7 @@ abstract class TernaryExpression extends Expression {
   }
 
   /**
-   * Called by default [[eval]] implementation.  If subclass of BinaryExpression keep the default
+   * Called by default [[eval]] implementation.  If subclass of TernaryExpression keep the default
    * nullability, they can override this method to save null-check code.  If we need full control
    * of evaluation process, we should override [[eval]].
    */
@@ -482,7 +482,7 @@ abstract class TernaryExpression extends Expression {
     ev: GeneratedExpressionCode,
     f: (String, String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
-      s"${ev.primitive} = ${f(eval1, eval2, eval3)};"
+      s"${ev.value} = ${f(eval1, eval2, eval3)};"
     })
   }
 
@@ -499,11 +499,11 @@ abstract class TernaryExpression extends Expression {
     ev: GeneratedExpressionCode,
     f: (String, String, String) => String): String = {
     val evals = children.map(_.gen(ctx))
-    val resultCode = f(evals(0).primitive, evals(1).primitive, evals(2).primitive)
+    val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
     s"""
       ${evals(0).code}
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${evals(0).isNull}) {
         ${evals(1).code}
         if (!${evals(1).isNull}) {

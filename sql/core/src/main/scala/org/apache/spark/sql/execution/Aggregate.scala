@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::
@@ -44,6 +45,10 @@ case class Aggregate(
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
+
+  override private[sql] lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: List[Distribution] = {
     if (partial) {
@@ -121,12 +126,15 @@ case class Aggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
     if (groupingExpressions.isEmpty) {
       child.execute().mapPartitions { iter =>
         val buffer = newAggregateBuffer()
         var currentRow: InternalRow = null
         while (iter.hasNext) {
           currentRow = iter.next()
+          numInputRows += 1
           var i = 0
           while (i < buffer.length) {
             buffer(i).update(currentRow)
@@ -142,6 +150,7 @@ case class Aggregate(
           i += 1
         }
 
+        numOutputRows += 1
         Iterator(resultProjection(aggregateResults))
       }
     } else {
@@ -152,6 +161,7 @@ case class Aggregate(
         var currentRow: InternalRow = null
         while (iter.hasNext) {
           currentRow = iter.next()
+          numInputRows += 1
           val currentGroup = groupingProjection(currentRow)
           var currentBuffer = hashTable.get(currentGroup)
           if (currentBuffer == null) {
@@ -180,6 +190,7 @@ case class Aggregate(
             val currentEntry = hashTableIter.next()
             val currentGroup = currentEntry.getKey
             val currentBuffer = currentEntry.getValue
+            numOutputRows += 1
 
             var i = 0
             while (i < currentBuffer.length) {

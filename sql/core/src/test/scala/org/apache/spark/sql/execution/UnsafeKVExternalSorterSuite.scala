@@ -22,16 +22,15 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, RowOrdering, UnsafeProjection}
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeRow, UnsafeProjection}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.
  */
-class UnsafeKVExternalSorterSuite extends SparkFunSuite {
-
+class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
   private val keyTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
   private val valueTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
 
@@ -109,8 +108,6 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
       inputData: Seq[(InternalRow, InternalRow)],
       pageSize: Long,
       spill: Boolean): Unit = {
-    // Calling this make sure we have block manager and everything else setup.
-    TestSQLContext
 
     val taskMemMgr = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
     val shuffleMemMgr = new TestShuffleMemoryManager
@@ -144,8 +141,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
     }
     sorter.cleanupResources()
 
-    val keyOrdering = RowOrdering.forSchema(keySchema.map(_.dataType))
-    val valueOrdering = RowOrdering.forSchema(valueSchema.map(_.dataType))
+    val keyOrdering = InterpretedOrdering.forSchema(keySchema.map(_.dataType))
+    val valueOrdering = InterpretedOrdering.forSchema(valueSchema.map(_.dataType))
     val kvOrdering = new Ordering[(InternalRow, InternalRow)] {
       override def compare(x: (InternalRow, InternalRow), y: (InternalRow, InternalRow)): Int = {
         keyOrdering.compare(x._1, y._1) match {

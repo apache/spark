@@ -15,20 +15,24 @@
 # limitations under the License.
 #
 
+from pyspark import since
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
 
 
-__all__ = ['DecisionTreeRegressor', 'DecisionTreeRegressionModel', 'GBTRegressor',
-           'GBTRegressionModel', 'LinearRegression', 'LinearRegressionModel',
+__all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
+           'DecisionTreeRegressor', 'DecisionTreeRegressionModel',
+           'GBTRegressor', 'GBTRegressionModel',
+           'LinearRegression', 'LinearRegressionModel',
            'RandomForestRegressor', 'RandomForestRegressionModel']
 
 
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                       HasRegParam, HasTol):
+                       HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
+                       HasStandardization):
     """
     Linear regression.
 
@@ -61,40 +65,35 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
-    """
 
-    # a placeholder to make it appear in the generated doc
-    elasticNetParam = \
-        Param(Params._dummy(), "elasticNetParam",
-              "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-              "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+    .. versionadded:: 1.4.0
+    """
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6):
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                 standardization=True):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                 standardization=True)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
-        #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty
-        #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
-        self.elasticNetParam = \
-            Param(self, "elasticNetParam",
-                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty " +
-                  "is an L2 penalty. For alpha = 1, it is an L1 penalty.")
-        self._setDefault(maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6):
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                  standardization=True):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                  standardization=True)
         Sets params for linear regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -103,6 +102,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     def _create_model(self, java_model):
         return LinearRegressionModel(java_model)
 
+    @since("1.4.0")
     def setElasticNetParam(self, value):
         """
         Sets the value of :py:attr:`elasticNetParam`.
@@ -110,6 +110,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         self._paramMap[self.elasticNetParam] = value
         return self
 
+    @since("1.4.0")
     def getElasticNetParam(self):
         """
         Gets the value of elasticNetParam or its default value.
@@ -120,9 +121,12 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
 class LinearRegressionModel(JavaModel):
     """
     Model fitted by LinearRegression.
+
+    .. versionadded:: 1.4.0
     """
 
     @property
+    @since("1.4.0")
     def weights(self):
         """
         Model weights.
@@ -130,6 +134,7 @@ class LinearRegressionModel(JavaModel):
         return self._call_java("weights")
 
     @property
+    @since("1.4.0")
     def intercept(self):
         """
         Model intercept.
@@ -182,6 +187,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -213,6 +220,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
@@ -229,6 +237,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def _create_model(self, java_model):
         return DecisionTreeRegressionModel(java_model)
 
+    @since("1.4.0")
     def setImpurity(self, value):
         """
         Sets the value of :py:attr:`impurity`.
@@ -236,6 +245,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._paramMap[self.impurity] = value
         return self
 
+    @since("1.4.0")
     def getImpurity(self):
         """
         Gets the value of impurity or its default value.
@@ -245,13 +255,19 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 @inherit_doc
 class DecisionTreeModel(JavaModel):
+    """Abstraction for Decision Tree models.
+
+    .. versionadded:: 1.5.0
+    """
 
     @property
+    @since("1.5.0")
     def numNodes(self):
         """Return number of nodes of the decision tree."""
         return self._call_java("numNodes")
 
     @property
+    @since("1.5.0")
     def depth(self):
         """Return depth of the decision tree."""
         return self._call_java("depth")
@@ -262,8 +278,13 @@ class DecisionTreeModel(JavaModel):
 
 @inherit_doc
 class TreeEnsembleModels(JavaModel):
+    """Represents a tree ensemble model.
+
+    .. versionadded:: 1.5.0
+    """
 
     @property
+    @since("1.5.0")
     def treeWeights(self):
         """Return the weights for each tree"""
         return list(self._call_java("javaTreeWeights"))
@@ -276,6 +297,8 @@ class TreeEnsembleModels(JavaModel):
 class DecisionTreeRegressionModel(DecisionTreeModel):
     """
     Model fitted by DecisionTreeRegressor.
+
+    .. versionadded:: 1.4.0
     """
 
 
@@ -302,6 +325,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     0.5
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -356,6 +381,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
@@ -373,6 +399,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def _create_model(self, java_model):
         return RandomForestRegressionModel(java_model)
 
+    @since("1.4.0")
     def setImpurity(self, value):
         """
         Sets the value of :py:attr:`impurity`.
@@ -380,12 +407,14 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._paramMap[self.impurity] = value
         return self
 
+    @since("1.4.0")
     def getImpurity(self):
         """
         Gets the value of impurity or its default value.
         """
         return self.getOrDefault(self.impurity)
 
+    @since("1.4.0")
     def setSubsamplingRate(self, value):
         """
         Sets the value of :py:attr:`subsamplingRate`.
@@ -393,12 +422,14 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._paramMap[self.subsamplingRate] = value
         return self
 
+    @since("1.4.0")
     def getSubsamplingRate(self):
         """
         Gets the value of subsamplingRate or its default value.
         """
         return self.getOrDefault(self.subsamplingRate)
 
+    @since("1.4.0")
     def setNumTrees(self, value):
         """
         Sets the value of :py:attr:`numTrees`.
@@ -406,12 +437,14 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._paramMap[self.numTrees] = value
         return self
 
+    @since("1.4.0")
     def getNumTrees(self):
         """
         Gets the value of numTrees or its default value.
         """
         return self.getOrDefault(self.numTrees)
 
+    @since("1.4.0")
     def setFeatureSubsetStrategy(self, value):
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
@@ -419,6 +452,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._paramMap[self.featureSubsetStrategy] = value
         return self
 
+    @since("1.4.0")
     def getFeatureSubsetStrategy(self):
         """
         Gets the value of featureSubsetStrategy or its default value.
@@ -429,6 +463,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 class RandomForestRegressionModel(TreeEnsembleModels):
     """
     Model fitted by RandomForestRegressor.
+
+    .. versionadded:: 1.4.0
     """
 
 
@@ -455,6 +491,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -501,6 +539,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
@@ -518,6 +557,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def _create_model(self, java_model):
         return GBTRegressionModel(java_model)
 
+    @since("1.4.0")
     def setLossType(self, value):
         """
         Sets the value of :py:attr:`lossType`.
@@ -525,12 +565,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         self._paramMap[self.lossType] = value
         return self
 
+    @since("1.4.0")
     def getLossType(self):
         """
         Gets the value of lossType or its default value.
         """
         return self.getOrDefault(self.lossType)
 
+    @since("1.4.0")
     def setSubsamplingRate(self, value):
         """
         Sets the value of :py:attr:`subsamplingRate`.
@@ -538,12 +580,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         self._paramMap[self.subsamplingRate] = value
         return self
 
+    @since("1.4.0")
     def getSubsamplingRate(self):
         """
         Gets the value of subsamplingRate or its default value.
         """
         return self.getOrDefault(self.subsamplingRate)
 
+    @since("1.4.0")
     def setStepSize(self, value):
         """
         Sets the value of :py:attr:`stepSize`.
@@ -551,6 +595,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         self._paramMap[self.stepSize] = value
         return self
 
+    @since("1.4.0")
     def getStepSize(self):
         """
         Gets the value of stepSize or its default value.
@@ -561,7 +606,170 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
 class GBTRegressionModel(TreeEnsembleModels):
     """
     Model fitted by GBTRegressor.
+
+    .. versionadded:: 1.4.0
     """
+
+
+@inherit_doc
+class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                            HasFitIntercept, HasMaxIter, HasTol):
+    """
+    Accelerated Failure Time (AFT) Model Survival Regression
+
+    Fit a parametric AFT survival regression model based on the Weibull distribution
+    of the survival time.
+
+    .. seealso:: `AFT Model <https://en.wikipedia.org/wiki/Accelerated_failure_time_model>`_
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([
+    ...     (1.0, Vectors.dense(1.0), 1.0),
+    ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
+    >>> aftsr = AFTSurvivalRegression()
+    >>> model = aftsr.fit(df)
+    >>> model.predict(Vectors.dense(6.3))
+    1.0
+    >>> model.predictQuantiles(Vectors.dense(6.3))
+    DenseVector([0.0101, 0.0513, 0.1054, 0.2877, 0.6931, 1.3863, 2.3026, 2.9957, 4.6052])
+    >>> model.transform(df).show()
+    +-----+---------+------+----------+
+    |label| features|censor|prediction|
+    +-----+---------+------+----------+
+    |  1.0|    [1.0]|   1.0|       1.0|
+    |  0.0|(1,[],[])|   0.0|       1.0|
+    +-----+---------+------+----------+
+    ...
+
+    .. versionadded:: 1.6.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    censorCol = Param(Params._dummy(), "censorCol",
+                      "censor column name. The value of this column could be 0 or 1. " +
+                      "If the value is 1, it means the event has occurred i.e. " +
+                      "uncensored; otherwise censored.")
+    quantileProbabilities = \
+        Param(Params._dummy(), "quantileProbabilities",
+              "quantile probabilities array. Values of the quantile probabilities array " +
+              "should be in the range (0, 1) and the array should be non-empty.")
+    quantilesCol = Param(Params._dummy(), "quantilesCol",
+                         "quantiles column name. This column will output quantiles of " +
+                         "corresponding quantileProbabilities if it is set.")
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
+                 quantileProbabilities=None, quantilesCol=None):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
+                 quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
+                 quantilesCol=None):
+        """
+        super(AFTSurvivalRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
+        #: Param for censor column name
+        self.censorCol = Param(self,  "censorCol",
+                               "censor column name. The value of this column could be 0 or 1. " +
+                               "If the value is 1, it means the event has occurred i.e. " +
+                               "uncensored; otherwise censored.")
+        #: Param for quantile probabilities array
+        self.quantileProbabilities = \
+            Param(self, "quantileProbabilities",
+                  "quantile probabilities array. Values of the quantile probabilities array " +
+                  "should be in the range (0, 1) and the array should be non-empty.")
+        #: Param for quantiles column name
+        self.quantilesCol = Param(self, "quantilesCol",
+                                  "quantiles column name. This column will output quantiles of " +
+                                  "corresponding quantileProbabilities if it is set.")
+        self._setDefault(censorCol="censor",
+                         quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99])
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("1.6.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
+                  quantileProbabilities=None, quantilesCol=None):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
+                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
+                  quantilesCol=None):
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return AFTSurvivalRegressionModel(java_model)
+
+    @since("1.6.0")
+    def setCensorCol(self, value):
+        """
+        Sets the value of :py:attr:`censorCol`.
+        """
+        self._paramMap[self.censorCol] = value
+        return self
+
+    @since("1.6.0")
+    def getCensorCol(self):
+        """
+        Gets the value of censorCol or its default value.
+        """
+        return self.getOrDefault(self.censorCol)
+
+    @since("1.6.0")
+    def setQuantileProbabilities(self, value):
+        """
+        Sets the value of :py:attr:`quantileProbabilities`.
+        """
+        self._paramMap[self.quantileProbabilities] = value
+        return self
+
+    @since("1.6.0")
+    def getQuantileProbabilities(self):
+        """
+        Gets the value of quantileProbabilities or its default value.
+        """
+        return self.getOrDefault(self.quantileProbabilities)
+
+    @since("1.6.0")
+    def setQuantilesCol(self, value):
+        """
+        Sets the value of :py:attr:`quantilesCol`.
+        """
+        self._paramMap[self.quantilesCol] = value
+        return self
+
+    @since("1.6.0")
+    def getQuantilesCol(self):
+        """
+        Gets the value of quantilesCol or its default value.
+        """
+        return self.getOrDefault(self.quantilesCol)
+
+
+class AFTSurvivalRegressionModel(JavaModel):
+    """
+    Model fitted by AFTSurvivalRegression.
+
+    .. versionadded:: 1.6.0
+    """
+
+    def predictQuantiles(self, features):
+        """
+        Predicted Quantiles
+        """
+        return self._call_java("predictQuantiles", features)
+
+    def predict(self, features):
+        """
+        Predicted value
+        """
+        return self._call_java("predict", features)
 
 
 if __name__ == "__main__":

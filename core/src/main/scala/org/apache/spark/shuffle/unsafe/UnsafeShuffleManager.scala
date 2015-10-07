@@ -161,7 +161,7 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
       stageAttemptId: Int,
       context: TaskContext): ShuffleWriter[K, V] = {
     handle match {
-      case unsafeShuffleHandle: UnsafeShuffleHandle[K, V] =>
+      case unsafeShuffleHandle: UnsafeShuffleHandle[K @unchecked, V @unchecked] =>
         numMapsForShufflesThatUsedNewPath.putIfAbsent(handle.shuffleId, unsafeShuffleHandle.numMaps)
         val env = SparkEnv.get
         addShuffleAttempt(handle.shuffleId, stageAttemptId)

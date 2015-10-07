@@ -39,6 +39,7 @@ private[feature] trait Word2VecBase extends Params
 
   /**
    * The dimension of the code that you want to transform from words.
+   * Default: 100
    * @group param
    */
   final val vectorSize = new IntParam(
@@ -50,6 +51,7 @@ private[feature] trait Word2VecBase extends Params
 
   /**
    * Number of partitions for sentences of words.
+   * Default: 1
    * @group param
    */
   final val numPartitions = new IntParam(
@@ -62,6 +64,7 @@ private[feature] trait Word2VecBase extends Params
   /**
    * The minimum number of times a token must appear to be included in the word2vec model's
    * vocabulary.
+   * Default: 5
    * @group param
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +
@@ -153,7 +156,7 @@ class Word2VecModel private[ml] (
    * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and
    * and the vector the DenseVector that it is mapped to.
    */
-  val getVectors: DataFrame = {
+  @transient lazy val getVectors: DataFrame = {
     val sc = SparkContext.getOrCreate()
     val sqlContext = SQLContext.getOrCreate(sc)
     import sqlContext.implicits._
@@ -221,6 +224,6 @@ class Word2VecModel private[ml] (
 
   override def copy(extra: ParamMap): Word2VecModel = {
     val copied = new Word2VecModel(uid, wordVectors)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

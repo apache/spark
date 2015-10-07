@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Accumulator, Logging}
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
@@ -32,6 +32,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
   protected[sql] val currentContext = new ThreadLocal[SQLContext]()
@@ -54,9 +56,15 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
-  // the value of codegenEnabled will be set by the desserializer after the constructor has run.
+  // the value of codegenEnabled/unsafeEnabled will be set by the desserializer after the
+  // constructor has run.
   val codegenEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.codegenEnabled
+  } else {
+    false
+  }
+  val unsafeEnabled: Boolean = if (sqlContext != null) {
+    sqlContext.conf.unsafeEnabled
   } else {
     false
   }
@@ -73,26 +81,15 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Whether track the number of rows output by this SparkPlan
+   * Return all metrics containing metrics of this SparkPlan.
    */
-  protected[sql] def trackNumOfRowsEnabled: Boolean = false
-
-  private lazy val numOfRowsAccumulator = sparkContext.internalAccumulator(0L, "number of rows")
+  private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
 
   /**
-   * Return all accumulators containing metrics of this SparkPlan.
+   * Return a LongSQLMetric according to the name.
    */
-  private[sql] def accumulators: Map[String, Accumulator[_]] = if (trackNumOfRowsEnabled) {
-      Map("numRows" -> numOfRowsAccumulator)
-    } else {
-      Map.empty
-    }
-
-  /**
-   * Return the accumulator according to the name.
-   */
-  private[sql] def accumulator[T](name: String): Accumulator[T] =
-    accumulators(name).asInstanceOf[Accumulator[T]]
+  private[sql] def longMetric(name: String): LongSQLMetric =
+    metrics(name).asInstanceOf[LongSQLMetric]
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -140,15 +137,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-      if (trackNumOfRowsEnabled) {
-        val numRows = accumulator[Long]("numRows")
-        doExecute().map { row =>
-          numRows += 1
-          row
-        }
-      } else {
-        doExecute()
-      }
+      doExecute()
     }
   }
 
@@ -157,7 +146,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def prepare(): Unit = {
     if (prepareCalled.compareAndSet(false, true)) {
-      doPrepare
+      doPrepare()
       children.foreach(_.prepare())
     }
   }
@@ -181,11 +170,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the result as an array.
    */
-  def executeCollect(): Array[Row] = {
-    execute().mapPartitions { iter =>
-      val converter = CatalystTypeConverters.createToScalaConverter(schema)
-      iter.map(converter(_).asInstanceOf[Row])
-    }.collect()
+  def executeCollect(): Array[InternalRow] = {
+    execute().map(_.copy()).collect()
+  }
+
+  /**
+   * Runs this query returning the result as an array, using external Row format.
+   */
+  def executeCollectPublic(): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    executeCollect().map(converter(_).asInstanceOf[Row])
   }
 
   /**
@@ -193,9 +187,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * This is modeled after RDD.take but never runs any job locally on the driver.
    */
-  def executeTake(n: Int): Array[Row] = {
+  def executeTake(n: Int): Array[InternalRow] = {
     if (n == 0) {
-      return new Array[Row](0)
+      return new Array[InternalRow](0)
     }
 
     val childRDD = execute().map(_.copy())
@@ -229,8 +223,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += numPartsToTry
     }
 
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    buf.toArray.map(converter(_).asInstanceOf[Row])
+    buf.toArray
   }
 
   private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
@@ -309,12 +302,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
             throw e
           } else {
             log.error("Failed to generate ordering, fallback to interpreted", e)
-            new RowOrdering(order, inputSchema)
+            new InterpretedOrdering(order, inputSchema)
           }
       }
     } else {
-      new RowOrdering(order, inputSchema)
+      new InterpretedOrdering(order, inputSchema)
     }
+  }
+  /**
+   * Creates a row ordering for the given schema, in natural ascending order.
+   */
+  protected def newNaturalAscendingOrdering(dataTypes: Seq[DataType]): Ordering[InternalRow] = {
+    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
+      case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    }
+    newOrdering(order, Seq.empty)
   }
 }
 
