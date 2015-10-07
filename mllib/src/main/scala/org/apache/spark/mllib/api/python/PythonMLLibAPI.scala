@@ -336,7 +336,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       initializationMode: String,
       seed: java.lang.Long,
       initializationSteps: Int,
-      epsilon: Double): KMeansModel = {
+      epsilon: Double,
+      initialModel: java.util.ArrayList[Vector]): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
@@ -346,6 +347,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setEpsilon(epsilon)
 
     if (seed != null) kMeansAlg.setSeed(seed)
+    if (!initialModel.isEmpty()) kMeansAlg.setInitialModel(new KMeansModel(initialModel))
 
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
