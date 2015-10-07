@@ -160,16 +160,16 @@ class HasPredictionCol(Params):
 
 class HasProbabilityCol(Params):
     """
-    Mixin for param probabilityCol: Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
+    Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
     """
 
     # a placeholder to make it appear in the generated doc
-    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
+    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
 
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
-        #: param for Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
-        self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities.Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
+        #: param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
+        self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
         self._setDefault(probabilityCol='probability')
 
     def setProbabilityCol(self, value):
