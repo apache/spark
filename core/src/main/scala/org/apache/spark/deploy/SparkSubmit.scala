@@ -458,7 +458,9 @@ object SparkSubmit {
         sysProp = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
+      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
+      // The name of the pool the submitted application is assigned into
+      OptionAssigner(args.poolName, STANDALONE, ALL_DEPLOY_MODES, sysProp = "spark.app.pool")
     )
 
     // In client mode, launch the application main class directly

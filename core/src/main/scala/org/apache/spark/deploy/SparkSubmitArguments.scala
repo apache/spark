@@ -77,6 +77,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = true // used internally
 
+  // Standalone mode only
+  var poolName: String = null
+
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
@@ -381,6 +384,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case QUEUE =>
         queue = value
 
+      case POOL =>
+        poolName = value
+
       case FILES =>
         files = Utils.resolveURIs(value)
 
@@ -521,6 +527,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
+        |
+        | Spark standalone (cluster or client deploy mode) only:
+        |  --pool POOL            Pool name the application is assigned to
         |
         | Spark standalone or Mesos with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.

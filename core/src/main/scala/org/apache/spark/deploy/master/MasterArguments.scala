@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.SparkConf
+import org.apache.spark.deploy.master.SchedulingMode.SchedulingMode
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
@@ -28,6 +29,10 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
   var port = 7077
   var webUiPort = 8080
   var propertiesFile: String = null
+
+  // default schedulingMode among Spark applications is FIFO
+  var schedulingMode: SchedulingMode = SchedulingMode.withName("FIFO")
+  var schedulingConfigFile: Option[String] = None
 
   // Check for settings in environment variables
   if (System.getenv("SPARK_MASTER_HOST") != null) {
@@ -47,6 +52,20 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
 
   if (conf.contains("spark.master.ui.port")) {
     webUiPort = conf.get("spark.master.ui.port").toInt
+  }
+
+  if (conf.contains("spark.master.scheduling.mode")) {
+    val mode = conf.get("spark.master.scheduling.mode")
+    schedulingMode = try {
+      SchedulingMode.withName(mode)
+    } catch {
+      case e: java.util.NoSuchElementException =>
+        throw new SparkException(s"Unrecognized scheduling mode: $mode")
+    }
+  }
+
+  if (conf.contains("spark.master.scheduling.config")) {
+    schedulingConfigFile = Some(conf.get("spark.master.scheduling.config"))
   }
 
   private def parse(args: List[String]): Unit = args match {
