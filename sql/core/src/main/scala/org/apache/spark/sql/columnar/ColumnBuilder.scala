@@ -117,7 +117,7 @@ private[sql] class CompactDecimalColumnBuilder(dataType: DecimalType)
   extends NativeColumnBuilder(new DecimalColumnStats(dataType), COMPACT_DECIMAL(dataType))
 
 private[sql] class DecimalColumnBuilder(dataType: DecimalType)
-  extends ComplexColumnBuilder(new DecimalColumnStats(dataType), DECIMAL(dataType))
+  extends ComplexColumnBuilder(new DecimalColumnStats(dataType), LARGE_DECIMAL(dataType))
 
 private[sql] class StructColumnBuilder(dataType: StructType)
   extends ComplexColumnBuilder(new ObjectColumnStats(dataType), STRUCT(dataType))
@@ -163,7 +163,8 @@ private[sql] object ColumnBuilder {
       case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder
       case BinaryType => new BinaryColumnBuilder
-      case dt: DecimalType if dt.precision <= 18 => new CompactDecimalColumnBuilder(dt)
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+        new CompactDecimalColumnBuilder(dt)
       case dt: DecimalType => new DecimalColumnBuilder(dt)
       case struct: StructType => new StructColumnBuilder(struct)
       case array: ArrayType => new ArrayColumnBuilder(array)

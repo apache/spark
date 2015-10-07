@@ -420,7 +420,7 @@ private[sql] object BINARY extends ByteArrayColumnType[Array[Byte]](16) {
   def deserialize(bytes: Array[Byte]): Array[Byte] = bytes
 }
 
-private[sql] case class DECIMAL(precision: Int, scale: Int)
+private[sql] case class LARGE_DECIMAL(precision: Int, scale: Int)
   extends ByteArrayColumnType[Decimal](12) {
 
   override val dataType: DataType = DecimalType(precision, scale)
@@ -443,9 +443,9 @@ private[sql] case class DECIMAL(precision: Int, scale: Int)
   }
 }
 
-private[sql] object DECIMAL {
-  def apply(dt: DecimalType): DECIMAL = {
-    DECIMAL(dt.precision, dt.scale)
+private[sql] object LARGE_DECIMAL {
+  def apply(dt: DecimalType): LARGE_DECIMAL = {
+    LARGE_DECIMAL(dt.precision, dt.scale)
   }
 }
 
@@ -582,8 +582,8 @@ private[sql] object ColumnType {
       case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
-      case dt: DecimalType if dt.precision <= 18 => COMPACT_DECIMAL(dt)
-      case dt: DecimalType => DECIMAL(dt)
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)
+      case dt: DecimalType => LARGE_DECIMAL(dt)
       case arr: ArrayType => ARRAY(arr)
       case map: MapType => MAP(map)
       case struct: StructType => STRUCT(struct)

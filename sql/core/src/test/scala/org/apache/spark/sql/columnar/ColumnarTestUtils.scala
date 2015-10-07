@@ -51,7 +51,7 @@ object ColumnarTestUtils {
       case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
       case BINARY => randomBytes(Random.nextInt(32))
       case COMPACT_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
-      case DECIMAL(precision, scale) => Decimal(Random.nextLong(), precision, scale)
+      case LARGE_DECIMAL(precision, scale) => Decimal(Random.nextLong(), precision, scale)
       case STRUCT(_) =>
         new GenericInternalRow(Array[Any](UTF8String.fromString(Random.nextString(10))))
       case ARRAY(_) =>

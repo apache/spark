@@ -36,7 +36,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
   test("defaultSize") {
     val checks = Map(
       NULL-> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
-      FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, DECIMAL(20, 10) -> 12,
+      FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, LARGE_DECIMAL(20, 10) -> 12,
       STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 16, MAP_TYPE -> 32)
 
     checks.foreach { case (columnType, expectedSize) =>
@@ -70,7 +70,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(STRING, "hello", 4 + "hello".getBytes("utf-8").length)
     checkActualSize(BINARY, Array.fill[Byte](4)(0.toByte), 4 + 4)
     checkActualSize(COMPACT_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
-    checkActualSize(DECIMAL(20, 10), Decimal(0, 20, 10), 5)
+    checkActualSize(LARGE_DECIMAL(20, 10), Decimal(0, 20, 10), 5)
     checkActualSize(ARRAY_TYPE, Array[Any](1), 16)
     checkActualSize(MAP_TYPE, Map(1 -> "a"), 25)
     checkActualSize(STRUCT_TYPE, Row("hello"), 28)
@@ -88,7 +88,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   testColumnType(NULL)
   testColumnType(BINARY)
-  testColumnType(DECIMAL(20, 10))
+  testColumnType(LARGE_DECIMAL(20, 10))
   testColumnType(STRUCT_TYPE)
   testColumnType(ARRAY_TYPE)
   testColumnType(MAP_TYPE)
@@ -145,7 +145,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       }
     }
 
-    assertResult(DECIMAL(19, 0)) {
+    assertResult(LARGE_DECIMAL(19, 0)) {
       ColumnType(DecimalType(19, 0))
     }
   }

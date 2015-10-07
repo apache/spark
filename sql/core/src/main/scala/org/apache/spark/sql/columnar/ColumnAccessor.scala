@@ -105,7 +105,7 @@ private[sql] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: De
   extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
 
 private[sql] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
-  extends BasicColumnAccessor[Decimal](buffer, DECIMAL(dataType))
+  extends BasicColumnAccessor[Decimal](buffer, LARGE_DECIMAL(dataType))
   with NullableColumnAccessor
 
 private[sql] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
@@ -135,7 +135,8 @@ private[sql] object ColumnAccessor {
       case DoubleType => new DoubleColumnAccessor(buf)
       case StringType => new StringColumnAccessor(buf)
       case BinaryType => new BinaryColumnAccessor(buf)
-      case dt: DecimalType if dt.precision < 19 => new CompactDecimalColumnAccessor(buf, dt)
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+        new CompactDecimalColumnAccessor(buf, dt)
       case dt: DecimalType => new DecimalColumnAccessor(buf, dt)
       case struct: StructType => new StructColumnAccessor(buf, struct)
       case array: ArrayType => new ArrayColumnAccessor(buf, array)
