@@ -1708,6 +1708,7 @@ class TaskInstanceModelView(ModelViewOnly):
         execution_date=datetime_f,
         start_date=datetime_f,
         end_date=datetime_f,
+        queued_dttm=datetime_f,
         dag_id=dag_link, duration=duration_f)
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_default_sort = ('start_date', True)
