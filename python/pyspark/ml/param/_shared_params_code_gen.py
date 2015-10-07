@@ -51,12 +51,12 @@ def _gen_param_header(name, doc, defaultValueStr):
     """
 
     # a placeholder to make it appear in the generated doc
-    $name = Param(Params._dummy(), "$name", "$doc")
+    $name = Param(Params._dummy(), "$name", "$doc.")
 
     def __init__(self):
         super(Has$Name, self).__init__()
         #: param for $doc
-        self.$name = Param(self, "$name", "$doc")'''
+        self.$name = Param(self, "$name", "$doc.")'''
     if defaultValueStr is not None:
         template += '''
         self._setDefault($name=$defaultValueStr)'''
@@ -112,7 +112,7 @@ if __name__ == "__main__":
         ("predictionCol", "prediction column name", "'prediction'"),
         ("probabilityCol", "Column name for predicted class conditional probabilities. " +
          "Note: Not all models output well-calibrated probability estimates! These probabilities " +
-         "should be treated as confidences, not precise probabilities.", "'probability'"),
+         "should be treated as confidences, not precise probabilities", "'probability'"),
         ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name", "'rawPrediction'"),
         ("inputCol", "input column name", None),
         ("inputCols", "input column names", None),
@@ -124,16 +124,16 @@ if __name__ == "__main__":
         ("stepSize", "Step size to be used for each iteration of optimization.", None),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
          "out rows with bad values), or error (which will throw an errror). More options may be " +
-         "added later.", None),
+         "added later", None),
         ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0"),
-        ("fitIntercept", "whether to fit an intercept term.", "True"),
+         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty", "0.0"),
+        ("fitIntercept", "whether to fit an intercept term", "True"),
         ("standardization", "whether to standardize the training features before fitting the " +
-         "model.", "True"),
+         "model", "True"),
         ("thresholds", "Thresholds in multi-class classification to adjust the probability of " +
          "predicting each class. Array must have length equal to the number of classes, with " +
          "values >= 0. The class with largest value p/t is predicted, where p is the original " +
-         "probability of that class and t is the class' threshold.", None)]
+         "probability of that class and t is the class' threshold", None)]
     code = []
     for name, doc, defaultValueStr in shared:
         param_code = _gen_param_header(name, doc, defaultValueStr)
@@ -141,18 +141,18 @@ if __name__ == "__main__":
 
     decisionTreeParams = [
         ("maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; " +
-         "depth 1 means 1 internal node + 2 leaf nodes."),
+         "depth 1 means 1 internal node + 2 leaf nodes"),
         ("maxBins", "Max number of bins for" +
          " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
-         " categorical feature."),
+         " categorical feature"),
         ("minInstancesPerNode", "Minimum number of instances each child must have after split. " +
          "If a split causes the left or right child to have fewer than minInstancesPerNode, the " +
-         "split will be discarded as invalid. Should be >= 1."),
-        ("minInfoGain", "Minimum information gain for a split to be considered at a tree node."),
+         "split will be discarded as invalid. Should be >= 1"),
+        ("minInfoGain", "Minimum information gain for a split to be considered at a tree node"),
         ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation."),
         ("cacheNodeIds", "If false, the algorithm will pass trees to executors to match " +
          "instances with nodes. If true, the algorithm will cache node IDs for each instance. " +
-         "Caching can speed up training of deeper trees.")]
+         "Caching can speed up training of deeper trees")]
 
     decisionTreeCode = '''class DecisionTreeParams(Params):
     """
