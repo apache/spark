@@ -20,12 +20,14 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Row, DataFrame}
 
 
 class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -70,6 +72,22 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setMaxDepth(2)
       .setMaxBins(8).fit(df)
     MLTestingUtils.checkCopy(model)
+  }
+
+  test("prediction on single instance") {
+    val categoricalFeatures = Map(0 -> 2, 1-> 2)
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
+    val trainer = new DecisionTreeRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(8)
+    val model = trainer.fit(df)
+
+    model.transform(df).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
+      .foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+      }
   }
 
   /////////////////////////////////////////////////////////////////////////////

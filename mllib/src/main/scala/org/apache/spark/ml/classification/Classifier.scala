@@ -129,12 +129,12 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /**
    * Predict label for the given features.
-   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
+   * This method can be used to implement [[transform()]] and output [[predictionCol]].
    *
    * This default implementation for classification predicts the index of the maximum value
    * from [[predictRaw()]].
    */
-  override protected def predict(features: FeaturesType): Double = {
+  override def predict(features: FeaturesType): Double = {
     raw2prediction(predictRaw(features))
   }
 

@@ -194,9 +194,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   /**
    * Predict label for the given features.
-   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     LabelConverter.decodeLabel(mlpModel.predict(features))
   }
 

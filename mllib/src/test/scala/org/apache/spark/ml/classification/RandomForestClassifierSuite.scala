@@ -153,6 +153,23 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     }
   }
 
+  test("prediction on single instance") {
+    val trainer = new RandomForestClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(3)
+      .setNumTrees(3)
+      .setSeed(123)
+
+    val df: DataFrame = TreeTests.setMetadata(orderedLabeledPoints5_20, Map.empty[Int, Int], 2)
+    val model = trainer.fit(df)
+
+    model.transform(df).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
+      .foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+      }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////

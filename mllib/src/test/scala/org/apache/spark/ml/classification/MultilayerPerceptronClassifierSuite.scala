@@ -90,4 +90,26 @@ class MultilayerPerceptronClassifierSuite extends SparkFunSuite with MLlibTestSp
     val mlpMetrics = new MulticlassMetrics(mlpPredictionAndLabels)
     assert(mlpMetrics.confusionMatrix ~== lrMetrics.confusionMatrix absTol 100)
   }
+
+  test("prediction on single instance") {
+    val df = sqlContext.createDataFrame(Seq(
+      (Vectors.dense(0.0, 0.0), 0.0),
+      (Vectors.dense(0.0, 1.0), 1.0),
+      (Vectors.dense(1.0, 0.0), 1.0),
+      (Vectors.dense(1.0, 1.0), 0.0))
+    ).toDF("features", "label")
+    val layers = Array[Int](2, 5, 2)
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(11L)
+      .setMaxIter(100)
+    val model = trainer.fit(df)
+
+    model.transform(df).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
+      .foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+      }
+  }
 }

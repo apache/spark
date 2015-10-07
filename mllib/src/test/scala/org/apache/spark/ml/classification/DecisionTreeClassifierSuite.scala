@@ -26,6 +26,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
@@ -259,6 +260,25 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
         "probability prediction mismatch")
     }
+  }
+
+  test("prediction on single instance") {
+    val trainer = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val df: DataFrame = TreeTests.setMetadata(continuousDataPointsForMulticlassRDD,
+      categoricalFeatures, numClasses)
+    val model = trainer.fit(df)
+
+    model.transform(df).select(trainer.getFeaturesCol, trainer.getPredictionCol)
+      .collect().foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+      }
   }
 
   test("training with 1-category categorical feature") {

@@ -458,6 +458,17 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("prediction on single instance") {
+    val trainer = new LinearRegression
+    val model = trainer.fit(dataset)
+
+    model.transform(dataset).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
+      .foreach {
+        case Row(features: Vector, prediction: Double) =>
+          assert(prediction ~== model.predict(features) relTol 1E-5)
+      }
+  }
+
   test("linear regression model training summary") {
     val trainer = new LinearRegression
     val model = trainer.fit(dataset)

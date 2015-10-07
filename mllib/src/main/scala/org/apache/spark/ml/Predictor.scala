@@ -190,7 +190,6 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
 
   /**
    * Predict label for the given features.
-   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
-  protected def predict(features: FeaturesType): Double
+  def predict(features: FeaturesType): Double
 }
