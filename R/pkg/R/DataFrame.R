@@ -1423,7 +1423,7 @@ setMethod("join",
 #'   specified, the common column names in \code{x} and \code{y} will be used.
 #' @param by.x a character vector specifying the joining columns for x.
 #' @param by.y a character vector specifying the joining columns for y.
-#' @param all.x a boolean value indicating whether all the rows in x should 
+#' @param all.x a boolean value indicating whether all the rows in x should
 #'              be including in the join
 #' @param all.y a boolean value indicating whether all the rows in y should 
 #'              be including in the join
@@ -1456,6 +1456,10 @@ setMethod("merge",
               stop("x and y has to be specified")
             }
 
+            if (length(suffixes) != 2) {
+              stop("suffixes must have length 2")
+            }
+
             # Join type is identified based on the values of all, all.x and all.y
             # default join type is inner, according to R it should be natural but since it
             # is not supported in spark inner join is used
@@ -1480,6 +1484,7 @@ setMethod("merge",
               stop("The intersection of dataframes is empty")
             }
 
+            # sets alias for making colnames unique in dataframe 'x'
             namesX <- names(x)
             colsX <- lapply(seq_len(length(namesX)), function(i){
               colNameX <- namesX[[i]]
@@ -1491,6 +1496,7 @@ setMethod("merge",
               colX
             })
 
+            # sets alias for making colnames unique in dataframe 'y'
             namesY <- names(y)
             colsY <- lapply(seq_len(length(namesY)), function(i){
               colNameY <- namesY[[i]]
