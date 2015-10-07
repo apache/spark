@@ -1699,7 +1699,7 @@ class TaskInstanceModelView(ModelViewOnly):
     verbose_name = "task instance"
     column_filters = (
         'state', 'dag_id', 'task_id', 'execution_date', 'hostname',
-        'queue', 'pool', 'operator')
+        'queue', 'pool', 'operator', 'start_date', 'end_date')
     named_filter_urls = True
     column_formatters = dict(
         log=log_link, task_id=task_instance_link,
@@ -1715,7 +1715,7 @@ class TaskInstanceModelView(ModelViewOnly):
     column_list = (
         'state', 'dag_id', 'task_id', 'execution_date', 'operator',
         'start_date', 'end_date', 'duration', 'job_id', 'hostname',
-        'unixname', 'priority_weight', 'queued_dttm', 'log')
+        'unixname', 'priority_weight', 'queue', 'queued_dttm', 'log')
     can_delete = True
     page_size = 500
 mv = TaskInstanceModelView(
