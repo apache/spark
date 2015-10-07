@@ -30,8 +30,7 @@ import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{SQLContext, Row}
 
 /**
  * :: Experimental ::
@@ -111,6 +110,7 @@ class ChiSqSelectorModel @Since("1.3.0") (
     }
   }
 
+  @Since("1.6.0")
   override def save(sc: SparkContext, path: String): Unit = {
     ChiSqSelectorModel.SaveLoadV1_0.save(sc, this, path)
   }
@@ -134,6 +134,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
     private[feature]
     val thisClassName = "org.apache.spark.mllib.feature.ChiSqSelectorModel"
 
+    @Since("1.6.0")
     def save(sc: SparkContext, model: ChiSqSelectorModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
@@ -149,6 +150,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 
     }
 
+    @Since("1.6.0")
     def load(sc: SparkContext, path: String): ChiSqSelectorModel = {
       implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
