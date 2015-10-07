@@ -18,18 +18,18 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeEnsembleModel, TreeRegressorParams}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.sql.functions.{col, lit, udf}
 
 
 /**
@@ -41,7 +41,7 @@ import org.apache.spark.sql.functions._
 @Experimental
 final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
-  with RandomForestParams with TreeRegressorParams {
+  with RandomForestParams with TreeRegressorParams with HasWeightCol{
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("rfr"))
@@ -89,10 +89,23 @@ final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   override def setFeatureSubsetStrategy(value: String): this.type =
     super.setFeatureSubsetStrategy(value)
 
+  /**
+   * Whether to over-/under-sample training instances according to the given weights in weightCol.
+   * If empty, all instances are treated equally (weight 1.0).
+   * Default is empty, so all instances have weight one.
+   * @group setParam
+   */
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+  setDefault(weightCol -> "")
+
   override protected def train(dataset: DataFrame): RandomForestRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val oldDataset = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
+      case Row(label: Double, weight: Double, features: Vector) =>
+        Instance(label, weight, features)
+    }
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
     val trees =

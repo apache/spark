@@ -17,16 +17,20 @@
 
 package org.apache.spark.ml.regression
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.VectorIndexer
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.tree.impl.WeightedLabeledPoint
 import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-
 
 class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -73,6 +77,56 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     MLTestingUtils.checkCopy(model)
   }
 
+  test("training with weighted data") {
+    val (dataset, weightedDataset) = {
+      val testData1 = TreeTests.generateNoisyData(5, 123)
+      val testData2 = TreeTests.generateNoisyData(5, 456)
+
+      // Over-sample the 1st dataset twice.
+      val overSampledTestData1 = testData1.flatMap {
+        labeledPoint => Iterator(labeledPoint, labeledPoint)
+      }
+
+      val rnd = new Random(8392)
+      val weightedTestData1 = testData1.flatMap {
+        case LabeledPoint(label: Double, features: Vector) => {
+          if (rnd.nextGaussian() > 0.0) {
+            Iterator(
+              WeightedLabeledPoint(label, 1.2, features),
+              WeightedLabeledPoint(label, 0.8, features),
+              WeightedLabeledPoint(0.0, 0.0, features))
+          } else {
+            Iterator(
+              WeightedLabeledPoint(label, 0.3, features),
+              WeightedLabeledPoint(1.0, 0.0, features),
+              WeightedLabeledPoint(label, 1.1, features),
+              WeightedLabeledPoint(label, 0.6, features))
+          }
+        }
+      }
+      val weightedTestData2 = testData2.map {
+        p: LabeledPoint => WeightedLabeledPoint(p.label, 1, p.features)
+      }
+
+      (sqlContext.createDataFrame(sc.parallelize(overSampledTestData1 ++ testData2, 2)),
+        sqlContext.createDataFrame(sc.parallelize(weightedTestData1 ++ weightedTestData2, 2)))
+    }
+
+    val featureIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(4)
+      .fit(dataset)
+
+    val dt = new DecisionTreeRegressor()
+      .setFeaturesCol("indexedFeatures")
+
+    val model1 = dt.fit(featureIndexer.transform(dataset))
+    val model2 = dt.fit(featureIndexer.transform(weightedDataset),
+      dt.weightCol->"weight")
+
+    TreeTests.checkEqual(model1, model2)
+  }
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
