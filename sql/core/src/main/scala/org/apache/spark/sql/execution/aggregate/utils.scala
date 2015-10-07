@@ -352,7 +352,7 @@ object Utils {
     // result expressions so that their attributes match up with the attributes of the final
     // result projection's input row:
     val rewrittenResultExpressions = resultExpressions.map { expr =>
-      expr.transform {  // TODO(josh): why is this transform instead of transformDown
+      expr.transformDown {
         case AggregateExpression2(aggregateFunction, _, isDistinct) =>
           // The final aggregation buffer's attributes will be `finalAggregationAttributes`, so
           // replace each aggregate expression by its corresponding attribute in that set:
