@@ -20,6 +20,8 @@ package org.apache.spark.streaming.ui
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import akka.remote.SeqNo
+
 import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
@@ -75,6 +77,19 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
     batchTable
   }
 
+  protected def createOutputOperationProgressBar(batch: BatchUIData): Seq[Node] = {
+    <td class="progress-cell">
+      {
+      SparkUIUtils.makeProgressBar(
+        started = batch.numActiveOutputOp,
+        completed = batch.numCompletedOutputOp,
+        failed = batch.numFailedOutputOp,
+        skipped = 0,
+        total = batch.numOutputOp)
+      }
+    </td>
+  }
+
   /**
    * Return HTML for all rows of this table.
    */
@@ -86,7 +101,10 @@ private[ui] class ActiveBatchTable(
     waitingBatches: Seq[BatchUIData],
     batchInterval: Long) extends BatchTableBase("active-batches-table", batchInterval) {
 
-  override protected def columns: Seq[Node] = super.columns ++ <th>Status</th>
+  override protected def columns: Seq[Node] = super.columns ++ {
+    <th>Output Ops: Succeeded/Total</th>
+      <th>Status</th>
+  }
 
   override protected def renderRows: Seq[Node] = {
     // The "batchTime"s of "waitingBatches" must be greater than "runningBatches"'s, so display
@@ -96,11 +114,11 @@ private[ui] class ActiveBatchTable(
   }
 
   private def runningBatchRow(batch: BatchUIData): Seq[Node] = {
-    baseRow(batch) ++ <td>processing</td>
+    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>processing</td>
   }
 
   private def waitingBatchRow(batch: BatchUIData): Seq[Node] = {
-    baseRow(batch) ++ <td>queued</td>
+    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>queued</td>
   }
 }
 
@@ -119,17 +137,11 @@ private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: 
   private def completedBatchRow(batch: BatchUIData): Seq[Node] = {
     val totalDelay = batch.totalDelay
     val formattedTotalDelay = totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
-    val numFailedOutputOp = batch.failureReason.size
-    val outputOpColumn = if (numFailedOutputOp > 0) {
-        s"${batch.numOutputOp - numFailedOutputOp}/${batch.numOutputOp}" +
-          s" (${numFailedOutputOp} failed)"
-      } else {
-        s"${batch.numOutputOp}/${batch.numOutputOp}"
-      }
-    baseRow(batch) ++
+
+    baseRow(batch) ++ {
       <td sorttable_customkey={totalDelay.getOrElse(Long.MaxValue).toString}>
         {formattedTotalDelay}
       </td>
-      <td>{outputOpColumn}</td>
+    } ++ createOutputOperationProgressBar(batch)
   }
 }

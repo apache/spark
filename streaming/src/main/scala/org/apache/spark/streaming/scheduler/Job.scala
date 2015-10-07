@@ -17,8 +17,10 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.streaming.Time
 import scala.util.Try
+
+import org.apache.spark.streaming.Time
+import org.apache.spark.util.CallSite
 
 /**
  * Class representing a Spark computation. It may contain multiple Spark jobs.
@@ -29,7 +31,7 @@ class Job(val time: Time, func: () => _) {
   private var _outputOpId: Int = _
   private var isSet = false
   private var _result: Try[_] = null
-  private var _callSite: String = "Unknown"
+  private var _callSite: CallSite = null
 
   def run() {
     _result = Try(func())
@@ -71,11 +73,11 @@ class Job(val time: Time, func: () => _) {
     _outputOpId = outputOpId
   }
 
-  def setCallSite(callSite: String): Unit = {
+  def setCallSite(callSite: CallSite): Unit = {
     _callSite = callSite
   }
 
-  def callSite: String = _callSite
+  def callSite: CallSite = _callSite
 
   override def toString: String = id
 }
