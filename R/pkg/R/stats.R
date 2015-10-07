@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-# DataFrameStatFunctions.R - Statistic functions for DataFrames.
+# stats.R - Statistic functions for DataFrames.
 
 setOldClass("jobj")
 
@@ -37,7 +37,7 @@ setOldClass("jobj")
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' df <- jsonFile(sqlContext, "/path/to/file.json")
 #' ct <- crosstab(df, "title", "gender")
 #' }
 setMethod("crosstab",
@@ -62,7 +62,7 @@ setMethod("crosstab",
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' df <- jsonFile(sqlContext, "/path/to/file.json")
 #' cov <- cov(df, "title", "gender")
 #' }
 setMethod("cov",
@@ -90,9 +90,9 @@ setMethod("cov",
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' df <- jsonFile(sqlContext, "/path/to/file.json")
 #' corr <- corr(df, "title", "gender")
-#' corr <- corr(df, "title", "gender", "pearson")
+#' corr <- corr(df, "title", "gender", method = "pearson")
 #' }
 setMethod("corr",
           signature(x = "DataFrame", col1 = "character", col2 = "character"),
