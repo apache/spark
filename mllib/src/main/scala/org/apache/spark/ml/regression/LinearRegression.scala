@@ -299,6 +299,19 @@ class LinearRegression(override val uid: String)
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }
 
+object LinearRegression {
+  /**
+   * Takes the current linear regression model and an option representing the
+   * prediction column. If the prediction column is set returns the current
+   * model and prediction column, otherwise generates a new column and sets
+   * it as the prediction column on a new copy of the input model.
+   */
+  protected def findSummaryModelAndPredictionCol(model: LinearRegressionmodel,
+    predictionColOpt: Option[String]): (LinearRegressionModel, String) = {
+
+  }
+}
+
 /**
  * :: Experimental ::
  * Model produced by [[LinearRegression]].
