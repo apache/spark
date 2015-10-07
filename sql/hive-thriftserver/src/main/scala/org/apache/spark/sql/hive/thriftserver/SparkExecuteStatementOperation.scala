@@ -190,9 +190,11 @@ private[hive] class SparkExecuteStatementOperation(
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
+    // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader =
       hiveContext.executionHive.state.getConf.getClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
+
     HiveThriftServer2.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,

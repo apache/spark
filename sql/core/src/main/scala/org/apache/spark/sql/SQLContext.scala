@@ -1208,7 +1208,10 @@ object SQLContext {
    * This function can be used to create a singleton SQLContext object that can be shared across
    * the JVM.
    *
-   * If there an active SQLContext for current thread, it will returned instead of the global one.
+   * If there is an active SQLContext for current thread, it will returned instead of the global
+   * one.
+   *
+   * @since 1.5.0
    */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     val ctx = activeContext.get()
@@ -1248,6 +1251,8 @@ object SQLContext {
    * Changes the SQLContext that will be returned in this thread and its children when
    * SQLContext.getOrCreate() is called. This can be used to ensure that a given thread receives
    * a SQLContext with an isolated session, instead of the global (first created) context.
+   *
+   * @since 1.6.0
    */
   def setActive(ctx: SQLContext): Unit = {
     activeContext.set(ctx)
@@ -1256,6 +1261,8 @@ object SQLContext {
   /**
    * Clears the active SQLContext for current thread. Subsequent calls to getOrCreate will
    * return the first created context instead of a thread-local override.
+   *
+   * @since 1.6.0
    */
   def clearActive(): Unit = {
     activeContext.remove()
