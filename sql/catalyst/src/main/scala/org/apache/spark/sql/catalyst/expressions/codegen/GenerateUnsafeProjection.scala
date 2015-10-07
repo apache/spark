@@ -93,7 +93,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
               final int $tmpCursor = $bufferHolder.cursor;
-              ${writeStructToBuffer(ctx, input.primitive, t.map(_.dataType), bufferHolder)}
+              ${writeStructToBuffer(ctx, input.value, t.map(_.dataType), bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
             """
 
@@ -102,7 +102,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
               final int $tmpCursor = $bufferHolder.cursor;
-              ${writeArrayToBuffer(ctx, input.primitive, et, bufferHolder)}
+              ${writeArrayToBuffer(ctx, input.value, et, bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
               $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
             """
@@ -112,7 +112,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
               final int $tmpCursor = $bufferHolder.cursor;
-              ${writeMapToBuffer(ctx, input.primitive, kt, vt, bufferHolder)}
+              ${writeMapToBuffer(ctx, input.value, kt, vt, bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
               $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
             """
@@ -122,19 +122,19 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             s"""
               final long $fieldOffset = $rowWriter.getFieldOffset($index);
               Platform.putLong($bufferHolder.buffer, $fieldOffset, 0L);
-              ${writePrimitiveType(ctx, input.primitive, dt, s"$bufferHolder.buffer", fieldOffset)}
+              ${writePrimitiveType(ctx, input.value, dt, s"$bufferHolder.buffer", fieldOffset)}
             """
 
           case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
-            s"$rowWriter.writeCompactDecimal($index, ${input.primitive}, " +
+            s"$rowWriter.writeCompactDecimal($index, ${input.value}, " +
               s"${t.precision}, ${t.scale});"
 
           case t: DecimalType =>
-            s"$rowWriter.write($index, ${input.primitive}, ${t.precision}, ${t.scale});"
+            s"$rowWriter.write($index, ${input.value}, ${t.precision}, ${t.scale});"
 
           case NullType => ""
 
-          case _ => s"$rowWriter.write($index, ${input.primitive});"
+          case _ => s"$rowWriter.write($index, ${input.value});"
         }
 
         s"""
@@ -324,7 +324,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val code =
       s"""
         $bufferHolder.reset();
-        ${writeExpressionsToBuffer(ctx, "i", exprEvals, exprTypes, bufferHolder)}
+        ${writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, bufferHolder)}
         $result.pointTo($bufferHolder.buffer, ${expressions.length}, $bufferHolder.totalSize());
       """
     GeneratedExpressionCode(code, "false", result)
@@ -363,9 +363,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           return apply((InternalRow) row);
         }
 
-        public UnsafeRow apply(InternalRow i) {
+        public UnsafeRow apply(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
-          return ${eval.primitive};
+          return ${eval.value};
         }
       }
       """
