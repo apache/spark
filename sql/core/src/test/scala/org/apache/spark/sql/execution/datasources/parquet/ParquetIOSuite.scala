@@ -100,13 +100,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   testStandardAndLegacyModes("fixed-length decimals") {
-    def makeDecimalRDD(decimal: DecimalType): DataFrame =
-      sparkContext
-        .parallelize(0 to 1000)
-        .map(i => Tuple1((i - 500) / 100.0))
-        .toDF()
-        // Parquet doesn't allow column names with spaces, have to add an alias here
-        .select($"_1" cast decimal as "dec")
+    def makeDecimalRDD(decimal: DecimalType): DataFrame = {
+      sqlContext
+        .range(1000)
+        // Parquet doesn't allow column names with spaces, have to add an alias here.
+        // Minus 500 here so that negative decimals are also tested.
+        .select((('id - 500) / 100.0) cast decimal as 'dec)
+        .coalesce(1)
+    }
 
     val combinations = Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17), (19, 0), (38, 37))
     for ((precision, scale) <- combinations) {

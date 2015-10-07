@@ -197,12 +197,16 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     val numBytes = minBytesForPrecision(precision)
 
     val int32Writer =
-      (row: SpecializedGetters, ordinal: Int) =>
-        recordConsumer.addInteger(row.getLong(ordinal).toInt)
+      (row: SpecializedGetters, ordinal: Int) => {
+        val unscaledLong = row.getDecimal(ordinal, precision, scale).toUnscaledLong
+        recordConsumer.addInteger(unscaledLong.toInt)
+      }
 
     val int64Writer =
-      (row: SpecializedGetters, ordinal: Int) =>
-        recordConsumer.addLong(row.getLong(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => {
+        val unscaledLong = row.getDecimal(ordinal, precision, scale).toUnscaledLong
+        recordConsumer.addLong(unscaledLong)
+      }
 
     val binaryWriterUsingUnscaledLong =
       (row: SpecializedGetters, ordinal: Int) => {
