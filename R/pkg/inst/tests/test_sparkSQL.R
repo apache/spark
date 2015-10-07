@@ -1329,6 +1329,18 @@ test_that("crosstab() on a DataFrame", {
   expect_identical(expected, ordered)
 })
 
+test_that("cov() and corr() on a DataFrame", {
+  l <- lapply(c(0:9), function(x) { list(x, x * 2.0) })
+  df <- createDataFrame(sqlContext, l, c("singles", "doubles"))
+  result <- cov(df, "singles", "doubles")
+  expect_true(abs(result - 55.0 / 3) < 1e-12)
+
+  result <- corr(df, "singles", "doubles")
+  expect_true(abs(result - 1.0) < 1e-12)
+  result <- corr(df, "singles", "doubles", "pearson")
+  expect_true(abs(result - 1.0) < 1e-12)
+})
+
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
   expect_equal(grepl("Table Not Found: blah", retError), TRUE)
