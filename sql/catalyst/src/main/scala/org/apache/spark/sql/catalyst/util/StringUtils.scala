@@ -22,10 +22,36 @@ import java.util.regex.Pattern
 import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils {
+  // replace the _ with .{1} exactly match 1 time of any character
+  // replace the % with .*, match 0 or more times with any character
+  def escapeLikeRegex(v1: Array[Byte]): Array[Byte] = {
+    if (!v1.isEmpty) {
+      val v2 = new Array[Byte](v1.length)
+      v2(0) = ' '
+      Array.copy(v1, 0, v2, 1, v1.length - 1)
+      v2.zip(v1).flatMap {
+        case (prev, '\\') => ""
+        case ('\\', c) =>
+          c match {
+            case '_' => "_"
+            case '%' => "%"
+            case _ => "\\" + c.toChar
+          }
+        case (prev, c) =>
+          c match {
+            case '_' => "."
+            case '%' => ".*"
+            case _ => Character.toString(c.toChar)
+          }
+      }.map(x => x.toByte)
+    } else {
+      v1
+    }
+  }
 
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
-  def escapeLikeRegex(v: String): String = {
+  def escapeLikeRegexJavaFallback(v: String): String = {
     if (!v.isEmpty) {
       "(?s)" + (' ' +: v.init).zip(v).flatMap {
         case (prev, '\\') => ""

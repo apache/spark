@@ -87,7 +87,9 @@ package object dsl {
     def in(list: Expression*): Expression = In(expr, list)
 
     def like(other: Expression): Expression = Like(expr, other)
+    def jlike(other: Expression): Expression = LikeJavaFallback(expr, other)// just for test
     def rlike(other: Expression): Expression = RLike(expr, other)
+    def jrlike(other: Expression): Expression = RLikeJavaFallback(expr, other)// just for test
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)
     def endsWith(other: Expression): Expression = EndsWith(expr, other)

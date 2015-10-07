@@ -17,46 +17,47 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.regex.{MatchResult, Pattern}
-
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.{RegexUtils, StringUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.jcodings.specific.UTF8Encoding
+import org.joni.{Regex, Option, Matcher}
 
 
 trait StringRegexExpression extends ImplicitCastInputTypes {
   self: BinaryExpression =>
 
-  def escape(v: String): String
-  def matches(regex: Pattern, str: String): Boolean
+  def escape(v: Array[Byte]): Array[Byte]
+  def matches(regex: Regex, input: Array[Byte]): Boolean
 
   override def dataType: DataType = BooleanType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   // try cache the pattern for Literal
-  private lazy val cache: Pattern = right match {
-    case x @ Literal(value: String, StringType) => compile(value)
+  private lazy val cache: Regex = right match {
+    case x @ Literal(pattern: Array[Byte], BinaryType) => compile(pattern)
     case _ => null
   }
 
-  protected def compile(str: String): Pattern = if (str == null) {
+  protected def compile(pattern: Array[Byte]): Regex = if (pattern == null) {
     null
   } else {
     // Let it raise exception if couldn't compile the regex string
-    Pattern.compile(escape(str))
+    val escapedPattern = escape(pattern)
+    new Regex(escapedPattern, 0, escapedPattern.length, Option.NONE, UTF8Encoding.INSTANCE)
   }
 
-  protected def pattern(str: String) = if (cache == null) compile(str) else cache
+  protected def pattern(pattern: Array[Byte]) = if (cache == null) compile(pattern) else cache
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val regex = pattern(input2.asInstanceOf[UTF8String].toString)
+    val regex = pattern(input2.asInstanceOf[UTF8String].getBytes)
     if(regex == null) {
       null
     } else {
-      matches(regex, input1.asInstanceOf[UTF8String].toString)
+      matches(regex, input1.asInstanceOf[UTF8String].getBytes)
     }
   }
 }
@@ -68,24 +69,32 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
-  override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
+  override def escape(v: Array[Byte]): Array[Byte] = StringUtils.escapeLikeRegex(v)
 
-  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+  override def matches(regex: Regex, input: Array[Byte]): Boolean =
+    regex.matcher(input).`match`(0, input.length, Option.DEFAULT) > -1
 
   override def toString: String = s"$left LIKE $right"
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val patternClass = classOf[Pattern].getName
+    val regexClass = classOf[Regex].getName
+    val optionClass = classOf[Option].getName
+    val encodingClass = classOf[UTF8Encoding].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
-    val pattern = ctx.freshName("pattern")
+    val regex = ctx.freshName("regex")
 
     if (right.foldable) {
       val rVal = right.eval()
       if (rVal != null) {
-        val regexStr =
-          StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        ctx.addMutableState(patternClass, pattern,
-          s"""$pattern = ${patternClass}.compile("$regexStr");""")
+        val tmp =
+          StringEscapeUtils.escapeJava(
+            new String(escape(rVal.asInstanceOf[UTF8String].getBytes), "utf-8"))
+        ctx.addMutableState(regexClass, regex,
+          s"""
+            byte[] pattern = UTF8String.fromString("${tmp}").getBytes();
+            $regex = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+              ${encodingClass}.INSTANCE);
+          """.stripMargin)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.gen(ctx)
@@ -94,7 +103,9 @@ case class Like(left: Expression, right: Expression)
           boolean ${ev.isNull} = ${eval.isNull};
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).matches();
+            byte[] input = ${eval.primitive}.getBytes();
+            ${ev.primitive} =
+              $regex.matcher(input).match(0, input.length, ${optionClass}.DEFAULT) > -1;
           }
         """
       } else {
@@ -106,9 +117,12 @@ case class Like(left: Expression, right: Expression)
     } else {
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String rightStr = ${eval2}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
-          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).matches();
+          byte[] pattern = $escapeFunc(${eval2}.getBytes());
+          ${regexClass} $regex = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+          ${encodingClass}.INSTANCE);
+          byte[] input = ${eval1}.getBytes();
+          ${ev.primitive} =
+            $regex.matcher(input).match(0, input.length, ${optionClass}.DEFAULT) > -1;
         """
       })
     }
@@ -119,21 +133,28 @@ case class Like(left: Expression, right: Expression)
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
-  override def escape(v: String): String = v
-  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
+  override def escape(v: Array[Byte]): Array[Byte] = v
+  override def matches(regex: Regex, input: Array[Byte]): Boolean =
+    regex.matcher(input).search(0, input.length, Option.DEFAULT) > -1
   override def toString: String = s"$left RLIKE $right"
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val patternClass = classOf[Pattern].getName
-    val pattern = ctx.freshName("pattern")
+    val regexClass = classOf[Regex].getName
+    val optionClass = classOf[Option].getName
+    val encodingClass = classOf[UTF8Encoding].getName
+    val regex = ctx.freshName("regex")
 
     if (right.foldable) {
       val rVal = right.eval()
       if (rVal != null) {
-        val regexStr =
+        val tmp =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
-        ctx.addMutableState(patternClass, pattern,
-          s"""$pattern = ${patternClass}.compile("$regexStr");""")
+        ctx.addMutableState(regexClass, regex,
+          s"""
+            byte[] pattern = UTF8String.fromString("${tmp}").getBytes();
+            $regex = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+              ${encodingClass}.INSTANCE);
+          """.stripMargin)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.gen(ctx)
@@ -142,7 +163,9 @@ case class RLike(left: Expression, right: Expression)
           boolean ${ev.isNull} = ${eval.isNull};
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).find(0);
+            byte[] input = ${eval.primitive}.getBytes();
+            ${ev.primitive} =
+              $regex.matcher(input).search(0, input.length, ${optionClass}.DEFAULT) > -1;
           }
         """
       } else {
@@ -154,9 +177,12 @@ case class RLike(left: Expression, right: Expression)
     } else {
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String rightStr = ${eval2}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile(rightStr);
-          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).find(0);
+          byte[] pattern = ${eval2}.getBytes();
+          ${regexClass} $regex = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+            ${encodingClass}.INSTANCE);
+          byte[] input = ${eval1}.getBytes();
+          ${ev.primitive} =
+            $regex.matcher(input).search(0, input.length, ${optionClass}.DEFAULT) > -1;
         """
       })
     }
@@ -199,36 +225,28 @@ case class StringSplit(str: Expression, pattern: Expression)
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
-  // last regex in string, we will update the pattern iff regexp value changed.
-  @transient private var lastRegex: UTF8String = _
-  // last regex pattern, we cache it for performance concern
-  @transient private var pattern: Pattern = _
+  @transient private var lastRegex: Array[Byte] = _
+  // last regex in string, we will update the pattern if regexp value changed.
+  @transient private var lastRegexInUTF8: UTF8String = _
   // last replacement string, we don't want to convert a UTF8String => java.langString every time.
-  @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
-  // result buffer write by Matcher
-  @transient private val result: StringBuffer = new StringBuffer
+  @transient private var lastReplacement: Array[Byte] = _
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
-    if (!p.equals(lastRegex)) {
+    if (!p.equals(lastRegexInUTF8)) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
+      lastRegexInUTF8 = p.asInstanceOf[UTF8String].clone()
+      lastRegex = lastRegexInUTF8.getBytes
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
       lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
-      lastReplacement = lastReplacementInUTF8.toString
+      lastReplacement = lastReplacementInUTF8.getBytes
     }
-    val m = pattern.matcher(s.toString())
-    result.delete(0, result.length())
 
-    while (m.find) {
-      m.appendReplacement(result, lastReplacement)
-    }
-    m.appendTail(result)
-
-    UTF8String.fromString(result.toString)
+    val input = s.asInstanceOf[UTF8String].getBytes
+    val result = RegexUtils.replaceAll(input, lastRegex, lastReplacement)
+    UTF8String.fromBytes(result)
   }
 
   override def dataType: DataType = StringType
@@ -237,45 +255,34 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def prettyName: String = "regexp_replace"
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val termLastRegex = ctx.freshName("lastRegex")
-    val termPattern = ctx.freshName("pattern")
+    val lastRegexInUTF8 = ctx.freshName("lastRegexInUTF8")
+    val lastRegex = ctx.freshName("lastRegex")
+    val lastReplacementInUTF8 = ctx.freshName("lastReplacementInUTF8")
+    val lastReplacement = ctx.freshName("lastReplacement")
 
-    val termLastReplacement = ctx.freshName("lastReplacement")
-    val termLastReplacementInUTF8 = ctx.freshName("lastReplacementInUTF8")
+    val replaceAllFunc = RegexUtils.getClass.getName.stripSuffix("$") + ".replaceAll"
 
-    val termResult = ctx.freshName("result")
-
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
-
-    ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
-    ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
-    ctx.addMutableState("String", termLastReplacement, s"${termLastReplacement} = null;")
-    ctx.addMutableState("UTF8String",
-      termLastReplacementInUTF8, s"${termLastReplacementInUTF8} = null;")
-    ctx.addMutableState(classNameStringBuffer,
-      termResult, s"${termResult} = new $classNameStringBuffer();")
+    ctx.addMutableState("UTF8String", lastRegexInUTF8, s"${lastRegexInUTF8} = null;")
+    ctx.addMutableState("byte[]", lastRegex, s"${lastRegex} = null;")
+    ctx.addMutableState("UTF8String", lastReplacementInUTF8, s"${lastReplacementInUTF8} = null;")
+    ctx.addMutableState("byte[]", lastReplacement, s"${lastReplacement} = null;")
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep) => {
-    s"""
-      if (!$regexp.equals(${termLastRegex})) {
+      s"""
+      if (!${regexp}.equals(${lastRegexInUTF8})) {
         // regex value changed
-        ${termLastRegex} = $regexp.clone();
-        ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
+        ${lastRegexInUTF8} = ${regexp}.clone();
+        ${lastRegex} = ${lastRegexInUTF8}.getBytes();
       }
-      if (!$rep.equals(${termLastReplacementInUTF8})) {
+      if (!$rep.equals(${lastReplacementInUTF8})) {
         // replacement string changed
-        ${termLastReplacementInUTF8} = $rep.clone();
-        ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
+        ${lastReplacementInUTF8} = $rep.clone();
+        ${lastReplacement} = ${lastReplacementInUTF8}.getBytes();
       }
-      ${termResult}.delete(0, ${termResult}.length());
-      java.util.regex.Matcher m = ${termPattern}.matcher($subject.toString());
 
-      while (m.find()) {
-        m.appendReplacement(${termResult}, ${termLastReplacement});
-      }
-      m.appendTail(${termResult});
-      ${ev.primitive} = UTF8String.fromString(${termResult}.toString());
+      byte[] input = ${subject}.getBytes();
+      byte[] result = ${replaceAllFunc}(input, ${lastRegex}, ${lastReplacement});
+      ${ev.primitive} = UTF8String.fromBytes(result);
       ${ev.isNull} = false;
     """
     })
@@ -292,20 +299,22 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
 
   // last regex in string, we will update the pattern iff regexp value changed.
-  @transient private var lastRegex: UTF8String = _
+  @transient private var lastRegexInUTF8: UTF8String = _
+  @transient private var lastRegex: Array[Byte] = _
   // last regex pattern, we cache it for performance concern
-  @transient private var pattern: Pattern = _
+  @transient private var regex: Regex = _
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
-    if (!p.equals(lastRegex)) {
+    if (!p.equals(lastRegexInUTF8)) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
+      lastRegexInUTF8 = p.asInstanceOf[UTF8String].clone()
+      lastRegex = lastRegexInUTF8.getBytes
+      regex = new Regex(lastRegex, 0, lastRegex.length, Option.NONE, UTF8Encoding.INSTANCE)
     }
-    val m = pattern.matcher(s.toString)
-    if (m.find) {
-      val mr: MatchResult = m.toMatchResult
-      UTF8String.fromString(mr.group(r.asInstanceOf[Int]))
+    val input = s.asInstanceOf[UTF8String].getBytes
+    val m = regex.matcher(input)
+    if (m.search(0, input.length, Option.DEFAULT) > -1) {
+      UTF8String.fromBytes(RegexUtils.group(m, r.asInstanceOf[Int], input))
     } else {
       UTF8String.EMPTY_UTF8
     }
@@ -317,25 +326,32 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def prettyName: String = "regexp_extract"
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val termLastRegex = ctx.freshName("lastRegex")
-    val termPattern = ctx.freshName("pattern")
-    val classNamePattern = classOf[Pattern].getCanonicalName
+    val regexClass = classOf[Regex].getName
+    val matcherClass = classOf[Matcher].getName
+    val optionClass = classOf[Option].getName
+    val encodingClass = classOf[UTF8Encoding].getName
+    val lastRegexInUTF8 = ctx.freshName("lastRegexInUTF8")
+    val lastRegex = ctx.freshName("lastRegex")
+    val regex = ctx.freshName("regex")
+    val groupFunc = RegexUtils.getClass.getName.stripSuffix("$") + ".group"
 
-    ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
-    ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
+    ctx.addMutableState("UTF8String", lastRegexInUTF8, s"${lastRegexInUTF8} = null;")
+    ctx.addMutableState("byte[]", lastRegex, s"${lastRegex} = null;")
+    ctx.addMutableState(regexClass, regex, s"${regex} = null;")
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-      if (!$regexp.equals(${termLastRegex})) {
+      if (!${regexp}.equals(${lastRegexInUTF8})) {
         // regex value changed
-        ${termLastRegex} = $regexp.clone();
-        ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
+        ${lastRegexInUTF8} = ${regexp}.clone();
+        ${lastRegex} = ${lastRegexInUTF8}.getBytes();
+        ${regex} = new ${regexClass}(${lastRegex}, 0, ${lastRegex}.length, ${optionClass}.NONE,
+          ${encodingClass}.INSTANCE);
       }
-      java.util.regex.Matcher m =
-        ${termPattern}.matcher($subject.toString());
-      if (m.find()) {
-        java.util.regex.MatchResult mr = m.toMatchResult();
-        ${ev.primitive} = UTF8String.fromString(mr.group($idx));
+      byte[] input = ${subject}.getBytes();
+      ${matcherClass} m = ${regex}.matcher(input);
+      if (m.search(0, input.length, ${optionClass}.DEFAULT) > -1) {
+        ${ev.primitive} = UTF8String.fromBytes(${groupFunc}(m, $idx, input));
         ${ev.isNull} = false;
       } else {
         ${ev.primitive} = UTF8String.EMPTY_UTF8;

@@ -248,6 +248,10 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "Whether the query analyzer should be case sensitive or not.")
 
+  val REGEX_ENGINE = stringConf("spark.sql.regex.engine",
+    defaultValue = Some("joni"),
+    doc = "The regular expression engine for string expressions.")
+
   val PARQUET_SCHEMA_MERGING_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
     defaultValue = Some(false),
     doc = "When true, the Parquet data source merges schemas collected from all data files, " +
@@ -476,6 +480,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, getConf(TUNGSTEN_ENABLED))
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+
+  override def regexEngine: String = getConf(SQLConf.REGEX_ENGINE)
 
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
 
