@@ -17,49 +17,29 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 
-class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
-
-  override def afterAll(): Unit = {
-    try {
-      SQLContext.setInstantiatedContext(sqlContext)
-    } finally {
-      super.afterAll()
-    }
-  }
+class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
 
   test("getOrCreate instantiates SQLContext") {
-    SQLContext.clearInstantiatedContext()
-    val sqlContext = SQLContext.getOrCreate(sparkContext)
+    val sqlContext = SQLContext.getOrCreate(sc)
     assert(sqlContext != null, "SQLContext.getOrCreate returned null")
-    assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
+    assert(SQLContext.getOrCreate(sc).eq(sqlContext),
       "SQLContext created by SQLContext.getOrCreate not returned by SQLContext.getOrCreate")
   }
 
-  test("getOrCreate gets last explicitly instantiated SQLContext") {
-    SQLContext.clearInstantiatedContext()
-    val sqlContext = new SQLContext(sparkContext)
-    assert(SQLContext.getOrCreate(sparkContext) != null,
-      "SQLContext.getOrCreate after explicitly created SQLContext returned null")
-    assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
-      "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
-  }
-
   test("getOrCreate return the original SQLContext") {
-    SQLContext.clearInstantiatedContext()
-    val sqlContext = new SQLContext(sparkContext)
+    val sqlContext = SQLContext.getOrCreate(sc)
     val newSession = sqlContext.newSession()
-    assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
+    assert(SQLContext.getOrCreate(sc).eq(sqlContext),
       "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
     SQLContext.setActive(newSession)
-    assert(SQLContext.getOrCreate(sparkContext).eq(newSession),
+    assert(SQLContext.getOrCreate(sc).eq(newSession),
       "SQLContext.getOrCreate after explicitly setActive() did not return the active context")
   }
 
   test("Sessions of SQLContext") {
-    val sqlContext = SQLContext.getOrCreate(sparkContext)
+    val sqlContext = SQLContext.getOrCreate(sc)
     val session1 = sqlContext.newSession()
     val session2 = sqlContext.newSession()
 

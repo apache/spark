@@ -156,7 +156,7 @@ class SQLContext private[sql](
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   @transient
-  protected[sql] val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -1174,9 +1174,9 @@ class SQLContext private[sql](
   // Register a succesfully instantiatd context to the singleton. This should be at the end of
   // the class definition so that the singleton is updated only if there is no exception in the
   // construction of the instance.
-  sparkContext.addSparkListener(new SparkListener{
-    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
-      SQLContext.clearTheInstantiatedContext(self)
+  sparkContext.addSparkListener(new SparkListener {
+    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+      SQLContext.clearInstantiatedContext(self)
     }
   })
 
@@ -1186,10 +1186,12 @@ class SQLContext private[sql](
 /**
  * This SQLContext object contains utility functions to create a singleton SQLContext instance,
  * or to get the created SQLContext instance.
+ *
+ * It also provides utility functions to support preference for threads in multiple sessions
+ * scenario, setActive could set a SQLContext for current thread, which will be returned by
+ * getOrCreate instead of the global one.
  */
 object SQLContext {
-
-  private val INSTANTIATION_LOCK = new Object()
 
   /**
    * The active SQLContext for the current thread.
@@ -1208,7 +1210,7 @@ object SQLContext {
    * This function can be used to create a singleton SQLContext object that can be shared across
    * the JVM.
    *
-   * If there is an active SQLContext for current thread, it will returned instead of the global
+   * If there is an active SQLContext for current thread, it will be returned instead of the global
    * one.
    *
    * @since 1.5.0
@@ -1219,7 +1221,7 @@ object SQLContext {
       return ctx
     }
 
-    INSTANTIATION_LOCK.synchronized {
+    synchronized {
       val ctx = instantiatedContext.get()
       if (ctx == null) {
         new SQLContext(sparkContext)
@@ -1229,22 +1231,12 @@ object SQLContext {
     }
   }
 
-  private[sql] def clearInstantiatedContext(): Unit = {
-    INSTANTIATION_LOCK.synchronized {
-      instantiatedContext.set(null)
-    }
-  }
-
-  private[sql] def clearTheInstantiatedContext(sqlContext: SQLContext): Unit = {
-    INSTANTIATION_LOCK.synchronized {
-      instantiatedContext.compareAndSet(sqlContext, null)
-    }
+  private[sql] def clearInstantiatedContext(sqlContext: SQLContext): Unit = {
+    instantiatedContext.compareAndSet(sqlContext, null)
   }
 
   private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
-    INSTANTIATION_LOCK.synchronized {
-      instantiatedContext.compareAndSet(null, sqlContext)
-    }
+    instantiatedContext.compareAndSet(null, sqlContext)
   }
 
   /**
@@ -1254,8 +1246,8 @@ object SQLContext {
    *
    * @since 1.6.0
    */
-  def setActive(ctx: SQLContext): Unit = {
-    activeContext.set(ctx)
+  def setActive(sqlContext: SQLContext): Unit = {
+    activeContext.set(sqlContext)
   }
 
   /**

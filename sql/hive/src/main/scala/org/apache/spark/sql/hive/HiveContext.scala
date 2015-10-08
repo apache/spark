@@ -441,7 +441,7 @@ class HiveContext private[hive](
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
-  override protected[sql] val functionRegistry: FunctionRegistry =
+  override protected[sql] lazy val functionRegistry: FunctionRegistry =
     new HiveFunctionRegistry(FunctionRegistry.builtin.copy())
 
   // The Hive UDF current_database() is foldable, will be evaluated by optimizer, but the optimizer
