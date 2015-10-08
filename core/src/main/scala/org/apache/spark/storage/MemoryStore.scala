@@ -304,9 +304,21 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       // later when the task finishes.
       if (keepUnrolling) {
         accountingLock.synchronized {
+          // Here, we are logically transferring memory from unroll memory to pending unroll memory.
+          // We release and re-acquire the memory from the MemoryManager. As of today, this is not
+          // race-prone because all calls to [acquire|release]UnrollMemoryForThisTask() occur in
+          // MemoryStore and are guarded by `accountingLock`, MemoryStore is the only component
+          // which allocates storage memory, and unroll memory is currently counted towards
+          // storage memory. If we ever change things so that unroll memory is counted towards
+          // execution memory, then we will need to revisit this argument as it may no longer hold.
+          // TODO: revisit this as part of SPARK-10983.
           val amountToRelease = currentUnrollMemoryForThisTask - previousMemoryReserved
           releaseUnrollMemoryForThisTask(amountToRelease)
-          reservePendingUnrollMemoryForThisTask(blockId, amountToRelease, droppedBlocks)
+          val acquired = memoryManager.acquireUnrollMemory(blockId, amountToRelease, droppedBlocks)
+          assert(acquired == amountToRelease)
+          val taskAttemptId = currentTaskAttemptId()
+          pendingUnrollMemoryMap(taskAttemptId) =
+            pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L) + amountToRelease
         }
       }
     }
@@ -513,27 +525,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
           memoryManager.releaseUnrollMemory(memoryToRelease)
         }
       }
-    }
-  }
-
-  /**
-   * Reserve the unroll memory of current unroll successful block used by this task
-   * until actually put the block into memory entry.
-   * @return whether the request is granted.
-   */
-  private def reservePendingUnrollMemoryForThisTask(
-      blockId: BlockId,
-      memory: Long,
-      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    val taskAttemptId = currentTaskAttemptId()
-    accountingLock.synchronized {
-      val acquired = memoryManager.acquireUnrollMemory(blockId, memory, droppedBlocks)
-      val success = acquired == memory
-      if (success) {
-        pendingUnrollMemoryMap(taskAttemptId) =
-          pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
-      }
-      success
     }
   }
 
