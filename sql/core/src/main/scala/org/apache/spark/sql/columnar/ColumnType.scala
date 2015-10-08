@@ -419,7 +419,6 @@ private[sql] object LARGE_DECIMAL {
 private[sql] case class STRUCT(dataType: StructType) extends ColumnType[UnsafeRow] {
 
   private val numOfFields: Int = dataType.fields.size
-  private val unsafeRow = new UnsafeRow
 
   override def defaultSize: Int = 20
 
@@ -446,8 +445,9 @@ private[sql] case class STRUCT(dataType: StructType) extends ColumnType[UnsafeRo
     val base = buffer.array()
     val offset = buffer.arrayOffset()
     val cursor = buffer.position()
-    unsafeRow.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numOfFields, sizeInBytes)
     buffer.position(cursor + sizeInBytes)
+    val unsafeRow = new UnsafeRow
+    unsafeRow.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numOfFields, sizeInBytes)
     unsafeRow
   }
 
@@ -455,7 +455,6 @@ private[sql] case class STRUCT(dataType: StructType) extends ColumnType[UnsafeRo
 }
 
 private[sql] case class ARRAY(dataType: ArrayType) extends ColumnType[UnsafeArrayData] {
-  private val array = new UnsafeArrayData
 
   override def defaultSize: Int = 16
 
@@ -485,8 +484,9 @@ private[sql] case class ARRAY(dataType: ArrayType) extends ColumnType[UnsafeArra
     val base = buffer.array()
     val offset = buffer.arrayOffset()
     val cursor = buffer.position()
-    array.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numElements, sizeInBytes)
     buffer.position(cursor + sizeInBytes)
+    val array = new UnsafeArrayData
+    array.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numElements, sizeInBytes)
     array
   }
 
@@ -494,9 +494,6 @@ private[sql] case class ARRAY(dataType: ArrayType) extends ColumnType[UnsafeArra
 }
 
 private[sql] case class MAP(dataType: MapType) extends ColumnType[UnsafeMapData] {
-
-  private val keyArray = new UnsafeArrayData
-  private val valueArray = new UnsafeArrayData
 
   override def defaultSize: Int = 32
 
@@ -529,7 +526,9 @@ private[sql] case class MAP(dataType: MapType) extends ColumnType[UnsafeMapData]
     val base = buffer.array()
     val offset = buffer.arrayOffset()
     val cursor = buffer.position()
+    val keyArray = new UnsafeArrayData
     keyArray.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numElements, keyArraySize)
+    val valueArray = new UnsafeArrayData
     valueArray.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor + keyArraySize,
       numElements, valueArraySize)
     buffer.position(cursor + keyArraySize + valueArraySize)
