@@ -113,7 +113,7 @@ setMethod("corr",
 #'                Should be greater than 1e-4. Default support = 0.01.
 #' @return a local R data.frame with the frequent items in each column
 #'
-#' @rdname freqItems
+#' @rdname statfunctions
 #' @name freqItems
 #' @export
 #' @examples

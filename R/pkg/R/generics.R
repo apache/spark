@@ -63,7 +63,7 @@ setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 # @export
 setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
-# @rdname freqItems
+# @rdname statfunctions
 # @export
 setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("freqItems") })
 

@@ -1340,7 +1340,7 @@ test_that("cov() and corr() on a DataFrame", {
   result <- corr(df, "singles", "doubles", "pearson")
   expect_true(abs(result - 1.0) < 1e-12)
 })
-  
+
 test_that("freqItems() on a DataFrame", {
   input <- 1:1000
   rdf <- data.frame(numbers = input, letters = as.character(input),
