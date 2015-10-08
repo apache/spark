@@ -125,7 +125,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
       val taskContext =
         new TaskContextImpl(0, 0, 0, 0, null, null, InternalAccumulator.create(sc))
       taskContext.taskMetrics.shuffleWriteMetrics = Some(new ShuffleWriteMetrics)
-      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), taskContext, outputFile)
+      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0, 0), taskContext, outputFile)
     } {
       // Clean up
       if (sc != null) {
