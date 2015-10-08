@@ -151,7 +151,7 @@ if __name__ == "__main__":
         ("minInstancesPerNode", "Minimum number of instances each child must have after split. " +
          "If a split causes the left or right child to have fewer than minInstancesPerNode, the " +
          "split will be discarded as invalid. Should be >= 1."),
-        ("minInfoGain", "Minimum information gain for a split to be considered at a tree node"),
+        ("minInfoGain", "Minimum information gain for a split to be considered at a tree node."),
         ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation."),
         ("cacheNodeIds", "If false, the algorithm will pass trees to executors to match " +
          "instances with nodes. If true, the algorithm will cache node IDs for each instance. " +
