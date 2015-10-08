@@ -17,20 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Random
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
-import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.util.MutablePair
+import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
 /**
@@ -294,6 +289,8 @@ case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().map(_.copy()).coalesce(numPartitions, shuffle = false)
   }
+
+  override def canProcessUnsafeRows: Boolean = true
 }
 
 /**
