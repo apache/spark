@@ -135,19 +135,47 @@ class TungstenAggregationIterator(
       completeAggregateExpressions.map(_.mode).distinct.headOption
   }
 
-  // All aggregate functions. TungstenAggregationIterator only handles expression-based aggregate.
-  // If there is any functions that is an ImperativeAggregateFunction, we throw an
-  // IllegalStateException.
-  private[this] val allAggregateFunctions: Array[DeclarativeAggregate] = {
-    if (!allAggregateExpressions.forall(
-        _.aggregateFunction.isInstanceOf[DeclarativeAggregate])) {
-      throw new IllegalStateException(
-        "Only ExpressionAggregateFunctions should be passed in TungstenAggregationIterator.")
+  // Initialize all AggregateFunctions by binding references, if necessary,
+  // and seting inputBufferOffset and mutableBufferOffset.
+  private[this] val allAggregateFunctions: Array[AggregateFunction2] = {
+    var mutableBufferOffset = 0
+    var inputBufferOffset: Int = initialInputBufferOffset
+    val functions = new Array[AggregateFunction2](allAggregateExpressions.length)
+    var i = 0
+    while (i < allAggregateExpressions.length) {
+      val func = allAggregateExpressions(i).aggregateFunction
+      val funcWithBoundReferences = allAggregateExpressions(i).mode match {
+        case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
+          // We need to create BoundReferences if the function is not an
+          // expression-based aggregate function (it does not support code-gen) and the mode of
+          // this function is Partial or Complete because we will call eval of this
+          // function's children in the update method of this aggregate function.
+          // Those eval calls require BoundReferences to work.
+          BindReferences.bindReference(func, originalInputAttributes)
+        case _ =>
+          // We only need to set inputBufferOffset for aggregate functions with mode
+          // PartialMerge and Final.
+          func match {
+            case function: ImperativeAggregate =>
+              function.withNewInputAggBufferOffset(inputBufferOffset)
+            case _ =>
+          }
+          inputBufferOffset += func.aggBufferSchema.length
+          func
+      }
+      // Set mutableBufferOffset for this function. It is important that setting
+      // mutableBufferOffset happens after all potential bindReference operations
+      // because bindReference will create a new instance of the function.
+      funcWithBoundReferences match {
+        case function: ImperativeAggregate =>
+          function.withNewMutableAggBufferOffset(mutableBufferOffset)
+        case _ =>
+      }
+      mutableBufferOffset += funcWithBoundReferences.aggBufferSchema.length
+      functions(i) = funcWithBoundReferences
+      i += 1
     }
-
-    allAggregateExpressions
-      .map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-      .toArray
+    functions
   }
 
   ///////////////////////////////////////////////////////////////////////////
@@ -158,7 +186,12 @@ class TungstenAggregationIterator(
 
   // The projection used to initialize buffer values.
   private[this] val initialProjection: MutableProjection = {
-    val initExpressions = allAggregateFunctions.flatMap(_.initialValues)
+    val initExpressions = allAggregateFunctions.flatMap {
+      case ae: DeclarativeAggregate => ae.initialValues
+      // For the positions corresponding to imperative aggregate functions, we'll use special
+      // no-op expressions which are ignored during projection code-generation.
+      case i: ImperativeAggregate => Seq.fill(i.aggBufferAttributes.length)(NoOp)
+    }
     newMutableProjection(initExpressions, Nil)()
   }
 
@@ -188,72 +221,124 @@ class TungstenAggregationIterator(
     aggregationMode match {
       // Partial-only
       case (Some(Partial), None) =>
-        val updateExpressions = allAggregateFunctions.flatMap(_.updateExpressions)
-        val updateProjection =
+        val updateExpressions = allAggregateFunctions.flatMap {
+          case ae: DeclarativeAggregate => ae.updateExpressions
+          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+        }
+        val imperativeAggregateFunctions: Array[ImperativeAggregate] =
+          allAggregateFunctions.collect { case func: ImperativeAggregate => func}
+        val expressionAggUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
-          updateProjection.target(currentBuffer)
-          updateProjection(joinedRow(currentBuffer, row))
+          expressionAggUpdateProjection.target(currentBuffer)
+          // Process all expression-based aggregate functions.
+          expressionAggUpdateProjection(joinedRow(currentBuffer, row))
+          // Process all imperative aggregate functions
+          var i = 0
+          while (i < imperativeAggregateFunctions.length) {
+            imperativeAggregateFunctions(i).update(currentBuffer, row)
+            i += 1
+          }
         }
 
       // PartialMerge-only or Final-only
       case (Some(PartialMerge), None) | (Some(Final), None) =>
-        val mergeExpressions = allAggregateFunctions.flatMap(_.mergeExpressions)
-        val mergeProjection =
+        val mergeExpressions = allAggregateFunctions.flatMap {
+          case ae: DeclarativeAggregate => ae.mergeExpressions
+          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+        }
+        val imperativeAggregateFunctions: Array[ImperativeAggregate] =
+          allAggregateFunctions.collect { case func: ImperativeAggregate => func}
+        // This projection is used to merge buffer values for all expression-based aggregates.
+        val expressionAggMergeProjection =
           newMutableProjection(mergeExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
-          mergeProjection.target(currentBuffer)
-          mergeProjection(joinedRow(currentBuffer, row))
+          // Process all expression-based aggregate functions.
+          expressionAggMergeProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
+          // Process all imperative aggregate functions.
+          var i = 0
+          while (i < imperativeAggregateFunctions.length) {
+            imperativeAggregateFunctions(i).merge(currentBuffer, row)
+            i += 1
+          }
         }
 
       // Final-Complete
       case (Some(Final), Some(Complete)) =>
-        val nonCompleteAggregateFunctions: Array[DeclarativeAggregate] =
-          allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
-        val completeAggregateFunctions: Array[DeclarativeAggregate] =
+        val completeAggregateFunctions: Array[AggregateFunction2] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
+        val completeImperativeAggregateFunctions: Array[ImperativeAggregate] =
+          completeAggregateFunctions.collect { case func: ImperativeAggregate => func }
+        val nonCompleteAggregateFunctions: Array[AggregateFunction2] =
+          allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
+        val nonCompleteImperativeAggregateFunctions: Array[ImperativeAggregate] =
+          nonCompleteAggregateFunctions.collect { case func: ImperativeAggregate => func }
 
         val completeOffsetExpressions =
           Seq.fill(completeAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
         val mergeExpressions =
-          nonCompleteAggregateFunctions.flatMap(_.mergeExpressions) ++ completeOffsetExpressions
+          nonCompleteAggregateFunctions.flatMap {
+            case ae: DeclarativeAggregate => ae.mergeExpressions
+            case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          } ++ completeOffsetExpressions
         val finalMergeProjection =
           newMutableProjection(mergeExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         // We do not touch buffer values of aggregate functions with the Final mode.
         val finalOffsetExpressions =
           Seq.fill(nonCompleteAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
-        val updateExpressions =
-          finalOffsetExpressions ++ completeAggregateFunctions.flatMap(_.updateExpressions)
+        val updateExpressions = finalOffsetExpressions ++ completeAggregateFunctions.flatMap {
+          case ae: DeclarativeAggregate => ae.updateExpressions
+          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+        }
         val completeUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
           val input = joinedRow(currentBuffer, row)
-          // For all aggregate functions with mode Complete, update the given currentBuffer.
+          // For all aggregate functions with mode Complete, update buffers.
           completeUpdateProjection.target(currentBuffer)(input)
+          var i = 0
+          while (i < completeImperativeAggregateFunctions.length) {
+            completeImperativeAggregateFunctions(i).update(currentBuffer, row)
+            i += 1
+          }
 
           // For all aggregate functions with mode Final, merge buffer values in row to
           // currentBuffer.
           finalMergeProjection.target(currentBuffer)(input)
+          i = 0
+          while (i < nonCompleteImperativeAggregateFunctions.length) {
+            nonCompleteImperativeAggregateFunctions(i).merge(currentBuffer, row)
+            i += 1
+          }
         }
 
       // Complete-only
       case (None, Some(Complete)) =>
-        val completeAggregateFunctions: Array[DeclarativeAggregate] =
+        val completeAggregateFunctions: Array[AggregateFunction2] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
+        // All imperative aggregate functions with mode Complete.
+        val completeImperativeAggregateFunctions: Array[ImperativeAggregate] =
+          completeAggregateFunctions.collect { case func: ImperativeAggregate => func }
 
-        val updateExpressions =
-          completeAggregateFunctions.flatMap(_.updateExpressions)
-        val completeUpdateProjection =
+        val updateExpressions = completeAggregateFunctions.flatMap {
+          case ae: DeclarativeAggregate => ae.updateExpressions
+          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+        }
+        val completeExpressionAggUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
-          completeUpdateProjection.target(currentBuffer)
-          // For all aggregate functions with mode Complete, update the given currentBuffer.
-          completeUpdateProjection(joinedRow(currentBuffer, row))
+          // For all aggregate functions with mode Complete, update buffers.
+          completeExpressionAggUpdateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
+          var i = 0
+          while (i < completeImperativeAggregateFunctions.length) {
+            completeImperativeAggregateFunctions(i).update(currentBuffer, row)
+            i += 1
+          }
         }
 
       // Grouping only.
@@ -289,7 +374,7 @@ class TungstenAggregationIterator(
         val joinedRow = new JoinedRow()
         val evalExpressions = allAggregateFunctions.map {
           case ae: DeclarativeAggregate => ae.evaluateExpression
-          // case agg: AggregateFunction2 => Literal.create(null, agg.dataType)
+           case agg: AggregateFunction2 => Literal.create(null, agg.dataType)
         }
         val expressionAggEvalProjection = UnsafeProjection.create(evalExpressions, bufferAttributes)
         // These are the attributes of the row produced by `expressionAggEvalProjection`
