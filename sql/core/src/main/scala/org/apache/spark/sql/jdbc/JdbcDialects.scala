@@ -202,6 +202,10 @@ case object PostgresDialect extends JdbcDialect {
       Some(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
       Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("json")) {
+      Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
+      Some(StringType)
     } else None
   }
 
