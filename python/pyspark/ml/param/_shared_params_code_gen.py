@@ -107,7 +107,7 @@ if __name__ == "__main__":
     shared = [
         ("maxIter", "max number of iterations (>= 0).", None),
         ("regParam", "regularization parameter (>= 0).", None),
-        ("featuresCol", "features column name", "'features'."),
+        ("featuresCol", "features column name.", "'features'"),
         ("labelCol", "label column name.", "'label'"),
         ("predictionCol", "prediction column name.", "'prediction'"),
         ("probabilityCol", "Column name for predicted class conditional probabilities. " +
@@ -118,8 +118,8 @@ if __name__ == "__main__":
         ("inputCols", "input column names.", None),
         ("outputCol", "output column name.", "self.uid + '__output'"),
         ("numFeatures", "number of features.", None),
-        ("checkpointInterval", "checkpoint interval (>= 1).", None),
-        ("seed", "random seed", "hash(type(self).__name__)."),
+        ("checkpointInterval", "checkpoint interval (>= 1)", None),
+        ("seed", "random seed.", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms.", None),
         ("stepSize", "Step size to be used for each iteration of optimization.", None),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
