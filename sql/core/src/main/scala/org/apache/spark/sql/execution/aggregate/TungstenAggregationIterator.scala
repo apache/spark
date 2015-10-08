@@ -287,7 +287,6 @@ class TungstenAggregationIterator(
           // Process all imperative aggregate functions.
           var i = 0
           while (i < imperativeAggregateFunctions.length) {
-            println("Aggregation mode is " + aggregationMode)
             imperativeAggregateFunctions(i).merge(currentBuffer, row)
             i += 1
           }
