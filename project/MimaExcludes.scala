@@ -80,6 +80,10 @@ object MimaExcludes {
           "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.regression.LeastSquaresCostFun.this")
+      ) ++ Seq(
+        // SPARK-8029.  False positive, this is a @Private java class
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter.this")
       )
     case v if v.startsWith("1.5") =>
       Seq(
