@@ -80,6 +80,35 @@ object MimaExcludes {
           "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.regression.LeastSquaresCostFun.this")
+      ) ++ Seq(
+        // Cleanup task types are marked as private but Mima also confused by this change,
+        // similar to SPARK-10381.
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanAccum"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanAccum$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanBroadcast"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanBroadcast$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanCheckpoint"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanCheckpoint$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanupTask"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanRDD"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanRDD$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanShuffle"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanShuffle$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanupTaskWeakReference"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.CleanupTaskWeakReference$")
       )
     case v if v.startsWith("1.5") =>
       Seq(
