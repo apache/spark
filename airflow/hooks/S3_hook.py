@@ -6,6 +6,7 @@ import re
 import fnmatch
 import configparser
 from urllib.parse import urlparse
+import warnings
 
 import boto
 from boto.s3.connection import S3Connection
