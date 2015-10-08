@@ -144,11 +144,12 @@ setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' df <- jsonFile(sqlContext, "/path/to/file.json")
 #' sample <- sampleBy(df, "key", fractions, 36)
 #' }
 setMethod("sampleBy",
-          signature(x = "DataFrame", col = "character", fractions = "environment", seed = "numeric"),
+          signature(x = "DataFrame", col = "character",
+                    fractions = "environment", seed = "numeric"),
           function(x, col, fractions, seed) {
             statFunctions <- callJMethod(x@sdf, "stat")
             # Seed is expected to be Long on Scala side, here convert it to an integer
