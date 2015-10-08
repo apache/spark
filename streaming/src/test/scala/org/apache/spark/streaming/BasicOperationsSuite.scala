@@ -210,7 +210,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       input.map(_.map(_.toString))
     )
   }
-  
+
   test("transform with NULL") {
     val input = Seq(1 to 4)
     intercept[SparkException] {
@@ -218,7 +218,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         input,
         (r: DStream[Int]) => r.transform(rdd => null.asInstanceOf[RDD[Int]]),
         Seq(Seq()),
-        1, 
+        1,
         false
       )
     }
