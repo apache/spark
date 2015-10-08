@@ -92,6 +92,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private MyByteArrayOutputStream serBuffer;
   private SerializationStream serOutputStream;
+  /**
+   * This is just to allow tests to explore more code paths, without requiring too much complexity
+   * in the test cases.  In normal usage, it will be true.
+   */
   private final boolean allowSpillMove;
 
   /**

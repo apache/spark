@@ -48,7 +48,7 @@ private[spark] class FetchFailedException(
   }
 
   def toTaskEndReason: TaskEndReason = FetchFailed(bmAddress, shuffleId, mapId, reduceId,
-    Utils.exceptionString(this))
+    stageAttemptId, Utils.exceptionString(this))
 }
 
 /**

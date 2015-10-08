@@ -631,7 +631,7 @@ private[spark] class TaskSetManager(
       task, Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
-      // include the partition here b/c on a partial retry, the partition is *not* necessarily
+      // include the partition here b/c on a stage retry, the partition is *not* necessarily
       // the same as info.id
       logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}}, " +
         s"partition ${task.partitionId}) in ${info.duration} ms on executor ${info.executorId} " +

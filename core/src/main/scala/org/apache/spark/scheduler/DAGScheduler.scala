@@ -1228,7 +1228,7 @@ class DAGScheduler(
         logInfo("Resubmitted " + task + ", so marking it as still running")
         stage.pendingPartitions += task.partitionId
 
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, stageAttemptId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleToMapStage(shuffleId)
 
