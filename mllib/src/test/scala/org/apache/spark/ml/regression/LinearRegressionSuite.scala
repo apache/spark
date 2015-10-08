@@ -462,9 +462,22 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("linear regression model training summary") {
     val trainer = new LinearRegression
     val model = trainer.fit(dataset)
+    val trainerNoPredictionCol = trainer.setPredictionCol("")
+    val modelNoPredictionCol = trainerNoPredictionCol.fit(dataset)
+
 
     // Training results for the model should be available
     assert(model.hasSummary)
+    assert(modelNoPredictionCol.hasSummary)
+
+    // Schema should be a superset of the input dataset
+    assert((dataset.schema.fieldNames.toSet + "prediction").subsetOf(
+      model.summary.predictions.schema.fieldNames.toSet))
+    // Validate that we re-insert a prediction column for evaluation
+    val modelNoPredictionColFieldNames = modelNoPredictionCol.summary.predictions.schema.fieldNames
+    assert((dataset.schema.fieldNames.toSet).subsetOf(
+      modelNoPredictionColFieldNames.toSet))
+    assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
 
     // Residuals in [[LinearRegressionResults]] should equal those manually computed
     val expectedResiduals = dataset.select("features", "label")
