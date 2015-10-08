@@ -832,7 +832,11 @@ class Airflow(BaseView):
                 s3 = boto.connect_s3()
                 bucket, key = loc.lstrip('s3:/').split('/', 1)
                 s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
-                log = s3_key.get_contents_as_string().decode()
+                if not s3_key.exists():
+                    log = 'No log available on S3.'
+                else:
+                    log = s3_key.get_contents_as_string().decode()
+
             elif socket.gethostname() == host:
                 try:
                     f = open(loc)
