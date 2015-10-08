@@ -76,17 +76,17 @@ class HasRegParam(Params):
 
 class HasFeaturesCol(Params):
     """
-    Mixin for param featuresCol: features column name
+    Mixin for param featuresCol: features column name.
     """
 
     # a placeholder to make it appear in the generated doc
-    featuresCol = Param(Params._dummy(), "featuresCol", "features column name")
+    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.")
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
-        #: param for features column name
-        self.featuresCol = Param(self, "featuresCol", "features column name")
-        self._setDefault(featuresCol='features'.)
+        #: param for features column name.
+        self.featuresCol = Param(self, "featuresCol", "features column name.")
+        self._setDefault(featuresCol='features')
 
     def setFeaturesCol(self, value):
         """
@@ -352,17 +352,17 @@ class HasCheckpointInterval(Params):
 
 class HasSeed(Params):
     """
-    Mixin for param seed: random seed
+    Mixin for param seed: random seed.
     """
 
     # a placeholder to make it appear in the generated doc
-    seed = Param(Params._dummy(), "seed", "random seed")
+    seed = Param(Params._dummy(), "seed", "random seed.")
 
     def __init__(self):
         super(HasSeed, self).__init__()
-        #: param for random seed
-        self.seed = Param(self, "seed", "random seed")
-        self._setDefault(seed=hash(type(self).__name__).)
+        #: param for random seed.
+        self.seed = Param(self, "seed", "random seed.")
+        self._setDefault(seed=hash(type(self).__name__))
 
     def setSeed(self, value):
         """
