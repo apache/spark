@@ -884,7 +884,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.frameSize</code></td>
   <td>128</td>
   <td>
-    Maximum message size to allow in "control plane" communication; generally only applies to map
+    Maximum message size (in MB) to allow in "control plane" communication; generally only applies to map
     output size information sent between executors and the driver. Increase this if you are running
     jobs with many thousands of map and reduce tasks and see messages about the frame size.
   </td>
