@@ -210,8 +210,6 @@ case class UnwrapOption(
 
   override def nullable: Boolean = true
 
-  override def children: Seq[Expression] = Nil
-
   override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
 
   override def eval(input: InternalRow): Any =
@@ -238,8 +236,6 @@ case class WrapOption(optionType: DataType, child: Expression)
 
   override def nullable: Boolean = true
 
-  override def children: Seq[Expression] = Nil
-
   override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
 
   override def eval(input: InternalRow): Any =
@@ -254,7 +250,7 @@ case class WrapOption(optionType: DataType, child: Expression)
 
       boolean ${ev.isNull} = false;
       scala.Option<$javaType> ${ev.value} =
-        ${inputObject.isNull} ? None : new scala.Some(${inputObject.value});
+        ${inputObject.isNull} ? scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
     """
   }
 }

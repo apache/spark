@@ -35,7 +35,7 @@ class ProductEncoderSuite extends SparkFunSuite {
     test(s"encode/decode: $inputData") {
       val encoder = try ProductEncoder[T] catch {
         case e: Exception =>
-          fail(s"Exception thrown generating encoder for $inputData", e)
+          fail(s"Exception thrown generating encoder", e)
       }
       val convertedData = encoder.toRow(inputData)
       val schema = encoder.schema.toAttributes
@@ -43,10 +43,12 @@ class ProductEncoderSuite extends SparkFunSuite {
       val convertedBack = try boundEncoder.fromRow(convertedData) catch {
         case e: Exception =>
           fail(
-           s"""Exception thrown while decoding $inputData
+           s"""Exception thrown while decoding
               |Converted: $convertedData
               |Schema: $schema
               |Construct Expressions: ${boundEncoder.constructExpression}
+              |
+              |$e
             """.stripMargin)
       }
       assert(inputData == convertedBack)
@@ -59,6 +61,13 @@ class ProductEncoderSuite extends SparkFunSuite {
     OptionalData(
       Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(PrimitiveData(1, 1, 1, 1, 1, 1, true))))
+
+  encodeDecodeTest(OptionalData(None, None, None, None, None, None, None, None))
+
+  encodeDecodeTest(
+    NullableData(
+      1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true, "test", new java.math.BigDecimal(1), new Date(0),
+      new Timestamp(0), Array[Byte](1, 2, 3)))
 
 //  test("convert PrimitiveData to InternalRow") {
 //    val inputData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
