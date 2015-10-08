@@ -21,6 +21,8 @@ import java.io.File
 import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
+import org.apache.hadoop.hive.ql.session.SessionState
+
 import scala.collection.mutable
 import scala.language.implicitConversions
 
@@ -89,14 +91,14 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   private lazy val temporaryConfig = newTemporaryConfiguration()
 
-  /** Sets up the system initially or after a RESET command */
-  protected override def configure(): Map[String, String] = {
-    super.configure() ++ temporaryConfig ++ Map(
+  override protected[sql] def defaultOverrides(): Map[String, String] = {
+    super.defaultOverrides ++ temporaryConfig ++ Seq(
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1"
-    )
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+    ).toMap
   }
 
   val testTempDir = Utils.createTempDir()
@@ -116,27 +118,15 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
-  // Make sure we set those test specific confs correctly when we create
-  // the SQLConf as well as when we call clear.
-  override protected[sql] def createSession(): SQLSession = {
-    new this.SQLSession()
-  }
-
-  protected[hive] class SQLSession extends super.SQLSession {
-    protected[sql] override lazy val conf: SQLConf = new SQLConf {
+  override def newSession(sessionID: Int, config: Map[String, String]): SQLSession =
+    new super.SQLSession(sessionID, config) {
+      protected[sql] override lazy val conf: SQLConf = new SQLConf(defaultOverrides()) {
       // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
       // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
       override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-
-      clear()
-
-      override def clear(): Unit = {
-        super.clear()
-
-        TestHiveContext.overrideConfs.map {
-          case (key, value) => setConfString(key, value)
-        }
+      config.foreach {
+        case (key, value) => setConfString(key, value)
       }
     }
   }
@@ -431,27 +421,17 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
-      // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      hiveconf.set("fs.default.name", new File(".").toURI.toString)
-      // It is important that we RESET first as broken hooks that might have been set could break
-      // other sql exec here.
-      executionHive.runSqlHive("RESET")
-      metadataHive.runSqlHive("RESET")
-      // For some reason, RESET does not reset the following variables...
-      // https://issues.apache.org/jira/browse/HIVE-9004
-      runSqlHive("set hive.table.parameters.default=")
-      runSqlHive("set datanucleus.cache.collections=true")
-      runSqlHive("set datanucleus.cache.collections.lazy=true")
-      // Lots of tests fail if we do not change the partition whitelist from the default.
-      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
+      detachSession()
 
-      configure().foreach {
-        case (k, v) =>
-          metadataHive.runSqlHive(s"SET $k=$v")
+      // there is no way to close all of the session states by single call but
+      // tests are using only one session and seemed enough with this
+      if (Option(SessionState.get()).isDefined) {
+        SessionState.get().close()
+        SessionState.detachSession()
       }
-      defaultOverrides()
 
-      runSqlHive("USE default")
+      // make new session
+      openSession()
 
       // Just loading src makes a lot of tests pass.  This is because some tests do something like
       // drop an index on src at the beginning.  Since we just pass DDL to hive this bypasses our
@@ -464,16 +444,4 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
     }
   }
-}
-
-private[hive] object TestHiveContext {
-
-  /**
-   * A map used to store all confs that need to be overridden in sql/hive unit tests.
-   */
-  val overrideConfs: Map[String, String] =
-    Map(
-      // Fewer shuffle partitions to speed up testing.
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
-    )
 }

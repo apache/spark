@@ -380,7 +380,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("test add jar") {
-    withMultipleConnectionJdbcStatement(
+    // this is only for a session and should not be shared to others
+    withSingleConnectionJdbcStatement(
       {
         statement =>
           val jarFile =
@@ -519,6 +520,24 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     } finally {
       statements.foreach(_.close())
       connections.foreach(_.close())
+    }
+  }
+
+  def withSingleConnectionJdbcStatement(fs: (Statement => Unit)*) {
+    val user = System.getProperty("user.name")
+    val connection = DriverManager.getConnection(jdbcUri, user, "")
+
+    try {
+      fs.foreach { case f =>
+        val statement = connection.createStatement()
+        try {
+          f(statement)
+        } finally {
+          statement.close()
+        }
+      }
+    } finally {
+      connection.close()
     }
   }
 

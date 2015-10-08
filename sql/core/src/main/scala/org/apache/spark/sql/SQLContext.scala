@@ -64,13 +64,20 @@ import org.apache.spark.util.Utils
  *
  * @since 1.0.0
  */
-class SQLContext(@transient val sparkContext: SparkContext)
+class SQLContext(
+    @transient val sparkContext: SparkContext,
+    @transient optionConf: Map[String, String] = Map.empty)
   extends org.apache.spark.Logging
   with Serializable {
 
   self =>
 
+  // for java invocation
+  def this(sparkContext: SparkContext) = this(sparkContext, Map.empty)
+
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
+
+  protected[sql] def defaultOverrides(): Map[String, String] = Map.empty
 
   /**
    * @return Spark SQL configuration
@@ -204,7 +211,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   @transient
-  protected[sql] val defaultSession = createSession()
+  protected[sql] lazy val defaultSession = openSession()
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
     classOf[DefaultParserDialect].getCanonicalName
@@ -212,7 +219,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.dialect
   }
 
-  {
+  protected[sql] val properties = {
     // We extract spark sql settings from SparkContext's conf and put them to
     // Spark SQL's conf.
     // First, we populate the SQLConf (conf). So, we can make sure that other values using
@@ -220,20 +227,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
     // and spark.sql.hive.metastore.jars to get correctly constructed.
     val properties = new Properties
-    sparkContext.getConf.getAll.foreach {
+    (sparkContext.getConf.getAll ++ optionConf).foreach {
       case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
       case _ =>
     }
-    // We directly put those settings to conf to avoid of calling setConf, which may have
-    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
-    // get constructed. If we call setConf directly, the constructed metadataHive may have
-    // wrong settings, or the construction may fail.
-    conf.setConf(properties)
-    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
-    // (e.g. hiveconf in HiveContext).
-    properties.asScala.foreach {
-      case (key, value) => setConf(key, value)
-    }
+    properties
   }
 
   @transient
@@ -831,10 +829,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   protected[sql] def openSession(): SQLSession = {
-    detachSession()
     val session = createSession()
-    tlSession.set(session)
-
+    session.conf.setConf(properties)
+    setSession(session)
     session
   }
 
@@ -851,13 +848,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   protected[sql] def setSession(session: SQLSession): Unit = {
-    detachSession()
     tlSession.set(session)
   }
 
   protected[sql] class SQLSession {
     // Note that this is a lazy val so we can override the default value in subclasses.
-    protected[sql] lazy val conf: SQLConf = new SQLConf
+    protected[sql] lazy val conf: SQLConf = new SQLConf(defaultOverrides())
   }
 
   @deprecated("use org.apache.spark.sql.QueryExecution", "1.6.0")

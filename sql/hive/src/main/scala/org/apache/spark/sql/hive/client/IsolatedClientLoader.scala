@@ -44,7 +44,8 @@ private[hive] object IsolatedClientLoader {
       config: Map[String, String] = Map.empty,
       ivyPath: Option[String] = None,
       sharedPrefixes: Seq[String] = Seq.empty,
-      barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
+      barrierPrefixes: Seq[String] = Seq.empty,
+      hiveContext: HiveContext): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(version)
     val files = resolvedVersions.getOrElseUpdate(resolvedVersion,
       downloadVersion(resolvedVersion, ivyPath))
@@ -53,7 +54,8 @@ private[hive] object IsolatedClientLoader {
       execJars = files,
       config = config,
       sharedPrefixes = sharedPrefixes,
-      barrierPrefixes = barrierPrefixes)
+      barrierPrefixes = barrierPrefixes,
+      hiveContext = hiveContext)
   }
 
   def hiveVersion(version: String): HiveVersion = version match {
@@ -118,7 +120,8 @@ private[hive] class IsolatedClientLoader(
     val rootClassLoader: ClassLoader = ClassLoader.getSystemClassLoader.getParent.getParent,
     val baseClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader,
     val sharedPrefixes: Seq[String] = Seq.empty,
-    val barrierPrefixes: Seq[String] = Seq.empty)
+    val barrierPrefixes: Seq[String] = Seq.empty,
+    val hiveContext: HiveContext)
   extends Logging {
 
   // Check to make sure that the root classloader does not know about Hive.
@@ -130,6 +133,7 @@ private[hive] class IsolatedClientLoader(
   protected def isSharedClass(name: String): Boolean =
     name.contains("slf4j") ||
     name.contains("log4j") ||
+    name.contains("commons.logging") ||
     name.startsWith("org.apache.spark.") ||
     (name.startsWith("org.apache.hadoop.") && !name.startsWith("org.apache.hadoop.hive.")) ||
     name.startsWith("scala.") ||
@@ -141,6 +145,8 @@ private[hive] class IsolatedClientLoader(
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
     name.startsWith(classOf[ClientWrapper].getName) ||
+    name.startsWith(classOf[IsolatedWrapper].getName) ||
+    name.startsWith(classOf[SharedWrapper].getName) ||
     name.startsWith(classOf[Shim].getName) ||
     barrierPrefixes.exists(name.startsWith)
 
@@ -179,9 +185,9 @@ private[hive] class IsolatedClientLoader(
   /** The isolated client interface to Hive. */
   val client: ClientInterface = try {
     classLoader
-      .loadClass(classOf[ClientWrapper].getName)
+      .loadClass(classOf[IsolatedWrapper].getName)
       .getConstructors.head
-      .newInstance(version, config, classLoader)
+      .newInstance(version, classLoader, config, hiveContext)
       .asInstanceOf[ClientInterface]
   } catch {
     case e: InvocationTargetException =>

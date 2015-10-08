@@ -136,12 +136,12 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  override def run(): Unit = {
+  override def runInternal(): Unit = {
     setState(OperationState.PENDING)
     setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
-      runInternal()
+      execute()
     } else {
       val parentSessionState = SessionState.get()
       val hiveConf = getConfigForOperation()
@@ -157,24 +157,26 @@ private[hive] class SparkExecuteStatementOperation(
           val doAsAction = new PrivilegedExceptionAction[Object]() {
             override def run(): Object = {
 
+              Hive.set(sessionHive)
+              SessionState.setCurrentSessionState(parentSessionState)
+
               // User information is part of the metastore client member in Hive
               hiveContext.setSession(currentSqlSession)
+
               // Always use the latest class loader provided by executionHive's state.
               val executionHiveClassLoader =
                 hiveContext.executionHive.state.getConf.getClassLoader
               sessionHive.getConf.setClassLoader(executionHiveClassLoader)
               parentSessionState.getConf.setClassLoader(executionHiveClassLoader)
 
-              Hive.set(sessionHive)
-              SessionState.setCurrentSessionState(parentSessionState)
               try {
-                runInternal()
+                execute()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
                   log.error("Error running hive query: ", e)
               }
-              return null
+              null
             }
           }
 
@@ -206,7 +208,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  override def runInternal(): Unit = {
+  private def execute(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)

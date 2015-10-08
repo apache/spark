@@ -35,7 +35,7 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.{Logging, SparkContext}
 
 
@@ -81,11 +81,13 @@ object HiveThriftServer2 extends Logging {
     }
 
     try {
-      val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
-      server.init(SparkSQLEnv.hiveContext.hiveconf)
-      server.start()
+      val hiveContext = SparkSQLEnv.hiveContext
+      val server = new HiveThriftServer2(hiveContext)
+      server.init(hiveContext.hiveconf)
+      hiveContext.execute(hiveContext.hiveconf, server.start())
+
       logInfo("HiveThriftServer2 started")
-      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.hiveContext.conf)
+      listener = new HiveThriftServer2Listener(server, hiveContext.conf)
       SparkSQLEnv.sparkContext.addSparkListener(listener)
       uiTab = if (SparkSQLEnv.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
         Some(new ThriftServerTab(SparkSQLEnv.sparkContext))

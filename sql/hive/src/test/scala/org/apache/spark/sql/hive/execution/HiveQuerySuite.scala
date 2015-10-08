@@ -31,7 +31,6 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
@@ -1105,7 +1104,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
+    assert(sql("SET").collect().size === defaultOverrides().size)
 
     val defaults = collectResults(sql("SET"))
     assertResult(Set(testKey -> testVal)) {

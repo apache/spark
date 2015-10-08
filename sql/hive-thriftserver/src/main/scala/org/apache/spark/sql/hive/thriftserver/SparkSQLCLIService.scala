@@ -40,10 +40,12 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
   extends CLIService(hiveServer)
   with ReflectedCompositeService {
 
+  private var sparkSqlSessionManager: SparkSQLSessionManager = null
+
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
 
-    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, hiveContext)
+    sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, hiveContext)
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
@@ -70,6 +72,35 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }
+
+  private def withMetaContext[A](sessionHandle: SessionHandle, f: => A): A = {
+    val session = sparkSqlSessionManager.getSession(sessionHandle).getSessionState
+    hiveContext.executionMetaHive.withHiveState(session, f)
+  }
+
+  override def getCatalogs(sessionHandle: SessionHandle): OperationHandle =
+    withMetaContext(sessionHandle,
+      super.getCatalogs(sessionHandle))
+
+  override def getSchemas(sessionHandle: SessionHandle, catalogName: String, schemaName: String):
+    OperationHandle = withMetaContext(sessionHandle,
+      super.getSchemas(sessionHandle, catalogName, schemaName))
+
+  override def getTables(sessionHandle: SessionHandle, catalogName: String, schemaName: String,
+    tableName: String, tableTypes: java.util.List[String]): OperationHandle =
+    withMetaContext(sessionHandle,
+      super.getTables(sessionHandle, catalogName, schemaName, tableName, tableTypes))
+
+  override def getTableTypes(sessionHandle: SessionHandle): OperationHandle =
+    withMetaContext(sessionHandle, super.getTableTypes(sessionHandle))
+
+  override def getColumns(sessionHandle: SessionHandle, catalogName: String, schemaName: String,
+    tableName: String, columnName: String): OperationHandle = withMetaContext(sessionHandle,
+      super.getColumns(sessionHandle, catalogName, schemaName, tableName, columnName))
+
+  override def getFunctions(sessionHandle: SessionHandle, catalogName: String, schemaName: String,
+    functionName: String): OperationHandle = withMetaContext(sessionHandle,
+      super.getFunctions(sessionHandle, catalogName, schemaName, functionName))
 }
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>

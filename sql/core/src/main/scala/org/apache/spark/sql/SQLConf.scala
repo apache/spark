@@ -438,7 +438,8 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf {
+private[sql] class SQLConf(val config: Map[String, String] = Map.empty)
+    extends Serializable with CatalystConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -560,7 +561,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   /** Return the value of Spark SQL configuration property for the given key. */
   def getConfString(key: String): String = {
-    Option(settings.get(key)).
+    getValue(key).
       orElse {
         // Try to use the default value
         Option(sqlConfEntries.get(key)).map(_.defaultValueString)
@@ -575,7 +576,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    */
   def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    Option(settings.get(entry.key)).map(entry.valueConverter).getOrElse(defaultValue)
+    getValue(entry.key).map(entry.valueConverter).getOrElse(defaultValue)
   }
 
   /**
@@ -584,8 +585,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    */
   def getConf[T](entry: SQLConfEntry[T]): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    Option(settings.get(entry.key)).map(entry.valueConverter).orElse(entry.defaultValue).
+    getValue(entry.key).map(entry.valueConverter).orElse(entry.defaultValue).
       getOrElse(throw new NoSuchElementException(entry.key))
+  }
+
+  private def getValue(key: String): Option[String] = {
+    val conf = Option(settings.get(key))
+    if (!conf.isDefined) config.get(key) else conf
   }
 
   /**
@@ -598,7 +604,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
       // Only verify configs in the SQLConf object
       entry.valueConverter(defaultValue)
     }
-    Option(settings.get(key)).getOrElse(defaultValue)
+    getValue(key).getOrElse(defaultValue)
   }
 
   /**
@@ -606,7 +612,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    * This creates a new copy of the config properties in the form of a Map.
    */
   def getAllConfs: immutable.Map[String, String] =
-    settings.synchronized { settings.asScala.toMap }
+    settings.synchronized { config ++ settings.asScala.toMap }
 
   /**
    * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
