@@ -87,10 +87,7 @@ private[sql] sealed abstract class ColumnType[JvmType] {
    */
   def setField(row: MutableRow, ordinal: Int, value: JvmType): Unit
 
-  /**
-   * Copies `from(fromOrdinal)` to `to(toOrdinal)`. Subclasses should override this method to avoid
-   * boxing/unboxing costs whenever possible.
-   */
+  @specialized(Boolean, Byte, Short, Int, Long)
   def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
