@@ -96,6 +96,17 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.hasParent)
   }
 
+  test("empty probabilityCol") {
+    val lr = new LogisticRegression().setProbabilityCol("")
+    val model = lr.fit(dataset)
+    assert(model.hasSummary)
+    // Validate that we re-insert a probability column for evaluation
+    val fieldNames = model.summary.predictions.schema.fieldNames
+    assert((dataset.schema.fieldNames.toSet).subsetOf(
+      fieldNames.toSet))
+    assert(fieldNames.exists(s => s.startsWith("probability_")))
+  }
+
   test("setThreshold, getThreshold") {
     val lr = new LogisticRegression
     // default
