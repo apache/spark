@@ -81,7 +81,7 @@ private[hive] case class CreateViewAsSelect(
     tableDesc: HiveTable,
     child: LogicalPlan,
     allowExisting: Boolean,
-    orReplace: Boolean,
+    replace: Boolean,
     sql: String) extends UnaryNode with Command {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean = false
@@ -515,7 +515,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       schema: Seq[HiveColumn],
       properties: Map[String, String],
       allowExist: Boolean,
-      orReplace: Boolean): CreateViewAsSelect = {
+      replace: Boolean): CreateViewAsSelect = {
     val (db, viewName) = extractDbNameTableName(viewNameParts)
 
     val originalText = context.getTokenRewriteStream
@@ -540,7 +540,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // We can remove this when parser is configurable(can access SQLConf) in the future.
     val sql = context.getTokenRewriteStream
       .toString(view.getTokenStartIndex, view.getTokenStopIndex)
-    CreateViewAsSelect(tableDesc, nodeToPlan(query, context), allowExist, orReplace, sql)
+    CreateViewAsSelect(tableDesc, nodeToPlan(query, context), allowExist, replace, sql)
   }
 
   protected def nodeToPlan(node: ASTNode, context: Context): LogicalPlan = node match {
@@ -638,7 +638,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         Some(viewNameParts),
         Some(query),
         maybeComment,
-        orReplace,
+        replace,
         allowExisting,
         maybeProperties,
         maybeColumns,
@@ -681,7 +681,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         }
 
         createView(view, context, viewNameParts, query, schema, properties.toMap,
-          allowExisting.isDefined, orReplace.isDefined)
+          allowExisting.isDefined, replace.isDefined)
       }
 
     case Token("TOK_CREATETABLE", children)

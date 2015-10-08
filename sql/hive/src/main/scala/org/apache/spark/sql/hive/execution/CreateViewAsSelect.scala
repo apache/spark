@@ -49,7 +49,9 @@ private[hive] case class CreateViewAsSelect(
       } else if (orReplace) {
         hiveContext.catalog.client.alertView(prepareTable())
       } else {
-        throw new AnalysisException(s"$database.$viewName already exists.")
+        throw new AnalysisException(s"View $database.$viewName already exists. " +
+          "If you want to update the view definition, please use ALTER VIEW AS or " +
+          "CREATE OR REPLACE VIEW AS")
       }
     } else {
       hiveContext.catalog.client.createView(prepareTable())
