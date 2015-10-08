@@ -170,9 +170,12 @@ class LinearRegression(override val uid: String)
       val intercept = yMean
 
       val model = new LinearRegressionModel(uid, coefficients, intercept)
+      // Handle possible missing or invalid prediction columns
+      val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
+
       val trainingSummary = new LinearRegressionTrainingSummary(
-        model.transform(dataset),
-        $(predictionCol),
+        summaryModel.transform(dataset),
+        predictionColName,
         $(labelCol),
         $(featuresCol),
         Array(0D))
@@ -262,9 +265,12 @@ class LinearRegression(override val uid: String)
     if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
+
     val trainingSummary = new LinearRegressionTrainingSummary(
-      model.transform(dataset),
-      $(predictionCol),
+      summaryModel.transform(dataset),
+      predictionColName,
       $(labelCol),
       $(featuresCol),
       objectiveHistory)
@@ -316,12 +322,25 @@ class LinearRegressionModel private[ml] (
    */
   // TODO: decide on a good name before exposing to public API
   private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
-    val t = udf { features: Vector => predict(features) }
-    val predictionAndObservations = dataset
-      .select(col($(labelCol)), t(col($(featuresCol))).as($(predictionCol)))
-
-    new LinearRegressionSummary(predictionAndObservations, $(predictionCol), $(labelCol))
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
+    new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName, $(labelCol))
   }
+
+  /**
+   * If the prediction column is set returns the current model and prediction column,
+   * otherwise generates a new column and sets it as the prediction column on a new copy
+   * of the current model.
+   */
+  private[regression] def findSummaryModelAndPredictionCol(): (LinearRegressionModel, String) = {
+    $(predictionCol) match {
+      case "" =>
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
+      case p => (this, p)
+    }
+  }
+
 
   override protected def predict(features: Vector): Double = {
     dot(features, weights) + intercept
