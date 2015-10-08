@@ -37,15 +37,10 @@ private[sql] object InMemoryRelation {
       batchSize: Int,
       storageLevel: StorageLevel,
       child: SparkPlan,
-      tableName: Option[String]): InMemoryRelation = {
-    val newChild = if (child.outputsUnsafeRows) {
-      child
-    } else {
-      ConvertToUnsafe(child)
-    }
-    new InMemoryRelation(newChild.output, useCompression, batchSize, storageLevel, newChild,
+      tableName: Option[String]): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel,
+      if (child.outputsUnsafeRows) child else ConvertToUnsafe(child),
       tableName)()
-  }
 }
 
 private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: InternalRow)

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -304,6 +305,15 @@ public class UnsafeArrayData extends ArrayData {
 
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert(buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + sizeInBytes);
   }
 
   @Override

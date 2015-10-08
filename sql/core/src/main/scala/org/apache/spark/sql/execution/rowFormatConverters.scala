@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 
 /**
  * :: DeveloperApi ::

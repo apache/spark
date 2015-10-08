@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -595,5 +596,14 @@ public final class UnsafeRow extends MutableRow {
    */
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert(buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + sizeInBytes);
   }
 }
