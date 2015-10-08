@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, ExecutionContext}
+import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.rpc._
@@ -26,8 +26,6 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{ThreadUtils, RpcUtils}
-
-import scala.util.control.NonFatal
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -176,6 +174,12 @@ private[spark] abstract class YarnSchedulerBackend(
 
       case RemoveExecutor(executorId, reason) =>
         removeExecutor(executorId, reason)
+
+      case PreemptExecutors(executorIds) =>
+        if (executorIds.nonEmpty) {
+          logInfo(s"Executor ID: ${executorIds.mkString(" ")} will possibly be preempted")
+        }
+        preemptedExecutorIDs.getAndSet(executorIds)
     }
 
 
