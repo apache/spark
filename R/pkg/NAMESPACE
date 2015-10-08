@@ -27,6 +27,8 @@ exportMethods("arrange",
               "collect",
               "columns",
               "count",
+              "cov",
+              "corr",
               "crosstab",
               "describe",
               "dim",
@@ -247,3 +249,5 @@ export("structField",
        "structType.jobj",
        "structType.structField",
        "print.structType")
+
+export("as.data.frame")

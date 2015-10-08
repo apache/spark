@@ -107,9 +107,10 @@ private[ui] class ActiveBatchTable(
 private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: Long)
   extends BatchTableBase("completed-batches-table", batchInterval) {
 
-  override protected def columns: Seq[Node] = super.columns ++
-    <th>Total Delay
-      {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
+  override protected def columns: Seq[Node] = super.columns ++ {
+    <th>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
+      <th>Output Ops: Succeeded/Total</th>
+  }
 
   override protected def renderRows: Seq[Node] = {
     batches.flatMap(batch => <tr>{completedBatchRow(batch)}</tr>)
@@ -118,9 +119,17 @@ private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: 
   private def completedBatchRow(batch: BatchUIData): Seq[Node] = {
     val totalDelay = batch.totalDelay
     val formattedTotalDelay = totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
+    val numFailedOutputOp = batch.failureReason.size
+    val outputOpColumn = if (numFailedOutputOp > 0) {
+        s"${batch.numOutputOp - numFailedOutputOp}/${batch.numOutputOp}" +
+          s" (${numFailedOutputOp} failed)"
+      } else {
+        s"${batch.numOutputOp}/${batch.numOutputOp}"
+      }
     baseRow(batch) ++
       <td sorttable_customkey={totalDelay.getOrElse(Long.MaxValue).toString}>
         {formattedTotalDelay}
       </td>
+      <td>{outputOpColumn}</td>
   }
 }

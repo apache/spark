@@ -336,7 +336,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
       case logical.Repartition(numPartitions, shuffle, child) =>
-        execution.Repartition(numPartitions, shuffle, planLater(child)) :: Nil
+        if (shuffle) {
+          execution.Exchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
+        } else {
+          execution.Coalesce(numPartitions, planLater(child)) :: Nil
+        }
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.

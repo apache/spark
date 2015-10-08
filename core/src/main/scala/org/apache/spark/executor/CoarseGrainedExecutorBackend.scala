@@ -110,6 +110,11 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
+      // Cannot shutdown here because an ack may need to be sent back to the caller. So send
+      // a message to self to actually do the shutdown.
+      self.send(Shutdown)
+
+    case Shutdown =>
       executor.stop()
       stop()
       rpcEnv.shutdown()

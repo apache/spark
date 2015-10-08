@@ -21,7 +21,8 @@ import java.io.{DataInput, DataOutput}
 import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
+import org.apache.hadoop.hive.ql.udf.UDAFPercentile
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDFOPAnd, GenericUDTFExplode, GenericUDAFAverage, GenericUDF}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
@@ -298,6 +299,62 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
 
     hiveContext.reset()
+  }
+
+  test("Hive UDFs with insufficient number of input arguments should trigger an analysis error") {
+    Seq((1, 2)).toDF("a", "b").registerTempTable("testUDF")
+
+    {
+      // HiveSimpleUDF
+      sql(s"CREATE TEMPORARY FUNCTION testUDFTwoListList AS '${classOf[UDFTwoListList].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDFTwoListList() FROM testUDF")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
+    }
+
+    {
+      // HiveGenericUDF
+      sql(s"CREATE TEMPORARY FUNCTION testUDFAnd AS '${classOf[GenericUDFOPAnd].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDFAnd() FROM testUDF")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFAnd")
+    }
+
+    {
+      // Hive UDAF
+      sql(s"CREATE TEMPORARY FUNCTION testUDAFPercentile AS '${classOf[UDAFPercentile].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDAFPercentile(a) FROM testUDF GROUP BY b")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDAFPercentile")
+    }
+
+    {
+      // AbstractGenericUDAFResolver
+      sql(s"CREATE TEMPORARY FUNCTION testUDAFAverage AS '${classOf[GenericUDAFAverage].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDAFAverage() FROM testUDF GROUP BY b")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDAFAverage")
+    }
+
+    {
+      // Hive UDTF
+      sql(s"CREATE TEMPORARY FUNCTION testUDTFExplode AS '${classOf[GenericUDTFExplode].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDTFExplode() FROM testUDF")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDTFExplode")
+    }
+
+    sqlContext.dropTempTable("testUDF")
   }
 }
 

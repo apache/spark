@@ -42,10 +42,10 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  * @param code The sequence of statements required to evaluate the expression.
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
  *                 to null.
- * @param primitive A term for a possible primitive value of the result of the evaluation. Not
- *                      valid if `isNull` is set to `true`.
+ * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
+ *              valid if `isNull` is set to `true`.
  */
-case class GeneratedExpressionCode(var code: String, var isNull: String, var primitive: String)
+case class GeneratedExpressionCode(var code: String, var isNull: String, var value: String)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported
@@ -99,6 +99,9 @@ class CodeGenContext {
   final val JAVA_FLOAT = "float"
   final val JAVA_DOUBLE = "double"
 
+  /** The variable name of the input row in generated code. */
+  final val INPUT_ROW = "i"
+
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
   /**
@@ -112,21 +115,21 @@ class CodeGenContext {
   }
 
   /**
-   * Returns the code to access a value in `SpecializedGetters` for a given DataType.
+   * Returns the specialized code to access a value from `inputRow` at `ordinal`.
    */
-  def getValue(getter: String, dataType: DataType, ordinal: String): String = {
+  def getValue(input: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$getter.get${primitiveTypeName(jt)}($ordinal)"
-      case t: DecimalType => s"$getter.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-      case StringType => s"$getter.getUTF8String($ordinal)"
-      case BinaryType => s"$getter.getBinary($ordinal)"
-      case CalendarIntervalType => s"$getter.getInterval($ordinal)"
-      case t: StructType => s"$getter.getStruct($ordinal, ${t.size})"
-      case _: ArrayType => s"$getter.getArray($ordinal)"
-      case _: MapType => s"$getter.getMap($ordinal)"
+      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+      case StringType => s"$input.getUTF8String($ordinal)"
+      case BinaryType => s"$input.getBinary($ordinal)"
+      case CalendarIntervalType => s"$input.getInterval($ordinal)"
+      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
+      case _: ArrayType => s"$input.getArray($ordinal)"
+      case _: MapType => s"$input.getMap($ordinal)"
       case NullType => "null"
-      case _ => s"($jt)$getter.get($ordinal, null)"
+      case _ => s"($jt)$input.get($ordinal, null)"
     }
   }
 
@@ -272,6 +275,7 @@ class CodeGenContext {
    * 64kb code size limit in JVM
    *
    * @param row the variable name of row that is used by expressions
+   * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
     val blocks = new ArrayBuffer[String]()
@@ -383,11 +387,23 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[UnsafeMapData].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
+
+    def formatted = CodeFormatter.format(code)
+    def withLineNums = formatted.split("\n").zipWithIndex.map {
+      case (l, n) => f"${n + 1}%03d $l"
+    }.mkString("\n")
+
+    logDebug({
+      // Only add extra debugging info to byte code when we are going to print the source code.
+      evaluator.setDebuggingInformation(false, true, false)
+      withLineNums
+    })
+
     try {
-      evaluator.cook(code)
+      evaluator.cook("generated.java", code)
     } catch {
       case e: Exception =>
-        val msg = s"failed to compile: $e\n" + CodeFormatter.format(code)
+        val msg = s"failed to compile: $e\n$withLineNums"
         logError(msg, e)
         throw new Exception(msg, e)
     }
