@@ -79,6 +79,8 @@ def run(args):
     utils.pessimistic_connection_handling()
     # Setting up logging
     log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+    if log.startswith('s3:'):
+        log = os.path.join(settings.AIRFLOW_HOME, '_tmp_s3_logs')
     directory = log + "/{args.dag_id}/{args.task_id}".format(args=args)
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -164,6 +166,14 @@ def run(args):
             force=args.force)
         executor.heartbeat()
         executor.end()
+
+    if conf.get('core', 'BASE_LOG_FOLDER').startswith('s3:'):
+        import boto
+        s3 = boto.connect_s3()
+        s3_log = filename.replace(log, conf.get('core', 'BASE_LOG_FOLDER'))
+        bucket, key = s3_log.lstrip('s3:/').split('/', 1)
+        s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
+        s3_key.set_contents_from_filename(filename)
 
 
 def task_state(args):
@@ -300,10 +310,11 @@ def worker(args):
     # Worker to serve static log files through this simple flask app
     env = os.environ.copy()
     env['AIRFLOW_HOME'] = settings.AIRFLOW_HOME
-    sp = subprocess.Popen(
-        ['airflow', 'serve_logs'],
-        env=env,
-    )
+    if not conf.get('core', 'BASE_LOG_FOLDER').startswith('s3:'):
+        sp = subprocess.Popen(
+            ['airflow', 'serve_logs'],
+            env=env,
+        )
 
     # Celery worker
     from airflow.executors.celery_executor import app as celery_app
