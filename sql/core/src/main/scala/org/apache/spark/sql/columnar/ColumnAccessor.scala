@@ -61,7 +61,7 @@ private[sql] abstract class BasicColumnAccessor[JvmType](
   protected def underlyingBuffer = buffer
 }
 
-private[sql] class NullColumnAccess(buffer: ByteBuffer)
+private[sql] class NullColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Any](buffer, NULL)
   with NullableColumnAccessor
 
@@ -124,7 +124,7 @@ private[sql] object ColumnAccessor {
     val buf = buffer.order(ByteOrder.nativeOrder)
 
     dataType match {
-      case NullType => new NullColumnAccess(buf)
+      case NullType => new NullColumnAccessor(buf)
       case BooleanType => new BooleanColumnAccessor(buf)
       case ByteType => new ByteColumnAccessor(buf)
       case ShortType => new ShortColumnAccessor(buf)
