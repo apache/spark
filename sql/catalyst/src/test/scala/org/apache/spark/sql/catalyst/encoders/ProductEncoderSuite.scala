@@ -88,8 +88,8 @@ class ProductEncoderSuite extends SparkFunSuite {
 
   test("convert nullable but present data to InternalRow") {
     val inputData = NullableData(
-      1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true,"test", new java.math.BigDecimal(1), new Date(0),
-      new Timestamp(0), Array[Byte](1,2,3))
+      1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true, "test", new java.math.BigDecimal(1), new Date(0),
+      new Timestamp(0), Array[Byte](1, 2, 3))
 
     val encoder = ProductEncoder[NullableData]
     val convertedData = encoder.toRow(inputData)
