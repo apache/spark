@@ -130,6 +130,7 @@ private[spark] class Client(
       appId
     } catch {
       case e: Throwable =>
+        SparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
         if (appId != null) {
           cleanupStagingDir(appId)
         }
@@ -549,6 +550,7 @@ private[spark] class Client(
       logInfo(s"Credentials file set to: $credentialsFile")
       val renewalInterval = getTokenRenewalInterval(stagingDirPath)
       sparkConf.set("spark.yarn.token.renewal.interval", renewalInterval.toString)
+      SparkHadoopUtil.get.startExecutorDelegationTokenRenewer(sparkConf)
     }
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
@@ -884,6 +886,7 @@ private[spark] class Client(
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
+        SparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
         cleanupStagingDir(appId)
         return (state, report.getFinalApplicationStatus)
       }
