@@ -36,6 +36,8 @@ import org.apache.spark.sql.hive.HiveContext
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader {
+  
+  val localClassLoader = new ThreadLocal[URLClassLoader]()
   /**
    * Creates isolated Hive client loaders by downloading the requested version from maven.
    */
@@ -148,28 +150,37 @@ private[hive] class IsolatedClientLoader(
     name.replaceAll("\\.", "/") + ".class"
 
   /** The classloader that is used to load an isolated version of Hive. */
-  protected val classLoader: ClassLoader = new URLClassLoader(allJars, rootClassLoader) {
-    override def loadClass(name: String, resolve: Boolean): Class[_] = {
-      val loaded = findLoadedClass(name)
-      if (loaded == null) doLoadClass(name, resolve) else loaded
+  protected val classLoader: ClassLoader = {
+    if(IsolatedClientLoader.localClassLoader.get() == null) {
+      setLocalClassLoader
     }
-
-    def doLoadClass(name: String, resolve: Boolean): Class[_] = {
-      val classFileName = name.replaceAll("\\.", "/") + ".class"
-      if (isBarrierClass(name) && isolationOn) {
-        // For barrier classes, we construct a new copy of the class.
-        val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
-        logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
-        defineClass(name, bytes, 0, bytes.length)
-      } else if (!isSharedClass(name)) {
-        logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
-        super.loadClass(name, resolve)
-      } else {
-        // For shared classes, we delegate to baseClassLoader.
-        logDebug(s"shared class: $name")
-        baseClassLoader.loadClass(name)
+    IsolatedClientLoader.localClassLoader.get()
+  }
+  
+  private def setLocalClassLoader() = {
+    IsolatedClientLoader.localClassLoader.set(new URLClassLoader(allJars, rootClassLoader) {
+      override def loadClass(name: String, resolve: Boolean): Class[_] = {
+        val loaded = findLoadedClass(name)
+        if (loaded == null) doLoadClass(name, resolve) else loaded
       }
-    }
+
+      def doLoadClass(name: String, resolve: Boolean): Class[_] = {
+        val classFileName = name.replaceAll("\\.", "/") + ".class"
+        if (isBarrierClass(name) && isolationOn) {
+          // For barrier classes, we construct a new copy of the class.
+          val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
+          logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
+          defineClass(name, bytes, 0, bytes.length)
+        } else if (!isSharedClass(name)) {
+          logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
+          super.loadClass(name, resolve)
+        } else {
+          // For shared classes, we delegate to baseClassLoader.
+          logDebug(s"shared class: $name")
+          baseClassLoader.loadClass(name)
+        }
+      }
+    })
   }
 
   // Pre-reflective instantiation setup.
