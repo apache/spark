@@ -47,7 +47,7 @@ import org.apache.spark.sql.{AnalysisException, SQLConf}
  *        [[StructType]].  Note that Spark SQL [[TimestampType]] is similar to Hive timestamp, which
  *        has optional nanosecond precision, but different from `TIME_MILLS` and `TIMESTAMP_MILLIS`
  *        described in Parquet format spec.  This argument only affects Parquet read path.
- * @param writeLegacyParquetFormat Whether to use legacy Parquet format compatible with Spark 1.5
+ * @param writeLegacyParquetFormat Whether to use legacy Parquet format compatible with Spark 1.4
  *        and prior versions when converting a Catalyst [[StructType]] to a Parquet [[MessageType]].
  *        When set to false, use standard format defined in parquet-format spec.  This argument only
  *        affects Parquet write path.
@@ -356,7 +356,7 @@ private[parquet] class CatalystSchemaConverter(
       // `TIMESTAMP_MICROS` which are both logical types annotating `INT64`.
       //
       // Originally, Spark SQL uses the same nanosecond timestamp type as Impala and Hive.  Starting
-      // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
+      // from Spark 1.4.0, we resort to a timestamp type with 100 ns precision so that we can store
       // a timestamp into a `Long`.  This design decision is subject to change though, for example,
       // we may resort to microsecond precision in the future.
       //
@@ -375,7 +375,7 @@ private[parquet] class CatalystSchemaConverter(
       // Decimals (legacy mode)
       // ======================
 
-      // Spark 1.5.x and prior versions only support decimals with a maximum precision of 18 and
+      // Spark 1.4.x and prior versions only support decimals with a maximum precision of 18 and
       // always store decimals in fixed-length byte arrays.  To keep compatibility with these older
       // versions, here we convert decimals with all precisions to `FIXED_LEN_BYTE_ARRAY` annotated
       // by `DECIMAL`.
@@ -426,7 +426,7 @@ private[parquet] class CatalystSchemaConverter(
       // ArrayType and MapType (legacy mode)
       // ===================================
 
-      // Spark 1.5.x and prior versions convert `ArrayType` with nullable elements into a 3-level
+      // Spark 1.4.x and prior versions convert `ArrayType` with nullable elements into a 3-level
       // `LIST` structure.  This behavior is somewhat a hybrid of parquet-hive and parquet-avro
       // (1.6.0rc3): the 3-level structure is similar to parquet-hive while the 3rd level element
       // field name "array" is borrowed from parquet-avro.
@@ -445,7 +445,7 @@ private[parquet] class CatalystSchemaConverter(
             .addField(convertField(StructField("array", elementType, nullable)))
             .named("bag"))
 
-      // Spark 1.5.x and prior versions convert ArrayType with non-nullable elements into a 2-level
+      // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
       // LIST structure.  This behavior mimics parquet-avro (1.6.0rc3).  Note that this case is
       // covered by the backwards-compatibility rules implemented in `isElementType()`.
       case ArrayType(elementType, nullable @ false) if writeLegacyParquetFormat =>
@@ -458,7 +458,7 @@ private[parquet] class CatalystSchemaConverter(
           // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
           convertField(StructField("array", elementType, nullable), REPEATED))
 
-      // Spark 1.5.x and prior versions convert MapType into a 3-level group annotated by
+      // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
       // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.
       case MapType(keyType, valueType, valueContainsNull) if writeLegacyParquetFormat =>
         // <map-repetition> group <name> (MAP) {

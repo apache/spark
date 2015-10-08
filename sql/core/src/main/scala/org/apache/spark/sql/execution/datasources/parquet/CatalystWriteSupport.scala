@@ -42,7 +42,7 @@ import org.apache.spark.sql.types._
  * messages.  This class can write Parquet data in two modes:
  *
  *  - Standard mode: Parquet data are written in standard format defined in parquet-format spec.
- *  - Legacy mode: Parquet data are written in legacy format compatible with Spark 1.5 and prior.
+ *  - Legacy mode: Parquet data are written in legacy format compatible with Spark 1.4 and prior.
  *
  * This behavior can be controlled by SQL option `spark.sql.parquet.writeLegacyParquetFormat`.  The
  * value of the option is propagated to this class by the `init()` method and its Hadoop
@@ -63,7 +63,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   // The Parquet `RecordConsumer` to which all `InternalRow`s are written
   private var recordConsumer: RecordConsumer = _
 
-  // Whether to write data in legacy Parquet format compatible with Spark 1.5 and prior versions
+  // Whether to write data in legacy Parquet format compatible with Spark 1.4 and prior versions
   private var writeLegacyParquetFormat: Boolean = _
 
   // Reusable byte array used to write timestamps as Parquet INT96 values
