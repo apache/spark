@@ -19,13 +19,12 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 import java.util.{Map => JMap}
+import javax.annotation.Nullable
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 
-private[hive] case class HiveDatabase(
-    name: String,
-    location: String)
+private[hive] case class HiveDatabase(name: String, location: String)
 
 private[hive] abstract class TableType { val name: String }
 private[hive] case object ExternalTable extends TableType { override val name = "EXTERNAL_TABLE" }
@@ -45,7 +44,7 @@ private[hive] case class HivePartition(
     values: Seq[String],
     storage: HiveStorageDescriptor)
 
-private[hive] case class HiveColumn(name: String, hiveType: String, comment: String)
+private[hive] case class HiveColumn(name: String, @Nullable hiveType: String, comment: String)
 private[hive] case class HiveTable(
     specifiedDatabase: Option[String],
     name: String,
@@ -125,6 +124,12 @@ private[hive] trait ClientInterface {
 
   /** Returns the metadata for the specified table or None if it doens't exist. */
   def getTableOption(dbName: String, tableName: String): Option[HiveTable]
+
+  /** Creates a view with the given metadata. */
+  def createView(view: HiveTable): Unit
+
+  /** Updates the given view with new metadata. */
+  def alertView(view: HiveTable): Unit
 
   /** Creates a table with the given metadata. */
   def createTable(table: HiveTable): Unit
