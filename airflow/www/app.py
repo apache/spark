@@ -826,7 +826,14 @@ class Airflow(BaseView):
         form = DateTimeForm(data={'execution_date': dttm})
         if ti:
             host = ti.hostname
-            if socket.gethostname() == host:
+
+            if loc.startswith('s3:'):
+                import boto
+                s3 = boto.connect_s3()
+                bucket, key = loc.lstrip('s3:/').split('/', 1)
+                s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
+                log = s3_key.get_contents_as_string().decode()
+            elif socket.gethostname() == host:
                 try:
                     f = open(loc)
                     log += "".join(f.readlines())
