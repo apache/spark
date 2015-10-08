@@ -357,8 +357,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     val jsonString = """{"type":"struct","fields":[{"name":"c1","type":"integer","nullable":false,"metadata":{}},{"name":"c2","type":"binary","nullable":true,"metadata":{}}]}"""
     // scalastyle:on
 
-    val fromCaseClassString = ParquetTypesConverter.convertFromString(caseClassString)
-    val fromJson = ParquetTypesConverter.convertFromString(jsonString)
+    val fromCaseClassString = StructType.fromString(caseClassString)
+    val fromJson = StructType.fromString(jsonString)
 
     (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
       assert(a.name == b.name)
