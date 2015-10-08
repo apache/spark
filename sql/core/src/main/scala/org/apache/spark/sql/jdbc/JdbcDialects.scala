@@ -277,4 +277,9 @@ case object MsSqlServerDialect extends JdbcDialect {
       Some(StringType)
     } else None
   }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case _ => None
+  }
 }

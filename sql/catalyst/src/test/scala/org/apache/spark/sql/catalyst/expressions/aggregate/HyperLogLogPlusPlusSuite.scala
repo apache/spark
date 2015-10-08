@@ -38,7 +38,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
   }
 
   def createBuffer(hll: HyperLogLogPlusPlus): MutableRow = {
-    val buffer = new SpecificMutableRow(hll.bufferAttributes.map(_.dataType))
+    val buffer = new SpecificMutableRow(hll.aggBufferAttributes.map(_.dataType))
     hll.initialize(buffer)
     buffer
   }

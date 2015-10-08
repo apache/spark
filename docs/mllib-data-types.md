@@ -33,6 +33,8 @@ implementations: [`DenseVector`](api/scala/index.html#org.apache.spark.mllib.lin
 using the factory methods implemented in
 [`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) to create local vectors.
 
+Refer to the [`Vector` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) and [`Vectors` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
@@ -58,6 +60,8 @@ implementations: [`DenseVector`](api/java/org/apache/spark/mllib/linalg/DenseVec
 [`SparseVector`](api/java/org/apache/spark/mllib/linalg/SparseVector.html).  We recommend
 using the factory methods implemented in
 [`Vectors`](api/java/org/apache/spark/mllib/linalg/Vectors.html) to create local vectors.
+
+Refer to the [`Vector` Java docs](api/java/org/apache/spark/mllib/linalg/Vector.html) and [`Vectors` Java docs](api/java/org/apache/spark/mllib/linalg/Vectors.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vector;
@@ -85,6 +89,8 @@ and the following as sparse vectors:
 
 We recommend using NumPy arrays over lists for efficiency, and using the factory methods implemented
 in [`Vectors`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Vectors) to create sparse vectors.
+
+Refer to the [`Vectors` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Vectors) for more details on the API.
 
 {% highlight python %}
 import numpy as np
@@ -119,6 +125,8 @@ For multiclass classification, labels should be class indices starting from zero
 A labeled point is represented by the case class
 [`LabeledPoint`](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint).
 
+Refer to the [`LabeledPoint` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -136,6 +144,8 @@ val neg = LabeledPoint(0.0, Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0)))
 A labeled point is represented by
 [`LabeledPoint`](api/java/org/apache/spark/mllib/regression/LabeledPoint.html).
 
+Refer to the [`LabeledPoint` Java docs](api/java/org/apache/spark/mllib/regression/LabeledPoint.html) for details on the API.
+
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
@@ -152,6 +162,8 @@ LabeledPoint neg = new LabeledPoint(0.0, Vectors.sparse(3, new int[] {0, 2}, new
 
 A labeled point is represented by
 [`LabeledPoint`](api/python/pyspark.mllib.html#pyspark.mllib.regression.LabeledPoint).
+
+Refer to the [`LabeledPoint` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LabeledPoint) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.linalg import SparseVector
@@ -187,6 +199,8 @@ After loading, the feature indices are converted to zero-based.
 [`MLUtils.loadLibSVMFile`](api/scala/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
 examples stored in LIBSVM format.
 
+Refer to the [`MLUtils` Scala docs](api/scala/index.html#org.apache.spark.mllib.util.MLUtils) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
@@ -199,6 +213,8 @@ val examples: RDD[LabeledPoint] = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_
 <div data-lang="java" markdown="1">
 [`MLUtils.loadLibSVMFile`](api/java/org/apache/spark/mllib/util/MLUtils.html) reads training
 examples stored in LIBSVM format.
+
+Refer to the [`MLUtils` Java docs](api/java/org/apache/spark/mllib/util/MLUtils.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.mllib.regression.LabeledPoint;
@@ -213,6 +229,8 @@ JavaRDD<LabeledPoint> examples =
 <div data-lang="python" markdown="1">
 [`MLUtils.loadLibSVMFile`](api/python/pyspark.mllib.html#pyspark.mllib.util.MLUtils) reads training
 examples stored in LIBSVM format.
+
+Refer to the [`MLUtils` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.util.MLUtils) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.util import MLUtils
@@ -246,6 +264,8 @@ We recommend using the factory methods implemented
 in [`Matrices`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices$) to create local
 matrices. Remember, local matrices in MLlib are stored in column-major order.
 
+Refer to the [`Matrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix) and [`Matrices` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Matrix, Matrices}
 
@@ -266,6 +286,8 @@ and [`SparseMatrix`](api/java/org/apache/spark/mllib/linalg/SparseMatrix.html).
 We recommend using the factory methods implemented
 in [`Matrices`](api/java/org/apache/spark/mllib/linalg/Matrices.html) to create local
 matrices. Remember, local matrices in MLlib are stored in column-major order.
+
+Refer to the [`Matrix` Java docs](api/java/org/apache/spark/mllib/linalg/Matrix.html) and [`Matrices` Java docs](api/java/org/apache/spark/mllib/linalg/Matrices.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Matrix;
@@ -288,6 +310,8 @@ and [`SparseMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.SparseMa
 We recommend using the factory methods implemented
 in [`Matrices`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrices) to create local
 matrices. Remember, local matrices in MLlib are stored in column-major order.
+
+Refer to the [`Matrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrix) and [`Matrices` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrices) for more details on the API.
 
 {% highlight python %}
 import org.apache.spark.mllib.linalg.{Matrix, Matrices}
@@ -341,6 +365,7 @@ created from an `RDD[Vector]` instance.  Then we can compute its column summary 
 [QR decomposition](https://en.wikipedia.org/wiki/QR_decomposition) is of the form A = QR where Q is an orthogonal matrix and R is an upper triangular matrix.
 For [singular value decomposition (SVD)](https://en.wikipedia.org/wiki/Singular_value_decomposition) and [principal component analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis), please refer to [Dimensionality reduction](mllib-dimensionality-reduction.html).
 
+Refer to the [`RowMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vector
@@ -364,6 +389,8 @@ val qrResult = mat.tallSkinnyQR(true)
 A [`RowMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) can be
 created from a `JavaRDD<Vector>` instance.  Then we can compute its column summary statistics.
 
+Refer to the [`RowMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) for details on the API.
+
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Vector;
@@ -386,6 +413,8 @@ QRDecomposition<RowMatrix, Matrix> result = mat.tallSkinnyQR(true);
 
 A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.RowMatrix) can be 
 created from an `RDD` of vectors.
+
+Refer to the [`RowMatrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.RowMatrix) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.linalg.distributed import RowMatrix
@@ -423,6 +452,8 @@ can be created from an `RDD[IndexedRow]` instance, where
 wrapper over `(Long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
 its row indices.
 
+Refer to the [`IndexedRowMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
 
@@ -447,6 +478,8 @@ can be created from an `JavaRDD<IndexedRow>` instance, where
 [`IndexedRow`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRow.html) is a
 wrapper over `(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
 its row indices.
+
+Refer to the [`IndexedRowMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRowMatrix.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
@@ -474,6 +507,8 @@ can be created from an `RDD` of `IndexedRow`s, where
 [`IndexedRow`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.IndexedRow) is a 
 wrapper over `(long, vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
 its row indices.
+
+Refer to the [`IndexedRowMatrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.IndexedRowMatrix) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix
@@ -529,6 +564,8 @@ wrapper over `(Long, Long, Double)`.  A `CoordinateMatrix` can be converted to a
 with sparse rows by calling `toIndexedRowMatrix`.  Other computations for 
 `CoordinateMatrix` are not currently supported.
 
+Refer to the [`CoordinateMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 
@@ -554,6 +591,8 @@ can be created from a `JavaRDD<MatrixEntry>` instance, where
 wrapper over `(long, long, double)`.  A `CoordinateMatrix` can be converted to an `IndexedRowMatrix`
 with sparse rows by calling `toIndexedRowMatrix`. Other computations for 
 `CoordinateMatrix` are not currently supported.
+
+Refer to the [`CoordinateMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/distributed/CoordinateMatrix.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
@@ -581,6 +620,8 @@ can be created from an `RDD` of `MatrixEntry` entries, where
 [`MatrixEntry`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.MatrixEntry) is a 
 wrapper over `(long, long, float)`.  A `CoordinateMatrix` can be converted to a `RowMatrix` by 
 calling `toRowMatrix`, or to an `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
+
+Refer to the [`CoordinateMatrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.CoordinateMatrix) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
@@ -631,6 +672,8 @@ most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` by calling 
 `toBlockMatrix` creates blocks of size 1024 x 1024 by default.
 Users may change the block size by supplying the values through `toBlockMatrix(rowsPerBlock, colsPerBlock)`.
 
+Refer to the [`BlockMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry}
 
@@ -655,6 +698,8 @@ A [`BlockMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/BlockMatrix
 most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` by calling `toBlockMatrix`.
 `toBlockMatrix` creates blocks of size 1024 x 1024 by default.
 Users may change the block size by supplying the values through `toBlockMatrix(rowsPerBlock, colsPerBlock)`.
+
+Refer to the [`BlockMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/distributed/BlockMatrix.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
@@ -682,6 +727,8 @@ BlockMatrix ata = matA.transpose().multiply(matA);
 A [`BlockMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.BlockMatrix) 
 can be created from an `RDD` of sub-matrix blocks, where a sub-matrix block is a 
 `((blockRowIndex, blockColIndex), sub-matrix)` tuple.
+
+Refer to the [`BlockMatrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.BlockMatrix) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.linalg import Matrices

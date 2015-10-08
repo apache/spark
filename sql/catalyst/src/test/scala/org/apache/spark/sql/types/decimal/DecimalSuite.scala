@@ -44,6 +44,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkDecimal(Decimal(170L, 4, 2), "1.70", 4, 2)
     checkDecimal(Decimal(17L, 24, 1), "1.7", 24, 1)
     checkDecimal(Decimal(1e17.toLong, 18, 0), 1e17.toLong.toString, 18, 0)
+    checkDecimal(Decimal(1000000000000000000L, 20, 2), "10000000000000000.00", 20, 2)
     checkDecimal(Decimal(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal(Decimal(Long.MinValue), Long.MinValue.toString, 20, 0)
     intercept[IllegalArgumentException](Decimal(170L, 2, 1))
