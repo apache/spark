@@ -135,4 +135,25 @@ class AnalysisSuite extends AnalysisTest {
     plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
     checkAnalysis(plan, plan)
   }
+
+  test("SPARK-8654: invalid CAST in NULL IN(...) expression") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(2))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-8654: different types in inlist but can be converted to a commmon type") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(1.2345))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-8654: check type compatibility error") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(true), Literal(1))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))
+  }
 }
