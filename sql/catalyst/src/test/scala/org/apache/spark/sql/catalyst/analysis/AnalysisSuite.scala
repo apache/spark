@@ -154,6 +154,7 @@ class AnalysisSuite extends AnalysisTest {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(true), Literal(1))), "a")() :: Nil,
       LocalRelation()
     )
-    assertAnalysisError(plan,Seq("cannot resolve 'null IN (true,1)' due to data type mismatch: Arguments must be same type"))
+    assertAnalysisError(plan, Seq("cannot resolve 'null IN (true,1)' due to data " +
+                                 "type mismatch: Arguments must be same type"))
   }
 }

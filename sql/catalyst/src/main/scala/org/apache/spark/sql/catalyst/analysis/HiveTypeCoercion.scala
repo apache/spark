@@ -314,7 +314,7 @@ object HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       case i @ In(a, b) if (a.dataType == NullType) =>
-        var inTypes:Seq[DataType] = Seq.empty
+        var inTypes : Seq[DataType] = Seq.empty
         b.foreach(e => inTypes = inTypes ++ Seq(e.dataType))
         findWiderCommonType(inTypes) match {
           case Some(finalDataType) => Literal.create(null, BooleanType)
