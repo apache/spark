@@ -178,28 +178,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("read standard Parquet file under legacy mode") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "false") {
-        sqlContext
-          .range(4)
-          .selectExpr("NAMED_STRUCT('a', id, 'b', ARRAY(id, id + 1, id + 2)) AS s")
-          .write
-          .parquet(path)
-      }
-
-      withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
-        checkAnswer(
-          sqlContext.read.parquet(path),
-          (0 until 4).map {
-            id => Row(Row(id, Seq(id, id + 1, id + 2)))
-          })
-      }
-    }
-  }
-
   test("nulls") {
     val allNulls = (
       null.asInstanceOf[java.lang.Boolean],
