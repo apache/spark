@@ -280,16 +280,21 @@ private[tree] class LearningNode(
   }
 
   /**
-   * Get the node corresponding to this data point.
+   * Get the node index corresponding to this data point.
    * This function mimics prediction, passing an example from the root node down to a leaf
-   * or unsplit node; that node is returned.
+   * or unsplit node; that node's index is returned.
    *
    * @param binnedFeatures  Binned feature vector for data point.
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
+   * @return  Leaf index if the data point reaches a leaf.
+   *          Otherwise, last node reachable in tree matching this example.
+   *          Note: This is the global node index, i.e., the index used in the tree.
+   *                This index is different from the index used during training a particular
+   *                group of nodes on one call to [[findBestSplits()]].
    */
-  def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): LearningNode = {
+  def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): Int = {
     if (this.isLeaf || this.split.isEmpty) {
-      this
+      this.id
     } else {
       val split = this.split.get
       val featureIndex = split.featureIndex
@@ -297,9 +302,9 @@ private[tree] class LearningNode(
       if (this.leftChild.isEmpty) {
         // Not yet split. Return next layer of nodes to train
         if (splitLeft) {
-          leftChild.get
+          LearningNode.leftChildIndex(this.id)
         } else {
-          rightChild.get
+          LearningNode.rightChildIndex(this.id)
         }
       } else {
         if (splitLeft) {
