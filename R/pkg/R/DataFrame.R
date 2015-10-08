@@ -1849,4 +1849,7 @@ setMethod("as.data.frame",
               stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
             }
             collect(x)
-          })
+          }
+)
+
+

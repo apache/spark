@@ -1340,6 +1340,29 @@ test_that("cov() and corr() on a DataFrame", {
   result <- corr(df, "singles", "doubles", "pearson")
   expect_true(abs(result - 1.0) < 1e-12)
 })
+  
+test_that("freqItems() on a DataFrame", {
+  input <- 1:1000
+  rdf <- data.frame(numbers = input, letters = as.character(input),
+                    negDoubles = input * -1.0, stringsAsFactors = F)
+  rdf[ input %% 3 == 0, ] <- c(1, "1", -1)
+  df <- createDataFrame(sqlContext, rdf)
+  multiColResults <- freqItems(df, c("numbers", "letters"), support=0.1)
+  expect_true(1 %in% multiColResults$numbers[[1]])
+  expect_true("1" %in% multiColResults$letters[[1]])
+  singleColResult <- freqItems(df, "negDoubles", support=0.1)
+  expect_true(-1 %in% head(singleColResult$negDoubles)[[1]])
+})
+
+test_that("freqItems2() on a DataFrame", {
+  l <- lapply(c(0:99), function(i) {
+    if (i %% 2 == 0) { list(1L, -1.0) }
+    else { list(i, i * -1.0) }})
+  df <- createDataFrame(sqlContext, l, c("a", "b"))
+  result <- freqItems(df, c("a", "b"), 0.4)
+  expect_identical(result[[1]], list(list(1L, 99L)))
+  expect_identical(result[[2]], list(list(-1, -99)))
+})
 
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
