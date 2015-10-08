@@ -102,6 +102,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
     val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE)
     val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
+    val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
     val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
 
     test(s"$columnType append/extract") {
@@ -109,22 +110,14 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       seq.foreach(columnType.append(_, 0, buffer))
 
       buffer.rewind()
-      seq.foreach { expected =>
-        logInfo("buffer = " + buffer + ", expected = " + expected)
-        val extracted = columnType.extract(buffer)
-        assert(expected.get(0, columnType.dataType) === extracted,
-          "Extracted value didn't equal to the original one. " +
-            hexDump(expected) + " != " + hexDump(extracted) +
-            ", buffer = " + dumpBuffer(buffer.duplicate().rewind().asInstanceOf[ByteBuffer]))
+      seq.foreach { row =>
+        logInfo("buffer = " + buffer + ", expected = " + row)
+        val expected = converter(row.get(0, columnType.dataType))
+        val extracted = converter(columnType.extract(buffer))
+        assert(expected === extracted,
+          s"Extracted value didn't equal to the original one. $expected != $extracted, buffer =" +
+          dumpBuffer(buffer.duplicate().rewind().asInstanceOf[ByteBuffer]))
       }
-    }
-  }
-
-  private def hexDump(value: Any): String = {
-    if (value == null) {
-      ""
-    } else {
-      value.toString.map(ch => Integer.toHexString(ch & 0xffff)).mkString(" ")
     }
   }
 

@@ -80,12 +80,6 @@ private[sql] object EnsureRowFormats extends Rule[SparkPlan] {
     operator.canProcessSafeRows && operator.canProcessUnsafeRows
 
   override def apply(operator: SparkPlan): SparkPlan = operator.transformUp {
-    case operator: InMemoryColumnarTableScan if !operator.relation.child.outputsUnsafeRows =>
-      val cache = operator.relation
-      val newCache = InMemoryRelation(cache.useCompression, cache.batchSize, cache.storageLevel,
-        ConvertToUnsafe(cache.child), cache.tableName)
-      operator.copy(relation = newCache)
-
     case operator: SparkPlan if onlyHandlesSafeRows(operator) =>
       if (operator.children.exists(_.outputsUnsafeRows)) {
         operator.withNewChildren {

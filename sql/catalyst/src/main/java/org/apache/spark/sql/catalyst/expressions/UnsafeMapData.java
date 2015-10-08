@@ -65,22 +65,6 @@ public class UnsafeMapData extends MapData {
   }
 
   @Override
-  public int hashCode() {
-    int h = numElements;
-    return (h * 31 + keys.hashCode()) * 31 + values.hashCode();
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    if (obj instanceof UnsafeMapData) {
-      UnsafeMapData map = (UnsafeMapData) obj;
-      return numElements == map.numElements && keys.equals(map.keyArray())
-        && values.equals(map.valueArray());
-    }
-    return false;
-  }
-
-  @Override
   public UnsafeMapData copy() {
     return new UnsafeMapData(keys.copy(), values.copy());
   }

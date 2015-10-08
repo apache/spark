@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
+import org.apache.spark.sql.execution.{ConvertToUnsafe, LeafNode, SparkPlan}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{Accumulable, Accumulator, Accumulators}
 
@@ -37,8 +37,15 @@ private[sql] object InMemoryRelation {
       batchSize: Int,
       storageLevel: StorageLevel,
       child: SparkPlan,
-      tableName: Option[String]): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
+      tableName: Option[String]): InMemoryRelation = {
+    val newChild = if (child.outputsUnsafeRows) {
+      child
+    } else {
+      ConvertToUnsafe(child)
+    }
+    new InMemoryRelation(newChild.output, useCompression, batchSize, storageLevel, newChild,
+      tableName)()
+  }
 }
 
 private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: InternalRow)
@@ -198,9 +205,6 @@ private[sql] case class InMemoryColumnarTableScan(
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
   extends LeafNode {
-
-  override def canProcessSafeRows: Boolean = false
-  override def canProcessUnsafeRows: Boolean = true
 
   override def output: Seq[Attribute] = attributes
 
