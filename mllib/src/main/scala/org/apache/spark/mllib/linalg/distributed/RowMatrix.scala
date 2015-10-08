@@ -359,8 +359,9 @@ class RowMatrix @Since("1.0.0") (
       alpha = m / m1 * mean(i)
       j = i
       while (j < n) {
-        G(i, j) = G(i, j) / m1 - alpha * mean(j)
-        G(j, i) = G(i, j)
+        val Gij = G(i, j) / m1 - alpha * mean(j)
+        G(i, j) = Gij
+        G(j, i) = Gij
         j += 1
       }
       i += 1
