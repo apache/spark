@@ -317,6 +317,10 @@ def parse_args():
     parser.add_option(
         "--instance-profile-name", default=None,
         help="IAM profile name to launch instances under")
+    parser.add_option(
+        "--aws-profile-name", default=None,
+        help="Use aws profile credentials")
+
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -1315,7 +1319,10 @@ def real_main():
         sys.exit(1)
 
     try:
-        conn = ec2.connect_to_region(opts.region)
+        if opts.aws_profile_name != None:
+            conn = ec2.connect_to_region(opts.region, profile_name = opts.aws_profile_name)
+        else:
+            conn = ec2.connect_to_region(opts.region)
     except Exception as e:
         print((e), file=stderr)
         sys.exit(1)
