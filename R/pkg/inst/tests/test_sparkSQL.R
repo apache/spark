@@ -673,6 +673,13 @@ test_that("select with column", {
   expect_equal(columns(df3), c("x"))
   expect_equal(count(df3), 3)
   expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
+
+  df4 <- select(df, c("name", "age"))
+  expect_equal(columns(df4), c("name", "age"))
+  expect_equal(count(df4), 3)
+
+  expect_error(select(df, c("name", "age"), "name"),
+                "To select multiple columns, use a character vector or list for col")
 })
 
 test_that("subsetting", {
@@ -982,7 +989,7 @@ test_that("arrange() and orderBy() on a DataFrame", {
   sorted <- arrange(df, df$age)
   expect_equal(collect(sorted)[1,2], "Michael")
 
-  sorted2 <- arrange(df, "name")
+  sorted2 <- arrange(df, "name", decreasing = FALSE)
   expect_equal(collect(sorted2)[2,"age"], 19)
 
   sorted3 <- orderBy(df, asc(df$age))
@@ -992,6 +999,15 @@ test_that("arrange() and orderBy() on a DataFrame", {
   sorted4 <- orderBy(df, desc(df$name))
   expect_equal(first(sorted4)$name, "Michael")
   expect_equal(collect(sorted4)[3,"name"], "Andy")
+
+  sorted5 <- arrange(df, "age", "name", decreasing = TRUE)
+  expect_equal(collect(sorted5)[1,2], "Andy")
+
+  sorted6 <- arrange(df, "age","name", decreasing = c(T, F))
+  expect_equal(collect(sorted6)[1,2], "Andy")
+
+  sorted7 <- arrange(df, "name", decreasing = FALSE)
+  expect_equal(collect(sorted7)[2,"age"], 19)
 })
 
 test_that("filter() on a DataFrame", {
@@ -1322,9 +1338,28 @@ test_that("crosstab() on a DataFrame", {
   expect_identical(expected, ordered)
 })
 
+test_that("cov() and corr() on a DataFrame", {
+  l <- lapply(c(0:9), function(x) { list(x, x * 2.0) })
+  df <- createDataFrame(sqlContext, l, c("singles", "doubles"))
+  result <- cov(df, "singles", "doubles")
+  expect_true(abs(result - 55.0 / 3) < 1e-12)
+
+  result <- corr(df, "singles", "doubles")
+  expect_true(abs(result - 1.0) < 1e-12)
+  result <- corr(df, "singles", "doubles", "pearson")
+  expect_true(abs(result - 1.0) < 1e-12)
+})
+
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
   expect_equal(grepl("Table Not Found: blah", retError), TRUE)
+})
+
+test_that("Method as.data.frame as a synonym for collect()", {
+  irisDF <- createDataFrame(sqlContext, iris)
+  expect_equal(as.data.frame(irisDF), collect(irisDF))
+  irisDF2 <- irisDF[irisDF$Species == "setosa", ]
+  expect_equal(as.data.frame(irisDF2), collect(irisDF2))
 })
 
 unlink(parquetPath)

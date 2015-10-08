@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{File, DataOutputStream, ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{File, ByteArrayInputStream, ByteArrayOutputStream}
 
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.Utils
@@ -41,7 +42,7 @@ class ClosableByteArrayInputStream(buf: Array[Byte]) extends ByteArrayInputStrea
   }
 }
 
-class UnsafeRowSerializerSuite extends SparkFunSuite {
+class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
 
   private def toUnsafeRow(row: Row, schema: Array[DataType]): UnsafeRow = {
     val converter = unsafeRowConverter(schema)
@@ -87,11 +88,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite {
   }
 
   test("close empty input stream") {
-    val baos = new ByteArrayOutputStream()
-    val dout = new DataOutputStream(baos)
-    dout.writeInt(-1)  // EOF
-    dout.flush()
-    val input = new ClosableByteArrayInputStream(baos.toByteArray)
+    val input = new ClosableByteArrayInputStream(Array.empty)
     val serializer = new UnsafeRowSerializer(numFields = 2).newInstance()
     val deserializerIter = serializer.deserializeStream(input).asKeyValueIterator
     assert(!deserializerIter.hasNext)
@@ -142,5 +139,17 @@ class UnsafeRowSerializerSuite extends SparkFunSuite {
         outputFile.delete()
       }
     }
+  }
+
+  test("SPARK-10403: unsafe row serializer with UnsafeShuffleManager") {
+    val conf = new SparkConf()
+      .set("spark.shuffle.manager", "tungsten-sort")
+    sc = new SparkContext("local", "test", conf)
+    val row = Row("Hello", 123)
+    val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
+    val rowsRDD = sc.parallelize(Seq((0, unsafeRow), (1, unsafeRow), (0, unsafeRow)))
+      .asInstanceOf[RDD[Product2[Int, InternalRow]]]
+    val shuffled = new ShuffledRowRDD(rowsRDD, new UnsafeRowSerializer(2), 2)
+    shuffled.count()
   }
 }

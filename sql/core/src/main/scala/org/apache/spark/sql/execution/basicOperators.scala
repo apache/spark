@@ -20,18 +20,12 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
+import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
-import org.apache.spark.util.{CompletionIterator, MutablePair}
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
 /**
@@ -204,7 +198,7 @@ case class Limit(limit: Int, child: SparkPlan)
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def executeCollect(): Array[Row] = child.executeTake(limit)
+  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val rdd: RDD[_ <: Product2[Boolean, InternalRow]] = if (sortBasedShuffleOn) {
@@ -258,9 +252,8 @@ case class TakeOrderedAndProject(
     projection.map(data.map(_)).getOrElse(data)
   }
 
-  override def executeCollect(): Array[Row] = {
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    collectData().map(converter(_).asInstanceOf[Row])
+  override def executeCollect(): Array[InternalRow] = {
+    collectData()
   }
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
@@ -280,10 +273,12 @@ case class TakeOrderedAndProject(
 /**
  * :: DeveloperApi ::
  * Return a new RDD that has exactly `numPartitions` partitions.
+ * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+ * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+ * the 100 new partitions will claim 10 of the current partitions.
  */
 @DeveloperApi
-case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
-  extends UnaryNode {
+case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = {
@@ -292,10 +287,11 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().map(_.copy()).coalesce(numPartitions, shuffle)
+    child.execute().map(_.copy()).coalesce(numPartitions, shuffle = false)
   }
-}
 
+  override def canProcessUnsafeRows: Boolean = true
+}
 
 /**
  * :: DeveloperApi ::

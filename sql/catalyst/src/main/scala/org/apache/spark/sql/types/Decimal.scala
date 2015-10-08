@@ -88,7 +88,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (precision < 19) {
         return null  // Requested precision is too low to represent this value
       }
-      this.decimalVal = BigDecimal(unscaled)
+      this.decimalVal = BigDecimal(unscaled, scale)
       this.longVal = 0L
     } else {
       val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
@@ -145,7 +145,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  def toJavaBigDecimal: java.math.BigDecimal = toBigDecimal.underlying()
+  def toJavaBigDecimal: java.math.BigDecimal = {
+    if (decimalVal.ne(null)) {
+      decimalVal.underlying()
+    } else {
+      java.math.BigDecimal.valueOf(longVal, _scale)
+    }
+  }
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {

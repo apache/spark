@@ -282,7 +282,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       )
 
       table("test_parquet_ctas").queryExecution.optimizedPlan match {
-        case LogicalRelation(_: ParquetRelation) => // OK
+        case LogicalRelation(_: ParquetRelation, _) => // OK
         case _ => fail(
           "test_parquet_ctas should be converted to " +
               s"${classOf[ParquetRelation].getCanonicalName }")
@@ -369,7 +369,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       assertResult(2) {
         analyzed.collect {
-          case r@LogicalRelation(_: ParquetRelation) => r
+          case r @ LogicalRelation(_: ParquetRelation, _) => r
         }.size
       }
     }
@@ -378,7 +378,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   def collectParquetRelation(df: DataFrame): ParquetRelation = {
     val plan = df.queryExecution.analyzed
     plan.collectFirst {
-      case LogicalRelation(r: ParquetRelation) => r
+      case LogicalRelation(r: ParquetRelation, _) => r
     }.getOrElse {
       fail(s"Expecting a ParquetRelation2, but got:\n$plan")
     }
@@ -428,7 +428,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       // Converted test_parquet should be cached.
       catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
-        case logical @ LogicalRelation(parquetRelation: ParquetRelation) => // OK
+        case logical @ LogicalRelation(parquetRelation: ParquetRelation, _) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +
@@ -620,7 +620,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
         val conf = Seq(
           HiveContext.CONVERT_METASTORE_PARQUET.key -> "false",
           SQLConf.PARQUET_BINARY_AS_STRING.key -> "true",
-          SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key -> "true")
+          SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "false")
 
         withSQLConf(conf: _*) {
           sql(
@@ -869,8 +869,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
         (1 to 10).map(i => Row(1, i, f"${i}_string")))
     }
 
-    // Re-enable this after SPARK-5508 is fixed
-    ignore(s"SPARK-5775 read array from $table") {
+    test(s"SPARK-5775 read array from $table") {
       checkAnswer(
         sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
         (1 to 10).map(i => Row(1 to i, 1)))

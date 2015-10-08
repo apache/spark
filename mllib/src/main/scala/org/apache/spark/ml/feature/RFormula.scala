@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
@@ -42,8 +43,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 /**
  * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '.', '~', '+', and '-'. Also see the
- * R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
+ * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
 @Experimental
 class RFormula(override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
@@ -82,36 +83,54 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     require(isDefined(formula), "Formula must be defined first.")
     val parsedFormula = RFormulaParser.parse($(formula))
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
-    // StringType terms and terms representing interactions need to be encoded before assembly.
-    // TODO(ekl) add support for feature interactions
     val encoderStages = ArrayBuffer[PipelineStage]()
+
+    val prefixesToRewrite = mutable.Map[String, String]()
     val tempColumns = ArrayBuffer[String]()
-    val takenNames = mutable.Set(dataset.columns: _*)
-    val encodedTerms = resolvedFormula.terms.map { term =>
+    def tmpColumn(category: String): String = {
+      val col = Identifiable.randomUID(category)
+      tempColumns += col
+      col
+    }
+
+    // First we index each string column referenced by the input terms.
+    val indexed: Map[String, String] = resolvedFormula.terms.flatten.distinct.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
-          val indexCol = term + "_idx_" + uid
-          val encodedCol = {
-            var tmp = term
-            while (takenNames.contains(tmp)) {
-              tmp += "_"
-            }
-            tmp
-          }
-          takenNames.add(indexCol)
-          takenNames.add(encodedCol)
-          encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
-          encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
-          tempColumns += indexCol
-          tempColumns += encodedCol
-          encodedCol
+          val indexCol = tmpColumn("stridx")
+          encoderStages += new StringIndexer()
+            .setInputCol(term)
+            .setOutputCol(indexCol)
+          (term, indexCol)
         case _ =>
-          term
+          (term, term)
       }
+    }.toMap
+
+    // Then we handle one-hot encoding and interactions between terms.
+    val encodedTerms = resolvedFormula.terms.map {
+      case Seq(term) if dataset.schema(term).dataType == StringType =>
+        val encodedCol = tmpColumn("onehot")
+        encoderStages += new OneHotEncoder()
+          .setInputCol(indexed(term))
+          .setOutputCol(encodedCol)
+        prefixesToRewrite(encodedCol + "_") = term + "_"
+        encodedCol
+      case Seq(term) =>
+        term
+      case terms =>
+        val interactionCol = tmpColumn("interaction")
+        encoderStages += new Interaction()
+          .setInputCols(terms.map(indexed).toArray)
+          .setOutputCol(interactionCol)
+        prefixesToRewrite(interactionCol + "_") = ""
+        interactionCol
     }
+
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
+    encoderStages += new VectorAttributeRewriter($(featuresCol), prefixesToRewrite.toMap)
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
@@ -217,4 +236,54 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   }
 
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
+}
+
+/**
+ * Utility transformer that rewrites Vector attribute names via prefix replacement. For example,
+ * it can rewrite attribute names starting with 'foo_' to start with 'bar_' instead.
+ *
+ * @param vectorCol name of the vector column to rewrite.
+ * @param prefixesToRewrite the map of string prefixes to their replacement values. Each attribute
+ *                          name defined in vectorCol will be checked against the keys of this
+ *                          map. When a key prefixes a name, the matching prefix will be replaced
+ *                          by the value in the map.
+ */
+private class VectorAttributeRewriter(
+    vectorCol: String,
+    prefixesToRewrite: Map[String, String])
+  extends Transformer {
+
+  override val uid = Identifiable.randomUID("vectorAttrRewriter")
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    val metadata = {
+      val group = AttributeGroup.fromStructField(dataset.schema(vectorCol))
+      val attrs = group.attributes.get.map { attr =>
+        if (attr.name.isDefined) {
+          val name = attr.name.get
+          val replacement = prefixesToRewrite.filter { case (k, _) => name.startsWith(k) }
+          if (replacement.nonEmpty) {
+            val (k, v) = replacement.headOption.get
+            attr.withName(v + name.stripPrefix(k))
+          } else {
+            attr
+          }
+        } else {
+          attr
+        }
+      }
+      new AttributeGroup(vectorCol, attrs).toMetadata()
+    }
+    val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
+    val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
+    dataset.select((otherCols :+ rewrittenCol): _*)
+  }
+
+  override def transformSchema(schema: StructType): StructType = {
+    StructType(
+      schema.fields.filter(_.name != vectorCol) ++
+      schema.fields.filter(_.name == vectorCol))
+  }
+
+  override def copy(extra: ParamMap): VectorAttributeRewriter = defaultCopy(extra)
 }

@@ -202,6 +202,10 @@ case object PostgresDialect extends JdbcDialect {
       Some(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
       Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("json")) {
+      Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
+      Some(StringType)
     } else None
   }
 
@@ -276,5 +280,10 @@ case object MsSqlServerDialect extends JdbcDialect {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
       Some(StringType)
     } else None
+  }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case _ => None
   }
 }

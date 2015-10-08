@@ -221,7 +221,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
 
             val aggregateOperator =
-              if (functionsWithDistinct.isEmpty) {
+              if (aggregateExpressions.map(_.aggregateFunction).exists(!_.supportsPartial)) {
+                if (functionsWithDistinct.nonEmpty) {
+                  sys.error("Distinct columns cannot exist in Aggregate operator containing " +
+                    "aggregate functions which don't support partial aggregation.")
+                } else {
+                  aggregate.Utils.planAggregateWithoutPartial(
+                    groupingExpressions,
+                    aggregateExpressions,
+                    aggregateFunctionMap,
+                    resultExpressions,
+                    planLater(child))
+                }
+              } else if (functionsWithDistinct.isEmpty) {
                 aggregate.Utils.planAggregateWithoutDistinct(
                   groupingExpressions,
                   aggregateExpressions,
@@ -324,7 +336,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
       case logical.Repartition(numPartitions, shuffle, child) =>
-        execution.Repartition(numPartitions, shuffle, planLater(child)) :: Nil
+        if (shuffle) {
+          execution.Exchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
+        } else {
+          execution.Coalesce(numPartitions, planLater(child)) :: Nil
+        }
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
