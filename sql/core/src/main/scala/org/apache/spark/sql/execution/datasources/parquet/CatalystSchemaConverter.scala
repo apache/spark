@@ -356,7 +356,7 @@ private[parquet] class CatalystSchemaConverter(
       // `TIMESTAMP_MICROS` which are both logical types annotating `INT64`.
       //
       // Originally, Spark SQL uses the same nanosecond timestamp type as Impala and Hive.  Starting
-      // from Spark 1.4.0, we resort to a timestamp type with 100 ns precision so that we can store
+      // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
       // a timestamp into a `Long`.  This design decision is subject to change though, for example,
       // we may resort to microsecond precision in the future.
       //

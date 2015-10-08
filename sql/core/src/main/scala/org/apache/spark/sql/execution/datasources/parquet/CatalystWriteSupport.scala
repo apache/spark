@@ -100,7 +100,9 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 
   override def write(row: InternalRow): Unit = {
-    consumeMessage(writeFields(row, schema, rootFieldWriters))
+    consumeMessage {
+      writeFields(row, schema, rootFieldWriters)
+    }
   }
 
   private def writeFields(
@@ -176,7 +178,9 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
       case t: StructType =>
         val fieldWriters = t.map(_.dataType).map(makeWriter)
         (row: SpecializedGetters, ordinal: Int) =>
-          consumeGroup(writeFields(row.getStruct(ordinal, t.length), t, fieldWriters))
+          consumeGroup {
+            writeFields(row.getStruct(ordinal, t.length), t, fieldWriters)
+          }
 
       case t: ArrayType => makeArrayWriter(t)
 
