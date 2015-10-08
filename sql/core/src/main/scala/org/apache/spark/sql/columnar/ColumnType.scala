@@ -450,123 +450,111 @@ private[sql] object LARGE_DECIMAL {
 }
 
 private[sql] case class STRUCT(dataType: StructType)
-  extends ByteArrayColumnType[InternalRow](20) {
+  extends ByteArrayColumnType[UnsafeRow](20) {
 
-  private val projection: UnsafeProjection =
-    UnsafeProjection.create(dataType)
   private val numOfFields: Int = dataType.fields.size
+  val unsafeRow = new UnsafeRow
 
-  override def setField(row: MutableRow, ordinal: Int, value: InternalRow): Unit = {
+  override def setField(row: MutableRow, ordinal: Int, value: UnsafeRow): Unit = {
     row.update(ordinal, value)
   }
 
-  override def getField(row: InternalRow, ordinal: Int): InternalRow = {
-    row.getStruct(ordinal, numOfFields)
+  override def getField(row: InternalRow, ordinal: Int): UnsafeRow = {
+    row.getStruct(ordinal, numOfFields).asInstanceOf[UnsafeRow]
   }
 
-  override def serialize(value: InternalRow): Array[Byte] = {
-    val unsafeRow = if (value.isInstanceOf[UnsafeRow]) {
-      value.asInstanceOf[UnsafeRow]
-    } else {
-      projection(value)
-    }
-    unsafeRow.getBytes
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    4 + getField(row, ordinal).getSizeInBytes
   }
 
-  override def deserialize(bytes: Array[Byte]): InternalRow = {
-    val unsafeRow = new UnsafeRow
+  override def serialize(value: UnsafeRow): Array[Byte] = {
+    value.getBytes
+  }
+
+  override def deserialize(bytes: Array[Byte]): UnsafeRow = {
     unsafeRow.pointTo(bytes, numOfFields, bytes.length)
     unsafeRow
   }
 
-  override def clone(v: InternalRow): InternalRow = v.copy()
+  override def clone(v: UnsafeRow): UnsafeRow = v.copy()
 }
 
 private[sql] case class ARRAY(dataType: ArrayType)
-  extends ByteArrayColumnType[ArrayData](16) {
+  extends ByteArrayColumnType[UnsafeArrayData](16) {
+  private val array = new UnsafeArrayData
 
-  private lazy val projection = UnsafeProjection.create(Array[DataType](dataType))
-  private val mutableRow = new GenericMutableRow(new Array[Any](1))
-
-  override def setField(row: MutableRow, ordinal: Int, value: ArrayData): Unit = {
+  override def setField(row: MutableRow, ordinal: Int, value: UnsafeArrayData): Unit = {
     row.update(ordinal, value)
   }
 
-  override def getField(row: InternalRow, ordinal: Int): ArrayData = {
-    row.getArray(ordinal)
+  override def getField(row: InternalRow, ordinal: Int): UnsafeArrayData = {
+    row.getArray(ordinal).asInstanceOf[UnsafeArrayData]
   }
 
-  override def serialize(value: ArrayData): Array[Byte] = {
-    val unsafeArray = if (value.isInstanceOf[UnsafeArrayData]) {
-      value.asInstanceOf[UnsafeArrayData]
-    } else {
-      mutableRow(0) = value
-      projection(mutableRow).getArray(0)
-    }
-    val outputBuffer =
-      ByteBuffer.allocate(4 + unsafeArray.getSizeInBytes).order(ByteOrder.nativeOrder())
-    outputBuffer.putInt(unsafeArray.numElements())
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    val unsafeArray = row.getArray(ordinal).asInstanceOf[UnsafeArrayData]
+    4 + 4 + unsafeArray.getSizeInBytes
+  }
+
+  override def serialize(value: UnsafeArrayData): Array[Byte] = {
+    val outputBuffer = ByteBuffer.allocate(4 + value.getSizeInBytes).order(ByteOrder.nativeOrder())
+    outputBuffer.putInt(value.numElements())
     val underlying = outputBuffer.array()
-    unsafeArray.writeToMemory(underlying, Platform.BYTE_ARRAY_OFFSET + 4)
+    value.writeToMemory(underlying, Platform.BYTE_ARRAY_OFFSET + 4)
     underlying
   }
 
-  override def deserialize(bytes: Array[Byte]): ArrayData = {
+  override def deserialize(bytes: Array[Byte]): UnsafeArrayData = {
     val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder())
     val numElements = buffer.getInt
-    val array = new UnsafeArrayData
     array.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET + 4, numElements, bytes.length - 4)
     array
   }
 
-  override def clone(v: ArrayData): ArrayData = v.copy()
+  override def clone(v: UnsafeArrayData): UnsafeArrayData = v.copy()
 }
 
-private[sql] case class MAP(dataType: MapType) extends ByteArrayColumnType[MapData](32) {
+private[sql] case class MAP(dataType: MapType) extends ByteArrayColumnType[UnsafeMapData](32) {
 
-  private lazy val projection: UnsafeProjection = UnsafeProjection.create(Array[DataType](dataType))
-  private val mutableRow = new GenericMutableRow(new Array[Any](1))
+  private val keyArray = new UnsafeArrayData
+  private val valueArray = new UnsafeArrayData
 
-  override def setField(row: MutableRow, ordinal: Int, value: MapData): Unit = {
+  override def setField(row: MutableRow, ordinal: Int, value: UnsafeMapData): Unit = {
     row.update(ordinal, value)
   }
 
-  override def getField(row: InternalRow, ordinal: Int): MapData = {
-    row.getMap(ordinal)
+  override def getField(row: InternalRow, ordinal: Int): UnsafeMapData = {
+    row.getMap(ordinal).asInstanceOf[UnsafeMapData]
   }
 
-  override def serialize(value: MapData): Array[Byte] = {
-    val unsafeMap = if (value.isInstanceOf[UnsafeMapData]) {
-      value.asInstanceOf[UnsafeMapData]
-    } else {
-      mutableRow(0) = value
-      projection(mutableRow).getMap(0)
-    }
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    val unsafeMap = getField(row, ordinal)
+    4 + 8 + unsafeMap.keyArray().getSizeInBytes + unsafeMap.valueArray().getSizeInBytes
+  }
 
+  override def serialize(value: UnsafeMapData): Array[Byte] = {
     val outputBuffer =
-      ByteBuffer.allocate(8 + unsafeMap.getSizeInBytes).order(ByteOrder.nativeOrder())
-    outputBuffer.putInt(unsafeMap.numElements())
-    val keyBytes = unsafeMap.keyArray().getSizeInBytes
+      ByteBuffer.allocate(8 + value.getSizeInBytes).order(ByteOrder.nativeOrder())
+    outputBuffer.putInt(value.numElements())
+    val keyBytes = value.keyArray().getSizeInBytes
     outputBuffer.putInt(keyBytes)
     val underlying = outputBuffer.array()
-    unsafeMap.keyArray().writeToMemory(underlying, Platform.BYTE_ARRAY_OFFSET + 8)
-    unsafeMap.valueArray().writeToMemory(underlying, Platform.BYTE_ARRAY_OFFSET + 8 + keyBytes)
+    value.keyArray().writeToMemory(underlying, Platform.BYTE_ARRAY_OFFSET + 8)
+    value.valueArray().writeToMemory(underlying, Platform.BYTE_ARRAY_OFFSET + 8 + keyBytes)
     underlying
   }
 
-  override def deserialize(bytes: Array[Byte]): MapData = {
+  override def deserialize(bytes: Array[Byte]): UnsafeMapData = {
     val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder())
     val numElements = buffer.getInt
     val keyArraySize = buffer.getInt
-    val keyArray = new UnsafeArrayData
-    val valueArray = new UnsafeArrayData
     keyArray.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET + 8, numElements, keyArraySize)
     valueArray.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET + 8 + keyArraySize, numElements,
       bytes.length - 8 - keyArraySize)
     new UnsafeMapData(keyArray, valueArray)
   }
 
-  override def clone(v: MapData): MapData = v.copy()
+  override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()
 }
 
 private[sql] object ColumnType {

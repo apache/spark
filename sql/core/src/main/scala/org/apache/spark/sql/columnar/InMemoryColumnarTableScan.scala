@@ -199,6 +199,9 @@ private[sql] case class InMemoryColumnarTableScan(
     @transient relation: InMemoryRelation)
   extends LeafNode {
 
+  override def canProcessSafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = true
+
   override def output: Seq[Attribute] = attributes
 
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)

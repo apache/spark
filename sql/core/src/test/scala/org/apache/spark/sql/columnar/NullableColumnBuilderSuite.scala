@@ -19,7 +19,7 @@ package org.apache.spark.sql.columnar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
 import org.apache.spark.sql.types._
 
 class TestNullableColumnBuilder[JvmType](columnType: ColumnType[JvmType])
@@ -51,6 +51,9 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       columnType: ColumnType[JvmType]): Unit = {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
+    val dataType = columnType.dataType
+    val proj = UnsafeProjection.create(Array[DataType](dataType))
+    val converter = CatalystTypeConverters.createToScalaConverter(dataType)
 
     test(s"$typeName column builder: empty column") {
       val columnBuilder = TestNullableColumnBuilder(columnType)
@@ -65,7 +68,7 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       val randomRow = makeRandomRow(columnType)
 
       (0 until 4).foreach { _ =>
-        columnBuilder.appendFrom(randomRow, 0)
+        columnBuilder.appendFrom(proj(randomRow), 0)
       }
 
       val buffer = columnBuilder.build()
@@ -77,12 +80,10 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       val columnBuilder = TestNullableColumnBuilder(columnType)
       val randomRow = makeRandomRow(columnType)
       val nullRow = makeNullRow(1)
-      val dataType = columnType.dataType
-      val converter = CatalystTypeConverters.createToScalaConverter(dataType)
 
       (0 until 4).foreach { _ =>
-        columnBuilder.appendFrom(randomRow, 0)
-        columnBuilder.appendFrom(nullRow, 0)
+        columnBuilder.appendFrom(proj(randomRow), 0)
+        columnBuilder.appendFrom(proj(nullRow), 0)
       }
 
       val buffer = columnBuilder.build()

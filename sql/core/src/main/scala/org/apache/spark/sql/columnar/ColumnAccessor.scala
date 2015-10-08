@@ -19,8 +19,7 @@ package org.apache.spark.sql.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.MutableRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.types._
 
@@ -109,15 +108,15 @@ private[sql] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalTy
   with NullableColumnAccessor
 
 private[sql] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
-  extends BasicColumnAccessor[InternalRow](buffer, STRUCT(dataType))
+  extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(dataType))
   with NullableColumnAccessor
 
 private[sql] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
-  extends BasicColumnAccessor[ArrayData](buffer, ARRAY(dataType))
+  extends BasicColumnAccessor[UnsafeArrayData](buffer, ARRAY(dataType))
   with NullableColumnAccessor
 
 private[sql] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
-  extends BasicColumnAccessor[MapData](buffer, MAP(dataType))
+  extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
