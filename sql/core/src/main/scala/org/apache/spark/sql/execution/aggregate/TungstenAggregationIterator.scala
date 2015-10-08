@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.{InternalAccumulator, Logging, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.expressions._
@@ -136,7 +138,7 @@ class TungstenAggregationIterator(
   }
 
   // Initialize all AggregateFunctions by binding references, if necessary,
-  // and seting inputBufferOffset and mutableBufferOffset.
+  // and setting inputBufferOffset and mutableBufferOffset.
   private[this] val allAggregateFunctions: Array[AggregateFunction2] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = initialInputBufferOffset
@@ -177,6 +179,29 @@ class TungstenAggregationIterator(
     }
     functions
   }
+
+  // Positions of those imperative aggregate functions in allAggregateFunctions.
+  // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
+  // func2 and func3 are imperative aggregate functions.
+  // ImperativeAggregateFunctionPositions will be [1, 2].
+  private[this] val allImperativeAggregateFunctionPositions: Array[Int] = {
+    val positions = new ArrayBuffer[Int]()
+    var i = 0
+    while (i < allAggregateFunctions.length) {
+      allAggregateFunctions(i) match {
+        case agg: DeclarativeAggregate =>
+        case _ => positions += i
+      }
+      i += 1
+    }
+    positions.toArray
+  }
+
+  // All imperative AggregateFunctions.
+  private[this] val allImperativeAggregateFunctions: Array[ImperativeAggregate] =
+    allImperativeAggregateFunctionPositions
+      .map(allAggregateFunctions)
+      .map(_.asInstanceOf[ImperativeAggregate])
 
   ///////////////////////////////////////////////////////////////////////////
   // Part 2: Methods and fields used by setting aggregation buffer values,
@@ -376,15 +401,26 @@ class TungstenAggregationIterator(
           case ae: DeclarativeAggregate => ae.evaluateExpression
            case agg: AggregateFunction2 => Literal.create(null, agg.dataType)
         }
-        val expressionAggEvalProjection = UnsafeProjection.create(evalExpressions, bufferAttributes)
+        val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)()
         // These are the attributes of the row produced by `expressionAggEvalProjection`
         val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
+        // TODO: Use unsafe row.
+        val aggregateResult = new GenericMutableRow(aggregateResultSchema.length)
+        expressionAggEvalProjection.target(aggregateResult)
         val resultProjection =
           UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateResultSchema)
 
         (currentGroupingKey: UnsafeRow, currentBuffer: UnsafeRow) => {
           // Generate results for all expression-based aggregate functions.
-          val aggregateResult = expressionAggEvalProjection.apply(currentBuffer)
+          expressionAggEvalProjection(currentBuffer)
+          // Generate results for all imperative aggregate functions.
+          var i = 0
+          while (i < allImperativeAggregateFunctions.length) {
+            aggregateResult.update(
+              allImperativeAggregateFunctionPositions(i),
+              allImperativeAggregateFunctions(i).eval(currentBuffer))
+            i += 1
+          }
           resultProjection(joinedRow(currentGroupingKey, aggregateResult))
         }
 

@@ -360,6 +360,7 @@ abstract class AggregationIterator(
         val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
         // TODO: Use unsafe row.
         val aggregateResult = new GenericMutableRow(aggregateResultSchema.length)
+        expressionAggEvalProjection.target(aggregateResult)
         val resultProjection =
           newMutableProjection(
             resultExpressions, groupingKeyAttributes ++ aggregateResultSchema)()
@@ -367,7 +368,7 @@ abstract class AggregationIterator(
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           // Generate results for all expression-based aggregate functions.
-          expressionAggEvalProjection.target(aggregateResult)(currentBuffer)
+          expressionAggEvalProjection(currentBuffer)
           // Generate results for all imperative aggregate functions.
           var i = 0
           while (i < allImperativeAggregateFunctions.length) {
