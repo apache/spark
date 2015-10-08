@@ -343,7 +343,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, null, 110.0, null, null, 10.0) :: Nil)
   }
 
-  test("non-AlgebraicAggregate aggreguate function") {
+  test("interpreted aggregate function") {
     checkAnswer(
       sqlContext.sql(
         """
@@ -368,7 +368,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(null) :: Nil)
   }
 
-  test("non-AlgebraicAggregate and AlgebraicAggregate aggreguate function") {
+  test("interpreted and expression-based aggregation functions") {
     checkAnswer(
       sqlContext.sql(
         """

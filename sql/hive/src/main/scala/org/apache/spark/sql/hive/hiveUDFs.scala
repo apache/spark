@@ -554,7 +554,7 @@ private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
     isUDAFBridgeRequired: Boolean = false)
-  extends AggregateFunction2 with HiveInspectors {
+  extends ImperativeAggregate with HiveInspectors {
 
   def this() = this(null, null)
 
@@ -598,7 +598,7 @@ private[hive] case class HiveUDAFFunction(
 
   // Hive UDAF has its own buffer, so we don't need to occupy a slot in the aggregation
   // buffer for it.
-  override def bufferSchema: StructType = StructType(Nil)
+  override def aggBufferSchema: StructType = StructType(Nil)
 
   override def update(_buffer: MutableRow, input: InternalRow): Unit = {
     val inputs = inputProjection(input)
@@ -610,13 +610,11 @@ private[hive] case class HiveUDAFFunction(
       "Hive UDAF doesn't support partial aggregate")
   }
 
-  override def cloneBufferAttributes: Seq[Attribute] = Nil
-
   override def initialize(_buffer: MutableRow): Unit = {
     buffer = function.getNewAggregationBuffer
   }
 
-  override def bufferAttributes: Seq[AttributeReference] = Nil
+  override def aggBufferAttributes: Seq[AttributeReference] = Nil
 
   // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
   // catalyst type checking framework.

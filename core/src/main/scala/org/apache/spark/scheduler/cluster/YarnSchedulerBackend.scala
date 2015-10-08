@@ -169,7 +169,7 @@ private[spark] abstract class YarnSchedulerBackend(
     override def receive: PartialFunction[Any, Unit] = {
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
-        amEndpoint = Some(am)
+        amEndpoint = Option(am)
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
