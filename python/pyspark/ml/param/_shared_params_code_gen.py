@@ -121,7 +121,7 @@ if __name__ == "__main__":
         ("checkpointInterval", "checkpoint interval (>= 1)", None),
         ("seed", "random seed", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms", None),
-        ("stepSize", "Step size to be used for each iteration of optimization.", None),
+        ("stepSize", "Step size to be used for each iteration of optimization", None),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
          "out rows with bad values), or error (which will throw an errror). More options may be " +
          "added later", None),
