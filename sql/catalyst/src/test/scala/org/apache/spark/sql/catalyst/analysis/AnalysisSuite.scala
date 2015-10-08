@@ -142,4 +142,18 @@ class AnalysisSuite extends AnalysisTest {
     )
     assertAnalysisSuccess(plan)
   }
+
+  test("SPARK-8654: different types in inlist but can be converted to a commmon type") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(1.2345))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-8654: check type compatibility error") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(true), Literal(1))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisError(plan,Seq("cannot resolve 'null IN (true,1)' due to data type mismatch: Arguments must be same type"))
+  }
 }

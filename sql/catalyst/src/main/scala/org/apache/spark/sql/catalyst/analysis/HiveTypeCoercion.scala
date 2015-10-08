@@ -314,7 +314,12 @@ object HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       case i @ In(a, b) if (a.dataType == NullType) =>
-        Literal.create(null, BooleanType)
+        var inTypes:Seq[DataType] = Seq.empty
+        b.foreach(e => inTypes = inTypes ++ Seq(e.dataType))
+        findWiderCommonType(inTypes) match {
+          case Some(finalDataType) => Literal.create(null, BooleanType)
+          case None => i
+        }
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
