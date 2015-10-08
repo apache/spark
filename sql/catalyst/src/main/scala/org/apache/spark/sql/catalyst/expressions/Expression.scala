@@ -174,7 +174,13 @@ abstract class Expression extends TreeNode[Expression] {
     }.toString
   }
 
-  override def toString: String = prettyName + children.mkString("(", ",", ")")
+
+  private def flatArguments = productIterator.flatMap {
+    case t: Traversable[_] => t
+    case single => single :: Nil
+  }
+
+  override def toString: String = prettyName + flatArguments.mkString("(", ",", ")")
 }
 
 
