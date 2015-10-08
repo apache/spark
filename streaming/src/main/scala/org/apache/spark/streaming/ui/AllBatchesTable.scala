@@ -17,11 +17,6 @@
 
 package org.apache.spark.streaming.ui
 
-import java.text.SimpleDateFormat
-import java.util.Date
-
-import akka.remote.SeqNo
-
 import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
@@ -48,7 +43,8 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
     val formattedProcessingTime = processingTime.map(SparkUIUtils.formatDuration).getOrElse("-")
     val batchTimeId = s"batch-$batchTime"
 
-    <td id={batchTimeId} sorttable_customkey={batchTime.toString}>
+    <td id={batchTimeId} sorttable_customkey={batchTime.toString}
+        isFailed={batch.isFailed.toString}>
       <a href={s"batch?id=$batchTime"}>
         {formattedBatchTime}
       </a>

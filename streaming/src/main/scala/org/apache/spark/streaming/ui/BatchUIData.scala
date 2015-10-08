@@ -105,6 +105,10 @@ private[ui] case class BatchUIData(
       op => op.failureReason.isEmpty && op.endTime.nonEmpty
     }
 
+  /**
+   * Return if this batch has any output operations
+   */
+  def isFailed: Boolean = numFailedOutputOp != 0
 }
 
 private[ui] object BatchUIData {
