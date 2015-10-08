@@ -34,7 +34,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @tparam JvmType Underlying Java type to represent the elements.
  */
-private[sql] sealed abstract class ColumnType[JvmType] {
+private[sql]
+sealed abstract class ColumnType[@specialized(Boolean, Byte, Short, Int, Long) JvmType] {
 
   // The catalyst data type of this column.
   def dataType: DataType
@@ -87,7 +88,6 @@ private[sql] sealed abstract class ColumnType[JvmType] {
    */
   def setField(row: MutableRow, ordinal: Int, value: JvmType): Unit
 
-  @specialized(Boolean, Byte, Short, Int, Long)
   def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
