@@ -43,10 +43,11 @@ private[spark] trait ShuffleManager {
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle
 
-  /** Get a writer for a given partition. Called on executors by map tasks.
-    * Implementations should call [[addShuffleAttempt]] to update internal state, so we can track
-    * all attempts for each shuffle.
-    * */
+  /**
+   * Get a writer for a given partition. Called on executors by map tasks.
+   * Implementations should call [[addShuffleAttempt]] to update internal state, so we can track
+   * all attempts for each shuffle.
+   */
   def getWriter[K, V](
       handle: ShuffleHandle,
       mapId: Int,
