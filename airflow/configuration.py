@@ -95,6 +95,7 @@ airflow_home = {AIRFLOW_HOME}
 dags_folder = {AIRFLOW_HOME}/dags
 
 # The folder where airflow should store its log files
+# For S3, use the full URL to the base folder (starting with "s3://...")
 base_log_folder = {AIRFLOW_HOME}/logs
 
 # The executor class that airflow should use. Choices include
