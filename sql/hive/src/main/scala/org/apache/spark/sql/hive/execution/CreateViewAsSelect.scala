@@ -32,7 +32,8 @@ import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 private[hive] case class CreateViewAsSelect(
     tableDesc: HiveTable,
     childSchema: Seq[Attribute],
-    allowExisting: Boolean) extends RunnableCommand {
+    allowExisting: Boolean,
+    orReplace: Boolean) extends RunnableCommand {
 
   assert(tableDesc.schema == Nil || tableDesc.schema.length == childSchema.length)
   assert(tableDesc.viewText.isDefined)
@@ -41,46 +42,52 @@ private[hive] case class CreateViewAsSelect(
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val database = tableDesc.database
     val viewName = tableDesc.name
-    val viewText = tableDesc.viewText.get
 
     if (hiveContext.catalog.tableExists(Seq(database, viewName))) {
       if (allowExisting) {
         // view already exists, will do nothing, to keep consistent with Hive
+      } else if (orReplace) {
+        hiveContext.catalog.client.alertView(prepareTable())
       } else {
         throw new AnalysisException(s"$database.$viewName already exists.")
       }
     } else {
-      // setup column types according to the schema of child.
-      val schema = if (tableDesc.schema == Nil) {
-        childSchema.map { attr =>
-          HiveColumn(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
-        }
-      } else {
-        childSchema.zip(tableDesc.schema).map { case (attr, col) =>
-          HiveColumn(col.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), col.comment)
-        }
-      }
-
-      val columnNames = childSchema.map(f => verbose(f.name))
-
-      // When user specified column names for view, we should create a project to do the renaming.
-      // When no column name specified, we still need to create a project to declare the columns
-      // we need, to make us more robust to top level `*`s.
-      val projectList = if (tableDesc.schema == Nil) {
-        columnNames.mkString(", ")
-      } else {
-        columnNames.zip(tableDesc.schema.map(f => verbose(f.name))).map {
-          case (name, alias) => s"$name AS $alias"
-        }.mkString(", ")
-      }
-
-      val expandedText = s"SELECT $projectList FROM ($viewText) ${verbose(viewName)}"
-
-      hiveContext.catalog.client.createView(
-        tableDesc.copy(schema = schema, viewText = Some(expandedText)))
+      hiveContext.catalog.client.createView(prepareTable())
     }
 
     Seq.empty[Row]
+  }
+
+  private def prepareTable(): HiveTable = {
+    // setup column types according to the schema of child.
+    val schema = if (tableDesc.schema == Nil) {
+      childSchema.map { attr =>
+        HiveColumn(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
+      }
+    } else {
+      childSchema.zip(tableDesc.schema).map { case (attr, col) =>
+        HiveColumn(col.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), col.comment)
+      }
+    }
+
+    val columnNames = childSchema.map(f => verbose(f.name))
+
+    // When user specified column names for view, we should create a project to do the renaming.
+    // When no column name specified, we still need to create a project to declare the columns
+    // we need, to make us more robust to top level `*`s.
+    val projectList = if (tableDesc.schema == Nil) {
+      columnNames.mkString(", ")
+    } else {
+      columnNames.zip(tableDesc.schema.map(f => verbose(f.name))).map {
+        case (name, alias) => s"$name AS $alias"
+      }.mkString(", ")
+    }
+
+    val viewName = verbose(tableDesc.name)
+
+    val expandedText = s"SELECT $projectList FROM (${tableDesc.viewText.get}) $viewName"
+
+    tableDesc.copy(schema = schema, viewText = Some(expandedText))
   }
 
   // escape backtick with double-backtick in column name and wrap it with backtick.

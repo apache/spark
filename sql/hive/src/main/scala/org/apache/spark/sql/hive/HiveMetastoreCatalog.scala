@@ -590,8 +590,12 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewAsSelect(table, child, allowExisting, sql) =>
+      case CreateViewAsSelect(table, child, allowExisting, orReplace, sql) =>
         if (conf.canonicalizeView) {
+          if (allowExisting && orReplace) {
+            throw new AnalysisException("Can't combine IF NOT EXISTS and OR REPLACE.")
+          }
+
           val (dbName, tblName) = processDatabaseAndTableName(
             table.specifiedDatabase.getOrElse(client.currentDatabase), table.name)
 
@@ -600,7 +604,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
               specifiedDatabase = Some(dbName),
               name = tblName),
             child.output,
-            allowExisting)
+            allowExisting,
+            orReplace)
         } else {
           HiveNativeCommand(sql)
         }

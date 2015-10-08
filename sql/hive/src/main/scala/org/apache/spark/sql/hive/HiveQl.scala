@@ -81,6 +81,7 @@ private[hive] case class CreateViewAsSelect(
     tableDesc: HiveTable,
     child: LogicalPlan,
     allowExisting: Boolean,
+    orReplace: Boolean,
     sql: String) extends UnaryNode with Command {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean = false
@@ -108,7 +109,6 @@ private[hive] object HiveQl extends Logging {
     "TOK_ALTERTABLE_SKEWED",
     "TOK_ALTERTABLE_TOUCH",
     "TOK_ALTERTABLE_UNARCHIVE",
-    "TOK_ALTERVIEW",
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
@@ -507,6 +507,42 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       }
   }
 
+  private def createView(
+      view: ASTNode,
+      context: Context,
+      viewNameParts: ASTNode,
+      query: ASTNode,
+      schema: Seq[HiveColumn],
+      properties: Map[String, String],
+      allowExist: Boolean,
+      orReplace: Boolean): CreateViewAsSelect = {
+    val (db, viewName) = extractDbNameTableName(viewNameParts)
+
+    val originalText = context.getTokenRewriteStream
+      .toString(query.getTokenStartIndex, query.getTokenStopIndex)
+
+    val tableDesc = HiveTable(
+      specifiedDatabase = db,
+      name = viewName,
+      schema = schema,
+      partitionColumns = Seq.empty[HiveColumn],
+      properties = properties,
+      serdeProperties = Map[String, String](),
+      tableType = VirtualView,
+      location = None,
+      inputFormat = None,
+      outputFormat = None,
+      serde = None,
+      viewText = Some(originalText))
+
+    // We need to keep the original SQL string so that if `spark.sql.canonicalizeView` is
+    // false, we can fall back to use hive native command later.
+    // We can remove this when parser is configurable(can access SQLConf) in the future.
+    val sql = context.getTokenRewriteStream
+      .toString(view.getTokenStartIndex, view.getTokenStopIndex)
+    CreateViewAsSelect(tableDesc, nodeToPlan(query, context), allowExist, orReplace, sql)
+  }
+
   protected def nodeToPlan(node: ASTNode, context: Context): LogicalPlan = node match {
     // Special drop table that also uncaches.
     case Token("TOK_DROPTABLE",
@@ -581,36 +617,46 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         }
       }
 
-     case view @ Token("TOK_CREATEVIEW", children)
+    case view @ Token("TOK_ALTERVIEW", children) =>
+      val Some(viewNameParts) :: maybeQuery :: ignores =
+        getClauses(Seq(
+          "TOK_TABNAME",
+          "TOK_QUERY",
+          "TOK_ALTERVIEW_ADDPARTS",
+          "TOK_ALTERVIEW_DROPPARTS",
+          "TOK_ALTERVIEW_PROPERTIES",
+          "TOK_ALTERVIEW_RENAME"), children)
+
+      // if ALTER VIEW doesn't have query part, let hive to handle it.
+      maybeQuery.map { query =>
+        createView(view, context, viewNameParts, query, Nil, Map(), false, true)
+      }.getOrElse(NativePlaceholder)
+
+    case view @ Token("TOK_CREATEVIEW", children)
         if children.collect { case t @ Token("TOK_QUERY", _) => t }.nonEmpty =>
       val Seq(
         Some(viewNameParts),
         Some(query),
         maybeComment,
+        orReplace,
         allowExisting,
         maybeProperties,
         maybeColumns,
         maybePartCols
-      ) = getClauses(
-        Seq(
-          "TOK_TABNAME",
-          "TOK_QUERY",
-          "TOK_TABLECOMMENT",
-          "TOK_IFNOTEXISTS",
-          "TOK_TABLEPROPERTIES",
-          "TOK_TABCOLNAME",
-          "TOK_VIEWPARTCOLS"),
-        children)
+      ) = getClauses(Seq(
+        "TOK_TABNAME",
+        "TOK_QUERY",
+        "TOK_TABLECOMMENT",
+        "TOK_ORREPLACE",
+        "TOK_IFNOTEXISTS",
+        "TOK_TABLEPROPERTIES",
+        "TOK_TABCOLNAME",
+        "TOK_VIEWPARTCOLS"), children)
 
       // If the view is partitioned, we let hive handle it.
       if (maybePartCols.isDefined) {
         NativePlaceholder
       } else {
-        val (db, viewName) = extractDbNameTableName(viewNameParts)
-
-        val originalText = context.getTokenRewriteStream
-          .toString(query.getTokenStartIndex, query.getTokenStopIndex)
-
         val schema = maybeColumns.map { cols =>
           BaseSemanticAnalyzer.getColumns(cols, true).asScala.map { field =>
             // We can't specify column types when create view, so fill it with null first, and
@@ -634,26 +680,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             }
         }
 
-        val tableDesc = HiveTable(
-          specifiedDatabase = db,
-          name = viewName,
-          schema = schema,
-          partitionColumns = Seq.empty[HiveColumn],
-          properties = properties.toMap,
-          serdeProperties = Map[String, String](),
-          tableType = VirtualView,
-          location = None,
-          inputFormat = None,
-          outputFormat = None,
-          serde = None,
-          viewText = Some(originalText))
-
-        // We need to keep the original SQL string so that if `spark.sql.canonicalizeView` is false,
-        // we can fall back to use hive native command later.
-        // We can remove this when parser is configurable(can access SQLConf) in the future.
-        val sql = context.getTokenRewriteStream
-          .toString(view.getTokenStartIndex, view.getTokenStopIndex)
-        CreateViewAsSelect(tableDesc, nodeToPlan(query, context), allowExisting.isDefined, sql)
+        createView(view, context, viewNameParts, query, schema, properties.toMap,
+          allowExisting.isDefined, orReplace.isDefined)
       }
 
     case Token("TOK_CREATETABLE", children)

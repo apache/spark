@@ -128,6 +128,9 @@ private[hive] trait ClientInterface {
   /** Creates a view with the given metadata. */
   def createView(view: HiveTable): Unit
 
+  /** Updates the given view with new metadata. */
+  def alertView(view: HiveTable): Unit
+
   /** Creates a table with the given metadata. */
   def createTable(table: HiveTable): Unit
 

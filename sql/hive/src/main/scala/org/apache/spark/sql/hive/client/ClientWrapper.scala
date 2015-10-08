@@ -354,7 +354,7 @@ private[hive] class ClientWrapper(
     qlTable
   }
 
-  override def createView(view: HiveTable): Unit = withHiveState {
+  private def toViewTable(view: HiveTable): metadata.Table = {
     // TODO: this is duplicated with `toQlTable` except the table type stuff.
     val tbl = new metadata.Table(view.database, view.name)
     tbl.setTableType(HTableType.VIRTUAL_VIEW)
@@ -374,7 +374,15 @@ private[hive] class ClientWrapper(
     // set create time
     tbl.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
 
-    client.createTable(tbl)
+    tbl
+  }
+
+  override def createView(view: HiveTable): Unit = withHiveState {
+    client.createTable(toViewTable(view))
+  }
+
+  override def alertView(view: HiveTable): Unit = withHiveState {
+    client.alterTable(view.qualifiedName, toViewTable(view))
   }
 
   override def createTable(table: HiveTable): Unit = withHiveState {
