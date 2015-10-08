@@ -70,7 +70,6 @@ object Utils {
     // Check if we can use TungstenAggregate.
     val usesTungstenAggregate =
       child.sqlContext.conf.unsafeEnabled &&
-      aggregateExpressions.forall(_.aggregateFunction.isInstanceOf[DeclarativeAggregate]) &&
       supportsTungstenAggregate(
         groupingExpressions,
         aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
