@@ -177,6 +177,8 @@ class CodeGenContext {
     case _: MapType => "MapData"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
+    case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
+    case ObjectType(cls) => cls.getName
     case _ => "Object"
   }
 
@@ -395,7 +397,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
-      evaluator.setDebuggingInformation(false, true, false)
+      evaluator.setDebuggingInformation(true, true, false)
       withLineNums
     })
 
