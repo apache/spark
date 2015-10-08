@@ -513,31 +513,6 @@ object Vectors {
     squaredDistance
   }
 
-  private def dot(a : DenseVector, b : DenseVector) : Double = {
-    (a.toArray zip b.toArray).map(x => (x._1 * x._2)).sum
-  }
-
-  private def dot(a : SparseVector, b : DenseVector) : Double = {
-    (a.indices zip a.values).map(x => { b(x._1)*x._2 }).sum
-  }
-
-  private def dot(a : SparseVector, b : SparseVector) : Double = {
-    var i = 0
-    var j = 0
-    var sum = 0.0
-    while ( i < a.indices.length && j < b.indices.length &&
-      (a.indices(i) < b.indices.last || b.indices(j) < a.indices.last) ) {
-      if ( a.indices(i) > b.indices(j) ) { j += 1 }
-      else if ( a.indices(i) < b.indices(j) ) { i += 1 }
-      else {
-        sum += a.values(i) * b.values(j)
-        i += 1
-        j += 1
-      }
-    }
-    sum
-  }
-
   /** Computes the dot or inner product between two vectors
     * @param a first Vector.
     * @param b second Vector.
@@ -546,12 +521,7 @@ object Vectors {
   @Since("1.6.0")
   def dot(a : Vector, b : Vector) : Double = {
     assert(a.size == b.size, "Size of vectors must match for dot product")
-    (a, b) match {
-      case (v1 : DenseVector,  v2 : DenseVector)  => dot(v1, v2)
-      case (v1 : DenseVector,  v2 : SparseVector) => dot(v2, v1)
-      case (v1 : SparseVector, v2 : DenseVector)  => dot(v1, v2)
-      case (v1 : SparseVector, v2 : SparseVector) => dot(v1, v2)
-    }
+    a.toBreeze.dot(b.toBreeze)
   }
 
   private def hadamard(a : DenseVector, b : DenseVector) : Vector = {
@@ -566,7 +536,7 @@ object Vectors {
     var i = 0
     var j = 0
     val indices = new ArrayBuffer[Int]
-    val values  = new ArrayBuffer[Double]
+    val values = new ArrayBuffer[Double]
     while ( i < a.indices.length && j < b.indices.length &&
       ( a.indices(i) < b.indices.last || b.indices(j) < a.indices.last ) ) {
       if ( a.indices(i) > b.indices(j) ) { j += 1 }
@@ -592,9 +562,9 @@ object Vectors {
   def hadamard( a : Vector, b : Vector ) : Vector = {
     assert(a.size == b.size, "Size of vectors must match for hadamard product")
     (a, b) match {
-      case (v1 : DenseVector,  v2 : DenseVector)  => hadamard(v1, v2)
-      case (v1 : DenseVector,  v2 : SparseVector) => hadamard(v2, v1)
-      case (v1 : SparseVector, v2 : DenseVector)  => hadamard(v1, v2)
+      case (v1 : DenseVector, v2 : DenseVector) => hadamard(v1, v2)
+      case (v1 : DenseVector, v2 : SparseVector) => hadamard(v2, v1)
+      case (v1 : SparseVector, v2 : DenseVector) => hadamard(v1, v2)
       case (v1 : SparseVector, v2 : SparseVector) => hadamard(v1, v2)
     }
   }
