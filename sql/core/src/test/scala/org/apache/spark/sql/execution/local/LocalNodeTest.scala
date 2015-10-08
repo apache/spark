@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.local
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{Expression, AttributeReference}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 
@@ -64,6 +64,24 @@ class LocalNodeTest extends SparkFunSuite {
             inputMap.getOrElse(u,
               sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
         }
+    }
+  }
+
+  /**
+   * Resolve all expressions in `expressions` based on the `output` of `localNode`.
+   * It assumes that all expressions in the `localNode` are resolved.
+   */
+  protected def resolveExpressions(
+      expressions: Seq[Expression],
+      localNode: LocalNode): Seq[Expression] = {
+    require(localNode.expressions.forall(_.resolved))
+    val inputMap = localNode.output.map { a => (a.name, a) }.toMap
+    expressions.map { expression =>
+      expression.transformUp {
+        case UnresolvedAttribute(Seq(u)) =>
+          inputMap.getOrElse(u,
+            sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
+      }
     }
   }
 
