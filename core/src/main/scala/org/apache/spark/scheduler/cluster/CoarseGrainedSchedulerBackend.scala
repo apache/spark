@@ -67,6 +67,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
+  // Number of executors requested from the cluster manager that have not been replaced yet
+  private var numReplacingExecutors = 0
+
   // A map to store hostname with its possible task number running on it
   protected var hostToLocalTaskCount: Map[String, Int] = Map.empty
 
@@ -148,6 +151,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
+            }
+            if (numReplacingExecutors > 0) {
+              numReplacingExecutors -= 1
+               logDebug(s"Decremented number of executors being replaced executors " +
+                s"($numReplacingExecutors left)")
             }
           }
           // Note: some tests expect the reply to come after we put the executor in the map
@@ -437,7 +445,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // take into account executors that are pending to be added or removed.
     if (!replace) {
       doRequestTotalExecutors(
-        numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)
+        numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
+        + numReplacingExecutors)
+    } else {
+      numReplacingExecutors += knownExecutors.size
     }
 
     doKillExecutors(executorsToKill)
