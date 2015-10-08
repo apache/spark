@@ -230,11 +230,49 @@ trait ScalaReflection {
         val objectType = ObjectType(boxedType)
         NewInstance(boxedType, UnresolvedAttribute(path) :: Nil, propagateNull = true, objectType)
 
+      case t if t <:< localTypeOf[java.sql.Date] =>
+        StaticInvoke(
+          DateTimeUtils,
+          ObjectType(classOf[java.sql.Date]),
+          "toJavaDate",
+          UnresolvedAttribute(path) :: Nil,
+          propagateNull = true)
+
+      case t if t <:< localTypeOf[java.sql.Timestamp] =>
+        StaticInvoke(
+          DateTimeUtils,
+          ObjectType(classOf[java.sql.Timestamp]),
+          "toJavaTimestamp",
+          UnresolvedAttribute(path) :: Nil,
+          propagateNull = true)
+
       case t if t <:< localTypeOf[java.lang.String] =>
         Invoke(UnresolvedAttribute(path), "toString", ObjectType(classOf[String]))
 
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
         Invoke(UnresolvedAttribute(path), "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]))
+
+      case t if t <:< localTypeOf[Array[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val elementDataType = dataTypeFor(elementType)
+        val Schema(dataType, nullable) = schemaFor(elementType)
+
+        val primitiveMethod = elementType match {
+          case t if t <:< definitions.IntTpe => Some("toIntArray")
+          case t if t <:< definitions.LongTpe => Some("toLongArray")
+          case t if t <:< definitions.DoubleTpe => Some("toDoubleArray")
+          case t if t <:< definitions.FloatTpe => Some("toFloatArray")
+          case t if t <:< definitions.ShortTpe => Some("toShortArray")
+          case t if t <:< definitions.ByteTpe => Some("toByteArray")
+          case t if t <:< definitions.BooleanTpe => Some("toBooleanArray")
+          case _ => None
+        }
+
+        primitiveMethod.map { method =>
+          Invoke(UnresolvedAttribute(path), method, dataTypeFor(t))
+        }.getOrElse {
+          ???
+        }
     }
   }
 

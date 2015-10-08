@@ -48,7 +48,7 @@ case class StaticInvoke(
     case other => other.getClass.getName.stripSuffix("$")
   }
   override def nullable: Boolean = true
-  override def children: Seq[Expression] = Nil
+  override def children: Seq[Expression] = arguments
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
@@ -69,7 +69,7 @@ case class StaticInvoke(
       s"""
         ${argGen.map(_.code).mkString("\n")}
 
-        boolean ${ev.isNull} = true;
+        boolean ${ev.isNull} = !$argsNonNull;
         $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
 
         if ($argsNonNull) {

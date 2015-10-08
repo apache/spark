@@ -17,21 +17,72 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.sql.{Date, Timestamp}
+import java.util
 
 import scala.reflect.runtime.universe._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst._
 
-
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
 case class NestedArray(a: Array[Array[Int]])
 
+case class BoxedData(
+    intField: java.lang.Integer,
+    longField: java.lang.Long,
+    doubleField: java.lang.Double,
+    floatField: java.lang.Float,
+    shortField: java.lang.Short,
+    byteField: java.lang.Byte,
+    booleanField: java.lang.Boolean)
+
 class ProductEncoderSuite extends SparkFunSuite {
 
-  protected def encodeDecodeTest[T <: Product : TypeTag](inputData: T) = {
+  encodeDecodeTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
+
+  encodeDecodeTest(
+    OptionalData(
+      Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
+      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true))))
+
+  encodeDecodeTest(OptionalData(None, None, None, None, None, None, None, None))
+
+  encodeDecodeTest(
+    BoxedData(1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true))
+
+  encodeDecodeTest(
+    BoxedData(null, null, null, null, null, null, null))
+
+  encodeDecodeTest(("Array[Byte] null", null: Array[Byte]))
+  encodeDecodeTestCustom(("Array[Byte]", Array[Byte](1, 2, 3)))
+    { (l, r) => util.Arrays.equals(l._2, r._2) }
+
+  encodeDecodeTest(("Array[Int] null", null: Array[Int]))
+  encodeDecodeTestCustom(("Array[Int]", Array[Int](1, 2, 3)))
+    { (l, r) => util.Arrays.equals(l._2, r._2) }
+
+  encodeDecodeTest(("Array[Long] null", null: Array[Long]))
+  encodeDecodeTestCustom(("Array[Long]", Array[Long](1, 2, 3)))
+    { (l, r) => util.Arrays.equals(l._2, r._2) }
+
+  encodeDecodeTestCustom(("java.sql.Timestamp", new java.sql.Timestamp(1)))
+    { (l, r) => l._2.toString == r._2.toString }
+
+  encodeDecodeTestCustom(("java.sql.Date", new java.sql.Date(1)))
+    { (l, r) => l._2.toString == r._2.toString }
+
+  /** Simplified encodeDecodeTestCustom, where the comparison function can be `Object.equals`.*/
+  protected def encodeDecodeTest[T <: Product : TypeTag](inputData: T) =
+    encodeDecodeTestCustom[T](inputData)((l, r) => l == r)
+
+  /**
+   * Constructs a test that round-trips `t` through an encoder, checking the results to ensure it
+   * matches the original.
+   */
+  protected def encodeDecodeTestCustom[T <: Product : TypeTag](
+      inputData: T)(
+      c: (T, T) => Boolean) = {
     test(s"encode/decode: $inputData") {
       val encoder = try ProductEncoder[T] catch {
         case e: Exception =>
@@ -45,29 +96,31 @@ class ProductEncoderSuite extends SparkFunSuite {
           fail(
            s"""Exception thrown while decoding
               |Converted: $convertedData
-              |Schema: $schema
-              |Construct Expressions: ${boundEncoder.constructExpression}
+              |Schema: ${schema.mkString(",")}
+              |${encoder.schema.treeString}
+              |Construct Expressions:
+              |${boundEncoder.constructExpression.treeString}
               |
-              |$e
-            """.stripMargin)
+            """.stripMargin, e)
       }
-      assert(inputData == convertedBack)
+
+      if (!c(inputData,convertedBack)) {
+        fail(
+          s"""Encoded/Decoded data does not match input data
+             |
+             |in:  $inputData
+             |out: $convertedBack
+             |
+             |Converted: ${convertedData.toSeq(encoder.schema).mkString("[", ",", "]")}
+             |Schema: ${schema.mkString(",")}
+             |${encoder.schema.treeString}
+             |Construct Expressions:
+             |${boundEncoder.constructExpression.treeString}
+             |
+           """.stripMargin)
+      }
     }
   }
-
-  encodeDecodeTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
-
-  encodeDecodeTest(
-    OptionalData(
-      Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true))))
-
-  encodeDecodeTest(OptionalData(None, None, None, None, None, None, None, None))
-
-  encodeDecodeTest(
-    NullableData(
-      1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true, "test", new java.math.BigDecimal(1), new Date(0),
-      new Timestamp(0), Array[Byte](1, 2, 3)))
 
 //  test("convert PrimitiveData to InternalRow") {
 //    val inputData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
@@ -144,6 +197,8 @@ class ProductEncoderSuite extends SparkFunSuite {
 //    assert(convertedData.getShort(4) == 1.toShort)
 //    assert(convertedData.getByte(5) == 1.toByte)
 //    assert(convertedData.getBoolean(6) == true)
+//
+//    assert(!convertedData.isNullAt(9))
 //  }
 //
 //  test("convert nullable data to InternalRow") {
