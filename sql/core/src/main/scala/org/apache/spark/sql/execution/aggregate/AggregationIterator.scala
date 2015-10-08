@@ -321,7 +321,7 @@ abstract class AggregationIterator(
   // Initializing the function used to generate the output row.
   protected val generateOutput: (InternalRow, MutableRow) => InternalRow = {
     val rowToBeEvaluated = new JoinedRow
-    val safeOutputRow = new GenericMutableRow(resultExpressions.length)
+    val safeOutputRow = new SpecificMutableRow(resultExpressions.map(_.dataType))
     val mutableOutput = if (outputsUnsafeRows) {
       UnsafeProjection.create(resultExpressions.map(_.dataType).toArray).apply(safeOutputRow)
     } else {
@@ -359,7 +359,7 @@ abstract class AggregationIterator(
         val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferSchemata)()
         val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
         // TODO: Use unsafe row.
-        val aggregateResult = new GenericMutableRow(aggregateResultSchema.length)
+        val aggregateResult = new SpecificMutableRow(aggregateResultSchema.map(_.dataType))
         expressionAggEvalProjection.target(aggregateResult)
         val resultProjection =
           newMutableProjection(

@@ -405,7 +405,7 @@ class TungstenAggregationIterator(
         // These are the attributes of the row produced by `expressionAggEvalProjection`
         val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
         // TODO: Use unsafe row.
-        val aggregateResult = new GenericMutableRow(aggregateResultSchema.length)
+        val aggregateResult = new SpecificMutableRow(aggregateResultSchema.map(_.dataType))
         expressionAggEvalProjection.target(aggregateResult)
         val resultProjection =
           UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateResultSchema)
