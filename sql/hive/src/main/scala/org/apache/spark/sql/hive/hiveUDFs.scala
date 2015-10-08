@@ -614,7 +614,9 @@ private[hive] case class HiveUDAFFunction(
     buffer = function.getNewAggregationBuffer
   }
 
-  override def aggBufferAttributes: Seq[AttributeReference] = Nil
+  override val aggBufferAttributes: Seq[AttributeReference] = Nil
+
+  override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
   // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
   // catalyst type checking framework.

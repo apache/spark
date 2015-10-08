@@ -341,6 +341,9 @@ private[sql] case class ScalaUDAF(
 
   override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
 
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
   private[this] lazy val childrenSchema: StructType = {
     val inputFields = children.zipWithIndex.map {
       case (child, index) =>

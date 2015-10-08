@@ -546,6 +546,9 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     AttributeReference(s"MS[$i]", LongType)()
   }
 
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
   /** Fill all words with zeros. */
   override def initialize(buffer: MutableRow): Unit = {
     var word = 0

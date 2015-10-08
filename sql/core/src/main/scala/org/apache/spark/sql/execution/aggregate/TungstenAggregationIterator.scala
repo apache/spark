@@ -610,8 +610,8 @@ class TungstenAggregationIterator(
       // When needsProcess is false, the format of input rows is groupingKey + aggregation buffer.
       // We need to project the aggregation buffer part from an input row.
       val buffer = createNewAggregationBuffer()
-      // The originalInputAttributes are using cloneBufferAttributes. So, we need to use
-      // allAggregateFunctions.flatMap(_.cloneBufferAttributes).
+      // The originalInputAttributes are using inputAggBufferAttributes. So, we need to use
+      // allAggregateFunctions.flatMap(_.inputAggBufferAttributes).
       val bufferExtractor = newMutableProjection(
         allAggregateFunctions.flatMap(_.inputAggBufferAttributes),
         originalInputAttributes)()
@@ -643,7 +643,7 @@ class TungstenAggregationIterator(
     allAggregateFunctions = initializeAllAggregateFunctions()
 
     // Basically the value of the KVIterator returned by externalSorter
-    // will just aggregation buffer. At here, we use cloneBufferAttributes.
+    // will just aggregation buffer. At here, we use inputAggBufferAttributes.
     val newInputAttributes: Seq[Attribute] =
       allAggregateFunctions.flatMap(_.inputAggBufferAttributes)
 

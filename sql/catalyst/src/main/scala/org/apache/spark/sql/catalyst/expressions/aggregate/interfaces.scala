@@ -231,9 +231,6 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
    * Use `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
    */
   def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit
-
-  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
 }
 
 /**
