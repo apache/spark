@@ -32,7 +32,7 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 import org.apache.spark.Logging
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, minBytesForPrecision}
 import org.apache.spark.sql.types._
@@ -44,9 +44,9 @@ import org.apache.spark.sql.types._
  *  - Standard mode: Parquet data are written in standard format defined in parquet-format spec.
  *  - Legacy mode: Parquet data are written in legacy format compatible with Spark 1.4 and prior.
  *
- * This behavior can be controlled by SQL option `spark.sql.parquet.writeLegacyParquetFormat`.  The
- * value of the option is propagated to this class by the `init()` method and its Hadoop
- * configuration argument.
+ * This behavior can be controlled by SQL option `spark.sql.parquet.writeLegacyFormat`.  The value
+ * of this option is propagated to this class by the `init()` method and its Hadoop configuration
+ * argument.
  */
 private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] with Logging {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to the record consumer.
