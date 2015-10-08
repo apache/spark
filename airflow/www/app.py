@@ -811,9 +811,9 @@ class Airflow(BaseView):
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')
         dag = dagbag.get_dag(dag_id)
-        log_relative = "/{dag_id}/{task_id}/{execution_date}".format(
+        log_relative = "{dag_id}/{task_id}/{execution_date}".format(
             **locals())
-        loc = BASE_LOG_FOLDER + log_relative
+        loc = os.path.join(BASE_LOG_FOLDER, log_relative)
         loc = loc.format(**locals())
         log = ""
         TI = models.TaskInstance
@@ -836,9 +836,9 @@ class Airflow(BaseView):
             else:
                 WORKER_LOG_SERVER_PORT = \
                     conf.get('celery', 'WORKER_LOG_SERVER_PORT')
-                url = (
-                    "http://{host}:{WORKER_LOG_SERVER_PORT}/log"
-                    "{log_relative}").format(**locals())
+                url = os.path.join(
+                    "http://{host}:{WORKER_LOG_SERVER_PORT}/log", log_relative
+                    ).format(**locals())
                 log += "Log file isn't local.\n"
                 log += "Fetching here: {url}\n".format(**locals())
                 try:
