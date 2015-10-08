@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -41,4 +43,8 @@ trait Encoder[T] {
    * copy the result before making another call if required.
    */
   def toRow(t: T): InternalRow
+
+  def fromRow(row: InternalRow): T
+
+  def bind(schema: Seq[Attribute]): Encoder[T]
 }

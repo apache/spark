@@ -81,8 +81,8 @@ case class StaticInvoke(
       s"""
         ${argGen.map(_.code).mkString("\n")}
 
-        final boolean ${ev.isNull} = ${ev.value} == null;
         $javaType ${ev.value} = $objectName.$functionName($argString);
+        final boolean ${ev.isNull} = ${ev.value} == null;
       """
     }
   }
@@ -190,8 +190,8 @@ case class NewInstance(
       s"""
         ${argGen.map(_.code).mkString("\n")}
 
-        final boolean ${ev.isNull} = ${ev.value} == null;
         $javaType ${ev.value} = new $className($argString);
+        final boolean ${ev.isNull} = ${ev.value} == null;
       """
     }
   }
@@ -230,6 +230,35 @@ case class UnwrapOption(
     """
   }
 }
+
+case class WrapOption(optionType: DataType, child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def dataType = ObjectType(classOf[Option[_]])
+
+  override def nullable: Boolean = true
+
+  override def children: Seq[Expression] = Nil
+
+  override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val javaType = ctx.javaType(optionType)
+    val inputObject = child.gen(ctx)
+
+    s"""
+      ${inputObject.code}
+
+      boolean ${ev.isNull} = false;
+      scala.Option<$javaType> ${ev.value} =
+        ${inputObject.isNull} ? None : new scala.Some(${inputObject.value});
+    """
+  }
+}
+
 
 case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends Expression {
 

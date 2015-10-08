@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -112,6 +113,78 @@ trait ScalaReflection {
           ObjectType(cls)
         case other => ObjectType(Utils.classForName(className))
       }
+  }
+
+  def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], Nil)
+
+  def constructorFor(tpe: `Type`, path: Seq[String]): Expression = ScalaReflectionLock.synchronized {
+    tpe match {
+      case t if !dataTypeFor(t).isInstanceOf[ObjectType] =>
+        UnresolvedAttribute(path)
+
+      case t if t <:< localTypeOf[Option[_]] =>
+        val TypeRef(_, _, Seq(optType)) = t
+        val boxedType = optType match {
+          // For primitive types we must manually box the primitive value.
+          case t if t <:< definitions.IntTpe => Some(classOf[java.lang.Integer])
+          case t if t <:< definitions.LongTpe => Some(classOf[java.lang.Long])
+          case t if t <:< definitions.DoubleTpe => Some(classOf[java.lang.Double])
+          case t if t <:< definitions.FloatTpe => Some(classOf[java.lang.Float])
+          case t if t <:< definitions.ShortTpe => Some(classOf[java.lang.Short])
+          case t if t <:< definitions.ByteTpe => Some(classOf[java.lang.Byte])
+          case t if t <:< definitions.BooleanTpe => Some(classOf[java.lang.Boolean])
+          case _ => None
+        }
+
+        boxedType.map { boxedType =>
+          val objectType = ObjectType(boxedType)
+          WrapOption(
+            objectType,
+            NewInstance(
+              boxedType,
+              UnresolvedAttribute(path) :: Nil,
+              propagateNull = false,
+              objectType))
+        }.getOrElse {
+          val className: String = optType.erasure.typeSymbol.asClass.fullName
+          val cls = Utils.classForName(className)
+          val objectType = ObjectType(cls)
+
+          WrapOption(objectType, constructorFor(optType, path))
+        }
+
+      case t if t <:< localTypeOf[Product] =>
+        val formalTypeArgs = t.typeSymbol.asClass.typeParams
+        val TypeRef(_, _, actualTypeArgs) = t
+        val constructorSymbol = t.member(nme.CONSTRUCTOR)
+        val params = if (constructorSymbol.isMethod) {
+          constructorSymbol.asMethod.paramss
+        } else {
+          // Find the primary constructor, and use its parameter ordering.
+          val primaryConstructorSymbol: Option[Symbol] =
+            constructorSymbol.asTerm.alternatives.find(s =>
+              s.isMethod && s.asMethod.isPrimaryConstructor)
+
+          if (primaryConstructorSymbol.isEmpty) {
+            sys.error("Internal SQL error: Product object did not have a primary constructor.")
+          } else {
+            primaryConstructorSymbol.get.asMethod.paramss
+          }
+        }
+
+        val className: String = t.erasure.typeSymbol.asClass.fullName
+        val cls = Utils.classForName(className)
+
+        val arguments = params.head.map { p =>
+          val fieldName = p.name.toString
+          val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+          val dataType = dataTypeFor(fieldType)
+
+          constructorFor(fieldType, path :+ fieldName)
+        }
+
+        NewInstance(cls, arguments, propagateNull = false, ObjectType(cls))
+    }
   }
 
   /** Returns expressions for extracting all the fields from the given type. */
