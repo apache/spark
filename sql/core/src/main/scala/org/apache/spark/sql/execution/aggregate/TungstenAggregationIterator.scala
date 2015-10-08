@@ -139,14 +139,19 @@ class TungstenAggregationIterator(
 
   // Initialize all AggregateFunctions by binding references, if necessary,
   // and setting inputBufferOffset and mutableBufferOffset.
-  private[this] val allAggregateFunctions: Array[AggregateFunction2] = {
+  private def initializeAllAggregateFunctions(): Array[AggregateFunction2] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = initialInputBufferOffset
     val functions = new Array[AggregateFunction2](allAggregateExpressions.length)
     var i = 0
     while (i < allAggregateExpressions.length) {
       val func = allAggregateExpressions(i).aggregateFunction
-      val funcWithBoundReferences = allAggregateExpressions(i).mode match {
+      val aggregateExpressionIsNonComplete = i < nonCompleteAggregateExpressions.length
+      // We need to use this mode instead of func.mode in order to hanlde aggregation mode switching
+      // when switching to sort-based aggregation:
+      val mode =
+        if (aggregateExpressionIsNonComplete) aggregationMode._1.get else aggregationMode._2.get
+      val funcWithBoundReferences = mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
@@ -180,6 +185,9 @@ class TungstenAggregationIterator(
     functions
   }
 
+  private[this] var allAggregateFunctions: Array[AggregateFunction2] =
+    initializeAllAggregateFunctions()
+
   // Positions of those imperative aggregate functions in allAggregateFunctions.
   // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
   // func2 and func3 are imperative aggregate functions.
@@ -196,12 +204,6 @@ class TungstenAggregationIterator(
     }
     positions.toArray
   }
-
-  // All imperative AggregateFunctions.
-  private[this] val allImperativeAggregateFunctions: Array[ImperativeAggregate] =
-    allImperativeAggregateFunctionPositions
-      .map(allAggregateFunctions)
-      .map(_.asInstanceOf[ImperativeAggregate])
 
   ///////////////////////////////////////////////////////////////////////////
   // Part 2: Methods and fields used by setting aggregation buffer values,
@@ -285,6 +287,7 @@ class TungstenAggregationIterator(
           // Process all imperative aggregate functions.
           var i = 0
           while (i < imperativeAggregateFunctions.length) {
+            println("Aggregation mode is " + aggregationMode)
             imperativeAggregateFunctions(i).merge(currentBuffer, row)
             i += 1
           }
@@ -409,6 +412,11 @@ class TungstenAggregationIterator(
         expressionAggEvalProjection.target(aggregateResult)
         val resultProjection =
           UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateResultSchema)
+
+        val allImperativeAggregateFunctions: Array[ImperativeAggregate] =
+          allImperativeAggregateFunctionPositions
+            .map(allAggregateFunctions)
+            .map(_.asInstanceOf[ImperativeAggregate])
 
         (currentGroupingKey: UnsafeRow, currentBuffer: UnsafeRow) => {
           // Generate results for all expression-based aggregate functions.
@@ -632,6 +640,8 @@ class TungstenAggregationIterator(
       case other => other
     }
     aggregationMode = newAggregationMode
+
+    allAggregateFunctions = initializeAllAggregateFunctions()
 
     // Basically the value of the KVIterator returned by externalSorter
     // will just aggregation buffer. At here, we use cloneBufferAttributes.
