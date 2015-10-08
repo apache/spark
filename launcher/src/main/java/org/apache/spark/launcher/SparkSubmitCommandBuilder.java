@@ -191,7 +191,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     Properties props = loadPropertiesFile();
     boolean isClientMode = isClientMode(props);
     String extraClassPath = isClientMode ?
-      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;
+      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) :
+            firstNonEmptyValue(SparkLauncher.CLIENT_EXTRA_CLASSPATH, conf, props);
 
     List<String> cmd = buildJavaCommand(extraClassPath);
     // Take Thrift Server as daemon
@@ -201,26 +202,39 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
     addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
 
+    // Figuring out where the memory value come from is a little tricky due to precedence.
+    // Precedence is observed in the following order:
+    // - explicit configuration (setConf()), which also covers --driver-memory cli argument.
+    // - properties file.
+    // - SPARK_DRIVER_MEMORY env variable
+    // - SPARK_MEM env variable
+    // - default value (1g)
+    // Take Thrift Server as daemon
+
+    String tsMemory =
+            isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
+    String memory;
+    String javaOptionKey;
+    String libPathKey;
     if (isClientMode) {
-      // Figuring out where the memory value come from is a little tricky due to precedence.
-      // Precedence is observed in the following order:
-      // - explicit configuration (setConf()), which also covers --driver-memory cli argument.
-      // - properties file.
-      // - SPARK_DRIVER_MEMORY env variable
-      // - SPARK_MEM env variable
-      // - default value (1g)
-      // Take Thrift Server as daemon
-      String tsMemory =
-        isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
-      String memory = firstNonEmpty(tsMemory,
+      memory = firstNonEmpty(tsMemory,
         firstNonEmptyValue(SparkLauncher.DRIVER_MEMORY, conf, props),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
-      cmd.add("-Xms" + memory);
-      cmd.add("-Xmx" + memory);
-      addOptionString(cmd, firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
-      mergeEnvPathList(env, getLibPathEnvName(),
-        firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+      javaOptionKey = SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS;
+      libPathKey = SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH;
+    } else {
+      memory = firstNonEmpty(tsMemory,
+        firstNonEmptyValue(SparkLauncher.CLIENT_MEMORY, conf, props),
+        System.getenv("SPARK_CLIENT_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
+      javaOptionKey = SparkLauncher.CLIENT_EXTRA_JAVA_OPTIONS;
+      libPathKey = SparkLauncher.CLIENT_EXTRA_LIBRARY_PATH;
     }
+
+    cmd.add("-Xms" + memory);
+    cmd.add("-Xmx" + memory);
+    addOptionString(cmd, firstNonEmptyValue(javaOptionKey, conf, props));
+    mergeEnvPathList(env, getLibPathEnvName(),
+            firstNonEmptyValue(libPathKey, conf, props));
 
     addPermGenSizeOpt(cmd);
     cmd.add("org.apache.spark.deploy.SparkSubmit");
@@ -333,6 +347,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
       } else if (opt.equals(DRIVER_CLASS_PATH)) {
         conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
+      } else if (opt.equals(CLIENT_MEMORY)) {
+        conf.put(SparkLauncher.CLIENT_MEMORY, value);
+      } else if (opt.equals(CLIENT_CLASS_PATH)) {
+        conf.put(SparkLauncher.CLIENT_EXTRA_CLASSPATH, value);
+      } else if (opt.equals(CLIENT_JAVA_OPTIONS)) {
+        conf.put(SparkLauncher.CLIENT_EXTRA_JAVA_OPTIONS, value);
+      } else if (opt.equals(CLIENT_LIBRARY_PATH)) {
+        conf.put(SparkLauncher.CLIENT_EXTRA_LIBRARY_PATH, value);
       } else if (opt.equals(CONF)) {
         String[] setConf = value.split("=", 2);
         checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);

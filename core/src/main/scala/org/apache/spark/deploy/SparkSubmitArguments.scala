@@ -519,6 +519,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --verbose, -v               Print additional debug output
         |  --version,                  Print the version of current Spark
         |
+        |  Cluster deploy mode only:
+        |  --client-memory MEM         Memory for client (e.g. 1000M, 2G) (Default: ${mem_mb}M).
+        |  --client-java-options       Extra Java options to pass to the client.
+        |  --client-library-path       Extra library path entries to pass to the client.
+        |  --client-class-path         Extra class path entries to pass to the client.
+        |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
         |
