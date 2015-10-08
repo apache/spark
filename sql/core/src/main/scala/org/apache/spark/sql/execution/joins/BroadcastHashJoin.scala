@@ -89,8 +89,13 @@ case class BroadcastHashJoin(
         // The following line doesn't run in a job so we cannot track the metric value. However, we
         // have already tracked it in the above lines. So here we can use
         // `SQLMetrics.nullLongMetric` to ignore it.
+
+        input.foreach { row =>
+          println(row)
+        }
+
         val hashed = HashedRelation(
-          input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
+          input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.length)
         sparkContext.broadcast(hashed)
       }
     }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
