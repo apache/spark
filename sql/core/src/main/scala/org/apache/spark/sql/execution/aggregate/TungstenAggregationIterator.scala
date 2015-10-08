@@ -401,7 +401,7 @@ class TungstenAggregationIterator(
         val joinedRow = new JoinedRow()
         val evalExpressions = allAggregateFunctions.map {
           case ae: DeclarativeAggregate => ae.evaluateExpression
-           case agg: AggregateFunction2 => Literal.create(null, agg.dataType)
+          case agg: AggregateFunction2 => NoOp
         }
         val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)()
         // These are the attributes of the row produced by `expressionAggEvalProjection`
