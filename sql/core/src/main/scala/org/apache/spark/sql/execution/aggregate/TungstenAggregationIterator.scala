@@ -139,9 +139,10 @@ class TungstenAggregationIterator(
 
   // Initialize all AggregateFunctions by binding references, if necessary,
   // and setting inputBufferOffset and mutableBufferOffset.
-  private def initializeAllAggregateFunctions(): Array[AggregateFunction2] = {
+  private def initializeAllAggregateFunctions(
+      startingInputBufferOffset: Int): Array[AggregateFunction2] = {
     var mutableBufferOffset = 0
-    var inputBufferOffset: Int = initialInputBufferOffset
+    var inputBufferOffset: Int = startingInputBufferOffset
     val functions = new Array[AggregateFunction2](allAggregateExpressions.length)
     var i = 0
     while (i < allAggregateExpressions.length) {
@@ -186,7 +187,7 @@ class TungstenAggregationIterator(
   }
 
   private[this] var allAggregateFunctions: Array[AggregateFunction2] =
-    initializeAllAggregateFunctions()
+    initializeAllAggregateFunctions(initialInputBufferOffset)
 
   // Positions of those imperative aggregate functions in allAggregateFunctions.
   // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
@@ -657,7 +658,7 @@ class TungstenAggregationIterator(
     }
     aggregationMode = newAggregationMode
 
-    allAggregateFunctions = initializeAllAggregateFunctions()
+    allAggregateFunctions = initializeAllAggregateFunctions(startingInputBufferOffset = 0)
 
     // Basically the value of the KVIterator returned by externalSorter
     // will just aggregation buffer. At here, we use inputAggBufferAttributes.
