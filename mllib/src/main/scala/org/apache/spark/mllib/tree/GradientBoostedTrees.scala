@@ -250,8 +250,7 @@ object GradientBoostedTrees extends Logging {
       predError = GradientBoostedTreesModel.updatePredictionError(
         input, predError, baseLearnerWeights(m), baseLearners(m), loss)
       predErrorCheckpointer.update(predError)
-      val currentPredError = predError.values.mean()
-      logDebug("error of gbt = " + currentPredError)
+      logDebug("error of gbt = " + predError.values.mean())
 
       if (validate) {
         // Stop training early if
