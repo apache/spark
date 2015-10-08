@@ -147,12 +147,12 @@ class TungstenAggregationIterator(
     while (i < allAggregateExpressions.length) {
       val func = allAggregateExpressions(i).aggregateFunction
       val aggregateExpressionIsNonComplete = i < nonCompleteAggregateExpressions.length
-      // We need to use this mode instead of func.mode in order to hanlde aggregation mode switching
+      // We need to use this mode instead of func.mode in order to handle aggregation mode switching
       // when switching to sort-based aggregation:
       val mode =
-        if (aggregateExpressionIsNonComplete) aggregationMode._1.get else aggregationMode._2.get
+        if (aggregateExpressionIsNonComplete) aggregationMode._1 else aggregationMode._2
       val funcWithBoundReferences = mode match {
-        case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
+        case Some(Partial) | Some(Complete) if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
           // this function is Partial or Complete because we will call eval of this
