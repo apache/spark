@@ -211,8 +211,8 @@ class TungstenAggregationIterator(
   //         rows.
   ///////////////////////////////////////////////////////////////////////////
 
-  // The projection used to initialize buffer values.
-  private[this] val initialProjection: MutableProjection = {
+  // The projection used to initialize buffer values for all expression-based aggregates.
+  private[this] val expressionAggInitialProjection: MutableProjection = {
     val initExpressions = allAggregateFunctions.flatMap {
       case ae: DeclarativeAggregate => ae.initialValues
       // For the positions corresponding to imperative aggregate functions, we'll use special
@@ -231,10 +231,27 @@ class TungstenAggregationIterator(
     val bufferRowSize: Int = bufferSchema.length
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
-    val unsafeProjection =
-      UnsafeProjection.create(bufferSchema.map(_.dataType))
-    val buffer = unsafeProjection.apply(genericMutableBuffer)
-    initialProjection.target(buffer)(EmptyRow)
+    // TODO(josh): figure out whether we have to use
+    val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
+
+    val buffer =  /* if (useUnsafeBuffer) */ {
+      val unsafeProjection =
+        UnsafeProjection.create(bufferSchema.map(_.dataType))
+      unsafeProjection.apply(genericMutableBuffer)
+//    } else {
+//      genericMutableBuffer
+    }
+    expressionAggInitialProjection.target(buffer)(EmptyRow)
+    // TODO(josh): this can be done more cleanly
+    val allImperativeAggregateFunctions: Array[ImperativeAggregate] =
+      allImperativeAggregateFunctionPositions
+        .map(allAggregateFunctions)
+        .map(_.asInstanceOf[ImperativeAggregate])
+    var i = 0
+    while (i < allImperativeAggregateFunctions.length) {
+      allImperativeAggregateFunctions(i).initialize(buffer)
+      i += 1
+    }
     buffer
   }
 
