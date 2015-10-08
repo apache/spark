@@ -22,13 +22,11 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.language.existentials
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
+import org.apache.spark.streaming.dstream.{Session, SessionSpec, DStream, WindowedDStream}
 import org.apache.spark.util.{Clock, ManualClock}
-import org.apache.spark.HashPartitioner
+import org.apache.spark.{HashPartitioner, SparkConf, SparkException}
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
@@ -630,6 +628,71 @@ class BasicOperationsSuite extends TestSuiteBase {
       }
     }
   }
+
+
+  test("sessionByKey") {
+    val inputData =
+      Seq(
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val outputData =
+      Seq(
+        Seq(("a", 1)),
+        Seq(("a", 2), ("b", 1)),
+        Seq(("a", 3), ("b", 2), ("c", 1)),
+        Seq(("a", 4), ("b", 3)),
+        Seq(("a", 5)),
+        Seq()
+      ).map { _.map { case (key, value) => Session(key, value, true) } }
+
+    val sessionOperation = (s: DStream[String]) => {
+      val updateFunc = (value: Int, sessionData: Option[Int]) => {
+        Option(value + sessionData.getOrElse(0))
+      }
+      s.map(x => (x, 1)).sessionByKey(SessionSpec.create[String, Int, Int](updateFunc))
+    }
+
+    testOperation(inputData, sessionOperation, outputData, true)
+  }
+
+  test("sessionByKey - with all sessions") {
+    val inputData =
+      Seq(
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val outputData =
+      Seq(
+        Seq(("a", 1)),
+        Seq(("a", 2), ("b", 1)),
+        Seq(("a", 3), ("b", 2), ("c", 1)),
+        Seq(("a", 4), ("b", 3), ("c", 1)),
+        Seq(("a", 5), ("b", 3), ("c", 1)),
+        Seq(("a", 5), ("b", 3), ("c", 1))
+      ).map { _.map { case (key, value) => Session(key, value, true) } }
+
+    val sessionOperation = (s: DStream[String]) => {
+      val updateFunc = (value: Int, sessionData: Option[Int]) => {
+        Option(value + sessionData.getOrElse(0))
+      }
+      s.map(x => (x, 1)).sessionByKey(
+        SessionSpec.create[String, Int, Int](updateFunc).reportAllSession(true))
+    }
+
+    testOperation(inputData, sessionOperation, outputData, true)
+  }
+
 
   /** Test cleanup of RDDs in DStream metadata */
   def runCleanupTest[T: ClassTag](

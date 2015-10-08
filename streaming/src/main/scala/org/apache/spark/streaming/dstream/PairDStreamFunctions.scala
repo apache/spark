@@ -35,8 +35,7 @@ import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf}
  */
 class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K])
-  extends Serializable
-{
+  extends Serializable {
   private[streaming] def ssc = self.ssc
 
   private[streaming] def sparkContext = self.context.sparkContext
@@ -349,6 +348,13 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
       windowDuration, slideDuration, partitioner
     )
   }
+
+  def sessionByKey[S: ClassTag](sessionSpec: SessionSpec[K, V, S]): DStream[Session[K, S]] = {
+    new SessionDStream[K, V, S](self, sessionSpec).mapPartitions { partitionIter =>
+      partitionIter.flatMap { _.iterator(!sessionSpec.getAllSessions()) }
+    }
+  }
+
 
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
