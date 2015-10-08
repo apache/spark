@@ -355,7 +355,6 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
         data2, {iter: Iterator[(Int, Int)] => writer2.write(iter); writer2.stop(true)})
       val (mapOutput1, mapOutput2) = interleaver.run()
 
-
       // register the output from attempt 1, and try to read it
       mapOutput1.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
       val reader1 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
@@ -371,7 +370,6 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
         new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem,
           InternalAccumulator.create(sc), false, taskMetrics = new TaskMetrics))
       reader2.read().toIndexedSeq should be(data2.toIndexedSeq)
-
 
       // make sure that when the shuffle gets unregistered, we cleanup from all attempts
       val shuffleFiles1 = manager.getShuffleFiles(shuffleHandle, 0, 0, 0)
@@ -436,7 +434,6 @@ class InterleaveIterators[T, R](
     (r1, r2)
   }
 }
-
 
 object ShuffleSuite {
 

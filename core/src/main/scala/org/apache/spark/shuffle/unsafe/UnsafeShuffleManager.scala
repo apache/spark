@@ -189,7 +189,7 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
       Option(numMapsForShufflesThatUsedNewPath.remove(shuffleId)).foreach { numMaps =>
         val attempts = clearStageAttemptsForShuffle(shuffleId)
         (0 until numMaps).foreach { mapId =>
-          attempts.foreach{ stageAttemptId =>
+          attempts.foreach { stageAttemptId =>
             shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId)
           }
         }

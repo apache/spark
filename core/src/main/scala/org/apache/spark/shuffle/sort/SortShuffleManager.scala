@@ -78,7 +78,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     if (shuffleMapNumber.containsKey(shuffleId)) {
       val numMaps = shuffleMapNumber.remove(shuffleId)
       val attempts = clearStageAttemptsForShuffle(shuffleId)
-      (0 until numMaps).map{ mapId =>
+      (0 until numMaps).foreach { mapId =>
         attempts.foreach { stageAttemptId =>
           shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId)
         }
