@@ -1071,7 +1071,7 @@ test_that("join() and merge() on a DataFrame", {
   
   joined7 <- join(df, df2, df$name == df2$name, "leftsemi")
   expect_equal(names(joined7), c("age", "name"))
-  expect_equal(count(joined7, 3))
+  expect_equal(count(joined7), 3)
 
   merged <- select(merge(df, df2, df$name == df2$name, "outer"),
                    alias(df$age + 5, "newAge"), df$name, df2$test)
