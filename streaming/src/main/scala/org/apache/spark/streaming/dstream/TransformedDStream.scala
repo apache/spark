@@ -17,10 +17,11 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.{PairRDDFunctions, RDD}
-import org.apache.spark.SparkException
-import org.apache.spark.streaming.{Duration, Time}
 import scala.reflect.ClassTag
+
+import org.apache.spark.SparkException
+import org.apache.spark.rdd.{PairRDDFunctions, RDD}
+import org.apache.spark.streaming.{Duration, Time}
 
 private[streaming]
 class TransformedDStream[U: ClassTag] (
