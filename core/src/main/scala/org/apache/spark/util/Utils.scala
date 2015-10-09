@@ -1751,6 +1751,13 @@ private[spark] object Utils extends Logging {
       if (uri.getScheme() != null) {
         return uri
       }
+      // make sure to handle if the path has a fragment (applies to yarn
+      // distributed cache)
+      if (uri.getFragment() != null) {
+        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
+        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+          uri.getFragment())
+      }
     } catch {
       case e: URISyntaxException =>
     }
