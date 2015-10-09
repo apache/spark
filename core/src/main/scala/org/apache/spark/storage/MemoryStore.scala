@@ -402,33 +402,61 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   /**
-   * Try to free up a given amount of space to store a particular block, but can fail if
-   * either the block is bigger than our memory or it would require replacing another block
-   * from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
-   * don't fit into memory that we want to avoid).
+   * Try to free up a given amount of space by evicting existing blocks.
    *
-   * @param blockId the ID of the block we are freeing space for
-   * @param space the size of this block
+   * @param space the amount of memory to free, in bytes
    * @param droppedBlocks a holder for blocks evicted in the process
-   * @return whether there is enough free space.
+   * @return whether the requested free space is freed.
+   */
+  private[spark] def ensureFreeSpace(
+      space: Long,
+      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    ensureFreeSpace(None, space, droppedBlocks)
+  }
+
+  /**
+   * Try to free up a given amount of space to store a block by evicting existing blocks.
+   *
+   * @param space the amount of memory to free, in bytes
+   * @param droppedBlocks a holder for blocks evicted in the process
+   * @return whether the requested free space is freed.
    */
   private[spark] def ensureFreeSpace(
       blockId: BlockId,
       space: Long,
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    ensureFreeSpace(Some(blockId), space, droppedBlocks)
+  }
+
+  /**
+   * Try to free up a given amount of space to store a particular block, but can fail if
+   * either the block is bigger than our memory or it would require replacing another block
+   * from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
+   * don't fit into memory that we want to avoid).
+   *
+   * @param blockId the ID of the block we are freeing space for, if any
+   * @param space the size of this block
+   * @param droppedBlocks a holder for blocks evicted in the process
+   * @return whether the requested free space is freed.
+   */
+  private def ensureFreeSpace(
+      blockId: Option[BlockId],
+      space: Long,
+      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     accountingLock.synchronized {
       val freeMemory = maxMemory - memoryUsed
-      val rddToAdd = getRddId(blockId)
+      val rddToAdd = blockId.flatMap(getRddId)
       val selectedBlocks = new ArrayBuffer[BlockId]
       var selectedMemory = 0L
 
-      logInfo(s"Ensuring $space bytes of free space for block $blockId " +
+      logInfo(s"Ensuring $space bytes of free space " +
+        blockId.map { id => s"for block $id" }.getOrElse("") +
         s"(free: $freeMemory, max: $maxMemory)")
 
       // Fail fast if the block simply won't fit
       if (space > maxMemory) {
-        logInfo(s"Will not store $blockId as the required space " +
-          s"($space bytes) than our memory limit ($maxMemory bytes)")
+        logInfo("Will not " + blockId.map { id => s"store $id" }.getOrElse("free memory") +
+          s" as the required space ($space bytes) exceeds our memory limit ($maxMemory bytes)")
         return false
       }
 
@@ -471,8 +499,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         }
         true
       } else {
-        logInfo(s"Will not store $blockId as it would require dropping another block " +
-          "from the same RDD")
+        blockId.foreach { id =>
+          logInfo(s"Will not store $id as it would require dropping another block " +
+            "from the same RDD")
+        }
         false
       }
     }

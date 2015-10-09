@@ -19,6 +19,7 @@ package org.apache.spark.memory
 
 import scala.collection.mutable
 
+import org.apache.spark.Logging
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 
 
@@ -29,7 +30,7 @@ import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
  * sorts and aggregations, while storage memory refers to that used for caching and propagating
  * internal data across the cluster. There exists one of these per JVM.
  */
-private[spark] abstract class MemoryManager {
+private[spark] abstract class MemoryManager extends Logging {
 
   // The memory store used to evict cached blocks
   private var _memoryStore: MemoryStore = _
@@ -40,6 +41,10 @@ private[spark] abstract class MemoryManager {
     _memoryStore
   }
 
+  // Amount of execution/storage memory in use, accesses must be synchronized on `this`
+  protected var _executionMemoryUsed: Long = 0
+  protected var _storageMemoryUsed: Long = 0
+
   /**
    * Set the [[MemoryStore]] used by this manager to evict cached blocks.
    * This must be set after construction due to initialization ordering constraints.
@@ -49,10 +54,23 @@ private[spark] abstract class MemoryManager {
   }
 
   /**
-   * Acquire N bytes of memory for execution.
+   * Total available memory for execution, in bytes.
+   */
+  def maxExecutionMemory: Long
+
+  /**
+   * Total available memory for storage, in bytes.
+   */
+  def maxStorageMemory: Long
+
+  /**
+   * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
+   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return number of bytes successfully granted (<= N).
    */
-  def acquireExecutionMemory(numBytes: Long): Long
+  def acquireExecutionMemory(
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
@@ -72,46 +90,62 @@ private[spark] abstract class MemoryManager {
   def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    acquireStorageMemory(blockId, numBytes, evictedBlocks)
+  }
 
   /**
    * Release N bytes of execution memory.
    */
-  def releaseExecutionMemory(numBytes: Long): Unit
+  def releaseExecutionMemory(numBytes: Long): Unit = synchronized {
+    if (numBytes > _executionMemoryUsed) {
+      logWarning(s"Attempted to release $numBytes bytes of execution " +
+        s"memory when we only have ${_executionMemoryUsed} bytes")
+      _executionMemoryUsed = 0
+    } else {
+      _executionMemoryUsed -= numBytes
+    }
+  }
 
   /**
    * Release N bytes of storage memory.
    */
-  def releaseStorageMemory(numBytes: Long): Unit
+  def releaseStorageMemory(numBytes: Long): Unit = synchronized {
+    if (numBytes > _storageMemoryUsed) {
+      logWarning(s"Attempted to release $numBytes bytes of storage " +
+        s"memory when we only have ${_storageMemoryUsed} bytes")
+      _storageMemoryUsed = 0
+    } else {
+      _storageMemoryUsed -= numBytes
+    }
+  }
 
   /**
    * Release all storage memory acquired.
    */
-  def releaseStorageMemory(): Unit
+  def releaseStorageMemory(): Unit = synchronized {
+    _storageMemoryUsed = 0
+  }
 
   /**
    * Release N bytes of unroll memory.
    */
-  def releaseUnrollMemory(numBytes: Long): Unit
-
-  /**
-   * Total available memory for execution, in bytes.
-   */
-  def maxExecutionMemory: Long
-
-  /**
-   * Total available memory for storage, in bytes.
-   */
-  def maxStorageMemory: Long
+  def releaseUnrollMemory(numBytes: Long): Unit = {
+    releaseStorageMemory(numBytes)
+  }
 
   /**
    * Execution memory currently in use, in bytes.
    */
-  def executionMemoryUsed: Long
+  final def executionMemoryUsed: Long = synchronized {
+    _executionMemoryUsed
+  }
 
   /**
    * Storage memory currently in use, in bytes.
    */
-  def storageMemoryUsed: Long
+  final def storageMemoryUsed: Long = synchronized {
+    _storageMemoryUsed
+  }
 
 }

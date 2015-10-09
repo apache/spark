@@ -28,23 +28,24 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class StaticMemoryManagerSuite extends SparkFunSuite {
   private val conf = new SparkConf().set("spark.storage.unrollFraction", "0.4")
+  private val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
   test("basic execution memory") {
     val maxExecutionMem = 1000L
     val (mm, _) = makeThings(maxExecutionMem, Long.MaxValue)
     assert(mm.executionMemoryUsed === 0L)
-    assert(mm.acquireExecutionMemory(10L) === 10L)
+    assert(mm.acquireExecutionMemory(10L, evictedBlocks) === 10L)
     assert(mm.executionMemoryUsed === 10L)
-    assert(mm.acquireExecutionMemory(100L) === 100L)
+    assert(mm.acquireExecutionMemory(100L, evictedBlocks) === 100L)
     // Acquire up to the max
-    assert(mm.acquireExecutionMemory(1000L) === 890L)
+    assert(mm.acquireExecutionMemory(1000L, evictedBlocks) === 890L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    assert(mm.acquireExecutionMemory(1L) === 0L)
+    assert(mm.acquireExecutionMemory(1L, evictedBlocks) === 0L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
     mm.releaseExecutionMemory(800L)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
-    assert(mm.acquireExecutionMemory(1L) === 1L)
+    assert(mm.acquireExecutionMemory(1L, evictedBlocks) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
     mm.releaseExecutionMemory(maxExecutionMem)
@@ -54,8 +55,8 @@ class StaticMemoryManagerSuite extends SparkFunSuite {
   test("basic storage memory") {
     val maxStorageMem = 1000L
     val dummyBlock = TestBlockId("you can see the world you brought to live")
-    val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val (mm, ms) = makeThings(Long.MaxValue, maxStorageMem)
+    evictedBlocks.clear()
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.acquireStorageMemory(dummyBlock, 10L, evictedBlocks))
     // `ensureFreeSpace` should be called with the number of bytes requested
@@ -95,17 +96,16 @@ class StaticMemoryManagerSuite extends SparkFunSuite {
     val maxExecutionMem = 200L
     val maxStorageMem = 1000L
     val dummyBlock = TestBlockId("ain't nobody love like you do")
-    val dummyBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val (mm, ms) = makeThings(maxExecutionMem, maxStorageMem)
     // Only execution memory should increase
-    assert(mm.acquireExecutionMemory(100L) === 100L)
+    assert(mm.acquireExecutionMemory(100L, evictedBlocks) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 100L)
-    assert(mm.acquireExecutionMemory(1000L) === 100L)
+    assert(mm.acquireExecutionMemory(1000L, evictedBlocks) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 200L)
     // Only storage memory should increase
-    assert(mm.acquireStorageMemory(dummyBlock, 50L, dummyBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 50L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 50L)
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 200L)
@@ -122,21 +122,20 @@ class StaticMemoryManagerSuite extends SparkFunSuite {
   test("unroll memory") {
     val maxStorageMem = 1000L
     val dummyBlock = TestBlockId("lonely water")
-    val dummyBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val (mm, ms) = makeThings(Long.MaxValue, maxStorageMem)
-    assert(mm.acquireUnrollMemory(dummyBlock, 100L, dummyBlocks))
+    assert(mm.acquireUnrollMemory(dummyBlock, 100L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 100L)
     assert(mm.storageMemoryUsed === 100L)
     mm.releaseUnrollMemory(40L)
     assert(mm.storageMemoryUsed === 60L)
     when(ms.currentUnrollMemory).thenReturn(60L)
-    assert(mm.acquireUnrollMemory(dummyBlock, 500L, dummyBlocks))
+    assert(mm.acquireUnrollMemory(dummyBlock, 500L, evictedBlocks))
     // `spark.storage.unrollFraction` is 0.4, so the max unroll space is 400 bytes.
     // Since we already occupy 60 bytes, we will try to ensure only 400 - 60 = 340 bytes.
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 340L)
     assert(mm.storageMemoryUsed === 560L)
     when(ms.currentUnrollMemory).thenReturn(560L)
-    assert(!mm.acquireUnrollMemory(dummyBlock, 800L, dummyBlocks))
+    assert(!mm.acquireUnrollMemory(dummyBlock, 800L, evictedBlocks))
     assert(mm.storageMemoryUsed === 560L)
     // We already have 560 bytes > the max unroll space of 400 bytes, so no bytes are freed
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 0L)

@@ -18,11 +18,13 @@
 package org.apache.spark.shuffle
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.annotations.VisibleForTesting
 
 import org.apache.spark._
 import org.apache.spark.memory.{StaticMemoryManager, MemoryManager}
+import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
@@ -114,7 +116,9 @@ class ShuffleMemoryManager protected (
    */
   private def acquire(numBytes: Long): Long = synchronized {
     val taskAttemptId = currentTaskAttemptId()
-    val acquired = memoryManager.acquireExecutionMemory(numBytes)
+    val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+    val acquired = memoryManager.acquireExecutionMemory(numBytes, evictedBlocks)
+    // TODO: do something about these evicted blocks
     taskMemory(taskAttemptId) += acquired
     acquired
   }
