@@ -70,6 +70,7 @@ infer_type <- function(x) {
 #' @param data An RDD or list or data.frame
 #' @param schema a list of column names or named list (StructType), optional
 #' @return an DataFrame
+#' @rdname createDataFrame
 #' @export
 #' @examples
 #'\dontrun{
@@ -77,6 +78,7 @@ infer_type <- function(x) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' df1 <- as.DataFrame(sqlContext, iris)
 #' df2 <- as.DataFrame(sqlContext, list(3,4,5,6))
+#' df3 <- createDataFrame(sqlContext, iris)
 #' }
 
 # TODO(davies): support sampling and infer type from NA
@@ -149,22 +151,9 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
   dataFrame(sdf)
 }
 
-#' Create a DataFrame
-#'
-#' Converts R data.frame or list into DataFrame.
-#'
-#' @param sqlContext A SQLContext
-#' @param data An RDD or list or data.frame
-#' @param schema a list of column names or named list (StructType), optional
-#' @return an DataFrame
+#' @rdname createDataFrame
+#' @aliases createDataFrame
 #' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' df1 <- as.DataFrame(sqlContext, iris)
-#' df2 <- as.DataFrame(sqlContext, list(3,4,5,6))
-#' }
 as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0){
   createDataFrame(sqlContext, data, schema, samplingRatio)
 }
