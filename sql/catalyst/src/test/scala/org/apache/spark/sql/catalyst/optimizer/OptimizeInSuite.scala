@@ -36,6 +36,7 @@ class OptimizeInSuite extends PlanTest {
       Batch("AnalysisNodes", Once,
         EliminateSubQueries) ::
       Batch("ConstantFolding", Once,
+        NullPropagation,
         ConstantFolding,
         BooleanSimplification,
         OptimizeIn) :: Nil
@@ -78,6 +79,37 @@ class OptimizeInSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: NULL IN (expr1, ..., exprN) gets transformed to Filter(null)") {
+    val originalQuery =
+      testRelation
+        .where(In(Literal.create(null, NullType), Seq(Literal(1), Literal(2))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(Literal.create(null, BooleanType))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: NULL(StringType) IN (expr1, .., exprN) " +
+    "gets transformed to Filter(null)") {
+    val originalQuery =
+      testRelation
+        .where(In(Literal.create(null, StringType), Seq(Literal(1), UnresolvedAttribute("b"))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(Literal.create(null, BooleanType))
         .analyze
 
     comparePlans(optimized, correctAnswer)

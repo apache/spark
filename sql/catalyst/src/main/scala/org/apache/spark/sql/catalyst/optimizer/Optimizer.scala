@@ -417,6 +417,14 @@ object NullPropagation extends Rule[LogicalPlan] {
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
       }
+
+      // If the value expression is NULL then transform the In expression to
+      // Literal(null)
+      case e @ In(v, list) => v match {
+        case Cast(Literal(null, _), _) => Literal.create(null, BooleanType)
+        case _ => e
+      }
+
     }
   }
 }
