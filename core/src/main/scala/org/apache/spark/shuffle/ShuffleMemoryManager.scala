@@ -21,8 +21,9 @@ import scala.collection.mutable
 
 import com.google.common.annotations.VisibleForTesting
 
+import org.apache.spark._
+import org.apache.spark.memory.{StaticMemoryManager, MemoryManager}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.{Logging, SparkException, SparkConf, TaskContext}
 
 /**
  * Allocates a pool of memory to tasks for use in shuffle operations. Each disk-spilling
@@ -40,16 +41,17 @@ import org.apache.spark.{Logging, SparkException, SparkConf, TaskContext}
  *
  * Use `ShuffleMemoryManager.create()` factory method to create a new instance.
  *
- * @param maxMemory total amount of memory available for execution, in bytes.
+ * @param memoryManager the interface through which this manager acquires execution memory
  * @param pageSizeBytes number of bytes for each page, by default.
  */
 private[spark]
 class ShuffleMemoryManager protected (
-    val maxMemory: Long,
+    memoryManager: MemoryManager,
     val pageSizeBytes: Long)
   extends Logging {
 
   private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
+  private val maxMemory = memoryManager.maxExecutionMemory
 
   private def currentTaskAttemptId(): Long = {
     // In case this is called on the driver, return an invalid task attempt id.
@@ -71,7 +73,7 @@ class ShuffleMemoryManager protected (
     // of active tasks, to let other tasks ramp down their memory in calls to tryToAcquire
     if (!taskMemory.contains(taskAttemptId)) {
       taskMemory(taskAttemptId) = 0L
-      notifyAll()  // Will later cause waiting tasks to wake up and check numThreads again
+      notifyAll()  // Will later cause waiting tasks to wake up and check numTasks again
     }
 
     // Keep looping until we're either sure that we don't want to grant this request (because this
@@ -85,28 +87,36 @@ class ShuffleMemoryManager protected (
       // How much we can grant this task; don't let it grow to more than 1 / numActiveTasks;
       // don't let it be negative
       val maxToGrant = math.min(numBytes, math.max(0, (maxMemory / numActiveTasks) - curMem))
+      // Only give it as much memory as is free, which might be none if it reached 1 / numTasks
+      val toGrant = math.min(maxToGrant, freeMemory)
 
       if (curMem < maxMemory / (2 * numActiveTasks)) {
         // We want to let each task get at least 1 / (2 * numActiveTasks) before blocking;
         // if we can't give it this much now, wait for other tasks to free up memory
         // (this happens if older tasks allocated lots of memory before N grew)
         if (freeMemory >= math.min(maxToGrant, maxMemory / (2 * numActiveTasks) - curMem)) {
-          val toGrant = math.min(maxToGrant, freeMemory)
-          taskMemory(taskAttemptId) += toGrant
-          return toGrant
+          return acquire(toGrant)
         } else {
           logInfo(
             s"TID $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
           wait()
         }
       } else {
-        // Only give it as much memory as is free, which might be none if it reached 1 / numThreads
-        val toGrant = math.min(maxToGrant, freeMemory)
-        taskMemory(taskAttemptId) += toGrant
-        return toGrant
+        return acquire(toGrant)
       }
     }
     0L  // Never reached
+  }
+
+  /**
+   * Acquire N bytes of execution memory from the memory manager for the current task.
+   * @return number of bytes actually acquired (<= N).
+   */
+  private def acquire(numBytes: Long): Long = synchronized {
+    val taskAttemptId = currentTaskAttemptId()
+    val acquired = memoryManager.acquireExecutionMemory(numBytes)
+    taskMemory(taskAttemptId) += acquired
+    acquired
   }
 
   /** Release numBytes bytes for the current task. */
@@ -115,16 +125,19 @@ class ShuffleMemoryManager protected (
     val curMem = taskMemory.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
       throw new SparkException(
-        s"Internal error: release called on ${numBytes} bytes but task only has ${curMem}")
+        s"Internal error: release called on $numBytes bytes but task only has $curMem")
     }
     taskMemory(taskAttemptId) -= numBytes
+    memoryManager.releaseExecutionMemory(numBytes)
     notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
   }
 
   /** Release all memory for the current task and mark it as inactive (e.g. when a task ends). */
   def releaseMemoryForThisTask(): Unit = synchronized {
     val taskAttemptId = currentTaskAttemptId()
-    taskMemory.remove(taskAttemptId)
+    taskMemory.remove(taskAttemptId).foreach { numBytes =>
+      memoryManager.releaseExecutionMemory(numBytes)
+    }
     notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
   }
 
@@ -138,30 +151,28 @@ class ShuffleMemoryManager protected (
 
 private[spark] object ShuffleMemoryManager {
 
-  def create(conf: SparkConf, numCores: Int): ShuffleMemoryManager = {
-    val maxMemory = ShuffleMemoryManager.getMaxMemory(conf)
+  def create(
+      conf: SparkConf,
+      memoryManager: MemoryManager,
+      numCores: Int): ShuffleMemoryManager = {
+    val maxMemory = memoryManager.maxExecutionMemory
     val pageSize = ShuffleMemoryManager.getPageSize(conf, maxMemory, numCores)
-    new ShuffleMemoryManager(maxMemory, pageSize)
+    new ShuffleMemoryManager(memoryManager, pageSize)
   }
 
+  /**
+   * Create a dummy [[ShuffleMemoryManager]] with the specified capacity and page size.
+   */
   def create(maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
-    new ShuffleMemoryManager(maxMemory, pageSizeBytes)
+    val conf = new SparkConf
+    val memoryManager = new StaticMemoryManager(
+      conf, maxExecutionMemory = maxMemory, maxStorageMemory = Long.MaxValue)
+    new ShuffleMemoryManager(memoryManager, pageSizeBytes)
   }
 
   @VisibleForTesting
   def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
-    new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
-  }
-
-  /**
-   * Figure out the shuffle memory limit from a SparkConf. We currently have both a fraction
-   * of the memory pool and a safety factor since collections can sometimes grow bigger than
-   * the size we target before we estimate their sizes again.
-   */
-  private def getMaxMemory(conf: SparkConf): Long = {
-    val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
-    val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+    create(maxMemory, 4 * 1024 * 1024)
   }
 
   /**
