@@ -94,7 +94,7 @@ private[streaming] class FlumePollingReceiver(
   override def onStop(): Unit = {
     logInfo("Shutting down Flume Polling Receiver")
     receiverExecutor.shutdown()
-    // Wait for a minute for the threads to die
+    // Wait upto a minute for the threads to die
     if (!receiverExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
       receiverExecutor.shutdownNow()
     }
