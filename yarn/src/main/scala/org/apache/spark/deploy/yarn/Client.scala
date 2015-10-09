@@ -537,7 +537,6 @@ private[spark] class Client(
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
     populateClasspath(args, yarnConf, sparkConf, env, true, extraCp)
-    logInfo("Environment.CLASSPATH: " + env.get(Environment.CLASSPATH.name))
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -1165,7 +1164,7 @@ object Client extends Logging {
         } else {
           getMainJarUri(sparkConf.getOption(CONF_SPARK_USER_JAR))
         }
-      mainJar.foreach(addFileToClasspath(sparkConf, conf,  _, APP_JAR, env))
+      mainJar.foreach(addFileToClasspath(sparkConf, conf, _, APP_JAR, env))
 
       val secondaryJars =
         if (args != null) {
