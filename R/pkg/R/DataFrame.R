@@ -1913,12 +1913,12 @@ setMethod("coltypes",
 
             # Map Spark data types into R's data types
             rTypes <- as.character(DATA_TYPES[types])
-            
+
             # Find which types could not be mapped
             naIndices <- which(is.na(rTypes))
-            
+
             # Assign the original scala data types to the unmatched ones
             rTypes[naIndices] <- types[naIndices]
-            
+
             rTypes
           })
