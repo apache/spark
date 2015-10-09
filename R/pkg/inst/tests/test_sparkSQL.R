@@ -1366,7 +1366,7 @@ test_that("Method as.data.frame as a synonym for collect()", {
 test_that("Method coltypes() to get R's data types of a DataFrame", {
   expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
 
-  data <- data.frame(c1=c(1,2,3), 
+  data <- data.frame(c1=c(1,2,3),
                      c2=c(T,F,T),
                      c3=c("2015/01/01 10:00:00", "2015/01/02 10:00:00", "2015/01/03 10:00:00"))
 
