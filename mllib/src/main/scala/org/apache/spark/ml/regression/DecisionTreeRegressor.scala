@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.regression
 
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -26,7 +27,6 @@ import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, Tr
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.sql.{Row, DataFrame}

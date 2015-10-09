@@ -19,11 +19,10 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.feature.{IndexToString, VectorIndexer, StringIndexer}
+import org.apache.spark.ml.feature.{Instance, IndexToString, VectorIndexer, StringIndexer}
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
-import org.apache.spark.ml.tree.impl.WeightedLabeledPoint
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -188,10 +187,10 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   test("training with weighted data") {
     val (dataset, testDataset) = {
       val keyFeature = Vectors.dense(0, 1.0, 2, 1.2)
-      val data0 = Array.fill(20)(WeightedLabeledPoint(0, 0.1, keyFeature))
-      val data1 = Array.fill(10)(WeightedLabeledPoint(1, 20.0, keyFeature))
+      val data0 = Array.fill(20)(Instance(0, 0.1, keyFeature))
+      val data1 = Array.fill(10)(Instance(1, 20.0, keyFeature))
 
-      val testData = Seq(WeightedLabeledPoint(0, 0.1, keyFeature))
+      val testData = Seq(Instance(0, 0.1, keyFeature))
       (sqlContext.createDataFrame(sc.parallelize(data0 ++ data1, 2)),
         sqlContext.createDataFrame(sc.parallelize(testData, 2)))
     }

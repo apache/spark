@@ -20,11 +20,10 @@ package org.apache.spark.ml.classification
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.{VectorIndexer, StringIndexer}
+import org.apache.spark.ml.feature.{Instance, VectorIndexer, StringIndexer}
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
-import org.apache.spark.ml.tree.impl.WeightedLabeledPoint
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -294,20 +293,20 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
         case LabeledPoint(label: Double, features: Vector) => {
           if (rnd.nextGaussian() > 0.0) {
             Iterator(
-              WeightedLabeledPoint(label, 1.2, features),
-              WeightedLabeledPoint(label, 0.8, features),
-              WeightedLabeledPoint(0.0, 0.0, features))
+              Instance(label, 1.2, features),
+              Instance(label, 0.8, features),
+              Instance(0.0, 0.0, features))
           } else {
             Iterator(
-              WeightedLabeledPoint(label, 0.3, features),
-              WeightedLabeledPoint(1, 0.0, features),
-              WeightedLabeledPoint(label, 1.1, features),
-              WeightedLabeledPoint(label, 0.6, features))
+              Instance(label, 0.3, features),
+              Instance(1, 0.0, features),
+              Instance(label, 1.1, features),
+              Instance(label, 0.6, features))
           }
         }
       }
       val weightedTestData2 = testData2.map {
-        p: LabeledPoint => WeightedLabeledPoint(p.label, 1, p.features)
+        p: LabeledPoint => Instance(p.label, 1, p.features)
       }
 
       (sqlContext.createDataFrame(sc.parallelize(overSampledTestData1 ++ testData2, 2)),
