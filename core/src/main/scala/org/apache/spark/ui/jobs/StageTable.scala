@@ -41,6 +41,7 @@ private[ui] class StageTableBase(
     <th>Description</th>
     <th>Submitted</th>
     <th>Duration</th>
+    <th>Max Task Duration</th>
     <th>Tasks: Succeeded/Total</th>
     <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
     <th><span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output</span></th>
@@ -126,6 +127,7 @@ private[ui] class StageTableBase(
     <td>No data available for this stage</td> ++ // Description
     <td></td> ++ // Submitted
     <td></td> ++ // Duration
+    <td></td> ++ // Max Task Duration
     <td></td> ++ // Tasks: Succeeded/Total
     <td></td> ++ // Input
     <td></td> ++ // Output
@@ -149,6 +151,10 @@ private[ui] class StageTableBase(
       if (finishTime > t) finishTime - t else System.currentTimeMillis - t
     }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
+
+    val maxTaskDuration = stageData.taskData.values.toSeq
+        .map(d => d.taskInfo.duration).max
+    val formattedMaxTaskDuration = UIUtils.formatDuration(maxTaskDuration)
 
     val inputRead = stageData.inputBytes
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
@@ -179,6 +185,7 @@ private[ui] class StageTableBase(
       {submissionTime}
     </td>
     <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
+    <td sorttable_customkey={maxTaskDuration.toString}>{formattedMaxTaskDuration}</td>
     <td class="progress-cell">
       {UIUtils.makeProgressBar(started = stageData.numActiveTasks,
         completed = stageData.completedIndices.size, failed = stageData.numFailedTasks,
