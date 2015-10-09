@@ -588,6 +588,7 @@ class TungstenAggregationIterator(
     // Otherwise, children operators may steal the window of opportunity and starve our sorter.
 
     if (needsProcess) {
+      assert(initialInputBufferOffset == 0)
       // First, we create a buffer.
       val buffer = createNewAggregationBuffer()
 
@@ -607,6 +608,7 @@ class TungstenAggregationIterator(
         externalSorter.insertKV(groupingKey, buffer)
       }
     } else {
+      assert(initialInputBufferOffset > 0)
       // When needsProcess is false, the format of input rows is groupingKey + aggregation buffer.
       // We need to project the aggregation buffer part from an input row.
       val buffer = createNewAggregationBuffer()
