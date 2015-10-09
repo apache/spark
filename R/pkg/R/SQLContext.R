@@ -35,6 +35,15 @@ getInternalType <- function(x) {
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
          stop(paste("Unsupported type for SparkDataFrame:", class(x))))
+#' return the SQL Context
+getSqlContext <- function() {
+  if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+    get(".sparkRHivesc", envir = .sparkREnv)
+  } else if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
+    get(".sparkRSQLsc", envir = .sparkREnv)
+  } else {
+    stop("SQL context not initialized")
+  }
 }
 
 #' infer the SQL type
@@ -90,6 +99,11 @@ infer_type <- function(x) {
 #' }
 
 # TODO(davies): support sampling and infer type from NA
+createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0) {
+  sqlContext <- getSqlContext()
+  createDataFrame(sqlContext, data, schema, samplingRatio)
+}
+
 createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
   if (is.data.frame(data)) {
       # get the names of columns, they will be put into RDD
@@ -190,13 +204,7 @@ setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
 
 setMethod("toDF", signature(x = "RDD"),
           function(x, ...) {
-            sqlContext <- if (exists(".sparkRHivesc", envir = .sparkREnv)) {
-              get(".sparkRHivesc", envir = .sparkREnv)
-            } else if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
-              get(".sparkRSQLsc", envir = .sparkREnv)
-            } else {
-              stop("no SQL context available")
-            }
+            sqlContext <- getSqlContext()
             createDataFrame(sqlContext, x, ...)
           })
 
@@ -225,6 +233,10 @@ read.json <- function(sqlContext, path) {
   read <- callJMethod(sqlContext, "read")
   sdf <- callJMethod(read, "json", paths)
   dataFrame(sdf)
+
+jsonFile <- function(path) {
+  sqlContext <- getSqlContext()
+  jsonFile(sqlContext, path)
 }
 
 #' @rdname read.json
@@ -290,6 +302,9 @@ read.parquet <- function(sqlContext, path) {
 #' @name parquetFile
 #' @export
 # TODO: Implement saveasParquetFile and write examples for both
+parquetFile <- function(...) {
+  sqlContext <- getSqlContext()
+  parquetFile(sqlContext, ...)
 parquetFile <- function(sqlContext, ...) {
   .Deprecated("read.parquet")
   read.parquet(sqlContext, unlist(list(...)))
@@ -341,6 +356,11 @@ read.text <- function(sqlContext, path) {
 #' new_df <- sql(sqlContext, "SELECT * FROM table")
 #' }
 
+sql <- function(sqlQuery) {
+  sqlContext <- getSqlContext()
+  sql(sqlContext, sqlQuery)
+}
+
 sql <- function(sqlContext, sqlQuery) {
  sdf <- callJMethod(sqlContext, "sql", sqlQuery)
  dataFrame(sdf)
@@ -387,6 +407,11 @@ tableToDF <- function(sqlContext, tableName) {
 #' tables(sqlContext, "hive")
 #' }
 
+tables <- function(databaseName = NULL) {
+  sqlContext <- getSqlContext()
+  tables(sqlContext, databaseName)
+}
+
 tables <- function(sqlContext, databaseName = NULL) {
   jdf <- if (is.null(databaseName)) {
     callJMethod(sqlContext, "tables")
@@ -411,6 +436,11 @@ tables <- function(sqlContext, databaseName = NULL) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' tableNames(sqlContext, "hive")
 #' }
+
+tableNames <- function(databaseName = NULL) {
+  sqlContext <- getSqlContext()
+  tableNames(sqlContext, databaseName)
+}
 
 tableNames <- function(sqlContext, databaseName = NULL) {
   if (is.null(databaseName)) {
@@ -439,6 +469,11 @@ tableNames <- function(sqlContext, databaseName = NULL) {
 #' cacheTable(sqlContext, "table")
 #' }
 
+cacheTable <- function(tableName) {
+  sqlContext <- getSqlContext()
+  cacheTable(sqlContext, tableName)
+}
+
 cacheTable <- function(sqlContext, tableName) {
   callJMethod(sqlContext, "cacheTable", tableName)
 }
@@ -461,6 +496,11 @@ cacheTable <- function(sqlContext, tableName) {
 #' uncacheTable(sqlContext, "table")
 #' }
 
+uncacheTable <- function(tableName) {
+  sqlContext <- getSqlContext()
+  uncacheTable(sqlContext, tableName)
+}
+
 uncacheTable <- function(sqlContext, tableName) {
   callJMethod(sqlContext, "uncacheTable", tableName)
 }
@@ -474,6 +514,11 @@ uncacheTable <- function(sqlContext, tableName) {
 #' \dontrun{
 #' clearCache(sqlContext)
 #' }
+
+clearCache <- function() {
+  sqlContext <- getSqlContext()
+  callJMethod(sqlContext, "clearCache")
+}
 
 clearCache <- function(sqlContext) {
   callJMethod(sqlContext, "clearCache")
@@ -494,6 +539,11 @@ clearCache <- function(sqlContext) {
 #' registerTempTable(df, "table")
 #' dropTempTable(sqlContext, "table")
 #' }
+
+dropTempTable <- function(tableName) {
+  sqlContext <- getSqlContext()
+  dropTempTable(sqlContext, tableName)
+}
 
 dropTempTable <- function(sqlContext, tableName) {
   if (class(tableName) != "character") {
@@ -529,13 +579,17 @@ dropTempTable <- function(sqlContext, tableName) {
 #' df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema = "true")
 #' }
 
+read.df <- function(path = NULL, source = NULL, schema = NULL, ...) {
+  sqlContext <- getSqlContext()
+  read.df(sqlContext, path, source, schema, ...)
+}
+
 read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
   }
   if (is.null(source)) {
-    sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
     source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                           "org.apache.spark.sql.parquet")
   }
@@ -549,8 +603,12 @@ read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) 
   dataFrame(sdf)
 }
 
-#' @rdname read.df
+#' @aliases read.df
 #' @name loadDF
+loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
+  read.df(path, source, schema, ...)
+}
+
 loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
   read.df(sqlContext, path, source, schema, ...)
 }
@@ -576,6 +634,11 @@ loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' df <- sparkRSQL.createExternalTable(sqlContext, "myjson", path="path/to/json", source="json")
 #' }
+
+createExternalTable <- function(tableName, path = NULL, source = NULL, ...) {
+  sqlContext <- getSqlContext()
+  createExternalTable(sqlContext, tableName, path, source)
+}
 
 createExternalTable <- function(sqlContext, tableName, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
