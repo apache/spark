@@ -209,11 +209,11 @@ object Attribute extends AttributeFactory {
 @Since("1.4.0")
 class NumericAttribute private[ml] (
     @Since("1.4.0") override val name: Option[String] = None,
-    @Since("1.4.0") ooverride val index: Option[Int] = None,
-    @Since("1.4.0") oval min: Option[Double] = None,
-    @Since("1.4.0") oval max: Option[Double] = None,
-    @Since("1.4.0") oval std: Option[Double] = None,
-    @Since("1.4.0") oval sparsity: Option[Double] = None) extends Attribute {
+    @Since("1.4.0") override val index: Option[Int] = None,
+    @Since("1.4.0") val min: Option[Double] = None,
+    @Since("1.4.0") val max: Option[Double] = None,
+    @Since("1.4.0") val std: Option[Double] = None,
+    @Since("1.4.0") val sparsity: Option[Double] = None) extends Attribute {
 
   std.foreach { s =>
     require(s >= 0.0, s"Standard deviation cannot be negative but got $s.")

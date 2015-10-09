@@ -202,7 +202,7 @@ class AttributeGroup private (
   }
 
 
-  @Since("1.5.2")
+  @Since("1.6.0")
   override def toString: String = toMetadata.toString
 }
 
