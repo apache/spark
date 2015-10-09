@@ -118,11 +118,11 @@ setMethod("corr",
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' df <- jsonFile(sqlContext, "/path/to/file.json")
 #' fi = freqItems(df, c("title", "gender"))
 #' }
 setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
-          function(x, cols, support) {
+          function(x, cols, support = 0.01) {
             statFunctions <- callJMethod(x@sdf, "stat")
             sct <- callJMethod(statFunctions, "freqItems", as.list(cols), support)
             collect(dataFrame(sct))

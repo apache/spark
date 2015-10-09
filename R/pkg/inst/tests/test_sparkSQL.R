@@ -1352,9 +1352,7 @@ test_that("freqItems() on a DataFrame", {
   expect_true("1" %in% multiColResults$letters[[1]])
   singleColResult <- freqItems(df, "negDoubles", support=0.1)
   expect_true(-1 %in% head(singleColResult$negDoubles)[[1]])
-})
 
-test_that("freqItems2() on a DataFrame", {
   l <- lapply(c(0:99), function(i) {
     if (i %% 2 == 0) { list(1L, -1.0) }
     else { list(i, i * -1.0) }})
