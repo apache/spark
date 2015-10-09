@@ -163,7 +163,7 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
-        self.assertEqual(maxIter.doc, "max number of iterations (>= 0)")
+        self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
         self.assertTrue(maxIter.parent == testParams.uid)
 
     def test_params(self):
@@ -197,9 +197,9 @@ class ParamTests(PySparkTestCase):
 
         self.assertEqual(
             testParams.explainParams(),
-            "\n".join(["inputCol: input column name (undefined)",
-                       "maxIter: max number of iterations (>= 0) (default: 10, current: 100)",
-                       "seed: random seed (default: 41, current: 43)"]))
+            "\n".join(["inputCol: input column name. (undefined)",
+                       "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
+                       "seed: random seed. (default: 41, current: 43)"]))
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
