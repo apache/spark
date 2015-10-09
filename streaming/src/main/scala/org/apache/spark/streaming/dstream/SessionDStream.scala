@@ -108,13 +108,13 @@ object SessionSpec {
 
 
 // -----------------------------------------------
-// --------------- SessionMap stuff --------------
+// --------------- SessionStore stuff --------------
 // -----------------------------------------------
 
 /**
  * Internal interface for defining the map that keeps track of sessions.
  */
-private[streaming] abstract class SessionMap[K: ClassTag, S: ClassTag] extends Serializable {
+private[streaming] abstract class SessionStore[K: ClassTag, S: ClassTag] extends Serializable {
   /** Add or update session data */
 
   def put(key: K, session: S): Unit
@@ -126,10 +126,10 @@ private[streaming] abstract class SessionMap[K: ClassTag, S: ClassTag] extends S
   def remove(key: K): Unit
 
   /**
-   * Shallow copy the map to create a new session map. Updates to the new map
+   * Shallow copy the map to create a new session store. Updates to the new map
    * should not mutate `this` map.
    */
-  def copy(): SessionMap[K, S]
+  def copy(): SessionStore[K, S]
 
   /**
    * Return an iterator of data in this map. If th flag is true, implementations should
@@ -138,32 +138,32 @@ private[streaming] abstract class SessionMap[K: ClassTag, S: ClassTag] extends S
   def iterator(updatedSessionsOnly: Boolean): Iterator[Session[K, S]]
 }
 
-private[streaming] object SessionMap {
-  def empty[K: ClassTag, S: ClassTag]: SessionMap[K, S] = new EmptySessionMap[K, S]
+private[streaming] object SessionStore {
+  def empty[K: ClassTag, S: ClassTag]: SessionStore[K, S] = new EmptySessionStore[K, S]
 
-  def create[K: ClassTag, S: ClassTag](): SessionMap[K, S] = new HashMapBasedSessionMap[K, S]()
+  def create[K: ClassTag, S: ClassTag](): SessionStore[K, S] = new HashMapBasedSessionStore[K, S]()
 }
 
-/** Specific implementation of SessionMap interface representing an empty map */
-private[streaming] class EmptySessionMap[K: ClassTag, S: ClassTag] extends SessionMap[K, S] {
+/** Specific implementation of SessionStore interface representing an empty map */
+private[streaming] class EmptySessionStore[K: ClassTag, S: ClassTag] extends SessionStore[K, S] {
   override def put(key: K, session: S): Unit = ???
   override def get(key: K): Option[S] = None
-  override def copy(): SessionMap[K, S] = new EmptySessionMap[K, S]
+  override def copy(): SessionStore[K, S] = new EmptySessionStore[K, S]
   override def remove(key: K): Unit = { }
   override def iterator(updatedSessionsOnly: Boolean): Iterator[Session[K, S]] = Iterator.empty
 }
 
 
 /** Specific implementation of the SessionMap interface using a scala mutable HashMap */
-private[streaming] class HashMapBasedSessionMap[K: ClassTag, S: ClassTag](
-    parentSessionMap: SessionMap[K, S]) extends SessionMap[K, S] {
+private[streaming] class HashMapBasedSessionStore[K: ClassTag, S: ClassTag](
+    parentSessionStore: SessionStore[K, S]) extends SessionStore[K, S] {
 
-  def this() = this(new EmptySessionMap[K, S])
+  def this() = this(new EmptySessionStore[K, S])
 
-  import HashMapBasedSessionMap._
+  import HashMapBasedSessionStore._
 
-  private val generation: Int = parentSessionMap match {
-    case map: HashMapBasedSessionMap[_, _] => map.generation + 1
+  private val generation: Int = parentSessionStore match {
+    case map: HashMapBasedSessionStore[_, _] => map.generation + 1
     case _ => 1
   }
 
@@ -180,7 +180,7 @@ private[streaming] class HashMapBasedSessionMap[K: ClassTag, S: ClassTag](
 
   /** Get the session data if it exists */
   override def get(key: K): Option[S] = {
-    internalMap.get(key).filter { _.deleted == false }.map { _.data }.orElse(parentSessionMap.get(key))
+    internalMap.get(key).filter { _.deleted == false }.map { _.data }.orElse(parentSessionStore.get(key))
   }
 
   /** Remove a key */
@@ -197,7 +197,7 @@ private[streaming] class HashMapBasedSessionMap[K: ClassTag, S: ClassTag](
       Session(key, sessionInfo.data, !sessionInfo.deleted)
     }
 
-    def previousSessions = parentSessionMap.iterator(updatedSessionsOnly = false).filter { session =>
+    def previousSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter { session =>
       !internalMap.contains(session.getKey())
     }
 
@@ -209,27 +209,27 @@ private[streaming] class HashMapBasedSessionMap[K: ClassTag, S: ClassTag](
   }
 
   /**
-   * Shallow copy the map to create a new session map. Updates to the new map
+   * Shallow copy the map to create a new session store. Updates to the new map
    * should not mutate `this` map.
    */
-  override def copy(): SessionMap[K, S] = {
-    doCopy(generation >= HashMapBasedSessionMap.GENERATION_THRESHOLD_FOR_CONSOLIDATION)
+  override def copy(): SessionStore[K, S] = {
+    doCopy(generation >= HashMapBasedSessionStore.GENERATION_THRESHOLD_FOR_CONSOLIDATION)
   }
 
-  def doCopy(consolidate: Boolean): SessionMap[K, S] = {
+  def doCopy(consolidate: Boolean): SessionStore[K, S] = {
     if (consolidate) {
-      val newParentMap = new HashMapBasedSessionMap[K, S]()
+      val newParentMap = new HashMapBasedSessionStore[K, S]()
       iterator(updatedSessionsOnly = false).filter { _.isActive }.foreach { case session =>
         newParentMap.internalMap.put(session.getKey(), SessionInfo(session.getData(), deleted = false))
       }
-      new HashMapBasedSessionMap[K, S](newParentMap)
+      new HashMapBasedSessionStore[K, S](newParentMap)
     } else {
-      new HashMapBasedSessionMap[K, S](this)
+      new HashMapBasedSessionStore[K, S](this)
     }
   }
 }
 
-private[streaming] object HashMapBasedSessionMap {
+private[streaming] object HashMapBasedSessionStore {
 
   case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
 
@@ -263,11 +263,11 @@ private[streaming] class SessionRDDPartition(
 
 private[streaming] class SessionRDD[K: ClassTag, V: ClassTag, S: ClassTag](
     _sc: SparkContext,
-    private var previousSessionRDD: RDD[SessionMap[K, S]],
+    private var previousSessionRDD: RDD[SessionStore[K, S]],
     private var partitionedDataRDD: RDD[(K, V)],
     updateFunction: (V, Option[S]) => Option[S],
     timestamp: Long
-  ) extends RDD[SessionMap[K, S]](
+  ) extends RDD[SessionStore[K, S]](
     _sc,
     List(new OneToOneDependency(previousSessionRDD), new OneToOneDependency(partitionedDataRDD))
   ) {
@@ -276,7 +276,7 @@ private[streaming] class SessionRDD[K: ClassTag, V: ClassTag, S: ClassTag](
 
   override val partitioner = previousSessionRDD.partitioner
 
-  override def compute(partition: Partition, context: TaskContext): Iterator[SessionMap[K, S]] = {
+  override def compute(partition: Partition, context: TaskContext): Iterator[SessionStore[K, S]] = {
     val sessionRDDPartition = partition.asInstanceOf[SessionRDDPartition]
     val prevSessionIterator = previousSessionRDD.iterator(
       sessionRDDPartition.previousSessionRDDPartition, context)
@@ -285,35 +285,41 @@ private[streaming] class SessionRDD[K: ClassTag, V: ClassTag, S: ClassTag](
 
     require(prevSessionIterator.hasNext)
 
-    val sessionMap = prevSessionIterator.next().copy()
+    val sessionStore = prevSessionIterator.next().copy()
     dataIterator.foreach { case (key, value) =>
-      val prevState = sessionMap.get(key)
+      val prevState = sessionStore.get(key)
       val newState = updateFunction(value, prevState)
       if (newState.isDefined) {
-        sessionMap.put(key, newState.get)
+        sessionStore.put(key, newState.get)
       } else {
-        sessionMap.remove(key)
+        sessionStore.remove(key)
       }
     }
-    Iterator(sessionMap)
+    Iterator(sessionStore)
   }
 
   override protected def getPartitions: Array[Partition] = {
     Array.tabulate(previousSessionRDD.partitions.length) { i =>
       new SessionRDDPartition(i, previousSessionRDD, partitionedDataRDD)}
   }
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    previousSessionRDD = null
+    partitionedDataRDD = null
+  }
 }
 
 private[streaming] object SessionRDD {
   def createFromPairRDD[K: ClassTag, S: ClassTag](
-      pairRDD: RDD[(K, S)], partitioner: Partitioner): RDD[SessionMap[K, S]] = {
+      pairRDD: RDD[(K, S)], partitioner: Partitioner): RDD[SessionStore[K, S]] = {
 
     val createStateMap = (iterator: Iterator[(K, S)]) => {
-      val newSessionMap = SessionMap.create[K, S]()
-      iterator.foreach { case (key, state) => newSessionMap.put(key, state) }
-      Iterator(newSessionMap)
+      val newSessionStore = SessionStore.create[K, S]()
+      iterator.foreach { case (key, state) => newSessionStore.put(key, state) }
+      Iterator(newSessionStore)
     }
-    pairRDD.partitionBy(partitioner).mapPartitions[SessionMap[K, S]](
+    pairRDD.partitionBy(partitioner).mapPartitions[SessionStore[K, S]](
       createStateMap, preservesPartitioning = true)
   }
 }
@@ -326,7 +332,7 @@ private[streaming] object SessionRDD {
 
 private[streaming] class SessionDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     parent: DStream[(K, V)], sessionSpec: SessionSpec[K, V, S])
-  extends DStream[SessionMap[K, S]](parent.context) {
+  extends DStream[SessionStore[K, S]](parent.context) {
 
   sessionSpec.validate()
   persist(StorageLevel.DISK_ONLY)
@@ -343,8 +349,8 @@ private[streaming] class SessionDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   override val mustCheckpoint = true
 
   /** Method that generates a RDD for the given time */
-  override def compute(validTime: Time): Option[RDD[SessionMap[K, S]]] = {
-    val previousSessionMapRDD = getOrCompute(validTime - slideDuration).getOrElse {
+  override def compute(validTime: Time): Option[RDD[SessionStore[K, S]]] = {
+    val previousSessionRDD = getOrCompute(validTime - slideDuration).getOrElse {
       SessionRDD.createFromPairRDD[K, S](
         sessionSpec.getInitialSessions().getOrElse(new EmptyRDD[(K, S)](ssc.sparkContext)),
         partitioner
@@ -353,7 +359,7 @@ private[streaming] class SessionDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     val newDataRDD = parent.getOrCompute(validTime).get
     val partitionedDataRDD = newDataRDD.partitionBy(partitioner)
     Some(new SessionRDD(
-      ssc.sparkContext, previousSessionMapRDD, partitionedDataRDD,
+      ssc.sparkContext, previousSessionRDD, partitionedDataRDD,
       updateFunction, validTime.milliseconds))
   }
 }

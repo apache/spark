@@ -1,12 +1,12 @@
 package org.apache.spark.streaming
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.streaming.dstream.HashMapBasedSessionMap
+import org.apache.spark.streaming.dstream.HashMapBasedSessionStore
 import org.apache.spark.streaming.dstream.Session
 
-class SessionMapSuite extends SparkFunSuite {
+class SessionStoreSuite extends SparkFunSuite {
   test("put, get, remove, iterator") {
-    val map = new HashMapBasedSessionMap[Int, Int]()
+    val map = new HashMapBasedSessionStore[Int, Int]()
 
     map.put(1, 100)
     assert(map.get(1) === Some(100))
@@ -27,7 +27,7 @@ class SessionMapSuite extends SparkFunSuite {
   }
 
   test("put, get, remove, iterator after copy") {
-    val parentMap = new HashMapBasedSessionMap[Int, Int]()
+    val parentMap = new HashMapBasedSessionStore[Int, Int]()
     parentMap.put(1, 100)
     parentMap.put(2, 200)
     parentMap.remove(1)
@@ -63,7 +63,7 @@ class SessionMapSuite extends SparkFunSuite {
   }
 
   test("copying with consolidation") {
-    val map1 = new HashMapBasedSessionMap[Int, Int]()
+    val map1 = new HashMapBasedSessionStore[Int, Int]()
     map1.put(1, 100)
     map1.put(2, 200)
 
@@ -76,7 +76,7 @@ class SessionMapSuite extends SparkFunSuite {
     map3.put(4, 700)
 
     assert(map3.iterator(false).toSet ===
-      map3.asInstanceOf[HashMapBasedSessionMap[Int, Int]].doCopy(true).iterator(false).toSet)
+      map3.asInstanceOf[HashMapBasedSessionStore[Int, Int]].doCopy(true).iterator(false).toSet)
 
   }
 }

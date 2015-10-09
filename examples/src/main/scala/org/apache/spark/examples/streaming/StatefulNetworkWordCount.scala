@@ -55,11 +55,12 @@ object StatefulNetworkWordCount {
 
     val newUpdateFunc = (iterator: Iterator[(String, Seq[Int], Option[Int])]) => {
       iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
-    }*/
+    }
+    */
 
     val sparkConf = new SparkConf().setAppName("StatefulNetworkWordCount")
     // Create the context with a 1 second batch size
-    val ssc = new StreamingContext(sparkConf, Seconds(1))
+    val ssc = new StreamingContext(sparkConf, Milliseconds(200))
     ssc.checkpoint(".")
 
     // Initial RDD input to updateStateByKey
