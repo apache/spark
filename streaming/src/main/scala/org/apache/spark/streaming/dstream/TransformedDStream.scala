@@ -42,7 +42,8 @@ class TransformedDStream[U: ClassTag] (
     val transformedRDD = transformFunc(parentRDDs, validTime)
     if (transformedRDD == null) {
       throw new SparkException("Transform function must not return null. " +
-        "Return RDD.empty to return no elements as the result of the transformation.")
+        "Return SparkContext.emptyRDD() instead to represent no element " +
+        "as the result of transformation.")
     }
     Some(transformedRDD)
   }
