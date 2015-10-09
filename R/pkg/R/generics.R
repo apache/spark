@@ -399,6 +399,14 @@ setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
 
+#' @rdname statfunctions
+#' @export
+setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
+
+#' @rdname statfunctions
+#' @export
+setGeneric("corr", function(x, col1, col2, method = "pearson") {standardGeneric("corr") })
+
 #' @rdname describe
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
@@ -413,7 +421,7 @@ setGeneric("dropna",
 #' @rdname nafunctions
 #' @export
 setGeneric("na.omit",
-           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+           function(object, ...) {
              standardGeneric("na.omit")
            })
 
@@ -467,7 +475,7 @@ setGeneric("merge")
 
 #' @rdname withColumn
 #' @export
-setGeneric("mutate", function(x, ...) {standardGeneric("mutate") })
+setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
 #' @rdname arrange
 #' @export
@@ -507,6 +515,10 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
+#' @rdname withColumn
+#' @export
+setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
+
 #' @rdname write.df
 #' @export
 setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
@@ -530,6 +542,10 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 #' @rdname showDF
 #' @export
 setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+
+# @rdname subset
+# @export
+setGeneric("subset", function(x, subset, select, ...) { standardGeneric("subset") })
 
 #' @rdname agg
 #' @export
@@ -975,3 +991,7 @@ setGeneric("glm")
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
+
+#' @rdname as.data.frame
+#' @export
+setGeneric("as.data.frame")

@@ -54,8 +54,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
 private[spark] class Client(
@@ -86,7 +87,11 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
-  def stop(): Unit = yarnClient.stop()
+  def stop(): Unit = {
+    yarnClient.stop()
+    // Unset YARN mode system env variable, to allow switching between cluster types.
+    System.clearProperty("SPARK_YARN_MODE")
+  }
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
@@ -726,6 +731,7 @@ private[spark] class Client(
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
+    YarnCommandBuilderUtils.addPermGenSizeOpt(javaOpts)
 
     val userClass =
       if (isClusterMode) {
@@ -1045,7 +1051,10 @@ object Client extends Logging {
           s"in favor of the $CONF_SPARK_JAR configuration variable.")
       System.getenv(ENV_SPARK_JAR)
     } else {
-      SparkContext.jarOfClass(this.getClass).head
+      SparkContext.jarOfClass(this.getClass).getOrElse(throw new SparkException("Could not "
+        + "find jar containing Spark classes. The jar can be defined using the "
+        + "spark.yarn.jar configuration option. If testing Spark, either set that option or "
+        + "make sure SPARK_PREPEND_CLASSES is not set."))
     }
   }
 
@@ -1146,13 +1155,24 @@ object Client extends Logging {
     }
 
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
-      val userClassPath =
+      // in order to properly add the app jar when user classpath is first
+      // we have to do the mainJar separate in order to send the right thing
+      // into addFileToClasspath
+      val mainJar =
         if (args != null) {
-          getUserClasspath(Option(args.userJar), Option(args.addJars))
+          getMainJarUri(Option(args.userJar))
         } else {
-          getUserClasspath(sparkConf)
+          getMainJarUri(sparkConf.getOption(CONF_SPARK_USER_JAR))
         }
-      userClassPath.foreach { x =>
+      mainJar.foreach(addFileToClasspath(sparkConf, _, APP_JAR, env))
+
+      val secondaryJars =
+        if (args != null) {
+          getSecondaryJarUris(Option(args.addJars))
+        } else {
+          getSecondaryJarUris(sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+        }
+      secondaryJars.foreach { x =>
         addFileToClasspath(sparkConf, x, null, env)
       }
     }
@@ -1169,16 +1189,20 @@ object Client extends Logging {
    * @param conf Spark configuration.
    */
   def getUserClasspath(conf: SparkConf): Array[URI] = {
-    getUserClasspath(conf.getOption(CONF_SPARK_USER_JAR),
-      conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+    val mainUri = getMainJarUri(conf.getOption(CONF_SPARK_USER_JAR))
+    val secondaryUris = getSecondaryJarUris(conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+    (mainUri ++ secondaryUris).toArray
   }
 
-  private def getUserClasspath(
-      mainJar: Option[String],
-      secondaryJars: Option[String]): Array[URI] = {
-    val mainUri = mainJar.orElse(Some(APP_JAR)).map(new URI(_))
-    val secondaryUris = secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
-    (mainUri ++ secondaryUris).toArray
+  private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
+    mainJar.flatMap { path =>
+      val uri = new URI(path)
+      if (uri.getScheme == LOCAL_SCHEME) Some(uri) else None
+    }.orElse(Some(new URI(APP_JAR)))
+  }
+
+  private def getSecondaryJarUris(secondaryJars: Option[String]): Seq[URI] = {
+    secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
   }
 
   /**

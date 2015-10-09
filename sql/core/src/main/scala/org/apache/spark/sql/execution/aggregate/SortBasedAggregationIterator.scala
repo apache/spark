@@ -54,7 +54,7 @@ class SortBasedAggregationIterator(
     outputsUnsafeRows) {
 
   override protected def newBuffer: MutableRow = {
-    val bufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
+    val bufferSchema = allAggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)

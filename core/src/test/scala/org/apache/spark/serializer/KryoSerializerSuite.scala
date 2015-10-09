@@ -150,6 +150,36 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       mutable.HashMap(1->"one", 2->"two", 3->"three")))
   }
 
+  test("Bug: SPARK-10251") {
+    val ser = new KryoSerializer(conf.clone.set("spark.kryo.registrationRequired", "true"))
+      .newInstance()
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+    check((1, 3))
+    check(Array((1, 3)))
+    check(List((1, 3)))
+    check(List[Int]())
+    check(List[Int](1, 2, 3))
+    check(List[String]())
+    check(List[String]("x", "y", "z"))
+    check(None)
+    check(Some(1))
+    check(Some("hi"))
+    check(1 -> 1)
+    check(mutable.ArrayBuffer(1, 2, 3))
+    check(mutable.ArrayBuffer("1", "2", "3"))
+    check(mutable.Map())
+    check(mutable.Map(1 -> "one", 2 -> "two"))
+    check(mutable.Map("one" -> 1, "two" -> 2))
+    check(mutable.HashMap(1 -> "one", 2 -> "two"))
+    check(mutable.HashMap("one" -> 1, "two" -> 2))
+    check(List(Some(mutable.HashMap(1->1, 2->2)), None, Some(mutable.HashMap(3->4))))
+    check(List(
+      mutable.HashMap("one" -> 1, "two" -> 2),
+      mutable.HashMap(1->"one", 2->"two", 3->"three")))
+  }
+
   test("ranges") {
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {

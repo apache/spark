@@ -23,6 +23,7 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{ExecutionContext, Await, Future}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 import scala.util.Random
 
 import sun.nio.ch.DirectBuffer
@@ -30,6 +31,7 @@ import sun.nio.ch.DirectBuffer
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.memory.MemoryManager
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
@@ -63,8 +65,8 @@ private[spark] class BlockManager(
     rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
     defaultSerializer: Serializer,
-    maxMemory: Long,
     val conf: SparkConf,
+    memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
     blockTransferService: BlockTransferService,
@@ -81,12 +83,15 @@ private[spark] class BlockManager(
 
   // Actual storage of where blocks are kept
   private var externalBlockStoreInitialized = false
-  private[spark] val memoryStore = new MemoryStore(this, maxMemory)
+  private[spark] val memoryStore = new MemoryStore(this, memoryManager)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
   private[spark] lazy val externalBlockStore: ExternalBlockStore = {
     externalBlockStoreInitialized = true
     new ExternalBlockStore(this, executorId)
   }
+  memoryManager.setMemoryStore(memoryStore)
+
+  private val maxMemory = memoryManager.maxStorageMemory
 
   private[spark]
   val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
@@ -103,15 +108,6 @@ private[spark] class BlockManager(
     } else {
       tmpPort
     }
-  }
-
-  // Check that we're not using external shuffle service with consolidated shuffle files.
-  if (externalShuffleServiceEnabled
-      && conf.getBoolean("spark.shuffle.consolidateFiles", false)
-      && shuffleManager.isInstanceOf[HashShuffleManager]) {
-    throw new UnsupportedOperationException("Cannot use external shuffle service with consolidated"
-      + " shuffle files in hash-based shuffle. Please disable spark.shuffle.consolidateFiles or "
-      + " switch to sort-based shuffle.")
   }
 
   var blockManagerId: BlockManagerId = _
@@ -164,24 +160,6 @@ private[spark] class BlockManager(
    * Executor.updateDependencies. When the BlockManager is initialized, user level jars hasn't been
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
-
-  /**
-   * Construct a BlockManager with a memory limit set based on system properties.
-   */
-  def this(
-      execId: String,
-      rpcEnv: RpcEnv,
-      master: BlockManagerMaster,
-      serializer: Serializer,
-      conf: SparkConf,
-      mapOutputTracker: MapOutputTracker,
-      shuffleManager: ShuffleManager,
-      blockTransferService: BlockTransferService,
-      securityManager: SecurityManager,
-      numUsableCores: Int) = {
-    this(execId, rpcEnv, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager, numUsableCores)
-  }
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -600,10 +578,26 @@ private[spark] class BlockManager(
   private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     require(blockId != null, "BlockId is null")
     val locations = Random.shuffle(master.getLocations(blockId))
+    var numFetchFailures = 0
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
-      val data = blockTransferService.fetchBlockSync(
-        loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
+      val data = try {
+        blockTransferService.fetchBlockSync(
+          loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
+      } catch {
+        case NonFatal(e) =>
+          numFetchFailures += 1
+          if (numFetchFailures == locations.size) {
+            // An exception is thrown while fetching this block from all locations
+            throw new BlockFetchException(s"Failed to fetch block from" +
+              s" ${locations.size} locations. Most recent failure cause:", e)
+          } else {
+            // This location failed, so we retry fetch from a different one by returning null here
+            logWarning(s"Failed to fetch remote block $blockId " +
+              s"from $loc (failed attempt $numFetchFailures)", e)
+            null
+          }
+      }
 
       if (data != null) {
         if (asBlockResult) {
@@ -661,7 +655,7 @@ private[spark] class BlockManager(
       writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
-    new DiskBlockObjectWriter(blockId, file, serializerInstance, bufferSize, compressStream,
+    new DiskBlockObjectWriter(file, serializerInstance, bufferSize, compressStream,
       syncWrites, writeMetrics)
   }
 
@@ -1258,13 +1252,6 @@ private[spark] class BlockManager(
 
 private[spark] object BlockManager extends Logging {
   private val ID_GENERATOR = new IdGenerator
-
-  /** Return the total amount of storage memory available. */
-  private def getMaxMemory(conf: SparkConf): Long = {
-    val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
-    val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
-  }
 
   /**
    * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that

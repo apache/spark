@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -42,7 +42,7 @@ import org.apache.spark.sql.hive.test.TestHive
  * configured using system properties.
  */
 abstract class HiveComparisonTest
-  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
+  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test

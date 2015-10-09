@@ -22,7 +22,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{StringUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -140,7 +140,15 @@ case class Cast(child: Expression, dataType: DataType)
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, _.numBytes() != 0)
+      buildCast[UTF8String](_, s => {
+        if (StringUtils.isTrueString(s)) {
+          true
+        } else if (StringUtils.isFalseString(s)) {
+          false
+        } else {
+          null
+        }
+      })
     case TimestampType =>
       buildCast[Long](_, t => t != 0)
     case DateType =>
@@ -430,7 +438,7 @@ case class Cast(child: Expression, dataType: DataType)
     val eval = child.gen(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
     eval.code +
-      castCode(ctx, eval.primitive, eval.isNull, ev.primitive, ev.isNull, dataType, nullSafeCast)
+      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast)
   }
 
   // three function arguments are: child.primitive, result.primitive and result.isNull
@@ -646,7 +654,17 @@ case class Cast(child: Expression, dataType: DataType)
 
   private[this] def castToBooleanCode(from: DataType): CastFunction = from match {
     case StringType =>
-      (c, evPrim, evNull) => s"$evPrim = $c.numBytes() != 0;"
+      val stringUtils = StringUtils.getClass.getName.stripSuffix("$")
+      (c, evPrim, evNull) =>
+        s"""
+          if ($stringUtils.isTrueString($c)) {
+            $evPrim = true;
+          } else if ($stringUtils.isFalseString($c)) {
+            $evPrim = false;
+          } else {
+            $evNull = true;
+          }
+        """
     case TimestampType =>
       (c, evPrim, evNull) => s"$evPrim = $c != 0;"
     case DateType =>

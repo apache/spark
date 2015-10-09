@@ -31,6 +31,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
@@ -1104,18 +1105,19 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size == 0)
+    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
 
+    val defaults = collectResults(sql("SET"))
     assertResult(Set(testKey -> testVal)) {
       collectResults(sql(s"SET $testKey=$testVal"))
     }
 
-    assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
+    assert(hiveconf.get(testKey, "") === testVal)
+    assertResult(defaults ++ Set(testKey -> testVal))(collectResults(sql("SET")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+    assertResult(defaults ++ Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
     }
 
@@ -1129,6 +1131,38 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
 
     conf.clear()
+  }
+
+  test("current_database with multiple sessions") {
+    sql("create database a")
+    sql("use a")
+    val s2 = newSession()
+    s2.sql("create database b")
+    s2.sql("use b")
+
+    assert(sql("select current_database()").first() === Row("a"))
+    assert(s2.sql("select current_database()").first() === Row("b"))
+
+    try {
+      sql("create table test_a(key INT, value STRING)")
+      s2.sql("create table test_b(key INT, value STRING)")
+
+      sql("select * from test_a")
+      intercept[AnalysisException] {
+        sql("select * from test_b")
+      }
+      sql("select * from b.test_b")
+
+      s2.sql("select * from test_b")
+      intercept[AnalysisException] {
+        s2.sql("select * from test_a")
+      }
+      s2.sql("select * from a.test_a")
+    } finally {
+      sql("DROP TABLE IF EXISTS test_a")
+      s2.sql("DROP TABLE IF EXISTS test_b")
+    }
+
   }
 
   createQueryTest("select from thrift based table",

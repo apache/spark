@@ -59,6 +59,8 @@ i.e. 4710.28,500.00. The data are split to training and testing set.
 Model is created using the training set and a mean squared error is calculated from the predicted
 labels and real labels in the test set.
 
+Refer to the [`IsotonicRegression` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.IsotonicRegression) and [`IsotonicRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.IsotonicRegressionModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.regression.{IsotonicRegression, IsotonicRegressionModel}
 
@@ -100,6 +102,8 @@ Data are read from a file where each line has a format label,feature
 i.e. 4710.28,500.00. The data are split to training and testing set.
 Model is created using the training set and a mean squared error is calculated from the predicted
 labels and real labels in the test set.
+
+Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/mllib/regression/IsotonicRegression.html) and [`IsotonicRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/IsotonicRegressionModel.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.SparkConf;
@@ -166,6 +170,8 @@ Data are read from a file where each line has a format label,feature
 i.e. 4710.28,500.00. The data are split to training and testing set.
 Model is created using the training set and a mean squared error is calculated from the predicted
 labels and real labels in the test set.
+
+Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.IsotonicRegression) and [`IsotonicRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.IsotonicRegressionModel) for more details on the API.
 
 {% highlight python %}
 import math

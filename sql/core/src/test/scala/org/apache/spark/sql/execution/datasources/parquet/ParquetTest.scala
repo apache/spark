@@ -19,11 +19,19 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.format.converter.ParquetMetadataConverter
+import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
+
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, SQLConf, SaveMode}
 
 /**
  * A helper trait that provides convenient facilities for Parquet testing.
@@ -33,7 +41,6 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
 private[sql] trait ParquetTest extends SQLTestUtils {
-  protected def _sqlContext: SQLContext
 
   /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
@@ -43,7 +50,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      _sqlContext.createDataFrame(data).write.parquet(file.getCanonicalPath)
+      sqlContext.createDataFrame(data).write.parquet(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
@@ -55,7 +62,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
   protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withParquetFile(data)(path => f(_sqlContext.read.parquet(path)))
+    withParquetFile(data)(path => f(sqlContext.read.parquet(path)))
   }
 
   /**
@@ -67,14 +74,14 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withParquetDataFrame(data) { df =>
-      _sqlContext.registerDataFrameAsTable(df, tableName)
+      sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    _sqlContext.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
+    sqlContext.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
@@ -97,5 +104,39 @@ private[sql] trait ParquetTest extends SQLTestUtils {
 
     assert(partDir.mkdirs(), s"Couldn't create directory $partDir")
     partDir
+  }
+
+  protected def writeMetadata(
+      schema: StructType, path: Path, configuration: Configuration): Unit = {
+    val parquetSchema = new CatalystSchemaConverter().convert(schema)
+    val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
+    val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
+    val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, createdBy)
+    val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
+    val footer = new Footer(path, parquetMetadata)
+    ParquetFileWriter.writeMetadataFile(configuration, path, Seq(footer).asJava)
+  }
+
+  protected def readAllFootersWithoutSummaryFiles(
+      path: Path, configuration: Configuration): Seq[Footer] = {
+    val fs = path.getFileSystem(configuration)
+    ParquetFileReader.readAllFootersInParallel(configuration, fs.getFileStatus(path)).asScala.toSeq
+  }
+
+  protected def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
+    ParquetFileReader.readFooter(
+      configuration,
+      new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
+      ParquetMetadataConverter.NO_FILTER)
+  }
+
+  protected def testStandardAndLegacyModes(testName: String)(f: => Unit): Unit = {
+    test(s"Standard mode - $testName") {
+      withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "false") { f }
+    }
+
+    test(s"Legacy mode - $testName") {
+      withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") { f }
+    }
   }
 }
