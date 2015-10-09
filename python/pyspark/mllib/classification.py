@@ -639,7 +639,8 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
             if not rdd.isEmpty():
                 self._model = LogisticRegressionWithSGD.train(
                     rdd, self.numIterations, self.stepSize,
-                    self.miniBatchFraction, self._model.weights)
+                    self.miniBatchFraction, self._model.weights,
+                    regParam=self.regParam, convergenceTol=self.convergenceTol)
 
         dstream.foreachRDD(update)
 
