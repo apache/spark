@@ -39,6 +39,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
+    case dt: OpenHashSetUDT => false  // it's not a standard UDT
     case udt: UserDefinedType[_] => canSupport(udt.sqlType)
     case _ => false
   }
