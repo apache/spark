@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.attribute
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
  * :: DeveloperApi ::
@@ -25,30 +25,36 @@ import org.apache.spark.annotation.DeveloperApi
  * and [[AttributeType$#Binary]].
  */
 @DeveloperApi
-sealed abstract class AttributeType(val name: String)
+@Since("1.4.0")
+sealed abstract class AttributeType(@Since("1.4.0") val name: String)
 
 @DeveloperApi
+@Since("1.4.0")
 object AttributeType {
 
   /** Numeric type. */
+  @Since("1.4.0")
   val Numeric: AttributeType = {
     case object Numeric extends AttributeType("numeric")
     Numeric
   }
 
   /** Nominal type. */
+  @Since("1.4.0")
   val Nominal: AttributeType = {
     case object Nominal extends AttributeType("nominal")
     Nominal
   }
 
   /** Binary type. */
+  @Since("1.4.0")
   val Binary: AttributeType = {
     case object Binary extends AttributeType("binary")
     Binary
   }
 
   /** Unresolved type. */
+  @Since("1.5.0")
   val Unresolved: AttributeType = {
     case object Unresolved extends AttributeType("unresolved")
     Unresolved
@@ -58,6 +64,7 @@ object AttributeType {
    * Gets the [[AttributeType]] object from its name.
    * @param name attribute type name: "numeric", "nominal", or "binary"
    */
+  @Since("1.4.0")
   def fromName(name: String): AttributeType = {
     if (name == Numeric.name) {
       Numeric
