@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
  * Before consuming the iterator, open function must be called.
  * After consuming the iterator, close function must be called.
  */
-abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Logging {
+abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Logging with Serializable {
 
   protected val codegenEnabled: Boolean = conf.codegenEnabled
 

@@ -86,7 +86,14 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
       filterCondition.map(Filter(_, scan)).getOrElse(scan)
     } else {
       val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-      Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
+      // If unsafe mode is enabled and we support these data types in Unsafe, use the
+      // Tungsten project. Otherwise, use the normal project.
+      val withFilter = filterCondition.map(Filter(_, scan)).getOrElse(scan)
+      if (UnsafeProjection.canSupport(projectList) && UnsafeProjection.canSupport(withFilter.schema)) {
+        TungstenProject(projectList, withFilter)
+      } else {
+        Project(projectList, withFilter)
+      }
     }
   }
 }

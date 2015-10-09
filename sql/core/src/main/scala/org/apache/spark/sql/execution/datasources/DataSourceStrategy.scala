@@ -317,7 +317,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         requestedColumns,
         scanBuilder(requestedColumns, pushedFilters),
         relation.relation)
-      execution.Project(projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
+      // If unsafe mode is enabled and we support these data types in Unsafe, use the
+      // Tungsten project. Otherwise, use the normal project.
+      val withFilter = filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
+      if (UnsafeProjection.canSupport(projects) && UnsafeProjection.canSupport(withFilter.schema)) {
+        execution.TungstenProject(projects, withFilter)
+      } else {
+        execution.Project(projects, withFilter)
+      }
     }
   }
 
