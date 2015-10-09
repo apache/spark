@@ -1898,6 +1898,7 @@ setMethod("coltypes",
             # R's data types
             DATA_TYPES <- c("string"="character",
                             "long"="integer",
+                            "tinyint"="integer",
                             "short"="integer",
                             "integer"="integer",
                             "byte"="integer",
