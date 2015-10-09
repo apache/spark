@@ -25,29 +25,27 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.ql.{ErrorMsg, Context}
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
+import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
+import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.{AnalysisException, catalyst}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.{logical, _}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution.{AnalyzeTable, DropTable, HiveNativeCommand, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
@@ -268,7 +266,7 @@ private[hive] object HiveQl extends Logging {
     node
   }
 
-  private def createContext(): Context = new Context(SessionState.get().getConf())
+  private def createContext(): Context = new Context(hiveConf)
 
   private def getAst(sql: String, context: Context) =
     ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, context))
@@ -277,12 +275,16 @@ private[hive] object HiveQl extends Logging {
    * Returns the HiveConf
    */
   private[this] def hiveConf: HiveConf = {
-    val ss = SessionState.get() // SessionState is lazy initialization, it can be null here
+    var ss = SessionState.get()
+    // SessionState is lazy initialization, it can be null here
     if (ss == null) {
-      new HiveConf()
-    } else {
-      ss.getConf
+      val original = Thread.currentThread().getContextClassLoader
+      val conf = new HiveConf(classOf[SessionState])
+      conf.setClassLoader(original)
+      ss = new SessionState(conf)
+      SessionState.start(ss)
     }
+    ss.getConf
   }
 
   /** Returns a LogicalPlan for a given HiveQL string. */

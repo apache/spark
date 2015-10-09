@@ -160,10 +160,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("show functions") {
-    val allFunctions =
+    val allBuiltinFunctions =
       (FunctionRegistry.builtin.listFunction().toSet[String] ++
         org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames.asScala).toList.sorted
-    checkAnswer(sql("SHOW functions"), allFunctions.map(Row(_)))
+    // The TestContext is shared by all the test cases, some functions may be registered before
+    // this, so we check that all the builtin functions are returned.
+    val allFunctions = sql("SHOW functions").collect().map(r => r(0))
+    allBuiltinFunctions.foreach { f =>
+      assert(allFunctions.contains(f))
+    }
     checkAnswer(sql("SHOW functions abs"), Row("abs"))
     checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
     checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
