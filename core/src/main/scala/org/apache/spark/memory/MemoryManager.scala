@@ -40,22 +40,22 @@ private[spark] abstract class MemoryManager {
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return number of bytes successfully granted (0 or N).
+   * @return whether all N bytes were successfully granted.
    */
   def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return number of bytes successfully granted (<= N).
+   * @return whether all N bytes were successfully granted.
    */
   def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
 
   /**
    * Release N bytes of execution memory.

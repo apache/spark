@@ -86,12 +86,12 @@ private[spark] class StaticMemoryManager(
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return number of bytes successfully granted (0 or N).
+   * @return whether all N bytes were successfully granted.
    */
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     acquireStorageMemory(blockId, numBytes, numBytes, evictedBlocks)
   }
 
@@ -102,12 +102,12 @@ private[spark] class StaticMemoryManager(
    * space specified by `spark.storage.unrollFraction`. Blocks evicted in the process, if any,
    * are added to `evictedBlocks`.
    *
-   * @return number of bytes successfully granted (0 or N).
+   * @return whether all N bytes were successfully granted.
    */
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     val currentUnrollMemory = memoryStore.currentUnrollMemory
     val maxNumBytesToFree = math.max(0, maxMemoryToEvictForUnroll - currentUnrollMemory)
     val numBytesToFree = math.min(numBytes, maxNumBytesToFree)
@@ -121,21 +121,22 @@ private[spark] class StaticMemoryManager(
    * @param numBytesToAcquire the size of this block
    * @param numBytesToFree the size of space to be freed through evicting blocks
    * @param evictedBlocks a holder for blocks evicted in the process
-   * @return number of bytes successfully granted (0 or N).
+   * @return whether all N bytes were successfully granted.
    */
   private def acquireStorageMemory(
       blockId: BlockId,
       numBytesToAcquire: Long,
       numBytesToFree: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     // Note: Keep this outside synchronized block to avoid potential deadlocks!
     memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
     storageLock.synchronized {
       assert(_storageMemoryUsed <= maxStorageMemory)
       val enoughMemory = _storageMemoryUsed + numBytesToAcquire <= maxStorageMemory
-      val bytesToGrant = if (enoughMemory) numBytesToAcquire else 0
-      _storageMemoryUsed += bytesToGrant
-      bytesToGrant
+      if (enoughMemory) {
+        _storageMemoryUsed += numBytesToAcquire
+      }
+      enoughMemory
     }
   }
 

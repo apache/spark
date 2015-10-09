@@ -61,11 +61,11 @@ private class GrantEverythingMemoryManager extends MemoryManager {
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
   override def releaseExecutionMemory(numBytes: Long): Unit = { }
   override def releaseStorageMemory(numBytes: Long): Unit = { }
   override def releaseStorageMemory(): Unit = { }

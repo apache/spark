@@ -376,8 +376,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       // outside of MemoryStore or if unroll memory is counted as execution memory, then we will
       // have to revisit this assumption. See SPARK-10983 for more context.
       releasePendingUnrollMemoryForThisTask()
-      val numBytesAcquired = memoryManager.acquireStorageMemory(blockId, size, droppedBlocks)
-      val enoughMemory = numBytesAcquired == size
+      val enoughMemory = memoryManager.acquireStorageMemory(blockId, size, droppedBlocks)
       if (enoughMemory) {
         // We acquired enough memory for the block, so go ahead and put it
         val entry = new MemoryEntry(value(), size, deserialized)
@@ -397,7 +396,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         }
         val droppedBlockStatus = blockManager.dropFromMemory(blockId, () => data)
         droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
-        memoryManager.releaseStorageMemory(numBytesAcquired)
       }
       enoughMemory
     }
@@ -498,8 +496,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       memory: Long,
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     accountingLock.synchronized {
-      val acquired = memoryManager.acquireUnrollMemory(blockId, memory, droppedBlocks)
-      val success = acquired == memory
+      val success = memoryManager.acquireUnrollMemory(blockId, memory, droppedBlocks)
       if (success) {
         val taskAttemptId = currentTaskAttemptId()
         unrollMemoryMap(taskAttemptId) = unrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
