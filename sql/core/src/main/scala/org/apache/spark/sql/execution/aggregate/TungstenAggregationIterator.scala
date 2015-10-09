@@ -60,8 +60,12 @@ import org.apache.spark.sql.types.StructType
  * @param nonCompleteAggregateExpressions
  *   [[AggregateExpression2]] containing [[AggregateFunction2]]s with mode [[Partial]],
  *   [[PartialMerge]], or [[Final]].
+ * @param nonCompleteAggregateAttributes the attributes of the nonCompleteAggregateExpressions'
+ *   outputs when they are stored in the final aggregation buffer.
  * @param completeAggregateExpressions
  *   [[AggregateExpression2]] containing [[AggregateFunction2]]s with mode [[Complete]].
+ * @param completeAggregateAttributes the attributes of completeAggregateExpressions' outputs
+ *   when they are stored in the final aggregation buffer.
  * @param resultExpressions
  *   expressions for generating output rows.
  * @param newMutableProjection
@@ -72,7 +76,9 @@ import org.apache.spark.sql.types.StructType
 class TungstenAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+    nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression2],
+    completeAggregateAttributes: Seq[Attribute],
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     originalInputAttributes: Seq[Attribute],
@@ -131,15 +137,15 @@ class TungstenAggregationIterator(
   // All aggregate functions. TungstenAggregationIterator only handles expression-based aggregate.
   // If there is any functions that is an ImperativeAggregateFunction, we throw an
   // IllegalStateException.
-  private[this] val allAggregateFunctions: Array[ExpressionAggregate] = {
+  private[this] val allAggregateFunctions: Array[DeclarativeAggregate] = {
     if (!allAggregateExpressions.forall(
-        _.aggregateFunction.isInstanceOf[ExpressionAggregate])) {
+        _.aggregateFunction.isInstanceOf[DeclarativeAggregate])) {
       throw new IllegalStateException(
         "Only ExpressionAggregateFunctions should be passed in TungstenAggregationIterator.")
     }
 
     allAggregateExpressions
-      .map(_.aggregateFunction.asInstanceOf[ExpressionAggregate])
+      .map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
       .toArray
   }
 
@@ -203,9 +209,9 @@ class TungstenAggregationIterator(
 
       // Final-Complete
       case (Some(Final), Some(Complete)) =>
-        val nonCompleteAggregateFunctions: Array[ExpressionAggregate] =
+        val nonCompleteAggregateFunctions: Array[DeclarativeAggregate] =
           allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
-        val completeAggregateFunctions: Array[ExpressionAggregate] =
+        val completeAggregateFunctions: Array[DeclarativeAggregate] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
 
         val completeOffsetExpressions =
@@ -235,7 +241,7 @@ class TungstenAggregationIterator(
 
       // Complete-only
       case (None, Some(Complete)) =>
-        val completeAggregateFunctions: Array[ExpressionAggregate] =
+        val completeAggregateFunctions: Array[DeclarativeAggregate] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
 
         val updateExpressions =
@@ -280,17 +286,25 @@ class TungstenAggregationIterator(
       // resultExpressions.
       case (Some(Final), None) | (Some(Final) | None, Some(Complete)) =>
         val joinedRow = new JoinedRow()
+        val evalExpressions = allAggregateFunctions.map {
+          case ae: DeclarativeAggregate => ae.evaluateExpression
+          // case agg: AggregateFunction2 => Literal.create(null, agg.dataType)
+        }
+        val expressionAggEvalProjection = UnsafeProjection.create(evalExpressions, bufferAttributes)
+        // These are the attributes of the row produced by `expressionAggEvalProjection`
+        val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
         val resultProjection =
-          UnsafeProjection.create(resultExpressions, groupingAttributes ++ bufferAttributes)
+          UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateResultSchema)
 
         (currentGroupingKey: UnsafeRow, currentBuffer: UnsafeRow) => {
-          resultProjection(joinedRow(currentGroupingKey, currentBuffer))
+          // Generate results for all expression-based aggregate functions.
+          val aggregateResult = expressionAggEvalProjection.apply(currentBuffer)
+          resultProjection(joinedRow(currentGroupingKey, aggregateResult))
         }
 
       // Grouping-only: a output row is generated from values of grouping expressions.
       case (None, None) =>
-        val resultProjection =
-          UnsafeProjection.create(resultExpressions, groupingAttributes)
+        val resultProjection = UnsafeProjection.create(resultExpressions, groupingAttributes)
 
         (currentGroupingKey: UnsafeRow, currentBuffer: UnsafeRow) => {
           resultProjection(currentGroupingKey)

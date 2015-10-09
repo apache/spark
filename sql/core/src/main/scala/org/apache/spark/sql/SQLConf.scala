@@ -292,10 +292,9 @@ private[spark] object SQLConf {
 
   val PARQUET_WRITE_LEGACY_FORMAT = booleanConf(
     key = "spark.sql.parquet.writeLegacyFormat",
-    defaultValue = Some(true),
+    defaultValue = Some(false),
     doc = "Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.",
-    isPublic = false)
+      "Spark SQL schema and vice versa.")
 
   val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
     key = "spark.sql.parquet.output.committer.class",
@@ -318,6 +317,15 @@ private[spark] object SQLConf {
     defaultValue = Some(false),
     doc = "When true, some predicates will be pushed down into the Hive metastore so that " +
           "unmatching partitions can be eliminated earlier.")
+
+  val CANONICALIZE_VIEW = booleanConf("spark.sql.canonicalizeView",
+    defaultValue = Some(false),
+    doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
+          "Note that this function is experimental and should ony be used when you are using " +
+          "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
+          "view should be fully qualified, i.e. use `tbl1`.`col1` instead of `*` whenever " +
+          "possible, or you may get wrong result.",
+    isPublic = false)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
@@ -362,7 +370,7 @@ private[spark] object SQLConf {
 
   val PARTITION_DISCOVERY_ENABLED = booleanConf("spark.sql.sources.partitionDiscovery.enabled",
     defaultValue = Some(true),
-    doc = "When true, automtically discover data partitions.")
+    doc = "When true, automatically discover data partitions.")
 
   val PARTITION_COLUMN_TYPE_INFERENCE =
     booleanConf("spark.sql.sources.partitionColumnTypeInference.enabled",
@@ -372,7 +380,7 @@ private[spark] object SQLConf {
   val PARTITION_MAX_FILES =
     intConf("spark.sql.sources.maxConcurrentWrites",
       defaultValue = Some(5),
-      doc = "The maximum number of concurent files to open before falling back on sorting when " +
+      doc = "The maximum number of concurrent files to open before falling back on sorting when " +
             "writing out files using dynamic partitioning.")
 
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
@@ -470,6 +478,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
+  private[spark] def canonicalizeView: Boolean = getConf(CANONICALIZE_VIEW)
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 

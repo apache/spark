@@ -679,7 +679,7 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
                 self._model = LinearRegressionWithSGD.train(
                     rdd, self.numIterations, self.stepSize,
                     self.miniBatchFraction, self._model.weights,
-                    self._model.intercept)
+                    intercept=self._model.intercept, convergenceTol=self.convergenceTol)
 
         dstream.foreachRDD(update)
 
