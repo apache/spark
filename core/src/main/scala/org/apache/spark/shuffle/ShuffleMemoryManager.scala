@@ -38,8 +38,8 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
  * If there are N tasks, it ensures that each tasks can acquire at least 1 / 2N of the memory
  * before it has to spill, and at most 1 / N. Because N varies dynamically, we keep track of the
  * set of active tasks and redo the calculations of 1 / 2N and 1 / N in waiting tasks whenever
- * this set changes. This is all done by synchronizing access on "this" to mutate state and using
- * wait() and notifyAll() to signal changes.
+ * this set changes. This is all done by synchronizing access to `memoryLock` to mutate state
+ * and using wait() and notifyAll() to signal changes.
  *
  * Use `ShuffleMemoryManager.create()` factory method to create a new instance.
  *
@@ -74,7 +74,8 @@ class ShuffleMemoryManager protected (
     // of active tasks, to let other tasks ramp down their memory in calls to tryToAcquire
     if (!taskMemory.contains(taskAttemptId)) {
       taskMemory(taskAttemptId) = 0L
-      notifyAll()  // Will later cause waiting tasks to wake up and check numTasks again
+      // This will later cause waiting tasks to wake up and check numTasks again
+      memoryManager.notifyAll()
     }
 
     // Keep looping until we're either sure that we don't want to grant this request (because this
@@ -102,7 +103,7 @@ class ShuffleMemoryManager protected (
         } else {
           logInfo(
             s"TID $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
-          wait()
+          memoryManager.wait()
         }
       } else {
         return acquire(toGrant)
@@ -134,7 +135,7 @@ class ShuffleMemoryManager protected (
     }
     taskMemory(taskAttemptId) -= numBytes
     memoryManager.releaseExecutionMemory(numBytes)
-    notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
+    memoryManager.notifyAll() // Notify waiters in tryToAcquire that memory has been freed
   }
 
   /** Release all memory for the current task and mark it as inactive (e.g. when a task ends). */
@@ -143,7 +144,7 @@ class ShuffleMemoryManager protected (
     taskMemory.remove(taskAttemptId).foreach { numBytes =>
       memoryManager.releaseExecutionMemory(numBytes)
     }
-    notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
+    memoryManager.notifyAll() // Notify waiters in tryToAcquire that memory has been freed
   }
 
   /** Returns the memory consumption, in bytes, for the current task */
