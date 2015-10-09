@@ -150,8 +150,7 @@ class TungstenAggregationIterator(
       val aggregateExpressionIsNonComplete = i < nonCompleteAggregateExpressions.length
       // We need to use this mode instead of func.mode in order to handle aggregation mode switching
       // when switching to sort-based aggregation:
-      val mode =
-        if (aggregateExpressionIsNonComplete) aggregationMode._1 else aggregationMode._2
+      val mode = if (aggregateExpressionIsNonComplete) aggregationMode._1 else aggregationMode._2
       val funcWithBoundReferences = mode match {
         case Some(Partial) | Some(Complete) if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
@@ -190,9 +189,11 @@ class TungstenAggregationIterator(
     initializeAllAggregateFunctions(initialInputBufferOffset)
 
   // Positions of those imperative aggregate functions in allAggregateFunctions.
-  // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
-  // func2 and func3 are imperative aggregate functions.
-  // ImperativeAggregateFunctionPositions will be [1, 2].
+  // For example, say that we have func1, func2, func3, func4 in aggregateFunctions, and
+  // func2 and func3 are imperative aggregate functions. Then
+  // allImperativeAggregateFunctionPositions will be [1, 2]. Note that this does not need to be
+  // updated when falling back to sort-based aggregation because the positions of the aggregate
+  // functions do not change in that case.
   private[this] val allImperativeAggregateFunctionPositions: Array[Int] = {
     val positions = new ArrayBuffer[Int]()
     var i = 0
@@ -213,6 +214,8 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // The projection used to initialize buffer values for all expression-based aggregates.
+  // Note that this projection does not need to be updated when switching to sort-based aggregation
+  // because the schema of empty aggregation buffers does not change in that case.
   private[this] val expressionAggInitialProjection: MutableProjection = {
     val initExpressions = allAggregateFunctions.flatMap {
       case ae: DeclarativeAggregate => ae.initialValues
