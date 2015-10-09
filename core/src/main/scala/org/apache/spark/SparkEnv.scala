@@ -70,7 +70,7 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    // TODO: unify these *MemoryManager classes
+    // TODO: unify these *MemoryManager classes (SPARK-10984)
     val memoryManager: MemoryManager,
     val shuffleMemoryManager: ShuffleMemoryManager,
     val executorMemoryManager: ExecutorMemoryManager,

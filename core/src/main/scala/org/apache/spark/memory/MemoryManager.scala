@@ -19,7 +19,7 @@ package org.apache.spark.memory
 
 import scala.collection.mutable
 
-import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 
 
 /**
@@ -27,9 +27,26 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  *
  * In this context, execution memory refers to that used for computation in shuffles, joins,
  * sorts and aggregations, while storage memory refers to that used for caching and propagating
- * internal data across the cluster.
+ * internal data across the cluster. There exists one of these per JVM.
  */
 private[spark] abstract class MemoryManager {
+
+  // The memory store used to evict cached blocks
+  private var _memoryStore: MemoryStore = _
+  protected def memoryStore: MemoryStore = {
+    if (_memoryStore == null) {
+      throw new IllegalArgumentException("memory store not initialized yet")
+    }
+    _memoryStore
+  }
+
+  /**
+   * Set the [[MemoryStore]] used by this manager to evict cached blocks.
+   * This must be set after construction due to initialization ordering constraints.
+   */
+  def setMemoryStore(store: MemoryStore): Unit = {
+    _memoryStore = store
+  }
 
   /**
    * Acquire N bytes of memory for execution.

@@ -89,6 +89,7 @@ private[spark] class BlockManager(
     externalBlockStoreInitialized = true
     new ExternalBlockStore(this, executorId)
   }
+  memoryManager.setMemoryStore(memoryStore)
 
   private val maxMemory = memoryManager.maxStorageMemory
 

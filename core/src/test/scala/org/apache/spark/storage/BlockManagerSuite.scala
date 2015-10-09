@@ -1045,13 +1045,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   test("reserve/release unroll memory") {
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
-    val dummyBlock = TestBlockId("")
-    val dummyEvictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     assert(memoryStore.currentUnrollMemory === 0)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     def reserveUnrollMemoryForThisTask(memory: Long): Boolean = {
-      memoryStore.reserveUnrollMemoryForThisTask(dummyBlock, memory, dummyEvictedBlocks)
+      memoryStore.reserveUnrollMemoryForThisTask(
+        TestBlockId(""), memory, new ArrayBuffer[(BlockId, BlockStatus)])
     }
 
     // Reserve

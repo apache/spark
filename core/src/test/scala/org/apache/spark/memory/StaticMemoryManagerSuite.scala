@@ -38,9 +38,9 @@ class StaticMemoryManagerSuite extends SparkFunSuite {
     assert(mm.acquireExecutionMemory(100L) === 100L)
     // Acquire up to the max
     assert(mm.acquireExecutionMemory(1000L) === 890L)
-    assert(mm.executionMemoryUsed === 1000L)
+    assert(mm.executionMemoryUsed === maxExecutionMem)
     assert(mm.acquireExecutionMemory(1L) === 0L)
-    assert(mm.executionMemoryUsed === 1000L)
+    assert(mm.executionMemoryUsed === maxExecutionMem)
     mm.releaseExecutionMemory(800L)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
@@ -54,35 +54,36 @@ class StaticMemoryManagerSuite extends SparkFunSuite {
   test("basic storage memory") {
     val maxStorageMem = 1000L
     val dummyBlock = TestBlockId("you can see the world you brought to live")
-    val dummyBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+    val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val (mm, ms) = makeThings(Long.MaxValue, maxStorageMem)
     assert(mm.storageMemoryUsed === 0L)
-    assert(mm.acquireStorageMemory(dummyBlock, 10L, dummyBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 10L, evictedBlocks))
     // `ensureFreeSpace` should be called with the number of bytes requested
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 10L)
     assert(mm.storageMemoryUsed === 10L)
-    assert(dummyBlocks.isEmpty)
-    assert(mm.acquireStorageMemory(dummyBlock, 100L, dummyBlocks))
+    assert(evictedBlocks.isEmpty)
+    assert(mm.acquireStorageMemory(dummyBlock, 100L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 100L)
+    assert(mm.storageMemoryUsed === 110L)
     // Acquire up to the max, not granted
-    assert(!mm.acquireStorageMemory(dummyBlock, 1000L, dummyBlocks))
+    assert(!mm.acquireStorageMemory(dummyBlock, 1000L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 1000L)
     assert(mm.storageMemoryUsed === 110L)
-    assert(mm.acquireStorageMemory(dummyBlock, 890L, dummyBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 890L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 890L)
     assert(mm.storageMemoryUsed === 1000L)
-    assert(!mm.acquireStorageMemory(dummyBlock, 1L, dummyBlocks))
+    assert(!mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 1L)
     assert(mm.storageMemoryUsed === 1000L)
     mm.releaseStorageMemory(800L)
     assert(mm.storageMemoryUsed === 200L)
     // Acquire after release
-    assert(mm.acquireStorageMemory(dummyBlock, 1L, dummyBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 1L)
     assert(mm.storageMemoryUsed === 201L)
     mm.releaseStorageMemory()
     assert(mm.storageMemoryUsed === 0L)
-    assert(mm.acquireStorageMemory(dummyBlock, 1L, dummyBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, dummyBlock, 1L)
     assert(mm.storageMemoryUsed === 1L)
     // Release beyond what was acquired
@@ -150,7 +151,8 @@ class StaticMemoryManagerSuite extends SparkFunSuite {
   private def makeThings(
       maxExecutionMem: Long,
       maxStorageMem: Long): (StaticMemoryManager, MemoryStore) = {
-    val mm = new StaticMemoryManager(conf, maxExecutionMem, maxStorageMem)
+    val mm = new StaticMemoryManager(
+      conf, maxExecutionMemory = maxExecutionMem, maxStorageMemory = maxStorageMem)
     val ms = mock(classOf[MemoryStore])
     mm.setMemoryStore(ms)
     (mm, ms)

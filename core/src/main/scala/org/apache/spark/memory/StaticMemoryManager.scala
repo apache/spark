@@ -19,8 +19,8 @@ package org.apache.spark.memory
 
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv}
-import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
 /**
@@ -41,27 +41,10 @@ private[spark] class StaticMemoryManager(
     (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
-  // Amount of execution memory in use. Accesses must be synchronized on `executionLock`.
+  // Amount of execution / storage memory in use
+  // Accesses must be synchronized on `this`
   private var _executionMemoryUsed: Long = 0
-  private val executionLock = new Object
-
-  // Amount of storage memory in use. Accesses must be synchronized on `storageLock`.
   private var _storageMemoryUsed: Long = 0
-  private val storageLock = new Object
-
-  // The memory store used to evict cached blocks
-  private var _memoryStore: MemoryStore = _
-  private def memoryStore: MemoryStore = {
-    if (_memoryStore == null) {
-      _memoryStore = SparkEnv.get.blockManager.memoryStore
-    }
-    _memoryStore
-  }
-
-  // For testing only
-  def setMemoryStore(store: MemoryStore): Unit = {
-    _memoryStore = store
-  }
 
   def this(conf: SparkConf) {
     this(
@@ -74,13 +57,11 @@ private[spark] class StaticMemoryManager(
    * Acquire N bytes of memory for execution.
    * @return number of bytes successfully granted (<= N).
    */
-  override def acquireExecutionMemory(numBytes: Long): Long = {
-    executionLock.synchronized {
-      assert(_executionMemoryUsed <= maxExecutionMemory)
-      val bytesToGrant = math.min(numBytes, maxExecutionMemory - _executionMemoryUsed)
-      _executionMemoryUsed += bytesToGrant
-      bytesToGrant
-    }
+  override def acquireExecutionMemory(numBytes: Long): Long = synchronized {
+    assert(_executionMemoryUsed <= maxExecutionMemory)
+    val bytesToGrant = math.min(numBytes, maxExecutionMemory - _executionMemoryUsed)
+    _executionMemoryUsed += bytesToGrant
+    bytesToGrant
   }
 
   /**
@@ -130,7 +111,7 @@ private[spark] class StaticMemoryManager(
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     // Note: Keep this outside synchronized block to avoid potential deadlocks!
     memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
-    storageLock.synchronized {
+    synchronized {
       assert(_storageMemoryUsed <= maxStorageMemory)
       val enoughMemory = _storageMemoryUsed + numBytesToAcquire <= maxStorageMemory
       if (enoughMemory) {
@@ -143,40 +124,34 @@ private[spark] class StaticMemoryManager(
   /**
    * Release N bytes of execution memory.
    */
-  override def releaseExecutionMemory(numBytes: Long): Unit = {
-    executionLock.synchronized {
-      if (numBytes > _executionMemoryUsed) {
-        logWarning(s"Attempted to release $numBytes bytes of execution " +
-          s"memory when we only have ${_executionMemoryUsed} bytes")
-        _executionMemoryUsed = 0
-      } else {
-        _executionMemoryUsed -= numBytes
-      }
+  override def releaseExecutionMemory(numBytes: Long): Unit = synchronized {
+    if (numBytes > _executionMemoryUsed) {
+      logWarning(s"Attempted to release $numBytes bytes of execution " +
+        s"memory when we only have ${_executionMemoryUsed} bytes")
+      _executionMemoryUsed = 0
+    } else {
+      _executionMemoryUsed -= numBytes
     }
   }
 
   /**
    * Release N bytes of storage memory.
    */
-  override def releaseStorageMemory(numBytes: Long): Unit = {
-    storageLock.synchronized {
-      if (numBytes > _storageMemoryUsed) {
-        logWarning(s"Attempted to release $numBytes bytes of storage " +
-          s"memory when we only have ${_storageMemoryUsed} bytes")
-        _storageMemoryUsed = 0
-      } else {
-        _storageMemoryUsed -= numBytes
-      }
+  override def releaseStorageMemory(numBytes: Long): Unit = synchronized {
+    if (numBytes > _storageMemoryUsed) {
+      logWarning(s"Attempted to release $numBytes bytes of storage " +
+        s"memory when we only have ${_storageMemoryUsed} bytes")
+      _storageMemoryUsed = 0
+    } else {
+      _storageMemoryUsed -= numBytes
     }
   }
 
   /**
    * Release all storage memory acquired.
    */
-  override def releaseStorageMemory(): Unit = {
-    storageLock.synchronized {
-      _storageMemoryUsed = 0
-    }
+  override def releaseStorageMemory(): Unit = synchronized {
+    _storageMemoryUsed = 0
   }
 
   /**
@@ -189,19 +164,15 @@ private[spark] class StaticMemoryManager(
   /**
    * Amount of execution memory currently in use, in bytes.
    */
-  override def executionMemoryUsed: Long = {
-    executionLock.synchronized {
-      _executionMemoryUsed
-    }
+  override def executionMemoryUsed: Long = synchronized {
+    _executionMemoryUsed
   }
 
   /**
    * Amount of storage memory currently in use, in bytes.
    */
-  override def storageMemoryUsed: Long = {
-    storageLock.synchronized {
-      _storageMemoryUsed
-    }
+  override def storageMemoryUsed: Long = synchronized {
+    _storageMemoryUsed
   }
 
 }

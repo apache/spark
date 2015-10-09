@@ -496,6 +496,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       memory: Long,
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     accountingLock.synchronized {
+      // Note: all acquisitions of unroll memory must be synchronized on `accountingLock`
       val success = memoryManager.acquireUnrollMemory(blockId, memory, droppedBlocks)
       if (success) {
         val taskAttemptId = currentTaskAttemptId()
