@@ -53,7 +53,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   test("success sanity check") {
     val badClient = IsolatedClientLoader.forVersion(HiveContext.hiveExecutionVersion,
       buildConf(),
-      ivyPath).client
+      ivyPath).createClient()
     val db = new HiveDatabase("default", "")
     badClient.createDatabase(db)
   }
@@ -83,7 +83,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   ignore("failure sanity check") {
     val e = intercept[Throwable] {
       val badClient = quietly {
-        IsolatedClientLoader.forVersion("13", buildConf(), ivyPath).client
+        IsolatedClientLoader.forVersion("13", buildConf(), ivyPath).createClient()
       }
     }
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
@@ -97,7 +97,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: create client") {
       client = null
       System.gc() // Hack to avoid SEGV on some JVM versions.
-      client = IsolatedClientLoader.forVersion(version, buildConf(), ivyPath).client
+      client = IsolatedClientLoader.forVersion(version, buildConf(), ivyPath).createClient()
     }
 
     test(s"$version: createDatabase") {
