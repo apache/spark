@@ -19,21 +19,12 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, SparkPlan}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object Utils {
-  def supportsTungstenAggregate(
-      groupingExpressions: Seq[Expression],
-      aggregateBufferAttributes: Seq[Attribute]): Boolean = {
-    val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
-
-    UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-      UnsafeProjection.canSupport(groupingExpressions)
-  }
 
   def planAggregateWithoutPartial(
       groupingExpressions: Seq[NamedExpression],
@@ -70,7 +61,7 @@ object Utils {
     // Check if we can use TungstenAggregate.
     val usesTungstenAggregate =
       child.sqlContext.conf.unsafeEnabled &&
-      supportsTungstenAggregate(
+      TungstenAggregate.supportsAggregate(
         groupingExpressions,
         aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
 
@@ -157,7 +148,7 @@ object Utils {
       child.sqlContext.conf.unsafeEnabled &&
         aggregateExpressions.forall(
           _.aggregateFunction.isInstanceOf[DeclarativeAggregate]) &&
-        supportsTungstenAggregate(
+        TungstenAggregate.supportsAggregate(
           groupingExpressions,
           aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
 

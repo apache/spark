@@ -224,35 +224,17 @@ class TungstenAggregationIterator(
   }
 
   // Creates a new aggregation buffer and initializes buffer values.
-  // This functions should be only called at most three times (when we create the hash map,
+  // This function should be only called at most three times (when we create the hash map,
   // when we switch to sort-based aggregation, and when we create the re-used buffer for
   // sort-based aggregation).
   private def createNewAggregationBuffer(): UnsafeRow = {
     val bufferSchema = allAggregateFunctions.flatMap(_.aggBufferAttributes)
-    val bufferRowSize: Int = bufferSchema.length
-
-    val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
-    // TODO(josh): figure out whether we have to use
-    val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
-
-    val buffer =  /* if (useUnsafeBuffer) */ {
-      val unsafeProjection =
-        UnsafeProjection.create(bufferSchema.map(_.dataType))
-      unsafeProjection.apply(genericMutableBuffer)
-//    } else {
-//      genericMutableBuffer
-    }
+    val buffer: UnsafeRow = UnsafeProjection.create(bufferSchema.map(_.dataType))
+      .apply(new GenericMutableRow(bufferSchema.length))
+    // Initialize declarative aggregates' buffer values
     expressionAggInitialProjection.target(buffer)(EmptyRow)
-    // TODO(josh): this can be done more cleanly
-    val allImperativeAggregateFunctions: Array[ImperativeAggregate] =
-      allImperativeAggregateFunctionPositions
-        .map(allAggregateFunctions)
-        .map(_.asInstanceOf[ImperativeAggregate])
-    var i = 0
-    while (i < allImperativeAggregateFunctions.length) {
-      allImperativeAggregateFunctions(i).initialize(buffer)
-      i += 1
-    }
+    // Initialize imperative aggregates' buffer values
+    allAggregateFunctions.collect { case f: ImperativeAggregate => f }.foreach(_.initialize(buffer))
     buffer
   }
 
