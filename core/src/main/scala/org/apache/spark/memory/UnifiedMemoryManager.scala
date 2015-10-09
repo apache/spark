@@ -41,9 +41,7 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * The implication is that attempts to cache blocks may fail if execution has already eaten
  * up most of the storage space, in which case the new blocks will be evicted directly.
  */
-private[spark] class UnifiedMemoryManager(
-    conf: SparkConf,
-    maxMemory: Long) extends MemoryManager {
+private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) extends MemoryManager {
 
   def this(conf: SparkConf) {
     this(conf, UnifiedMemoryManager.getMaxMemory(conf))
@@ -78,57 +76,25 @@ private[spark] class UnifiedMemoryManager(
   /**
    * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
    *
-   * This method only evicts blocks up to the amount of memory borrowed by storage.
+   * This method evicts blocks only up to the amount of memory borrowed by storage.
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return number of bytes successfully granted (<= N).
    */
   override def acquireExecutionMemory(
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
     assert(numBytes >= 0)
-    var spaceToEnsure = 0L
-
-    // Grant as much of `numBytes` as is available
-    def grantFreeMemory(): Long = synchronized {
-      val bytesToGrant = math.min(numBytes, totalFreeMemory)
-      _executionMemoryUsed += bytesToGrant
-      return bytesToGrant
+    val memoryBorrowedByStorage = math.max(0, _storageMemoryUsed - storageRegionSize)
+    // If there is not enough free memory AND storage has borrowed some execution memory,
+    // then evict as much memory borrowed by storage as needed to grant this request
+    val shouldEvictStorage = totalFreeMemory < numBytes && memoryBorrowedByStorage > 0
+    if (shouldEvictStorage) {
+      val spaceToEnsure = math.min(numBytes, memoryBorrowedByStorage)
+      memoryStore.ensureFreeSpace(spaceToEnsure, evictedBlocks)
     }
-
-    synchronized {
-      // If there is not enough free memory AND storage has borrowed some execution memory,
-      // then evict as much memory borrowed by storage as needed by dropping existing blocks
-      val memoryBorrowedByStorage = math.max(0, _storageMemoryUsed - storageRegionSize)
-      val shouldEvictStorage = totalFreeMemory < numBytes && memoryBorrowedByStorage > 0
-      if (shouldEvictStorage) {
-        // Note: do not call `ensureFreeSpace` in this synchronized block to avoid deadlocks
-        spaceToEnsure = math.min(numBytes, memoryBorrowedByStorage)
-      } else {
-        return grantFreeMemory()
-      }
-    }
-
-    // If we reached here, then we should ensure free space and try again.
-    //
-    // Note: here we assume this method is externally synchronized by the caller, meaning at any
-    // given time only one thread can be acquiring execution memory. However, it is still possible
-    // for another thread to acquire storage memory concurrently. Because of this, there are two
-    // potential race conditions:
-    //
-    //   (1) Before ensuring free space, someone else jumps in and puts more blocks, borrowing
-    //       more memory from execution in the process. In this case we may end up freeing less
-    //       space than what we could have freed otherwise.
-    //
-    //   (2) After ensuring free space, someone else jumps in and steals the space we just freed
-    //
-    // In both cases, the worst case is that we don't grant all execution memory requested, which
-    // is generally safe since we expect the caller to just spill. Note that fixing this requires
-    // synchronizing all memory acquisitions, execution and storage, on the same lock, which may
-    // be difficult.
-
-    assert(spaceToEnsure > 0)
-    memoryStore.ensureFreeSpace(spaceToEnsure, evictedBlocks)
-    grantFreeMemory()
+    val bytesToGrant = math.min(numBytes, totalFreeMemory)
+    _executionMemoryUsed += bytesToGrant
+    bytesToGrant
   }
 
   /**
@@ -139,17 +105,14 @@ private[spark] class UnifiedMemoryManager(
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     assert(numBytes >= 0)
-    // Note: Keep this outside synchronized block to avoid potential deadlocks!
     memoryStore.ensureFreeSpace(blockId, numBytes, evictedBlocks)
-    synchronized {
-      val enoughMemory = totalFreeMemory >= numBytes
-      if (enoughMemory) {
-        _storageMemoryUsed += numBytes
-      }
-      enoughMemory
+    val enoughMemory = totalFreeMemory >= numBytes
+    if (enoughMemory) {
+      _storageMemoryUsed += numBytes
     }
+    enoughMemory
   }
 
 }

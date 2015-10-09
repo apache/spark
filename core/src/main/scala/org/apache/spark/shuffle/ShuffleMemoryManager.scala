@@ -67,7 +67,7 @@ class ShuffleMemoryManager protected (
    * total memory pool (where N is the # of active tasks) before it is forced to spill. This can
    * happen if the number of tasks increases but an older task had a lot of memory already.
    */
-  def tryToAcquire(numBytes: Long): Long = synchronized {
+  def tryToAcquire(numBytes: Long): Long = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
 
@@ -114,7 +114,7 @@ class ShuffleMemoryManager protected (
    * Acquire N bytes of execution memory from the memory manager for the current task.
    * @return number of bytes actually acquired (<= N).
    */
-  private def acquire(numBytes: Long): Long = synchronized {
+  private def acquire(numBytes: Long): Long = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val acquired = memoryManager.acquireExecutionMemory(numBytes, evictedBlocks)
@@ -124,7 +124,7 @@ class ShuffleMemoryManager protected (
   }
 
   /** Release numBytes bytes for the current task. */
-  def release(numBytes: Long): Unit = synchronized {
+  def release(numBytes: Long): Unit = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     val curMem = taskMemory.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
@@ -137,7 +137,7 @@ class ShuffleMemoryManager protected (
   }
 
   /** Release all memory for the current task and mark it as inactive (e.g. when a task ends). */
-  def releaseMemoryForThisTask(): Unit = synchronized {
+  def releaseMemoryForThisTask(): Unit = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     taskMemory.remove(taskAttemptId).foreach { numBytes =>
       memoryManager.releaseExecutionMemory(numBytes)
@@ -146,7 +146,7 @@ class ShuffleMemoryManager protected (
   }
 
   /** Returns the memory consumption, in bytes, for the current task */
-  def getMemoryConsumptionForThisTask(): Long = synchronized {
+  def getMemoryConsumptionForThisTask(): Long = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     taskMemory.getOrElse(taskAttemptId, 0L)
   }

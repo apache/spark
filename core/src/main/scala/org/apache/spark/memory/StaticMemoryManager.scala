@@ -54,7 +54,7 @@ private[spark] class StaticMemoryManager(
    */
   override def acquireExecutionMemory(
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
     assert(numBytes >= 0)
     assert(_executionMemoryUsed <= maxExecutionMemory)
     val bytesToGrant = math.min(numBytes, maxExecutionMemory - _executionMemoryUsed)
@@ -70,7 +70,7 @@ private[spark] class StaticMemoryManager(
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     acquireStorageMemory(blockId, numBytes, numBytes, evictedBlocks)
   }
 
@@ -86,7 +86,7 @@ private[spark] class StaticMemoryManager(
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     val currentUnrollMemory = memoryStore.currentUnrollMemory
     val maxNumBytesToFree = math.max(0, maxMemoryToEvictForUnroll - currentUnrollMemory)
     val numBytesToFree = math.min(numBytes, maxNumBytesToFree)
@@ -106,19 +106,16 @@ private[spark] class StaticMemoryManager(
       blockId: BlockId,
       numBytesToAcquire: Long,
       numBytesToFree: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
-    // Note: Keep this outside synchronized block to avoid potential deadlocks!
     memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
-    synchronized {
-      assert(_storageMemoryUsed <= maxStorageMemory)
-      val enoughMemory = _storageMemoryUsed + numBytesToAcquire <= maxStorageMemory
-      if (enoughMemory) {
-        _storageMemoryUsed += numBytesToAcquire
-      }
-      enoughMemory
+    assert(_storageMemoryUsed <= maxStorageMemory)
+    val enoughMemory = _storageMemoryUsed + numBytesToAcquire <= maxStorageMemory
+    if (enoughMemory) {
+      _storageMemoryUsed += numBytesToAcquire
     }
+    enoughMemory
   }
 
 }

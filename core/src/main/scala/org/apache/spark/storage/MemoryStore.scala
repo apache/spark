@@ -37,15 +37,15 @@ private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: MemoryManager)
   extends BlockStore(blockManager) {
 
+  // Note: all changes to memory allocations, including unrolling, putting blocks and evicting
+  // blocks, must be synchronized on `memoryManager`!
+
   private val conf = blockManager.conf
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
   private val maxMemory = memoryManager.maxStorageMemory
 
-  // Ensure only one thread is putting, and if necessary, dropping blocks at any given time
-  private val accountingLock = new Object
-
   // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
-  // All accesses of this map are assumed to have manually synchronized on `accountingLock`
+  // All accesses of this map are assumed to have manually synchronized on `memoryManager`
   private val unrollMemoryMap = mutable.HashMap[Long, Long]()
   // Same as `unrollMemoryMap`, but for pending unroll memory as defined below.
   // Pending unroll memory refers to the intermediate memory occupied by a task
@@ -208,7 +208,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def remove(blockId: BlockId): Boolean = {
+  override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized { entries.remove(blockId) }
     if (entry != null) {
       memoryManager.releaseStorageMemory(entry.size)
@@ -220,10 +220,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def clear() {
+  override def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
       entries.clear()
     }
+    unrollMemoryMap.clear()
+    pendingUnrollMemoryMap.clear()
     memoryManager.releaseStorageMemory()
     logInfo("MemoryStore cleared")
   }
@@ -299,22 +301,22 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       }
 
     } finally {
-      // If we return an array, the values returned will later be cached in `tryToPut`.
-      // In this case, we should release the memory after we cache the block there.
-      // Otherwise, if we return an iterator, we release the memory reserved here
-      // later when the task finishes.
+      // If we return an array, the values returned here will be cached in `tryToPut` later.
+      // In this case, we should release the memory only after we cache the block there.
       if (keepUnrolling) {
         val taskAttemptId = currentTaskAttemptId()
-        accountingLock.synchronized {
-          // Here, we transfer memory from unroll to pending unroll because we expect to cache this
-          // block in `tryToPut`. We do not release and re-acquire memory from the MemoryManager in
-          // order to avoid race conditions where another component steals the memory that we're
-          // trying to transfer.
+        memoryManager.synchronized {
+          // Since we continue to hold onto the array until we actually cache it, we cannot
+          // release the unroll memory yet. Instead, we transfer it to pending unroll memory
+          // so `tryToPut` can further transfer it to normal storage memory later.
           val amountToTransferToPending = currentUnrollMemoryForThisTask - previousMemoryReserved
           unrollMemoryMap(taskAttemptId) -= amountToTransferToPending
           pendingUnrollMemoryMap(taskAttemptId) =
             pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L) + amountToTransferToPending
         }
+      } else {
+        // Otherwise, if we return an iterator, we can only release the unroll memory when
+        // the task finishes since we don't know when the iterator will be consumed.
       }
     }
   }
@@ -343,7 +345,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * `value` will be lazily created. If it cannot be put into MemoryStore or disk, `value` won't be
    * created to avoid OOM since it may be a big ByteBuffer.
    *
-   * Synchronize on `accountingLock` to ensure that all the put requests and its associated block
+   * Synchronize on `memoryManager` to ensure that all the put requests and its associated block
    * dropping is done by only on thread at a time. Otherwise while one thread is dropping
    * blocks to free memory for one block, another thread may use up the freed space for
    * another block.
@@ -365,16 +367,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
      * for freeing up more space for another block that needs to be put. Only then the actually
      * dropping of blocks (and writing to disk if necessary) can proceed in parallel. */
 
-    accountingLock.synchronized {
+    memoryManager.synchronized {
       // Note: if we have previously unrolled this block successfully, then pending unroll
       // memory should be non-zero. This is the amount that we already reserved during the
       // unrolling process. In this case, we can just reuse this space to cache our block.
-      //
-      // Note: the StaticMemoryManager counts unroll memory as storage memory. Here, the
-      // synchronization on `accountingLock` guarantees that the release of unroll memory and
-      // acquisition of storage memory happens atomically. However, if storage memory is acquired
-      // outside of MemoryStore or if unroll memory is counted as execution memory, then we will
-      // have to revisit this assumption. See SPARK-10983 for more context.
+      // The synchronization on `memoryManager` here guarantees that the release and acquire
+      // happen atomically. This relies on the assumption that all memory acquisitions are
+      // synchronized on the same lock.
       releasePendingUnrollMemoryForThisTask()
       val enoughMemory = memoryManager.acquireStorageMemory(blockId, size, droppedBlocks)
       if (enoughMemory) {
@@ -443,7 +442,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       blockId: Option[BlockId],
       space: Long,
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    accountingLock.synchronized {
+    memoryManager.synchronized {
       val freeMemory = maxMemory - memoryUsed
       val rddToAdd = blockId.flatMap(getRddId)
       val selectedBlocks = new ArrayBuffer[BlockId]
@@ -525,8 +524,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       blockId: BlockId,
       memory: Long,
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    accountingLock.synchronized {
-      // Note: all acquisitions of unroll memory must be synchronized on `accountingLock`
+    memoryManager.synchronized {
       val success = memoryManager.acquireUnrollMemory(blockId, memory, droppedBlocks)
       if (success) {
         val taskAttemptId = currentTaskAttemptId()
@@ -542,7 +540,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    */
   def releaseUnrollMemoryForThisTask(memory: Long = Long.MaxValue): Unit = {
     val taskAttemptId = currentTaskAttemptId()
-    accountingLock.synchronized {
+    memoryManager.synchronized {
       if (unrollMemoryMap.contains(taskAttemptId)) {
         val memoryToRelease = math.min(memory, unrollMemoryMap(taskAttemptId))
         if (memoryToRelease > 0) {
@@ -561,7 +559,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    */
   def releasePendingUnrollMemoryForThisTask(memory: Long = Long.MaxValue): Unit = {
     val taskAttemptId = currentTaskAttemptId()
-    accountingLock.synchronized {
+    memoryManager.synchronized {
       if (pendingUnrollMemoryMap.contains(taskAttemptId)) {
         val memoryToRelease = math.min(memory, pendingUnrollMemoryMap(taskAttemptId))
         if (memoryToRelease > 0) {
@@ -578,21 +576,21 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   /**
    * Return the amount of memory currently occupied for unrolling blocks across all tasks.
    */
-  def currentUnrollMemory: Long = accountingLock.synchronized {
+  def currentUnrollMemory: Long = memoryManager.synchronized {
     unrollMemoryMap.values.sum + pendingUnrollMemoryMap.values.sum
   }
 
   /**
    * Return the amount of memory currently occupied for unrolling blocks by this task.
    */
-  def currentUnrollMemoryForThisTask: Long = accountingLock.synchronized {
+  def currentUnrollMemoryForThisTask: Long = memoryManager.synchronized {
     unrollMemoryMap.getOrElse(currentTaskAttemptId(), 0L)
   }
 
   /**
    * Return the number of tasks currently unrolling blocks.
    */
-  private def numTasksUnrolling: Int = accountingLock.synchronized { unrollMemoryMap.keys.size }
+  private def numTasksUnrolling: Int = memoryManager.synchronized { unrollMemoryMap.keys.size }
 
   /**
    * Log information about current memory usage.

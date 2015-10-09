@@ -90,7 +90,7 @@ private[spark] abstract class MemoryManager extends Logging {
   def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     acquireStorageMemory(blockId, numBytes, evictedBlocks)
   }
 
@@ -130,7 +130,7 @@ private[spark] abstract class MemoryManager extends Logging {
   /**
    * Release N bytes of unroll memory.
    */
-  def releaseUnrollMemory(numBytes: Long): Unit = {
+  def releaseUnrollMemory(numBytes: Long): Unit = synchronized {
     releaseStorageMemory(numBytes)
   }
 
