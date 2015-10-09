@@ -884,7 +884,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.frameSize</code></td>
   <td>128</td>
   <td>
-    Maximum message size to allow in "control plane" communication; generally only applies to map
+    Maximum message size (in MB) to allow in "control plane" communication; generally only applies to map
     output size information sent between executors and the driver. Increase this if you are running
     jobs with many thousands of map and reduce tasks and see messages about the frame size.
   </td>
@@ -1488,6 +1488,14 @@ Apart from these, the following properties are also available, and may be useful
     Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
     streaming application as they will not be cleared automatically. But it comes at the cost of
     higher memory usage in Spark.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.stopGracefullyOnShutdown</code></td>
+  <td>false</td>
+  <td>
+    If <code>true</code>, Spark shuts down the <code>StreamingContext</code> gracefully on JVM 
+    shutdown rather than immediately.
   </td>
 </tr>
 <tr>

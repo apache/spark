@@ -218,6 +218,8 @@ L-BFGS optimizer.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`LBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS) and [`SquaredL2Updater` Scala docs](api/scala/index.html#org.apache.spark.mllib.optimization.SquaredL2Updater) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
@@ -278,6 +280,8 @@ println("Area under ROC = " + auROC)
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`LBFGS` Java docs](api/java/org/apache/spark/mllib/optimization/LBFGS.html) and [`SquaredL2Updater` Java docs](api/java/org/apache/spark/mllib/optimization/SquaredL2Updater.html) for details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 import java.util.Random;

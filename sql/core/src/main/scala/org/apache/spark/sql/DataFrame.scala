@@ -1415,7 +1415,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def collect(): Array[Row] = withNewExecutionId {
-    queryExecution.executedPlan.executeCollect()
+    queryExecution.executedPlan.executeCollectPublic()
   }
 
   /**
@@ -1595,7 +1595,7 @@ class DataFrame private[sql](
    */
   def inputFiles: Array[String] = {
     val files: Seq[String] = logicalPlan.collect {
-      case LogicalRelation(fsBasedRelation: FileRelation) =>
+      case LogicalRelation(fsBasedRelation: FileRelation, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
         fr.inputFiles
