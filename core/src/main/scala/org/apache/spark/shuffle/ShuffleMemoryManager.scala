@@ -53,7 +53,6 @@ class ShuffleMemoryManager protected (
   extends Logging {
 
   private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
-  private val maxMemory = memoryManager.maxExecutionMemory
 
   private def currentTaskAttemptId(): Long = {
     // In case this is called on the driver, return an invalid task attempt id.
@@ -81,9 +80,11 @@ class ShuffleMemoryManager protected (
     // Keep looping until we're either sure that we don't want to grant this request (because this
     // task would have more than 1 / numActiveTasks of the memory) or we have enough free
     // memory to give it (we always let each task get at least 1 / (2 * numActiveTasks)).
+    // TODO: simplify this to limit each task to its own slot
     while (true) {
       val numActiveTasks = taskMemory.keys.size
       val curMem = taskMemory(taskAttemptId)
+      val maxMemory = memoryManager.maxExecutionMemory
       val freeMemory = maxMemory - taskMemory.values.sum
 
       // How much we can grant this task; don't let it grow to more than 1 / numActiveTasks;

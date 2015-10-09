@@ -42,7 +42,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
 
   private val conf = blockManager.conf
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
-  private val maxMemory = memoryManager.maxStorageMemory
 
   // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
   // All accesses of this map are assumed to have manually synchronized on `memoryManager`
@@ -60,6 +59,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   private val unrollMemoryThreshold: Long =
     conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
 
+  /** Total amount of memory available to storage, in bytes. */
+  private def maxMemory: Long = memoryManager.maxStorageMemory
+
   if (maxMemory < unrollMemoryThreshold) {
     logWarning(s"Max memory ${Utils.bytesToString(maxMemory)} is less than the initial memory " +
       s"threshold ${Utils.bytesToString(unrollMemoryThreshold)} needed to store a block in " +
@@ -75,7 +77,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * Amount of storage memory, in bytes, used for caching blocks.
    * This does not include memory used for unrolling.
    */
-  private def blocksMemoryUsed: Long = memoryUsed - currentUnrollMemory
+  private def blocksMemoryUsed: Long = memoryManager.synchronized {
+    memoryUsed - currentUnrollMemory
+  }
 
   override def getSize(blockId: BlockId): Long = {
     entries.synchronized {

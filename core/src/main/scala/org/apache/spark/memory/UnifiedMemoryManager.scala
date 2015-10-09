@@ -66,12 +66,16 @@ private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) exte
   /**
    * Total available memory for execution, in bytes.
    */
-  override val maxExecutionMemory: Long = maxMemory
+  override def maxExecutionMemory: Long = synchronized {
+    maxMemory - _storageMemoryUsed
+  }
 
   /**
    * Total available memory for storage, in bytes.
    */
-  override val maxStorageMemory: Long = maxMemory
+  override val maxStorageMemory: Long = synchronized {
+    maxMemory - _executionMemoryUsed
+  }
 
   /**
    * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
