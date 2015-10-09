@@ -19,19 +19,15 @@ package org.apache.spark.sql.execution.ui
 
 import scala.collection.mutable
 
-import com.google.common.annotations.VisibleForTesting
-
-import org.apache.spark.{JobExecutionStatus, Logging}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
+import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 
-private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener with Logging {
+private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
-  private val retainedExecutions =
-    sqlContext.sparkContext.conf.getInt("spark.sql.ui.retainedExecutions", 1000)
+  private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
   private val activeExecutions = mutable.HashMap[Long, SQLExecutionUIData]()
 

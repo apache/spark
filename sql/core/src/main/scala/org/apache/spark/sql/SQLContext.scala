@@ -64,33 +64,31 @@ import org.apache.spark.util.Utils
  */
 class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
-    @transient protected[sql] val cacheManager: CacheManager)
+    @transient protected[sql] val cacheManager: CacheManager,
+    @transient private[sql] val listener: SQLListener)
   extends org.apache.spark.Logging with Serializable {
 
   self =>
 
-  def this(sparkContext: SparkContext) = this(sparkContext, new CacheManager)
+  def this(sparkContext: SparkContext) = {
+    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext))
+  }
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   /**
    * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
-   * registered functions, but sharing the same SparkContext and CacheManager.
+   * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
    *
    * @since 1.6.0
    */
   def newSession(): SQLContext = {
-    new SQLContext(sparkContext, cacheManager)
+    new SQLContext(sparkContext, cacheManager, listener)
   }
 
   /**
    * @return Spark SQL configuration
    */
   protected[sql] lazy val conf = new SQLConf
-
-  // `listener` should be only used in the driver
-  @transient private[sql] val listener = new SQLListener(this)
-  sparkContext.addSparkListener(listener)
-  sparkContext.ui.foreach(new SQLTab(this, _))
 
   /**
    * Set Spark SQL configuration properties.
@@ -1277,5 +1275,15 @@ object SQLContext {
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
       ): InternalRow
     }
+  }
+
+  /**
+   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
+   */
+  private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
+    val listener = new SQLListener(sc.conf)
+    sc.addSparkListener(listener)
+    sc.ui.foreach(new SQLTab(listener, _))
+    listener
   }
 }
