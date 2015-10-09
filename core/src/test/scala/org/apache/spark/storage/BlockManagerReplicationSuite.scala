@@ -29,6 +29,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark._
+import org.apache.spark.memory.StaticMemoryManager
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.KryoSerializer
@@ -39,29 +40,31 @@ import org.apache.spark.storage.StorageLevel._
 class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   private val conf = new SparkConf(false).set("spark.app.id", "test")
-  var rpcEnv: RpcEnv = null
-  var master: BlockManagerMaster = null
-  val securityMgr = new SecurityManager(conf)
-  val mapOutputTracker = new MapOutputTrackerMaster(conf)
-  val shuffleManager = new HashShuffleManager(conf)
+  private var rpcEnv: RpcEnv = null
+  private var master: BlockManagerMaster = null
+  private val securityMgr = new SecurityManager(conf)
+  private val mapOutputTracker = new MapOutputTrackerMaster(conf)
+  private val shuffleManager = new HashShuffleManager(conf)
 
   // List of block manager created during an unit test, so that all of the them can be stopped
   // after the unit test.
-  val allStores = new ArrayBuffer[BlockManager]
+  private val allStores = new ArrayBuffer[BlockManager]
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   conf.set("spark.kryoserializer.buffer", "1m")
-  val serializer = new KryoSerializer(conf)
+  private val serializer = new KryoSerializer(conf)
 
   // Implicitly convert strings to BlockIds for test clarity.
-  implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
+  private implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
 
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
-    val store = new BlockManager(name, rpcEnv, master, serializer, maxMem, conf,
-      mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem)
+    val store = new BlockManager(name, rpcEnv, master, serializer, conf,
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    memManager.setMemoryStore(store.memoryStore)
     store.initialize("app-id")
     allStores += store
     store
@@ -258,8 +261,10 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
     val failableTransfer = mock(classOf[BlockTransferService]) // this wont actually work
     when(failableTransfer.hostName).thenReturn("some-hostname")
     when(failableTransfer.port).thenReturn(1000)
-    val failableStore = new BlockManager("failable-store", rpcEnv, master, serializer,
-      10000, conf, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, 0)
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, 10000)
+    val failableStore = new BlockManager("failable-store", rpcEnv, master, serializer, conf,
+      memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, 0)
+    memManager.setMemoryStore(failableStore.memoryStore)
     failableStore.initialize("app-id")
     allStores += failableStore // so that this gets stopped after test
     assert(master.getPeers(store.blockManagerId).toSet === Set(failableStore.blockManagerId))
