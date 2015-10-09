@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.memory
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -23,6 +23,7 @@ import org.mockito.Mockito.{mock, reset, verify, when}
 import org.mockito.Matchers.{any, eq => meq}
 
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, TestBlockId}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 
 class StaticMemoryManagerSuite extends SparkFunSuite {

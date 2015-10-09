@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.memory
 
 import scala.collection.mutable
 
+import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 
 

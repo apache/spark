@@ -23,7 +23,8 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{MemoryManager, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.memory.MemoryManager
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 

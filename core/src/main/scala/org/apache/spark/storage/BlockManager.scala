@@ -31,6 +31,7 @@ import sun.nio.ch.DirectBuffer
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.memory.MemoryManager
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf

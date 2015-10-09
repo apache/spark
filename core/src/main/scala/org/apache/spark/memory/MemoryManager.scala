@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.memory
 
 import scala.collection.mutable
 

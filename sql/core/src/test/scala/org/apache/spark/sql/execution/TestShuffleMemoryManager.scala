@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 
-import org.apache.spark.MemoryManager
+import org.apache.spark.memory.MemoryManager
 import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.storage.{BlockId, BlockStatus}
 

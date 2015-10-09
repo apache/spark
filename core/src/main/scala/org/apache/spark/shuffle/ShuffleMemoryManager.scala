@@ -21,8 +21,9 @@ import scala.collection.mutable
 
 import com.google.common.annotations.VisibleForTesting
 
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark._
+import org.apache.spark.memory.{StaticMemoryManager, MemoryManager}
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
  * Allocates a pool of memory to tasks for use in shuffle operations. Each disk-spilling
