@@ -1374,7 +1374,7 @@ test_that("Method coltypes() to get R's data types of a DataFrame", {
                        structField("c3", "boolean"),
                        structField("c4", "timestamp"))
 
-  DF <- createDataFrame(sqlContext, df, schema)
+  DF <- createDataFrame(sqlContext, data, schema)
   expect_equal(coltypes(DF), c("integer", "logical", "timestamp"))
 })
 
