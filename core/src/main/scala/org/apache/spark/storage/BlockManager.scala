@@ -94,7 +94,7 @@ private[spark] class BlockManager(
   // Note: depending on the memory manager, `maxStorageMemory` may actually vary over time.
   // However, since we use this only for reporting and logging, what we actually want here is
   // the absolute maximum value that `maxStorageMemory` can ever possibly reach. We may need
-  // to revisit whether reporting this value as the "max" is intuitive to the user later.
+  // to revisit whether reporting this value as the "max" is intuitive to the user.
   private val maxMemory = memoryManager.maxStorageMemory
 
   private[spark]

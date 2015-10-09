@@ -37,8 +37,8 @@ private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: MemoryManager)
   extends BlockStore(blockManager) {
 
-  // Note: all changes to memory allocations, including unrolling, putting blocks and evicting
-  // blocks, must be synchronized on `memoryManager`!
+  // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
+  // acquiring or releasing unroll memory, must be synchronized on `memoryManager`!
 
   private val conf = blockManager.conf
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
@@ -59,7 +59,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   private val unrollMemoryThreshold: Long =
     conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
 
-  /** Total amount of memory available to storage, in bytes. */
+  /** Total amount of memory available for storage, in bytes. */
   private def maxMemory: Long = memoryManager.maxStorageMemory
 
   if (maxMemory < unrollMemoryThreshold) {
@@ -313,6 +313,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
           // Since we continue to hold onto the array until we actually cache it, we cannot
           // release the unroll memory yet. Instead, we transfer it to pending unroll memory
           // so `tryToPut` can further transfer it to normal storage memory later.
+          // TODO: we can probably express this without pending unroll memory (SPARK-10907)
           val amountToTransferToPending = currentUnrollMemoryForThisTask - previousMemoryReserved
           unrollMemoryMap(taskAttemptId) -= amountToTransferToPending
           pendingUnrollMemoryMap(taskAttemptId) =
@@ -418,7 +419,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   /**
-   * Try to free up a given amount of space to store a block by evicting existing blocks.
+   * Try to free up a given amount of space to store a block by evicting existing ones.
    *
    * @param space the amount of memory to free, in bytes
    * @param droppedBlocks a holder for blocks evicted in the process
