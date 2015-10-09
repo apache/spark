@@ -537,6 +537,7 @@ private[spark] class Client(
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
     populateClasspath(args, yarnConf, sparkConf, env, true, extraCp)
+    logInfo("Environment.CLASSPATH: " + env.get(Environment.CLASSPATH.name))
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -1164,7 +1165,7 @@ object Client extends Logging {
         } else {
           getMainJarUri(sparkConf.getOption(CONF_SPARK_USER_JAR))
         }
-      mainJar.foreach(addFileToClasspath(sparkConf, _, APP_JAR, env))
+      mainJar.foreach(addFileToClasspath(sparkConf, conf,  _, APP_JAR, env))
 
       val secondaryJars =
         if (args != null) {
@@ -1173,10 +1174,10 @@ object Client extends Logging {
           getSecondaryJarUris(sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
         }
       secondaryJars.foreach { x =>
-        addFileToClasspath(sparkConf, x, null, env)
+        addFileToClasspath(sparkConf, conf, x, null, env)
       }
     }
-    addFileToClasspath(sparkConf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
+    addFileToClasspath(sparkConf, conf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
@@ -1213,13 +1214,15 @@ object Client extends Logging {
    *
    * If not a "local:" file and no alternate name, the environment is not modified.
    *
-   * @param conf      Spark configuration.
-   * @param uri       URI to add to classpath (optional).
-   * @param fileName  Alternate name for the file (optional).
-   * @param env       Map holding the environment variables.
+   * @param conf        Spark configuration.
+   * @param hadoopConf  Hadoop configuration.
+   * @param uri         URI to add to classpath (optional).
+   * @param fileName    Alternate name for the file (optional).
+   * @param env         Map holding the environment variables.
    */
   private def addFileToClasspath(
       conf: SparkConf,
+      hadoopConf: Configuration,
       uri: URI,
       fileName: String,
       env: HashMap[String, String]): Unit = {
@@ -1228,6 +1231,11 @@ object Client extends Logging {
     } else if (fileName != null) {
       addClasspathEntry(buildPath(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
+    } else {
+      val localPath = getQualifiedLocalPath(localURI, hadoopConf)
+      val linkName = Option(localURI.getFragment()).getOrElse(localPath.getName())
+      addClasspathEntry(buildPath(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), linkName), env)
     }
   }
 
