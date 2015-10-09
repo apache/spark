@@ -390,12 +390,12 @@ class StandaloneDynamicAllocationSuite
     var apps = getApplications()
     assert(apps.head.executors.size === 2)
     // kill executor 1
-    assert(killNExecutors(sc, 1))
+    assert(sc.killExecutor(executors.head))
     apps = getApplications()
     assert(apps.head.executors.size === 2)
     assert(apps.head.getExecutorLimit === 2)
-    // kill all executors
-    assert(killAllExecutors(sc)
+    // kill executor 2
+    assert(sc.killExecutor(executors(1)))
     apps = getApplications()
     assert(apps.head.executors.size === 1)
     assert(apps.head.getExecutorLimit === 1)
