@@ -454,7 +454,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Clears the user-supplied value for the input param.
    */
-  protected final def clear(param: Param[_]): this.type = {
+  final def clear(param: Param[_]): this.type = {
     shouldOwn(param)
     paramMap.remove(param)
     this
