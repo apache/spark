@@ -1658,7 +1658,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.jdbc()", "1.4.0")
   def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
-    val w = if (overwrite) write.mode(SaveMode.Overwrite) else write
+    val w = if (overwrite) write.mode(SaveMode.Overwrite) else write.mode(SaveMode.Append)
     w.jdbc(url, table, new Properties)
   }
 
