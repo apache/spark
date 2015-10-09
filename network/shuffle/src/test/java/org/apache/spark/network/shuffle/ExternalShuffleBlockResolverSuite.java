@@ -102,9 +102,16 @@ public class ExternalShuffleBlockResolverSuite {
       // pass
     }
 
-    // no stageAttemptId
+    // wrong number of parts (note that we allow a missing stageAttemptId)
     try {
-      resolver.getBlockData("app0", "exec1", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec1", "shuffle_1_1_0_0_0");
+      fail("Should have failed");
+    } catch (RuntimeException e) {
+      assertTrue("Bad error message: " + e, e.getMessage().contains("Unexpected block id format"));
+    }
+
+    try {
+      resolver.getBlockData("app0", "exec1", "shuffle_1_1");
       fail("Should have failed");
     } catch (RuntimeException e) {
       assertTrue("Bad error message: " + e, e.getMessage().contains("Unexpected block id format"));
@@ -143,6 +150,54 @@ public class ExternalShuffleBlockResolverSuite {
     String block0 = CharStreams.toString(new InputStreamReader(blockStream));
     blockStream.close();
     assertEquals(expected, block0);
+  }
+
+  @Test
+  public void supportLegacySortShuffleBlockIds() throws IOException {
+    // In Spark 1.6, the stage attempt ID was added to shuffle block ids (SPARK-8029).  However,
+    // during a rolling upgrade, the shuffle service may be restarted with new code but still
+    // need to serve old apps.  So we make sure we can still handle old blocks
+
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
+    resolver.registerExecutor("app0", "exec0",
+      dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
+
+    dataContext.insertLegacySortShuffleData(2, 1,
+      new byte[][]{"legacy".getBytes(), "block".getBytes()});
+
+    testReadBlockData(resolver, "shuffle_2_1_0", "legacy");
+    testReadBlockData(resolver, "shuffle_2_1_1", "block");
+
+    // verify everything still works when we also register some blocks which do have a
+    // stageAttemptId
+    testSortShuffleBlocks();
+
+    testReadBlockData(resolver, "shuffle_2_1_0", "legacy");
+    testReadBlockData(resolver, "shuffle_2_1_1", "block");
+  }
+
+  @Test
+  public void supportLegacyHashShuffleBlockIds() throws IOException {
+    // In Spark 1.6, the stage attempt ID was added to shuffle block ids (SPARK-8029).  However,
+    // during a rolling upgrade, the shuffle service may be restarted with new code but still
+    // need to serve old apps.  So we make sure we can still handle old blocks
+
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
+    resolver.registerExecutor("app0", "exec0",
+      dataContext.createExecutorInfo("org.apache.spark.shuffle.hash.HashShuffleManager"));
+
+    dataContext.insertLegacyHashShuffleData(2, 0,
+      new byte[][] { "more legacy".getBytes(), "hash".getBytes() } );
+
+    testReadBlockData(resolver, "shuffle_2_0_0", "more legacy");
+    testReadBlockData(resolver, "shuffle_2_0_1", "hash");
+
+    // verify everything still works when we also register some blocks which do have a
+    // stageAttemptId
+    testHashShuffleBlocks();
+
+    testReadBlockData(resolver, "shuffle_2_0_0", "more legacy");
+    testReadBlockData(resolver, "shuffle_2_0_1", "hash");
   }
 
   @Test
