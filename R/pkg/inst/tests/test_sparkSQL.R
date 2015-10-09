@@ -1059,16 +1059,16 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(names(joined4), c("newAge", "name", "test"))
   expect_equal(count(joined4), 4)
   expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
-  
+
   joined5 <- join(df, df2, df$name == df2$name, "leftouter")
   expect_equal(names(joined5), c("age", "name", "name", "test"))
   expect_equal(count(joined5), 3)
   expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[1]))
-  
+
   joined6 <- join(df, df2, df$name == df2$name, "inner")
   expect_equal(names(joined6), c("age", "name", "name", "test"))
   expect_equal(count(joined6), 3)
-  
+
   joined7 <- join(df, df2, df$name == df2$name, "leftsemi")
   expect_equal(names(joined7), c("age", "name"))
   expect_equal(count(joined7), 3)
