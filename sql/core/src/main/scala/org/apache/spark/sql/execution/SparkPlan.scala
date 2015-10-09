@@ -115,7 +115,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def canProcessUnsafeRows: Boolean = false
 
   /**
-   * Specifies whether this operator is capablef processing Java-object-based Rows (i.e. rows
+   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
    * that are not UnsafeRows).
    */
   def canProcessSafeRows: Boolean = true
