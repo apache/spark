@@ -146,8 +146,6 @@ object Utils {
     val aggregateExpressions = functionsWithDistinct ++ functionsWithoutDistinct
     val usesTungstenAggregate =
       child.sqlContext.conf.unsafeEnabled &&
-        aggregateExpressions.forall(
-          _.aggregateFunction.isInstanceOf[DeclarativeAggregate]) &&
         TungstenAggregate.supportsAggregate(
           groupingExpressions,
           aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
