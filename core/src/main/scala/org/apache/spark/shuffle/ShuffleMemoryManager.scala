@@ -120,7 +120,12 @@ class ShuffleMemoryManager protected (
     val taskAttemptId = currentTaskAttemptId()
     val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val acquired = memoryManager.acquireExecutionMemory(numBytes, evictedBlocks)
-    // TODO: do something about these evicted blocks
+    // Register evicted blocks, if any, with task metrics
+    Option(TaskContext.get()).foreach { tc =>
+      val metrics = tc.taskMetrics()
+      val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+      metrics.updatedBlocks = Some(lastUpdatedBlocks ++ evictedBlocks.toSeq)
+    }
     taskMemory(taskAttemptId) += acquired
     acquired
   }
