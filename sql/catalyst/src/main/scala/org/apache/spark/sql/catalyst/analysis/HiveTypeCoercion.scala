@@ -307,7 +307,8 @@ object HiveTypeCoercion {
    * Convert the value and in list expressions to the common operator type
    * by looking at all the argument types and finding the closest one that
    * all the arguments can be cast to. When no common operator type is found
-   * an Analysis Exception is raised.
+   * the original expression will be returned and an Analysis Exception will
+   * be raised at type checking phase.
    */
   object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
