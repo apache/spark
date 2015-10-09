@@ -440,7 +440,8 @@ class LogisticRegressionModel private[ml] (
    * otherwise generates a new column and sets it as the probability column on a new copy
    * of the current model.
    */
-  private[classification] def findSummaryModelAndProbabilityCol(): (LogisticRegressionModel, String) = {
+  private[classification] def findSummaryModelAndProbabilityCol():
+      (LogisticRegressionModel, String) = {
     $(probabilityCol) match {
       case "" =>
         val probabilityColName = "probability_" + java.util.UUID.randomUUID.toString()
