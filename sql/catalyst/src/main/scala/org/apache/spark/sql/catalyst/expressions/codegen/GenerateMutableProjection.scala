@@ -27,6 +27,8 @@ abstract class BaseMutableProjection extends MutableProjection
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
  * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
+ * It exposes a `target` method, which is used to set the row that will be updated.
+ * The internal [[MutableRow]] object created internally is used only when `target` is not used.
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
 
