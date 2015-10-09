@@ -42,17 +42,7 @@ object LocalRelation {
   }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
-  extends LeafNode with analysis.MultiInstanceRelation {
-
-  /**
-   * Returns an identical copy of this relation with new exprIds for all attributes.  Different
-   * attributes are required when a relation is going to be included multiple times in the same
-   * query.
-   */
-  override final def newInstance(): this.type = {
-    LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
-  }
+case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil) extends LeafNode {
 
   override protected def stringArgs = Iterator(output)
 

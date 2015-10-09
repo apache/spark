@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
@@ -74,12 +73,9 @@ object RDDConversions {
 private[sql] case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow])(sqlContext: SQLContext)
-  extends LogicalPlan with MultiInstanceRelation {
+  extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = Nil
-
-  override def newInstance(): LogicalRDD.this.type =
-    LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
 
   override def sameResult(plan: LogicalPlan): Boolean = plan match {
     case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
@@ -116,12 +112,9 @@ private[sql] object PhysicalRDD {
 /** Logical plan node for scanning data from a local collection. */
 private[sql]
 case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[InternalRow])(sqlContext: SQLContext)
-   extends LogicalPlan with MultiInstanceRelation {
+   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = Nil
-
-  override def newInstance(): this.type =
-    LogicalLocalTable(output.map(_.newInstance()), rows)(sqlContext).asInstanceOf[this.type]
 
   override def sameResult(plan: LogicalPlan): Boolean = plan match {
     case LogicalRDD(_, otherRDD) => rows == rows

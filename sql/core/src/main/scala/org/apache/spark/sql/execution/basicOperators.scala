@@ -28,6 +28,17 @@ import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
+@DeveloperApi
+case class NewOutput(output: Seq[Attribute], child: SparkPlan) extends UnaryNode {
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = child.canProcessUnsafeRows
+  override def canProcessSafeRows: Boolean = child.canProcessSafeRows
+
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+}
+
 /**
  * :: DeveloperApi ::
  */
