@@ -406,16 +406,13 @@ class TungstenAggregationIterator(
         val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)()
         // These are the attributes of the row produced by `expressionAggEvalProjection`
         val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
-        // TODO: Use unsafe row.
         val aggregateResult = new SpecificMutableRow(aggregateResultSchema.map(_.dataType))
         expressionAggEvalProjection.target(aggregateResult)
         val resultProjection =
           UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateResultSchema)
 
         val allImperativeAggregateFunctions: Array[ImperativeAggregate] =
-          allImperativeAggregateFunctionPositions
-            .map(allAggregateFunctions)
-            .map(_.asInstanceOf[ImperativeAggregate])
+          allAggregateFunctions.collect { case func: ImperativeAggregate => func}
 
         (currentGroupingKey: UnsafeRow, currentBuffer: UnsafeRow) => {
           // Generate results for all expression-based aggregate functions.
