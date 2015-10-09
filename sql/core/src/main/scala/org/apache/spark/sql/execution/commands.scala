@@ -24,7 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{ExpressionDescription, Expression, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
@@ -69,12 +69,6 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
 
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
-  }
-
-  override protected[sql] def buildFragment(): RDD[InternalRow] = {
-    val convert = CatalystTypeConverters.createToCatalystConverter(schema)
-    val converted = sideEffectResult.map(convert(_).asInstanceOf[InternalRow])
-    sqlContext.sparkContext.parallelize(converted, 1)
   }
 
   override def argString: String = cmd.toString

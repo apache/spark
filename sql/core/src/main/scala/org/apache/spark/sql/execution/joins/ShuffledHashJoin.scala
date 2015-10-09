@@ -63,20 +63,4 @@ case class ShuffledHashJoin(
       hashJoin(streamIter, numStreamedRows, hashed, numOutputRows)
     }
   }
-
-  override protected[sql] def executeWithLocalNode(): BuildingFragment = {
-    val leftBuildingFragment = left.executeWithLocalNode()
-    val rightBuildFragment = right.executeWithLocalNode()
-    val inputs = leftBuildingFragment.inputs ++ rightBuildFragment.inputs
-    val joinNode =
-      HashJoinNode(
-        sqlContext.conf,
-        leftKeys,
-        rightKeys,
-        buildSide,
-        leftBuildingFragment.currentTerminalNode,
-        rightBuildFragment.currentTerminalNode)
-
-    BuildingFragment(inputs, joinNode)
-  }
 }

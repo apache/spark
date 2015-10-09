@@ -422,9 +422,6 @@ private[spark] object SQLConf {
   val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
     defaultValue = Some(true), doc = "<TODO>")
 
-  val USE_LOCALNODE_EXECUTION = booleanConf("spark.sql.useLocalNode",
-    defaultValue = Some(true), doc = "<TODO>")
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -493,8 +490,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
 
   private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
-
-  private[spark] def useLocalNode: Boolean = getConf(USE_LOCALNODE_EXECUTION)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

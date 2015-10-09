@@ -102,12 +102,6 @@ private[sql] case class PhysicalRDD(
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
-  override protected[sql] def executeWithLocalNode(): BuildingFragment = {
-    val scanNode = IteratorScanNode(sqlContext.conf, output)
-    val fragmentInput = FragmentInput(rdd, scanNode)
-    BuildingFragment(Array(fragmentInput), scanNode)
-  }
-
   override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
 }
 

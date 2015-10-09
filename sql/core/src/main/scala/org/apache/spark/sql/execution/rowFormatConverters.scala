@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.local.{ConvertToUnsafeNode, ConvertToSafeNode}
 
 /**
  * :: DeveloperApi ::
@@ -46,16 +45,6 @@ case class ConvertToUnsafe(child: SparkPlan) extends UnaryNode {
       iter.map(convertToUnsafe)
     }
   }
-
-  override protected[sql] def executeWithLocalNode(): BuildingFragment = {
-    val buildingFragment = child.executeWithLocalNode()
-    val filterNode =
-      ConvertToUnsafeNode(
-        sqlContext.conf,
-        buildingFragment.currentTerminalNode)
-
-    BuildingFragment(buildingFragment.inputs, filterNode)
-  }
 }
 
 /**
@@ -75,16 +64,6 @@ case class ConvertToSafe(child: SparkPlan) extends UnaryNode {
       val convertToSafe = FromUnsafeProjection(child.output.map(_.dataType))
       iter.map(convertToSafe)
     }
-  }
-
-  override protected[sql] def executeWithLocalNode(): BuildingFragment = {
-    val buildingFragment = child.executeWithLocalNode()
-    val filterNode =
-      ConvertToSafeNode(
-        sqlContext.conf,
-        buildingFragment.currentTerminalNode)
-
-    BuildingFragment(buildingFragment.inputs, filterNode)
   }
 }
 

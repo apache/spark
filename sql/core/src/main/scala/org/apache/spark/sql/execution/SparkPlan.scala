@@ -139,15 +139,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         "Operator will receive unsafe rows as input but cannot process unsafe rows")
     }
 
-    if (!sqlContext.conf.useLocalNode) {
-      RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
-        prepare()
-        doExecute()
-      }
-    } else {
-      RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
-        buildFragment
-      }
+    RDDOperationScope.withScope(sparkContext, nodeName, allowNesting = false, ignoreParent = true) {
+      prepare()
+      doExecute()
     }
   }
 
@@ -327,71 +321,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     }
     newOrdering(order, Seq.empty)
-  }
-
-  protected[sql] def executeWithLocalNode(): BuildingFragment = {
-    throw new UnsupportedOperationException(
-      s"$simpleString does not support executeWithLocalNode.")
-  }
-
-  protected[sql] def buildFragment: RDD[InternalRow] = {
-    val buildingFragment = executeWithLocalNode()
-    // Now, we will assemble a complete query fragment.
-    val inputs = buildingFragment.inputs
-    val currentTerminalNode = buildingFragment.currentTerminalNode
-    println("currentTerminalNode " + currentTerminalNode)
-    val function = {
-      (iterators: Array[Iterator[InternalRow]]) =>
-        var i = 0
-        while (i < inputs.length) {
-          inputs(i).iteratorScan.withIterator(iterators(i))
-          i += 1
-        }
-        currentTerminalNode.prepare()
-        currentTerminalNode.open()
-        CompletionIterator[InternalRow, Iterator[InternalRow]](
-          currentTerminalNode.asIterator,
-          currentTerminalNode.close())
-    }
-    val rdds = inputs.map(_.rdd)
-    val fragment = new CoPartitionedRDD(sqlContext.sparkContext, function, rdds)
-    /*
-    val fragment = inputs.length match {
-      case 1 =>
-        inputs(0).rdd.mapPartitions { iter =>
-          inputs(0).iteratorScan.withIterator(iter)
-          currentTerminalNode.prepare()
-          currentTerminalNode.open()
-
-          CompletionIterator[InternalRow, Iterator[InternalRow]](currentTerminalNode.asIterator, currentTerminalNode.close())
-        }
-      case 2 =>
-        inputs(0).rdd.zipPartitions(inputs(1).rdd) { (iter0, iter1) =>
-          inputs(0).iteratorScan.withIterator(iter0)
-          inputs(1).iteratorScan.withIterator(iter1)
-
-          currentTerminalNode.prepare()
-          currentTerminalNode.open()
-
-          CompletionIterator[InternalRow, Iterator[InternalRow]](currentTerminalNode.asIterator, currentTerminalNode.close())
-        }
-      case 3 =>
-        inputs(0).rdd.zipPartitions(inputs(1).rdd, inputs(2).rdd) { (iter0, iter1, iter2) =>
-          inputs(0).iteratorScan.withIterator(iter0)
-          inputs(1).iteratorScan.withIterator(iter1)
-          inputs(2).iteratorScan.withIterator(iter2)
-
-          currentTerminalNode.prepare()
-          currentTerminalNode.open()
-
-          CompletionIterator[InternalRow, Iterator[InternalRow]](currentTerminalNode.asIterator, currentTerminalNode.close())
-        }
-      case n =>
-        sys.error(s"A fragment with $n inputs is not supported.")
-    }*/
-    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
-      fragment
-    }
   }
 }
 
