@@ -153,6 +153,8 @@ public class SparkSaslSuite {
       assertEquals("Pong", new String(response, StandardCharsets.UTF_8));
     } finally {
       ctx.close();
+      // There should be 2 terminated events; one for the client, one for the server.
+      verify(rpcHandler, times(2)).connectionTerminated(any(TransportClient.class));
     }
   }
 
@@ -332,6 +334,23 @@ public class SparkSaslSuite {
         ctx.close();
       }
     }
+  }
+
+  @Test
+  public void testRpcHandlerDelegate() throws Exception {
+    // Tests all delegates exception for receive(), which is more complicated and already handled
+    // by all other tests.
+    RpcHandler handler = mock(RpcHandler.class);
+    RpcHandler saslHandler = new SaslRpcHandler(null, null, handler, null);
+
+    saslHandler.getStreamManager();
+    verify(handler).getStreamManager();
+
+    saslHandler.connectionTerminated(null);
+    verify(handler).connectionTerminated(any(TransportClient.class));
+
+    saslHandler.exceptionCaught(null, null);
+    verify(handler).exceptionCaught(any(Throwable.class), any(TransportClient.class));
   }
 
   private static class SaslTestCtx {
