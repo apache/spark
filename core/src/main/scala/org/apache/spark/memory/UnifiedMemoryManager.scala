@@ -33,8 +33,8 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * This means the size of the storage region is 0.75 * 0.5 = 0.375 of the heap space by default.
  *
  * Storage can borrow as much execution memory as is free until execution reclaims its space.
- * When this happens, cached blocks will be evicted from memory until all borrowed storage
- * memory is released.
+ * When this happens, cached blocks will be evicted from memory until sufficient borrowed
+ * memory is released to satisfy the execution memory request.
  *
  * Similarly, execution can borrow as much storage memory as is free. However, execution
  * memory is *never* evicted by storage due to the complexities involved in implementing this.
@@ -47,8 +47,12 @@ private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) exte
     this(conf, UnifiedMemoryManager.getMaxMemory(conf))
   }
 
-  // Size of the storage region, in bytes
-  // Cached blocks can be evicted only if actual storage memory used exceeds this
+  /**
+   * Size of the storage region, in bytes.
+   *
+   * This region is not statically reserved; execution can borrow from it if necessary.
+   * Cached blocks can be evicted only if actual storage memory usage exceeds this region.
+   */
   private val storageRegionSize: Long = {
     (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong
   }
@@ -65,6 +69,7 @@ private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) exte
 
   /**
    * Total available memory for execution, in bytes.
+   * In this model, this is equivalent to the amount of memory not occupied by storage.
    */
   override def maxExecutionMemory: Long = synchronized {
     maxMemory - _storageMemoryUsed
@@ -72,6 +77,7 @@ private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) exte
 
   /**
    * Total available memory for storage, in bytes.
+   * In this model, this is equivalent to the amount of memory not occupied by execution.
    */
   override val maxStorageMemory: Long = synchronized {
     maxMemory - _executionMemoryUsed
