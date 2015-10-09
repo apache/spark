@@ -67,7 +67,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
     ),
 
     "orc" -> (
-      "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.VectorizedOrcInputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
     )

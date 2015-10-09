@@ -25,7 +25,7 @@ import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.io.orc.{OrcInputFormat, OrcOutputFormat, OrcSerde, OrcSplit, OrcStruct}
+import org.apache.hadoop.hive.ql.io.orc.{VectorizedOrcInputFormat, OrcOutputFormat, OrcSerde, OrcSplit, OrcStruct}
 import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector
 import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, StructTypeInfo}
 import org.apache.hadoop.io.{NullWritable, Writable}
@@ -309,7 +309,7 @@ private[orc] case class OrcTableScan(
     FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
 
     val inputFormatClass =
-      classOf[OrcInputFormat]
+      classOf[VectorizedOrcInputFormat]
         .asInstanceOf[Class[_ <: MapRedInputFormat[NullWritable, Writable]]]
 
     val rdd = sqlContext.sparkContext.hadoopRDD(
