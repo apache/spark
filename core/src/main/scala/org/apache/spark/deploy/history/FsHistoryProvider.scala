@@ -223,7 +223,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getConfig(): Map[String, String] =  {
+  override def getConfig(): Map[String, String] = {
     val safeMode = if (isFsInSafeMode()) {
       Map("HDFS State" -> "In safe mode.")
     } else {
