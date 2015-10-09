@@ -385,17 +385,20 @@ class StandaloneDynamicAllocationSuite
     val executors = getExecutorIds(sc)
     assert(executors.size === 2)
 
-    // kill executor,and replace it
+    // kill executor 1, and replace it
     assert(sc.killAndReplaceExecutor(executors.head))
-    assert(master.apps.head.executors.size === 2)
-
-    assert(sc.killExecutor(executors.head))
-    assert(master.apps.head.executors.size === 2)
-    assert(master.apps.head.getExecutorLimit === 2)
-
-    assert(sc.killExecutor(executors(1)))
-    assert(master.apps.head.executors.size === 1)
-    assert(master.apps.head.getExecutorLimit === 1)
+    var apps = getApplications()
+    assert(apps.head.executors.size === 2)
+    // kill executor 1
+    assert(killNExecutors(sc, 1))
+    apps = getApplications()
+    assert(apps.head.executors.size === 2)
+    assert(apps.head.getExecutorLimit === 2)
+    // kill all executors
+    assert(killAllExecutors(sc)
+    apps = getApplications()
+    assert(apps.head.executors.size === 1)
+    assert(apps.head.getExecutorLimit === 1)
   }
 
   // ===============================
