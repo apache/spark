@@ -195,19 +195,22 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         converted match {
           case None => Nil // Cannot convert to new aggregation code path.
           case Some(logical.Aggregate(groupingExpressions, resultExpressions, child)) =>
-            // Extracts all distinct aggregate expressions from the resultExpressions.
+            // A single aggregate expression might appear multiple times in resultExpressions.
+            // In order to avoid evaluating an individual aggregate function multiple times, we'll
+            // build a set of the distinct aggregate expressions and build a function which can
+            // be used to re-write expressions so that they reference the single copy of the
+            // aggregate function which actually gets computed.
             val aggregateExpressions = resultExpressions.flatMap { expr =>
               expr.collect {
                 case agg: AggregateExpression2 => agg
               }
-            }.toSet.toSeq
+            }.distinct
             // For those distinct aggregate expressions, we create a map from the
             // aggregate function to the corresponding attribute of the function.
-            val aggregateFunctionMap = aggregateExpressions.map { agg =>
+            val aggregateFunctionToAttribute = aggregateExpressions.map { agg =>
               val aggregateFunction = agg.aggregateFunction
-              val attribtue = Alias(aggregateFunction, aggregateFunction.toString)().toAttribute
-              (aggregateFunction, agg.isDistinct) ->
-                (aggregateFunction -> attribtue)
+              val attribute = Alias(aggregateFunction, aggregateFunction.toString)().toAttribute
+              (aggregateFunction, agg.isDistinct) -> attribute
             }.toMap
 
             val (functionsWithDistinct, functionsWithoutDistinct) =
@@ -220,6 +223,40 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   "code path.")
             }
 
+            val namedGroupingExpressions = groupingExpressions.map {
+              case ne: NamedExpression => ne -> ne
+              // If the expression is not a NamedExpressions, we add an alias.
+              // So, when we generate the result of the operator, the Aggregate Operator
+              // can directly get the Seq of attributes representing the grouping expressions.
+              case other =>
+                val withAlias = Alias(other, other.toString)()
+                other -> withAlias
+            }
+            val groupExpressionMap = namedGroupingExpressions.toMap
+
+            // The original `resultExpressions` are a set of expressions which may reference
+            // aggregate expressions, grouping column values, and constants. When aggregate operator
+            // emits output rows, we will use `resultExpressions` to generate an output projection
+            // which takes the grouping columns and final aggregate result buffer as input.
+            // Thus, we must re-write the result expressions so that their attributes match up with
+            // the attributes of the final result projection's input row:
+            val rewrittenResultExpressions = resultExpressions.map { expr =>
+              expr.transformDown {
+                case AggregateExpression2(aggregateFunction, _, isDistinct) =>
+                  // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
+                  // so replace each aggregate expression by its corresponding attribute in the set:
+                  aggregateFunctionToAttribute(aggregateFunction, isDistinct)
+                case expression =>
+                  // Since we're using `namedGroupingAttributes` to extract the grouping key
+                  // columns, we need to replace grouping key expressions with their corresponding
+                  // attributes. We do not rely on the equality check at here since attributes may
+                  // differ cosmetically. Instead, we use semanticEquals.
+                  groupExpressionMap.collectFirst {
+                    case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+                  }.getOrElse(expression)
+              }.asInstanceOf[NamedExpression]
+            }
+
             val aggregateOperator =
               if (aggregateExpressions.map(_.aggregateFunction).exists(!_.supportsPartial)) {
                 if (functionsWithDistinct.nonEmpty) {
@@ -227,26 +264,26 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                     "aggregate functions which don't support partial aggregation.")
                 } else {
                   aggregate.Utils.planAggregateWithoutPartial(
-                    groupingExpressions,
+                    namedGroupingExpressions.map(_._2),
                     aggregateExpressions,
-                    aggregateFunctionMap,
-                    resultExpressions,
+                    aggregateFunctionToAttribute,
+                    rewrittenResultExpressions,
                     planLater(child))
                 }
               } else if (functionsWithDistinct.isEmpty) {
                 aggregate.Utils.planAggregateWithoutDistinct(
-                  groupingExpressions,
+                  namedGroupingExpressions.map(_._2),
                   aggregateExpressions,
-                  aggregateFunctionMap,
-                  resultExpressions,
+                  aggregateFunctionToAttribute,
+                  rewrittenResultExpressions,
                   planLater(child))
               } else {
                 aggregate.Utils.planAggregateWithOneDistinct(
-                  groupingExpressions,
+                  namedGroupingExpressions.map(_._2),
                   functionsWithDistinct,
                   functionsWithoutDistinct,
-                  aggregateFunctionMap,
-                  resultExpressions,
+                  aggregateFunctionToAttribute,
+                  rewrittenResultExpressions,
                   planLater(child))
               }
 
@@ -336,7 +373,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
       case logical.Repartition(numPartitions, shuffle, child) =>
-        execution.Repartition(numPartitions, shuffle, planLater(child)) :: Nil
+        if (shuffle) {
+          execution.Exchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
+        } else {
+          execution.Coalesce(numPartitions, planLater(child)) :: Nil
+        }
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.

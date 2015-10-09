@@ -989,7 +989,7 @@ test_that("arrange() and orderBy() on a DataFrame", {
   sorted <- arrange(df, df$age)
   expect_equal(collect(sorted)[1,2], "Michael")
 
-  sorted2 <- arrange(df, "name")
+  sorted2 <- arrange(df, "name", decreasing = FALSE)
   expect_equal(collect(sorted2)[2,"age"], 19)
 
   sorted3 <- orderBy(df, asc(df$age))
@@ -999,6 +999,15 @@ test_that("arrange() and orderBy() on a DataFrame", {
   sorted4 <- orderBy(df, desc(df$name))
   expect_equal(first(sorted4)$name, "Michael")
   expect_equal(collect(sorted4)[3,"name"], "Andy")
+
+  sorted5 <- arrange(df, "age", "name", decreasing = TRUE)
+  expect_equal(collect(sorted5)[1,2], "Andy")
+
+  sorted6 <- arrange(df, "age","name", decreasing = c(T, F))
+  expect_equal(collect(sorted6)[1,2], "Andy")
+
+  sorted7 <- arrange(df, "name", decreasing = FALSE)
+  expect_equal(collect(sorted7)[2,"age"], 19)
 })
 
 test_that("filter() on a DataFrame", {
@@ -1327,6 +1336,18 @@ test_that("crosstab() on a DataFrame", {
   expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 0, 1), "b1" = c(1, 1, 0),
                          stringsAsFactors = FALSE, row.names = NULL)
   expect_identical(expected, ordered)
+})
+
+test_that("cov() and corr() on a DataFrame", {
+  l <- lapply(c(0:9), function(x) { list(x, x * 2.0) })
+  df <- createDataFrame(sqlContext, l, c("singles", "doubles"))
+  result <- cov(df, "singles", "doubles")
+  expect_true(abs(result - 55.0 / 3) < 1e-12)
+
+  result <- corr(df, "singles", "doubles")
+  expect_true(abs(result - 1.0) < 1e-12)
+  result <- corr(df, "singles", "doubles", "pearson")
+  expect_true(abs(result - 1.0) < 1e-12)
 })
 
 test_that("SQL error message is returned from JVM", {
