@@ -19,99 +19,94 @@ package org.apache.spark.memory
 
 import scala.collection.mutable
 
-import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
+import org.apache.spark.SparkConf
+import org.apache.spark.storage.{BlockStatus, BlockId}
 
 
 /**
- * An abstract memory manager that enforces how memory is shared between execution and storage.
+ * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
+ * either side can borrow memory from the other.
  *
- * In this context, execution memory refers to that used for computation in shuffles, joins,
- * sorts and aggregations, while storage memory refers to that used for caching and propagating
- * internal data across the cluster. There exists one of these per JVM.
+ * The region shared between execution and storage is a fraction of the total heap space
+ * configurable through `spark.memory.fraction` (default 0.75). The position of the boundary
+ * within this space is further determined by `spark.memory.storageFraction` (default 0.5).
+ * This means the size of the storage region is 0.75 * 0.5 = 0.375 of the heap space by default.
+ *
+ * Storage can borrow as much execution memory as is free until execution reclaims its space.
+ * When this happens, cached blocks will be evicted from memory until all borrowed storage
+ * memory is released.
+ *
+ * Similarly, execution can borrow as much storage memory as is free. However, execution
+ * memory is *never* evicted by storage due to the complexities involved in implementing this.
+ * The implication is that attempts to cache blocks may fail if execution has already eaten
+ * up most of the storage space, in which case the new blocks will be evicted directly.
  */
-private[spark] abstract class MemoryManager {
-
-  // The memory store used to evict cached blocks
-  private var _memoryStore: MemoryStore = _
-  protected def memoryStore: MemoryStore = {
-    if (_memoryStore == null) {
-      throw new IllegalArgumentException("memory store not initialized yet")
-    }
-    _memoryStore
-  }
-
-  /**
-   * Set the [[MemoryStore]] used by this manager to evict cached blocks.
-   * This must be set after construction due to initialization ordering constraints.
-   */
-  final def setMemoryStore(store: MemoryStore): Unit = {
-    _memoryStore = store
-  }
+private[spark] class UnifiedMemoryManager(conf: SparkConf) extends MemoryManager {
 
   /**
    * Acquire N bytes of memory for execution.
    * @return number of bytes successfully granted (<= N).
    */
-  def acquireExecutionMemory(numBytes: Long): Long
+  override def acquireExecutionMemory(numBytes: Long): Long = numBytes
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return whether all N bytes were successfully granted.
    */
-  def acquireStorageMemory(
+  override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return whether all N bytes were successfully granted.
    */
-  def acquireUnrollMemory(
+  override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
 
   /**
    * Release N bytes of execution memory.
    */
-  def releaseExecutionMemory(numBytes: Long): Unit
+  override def releaseExecutionMemory(numBytes: Long): Unit = { }
 
   /**
    * Release N bytes of storage memory.
    */
-  def releaseStorageMemory(numBytes: Long): Unit
+  override def releaseStorageMemory(numBytes: Long): Unit = { }
 
   /**
    * Release all storage memory acquired.
    */
-  def releaseStorageMemory(): Unit
+  override def releaseStorageMemory(): Unit = { }
 
   /**
    * Release N bytes of unroll memory.
    */
-  def releaseUnrollMemory(numBytes: Long): Unit
+  override def releaseUnrollMemory(numBytes: Long): Unit = { }
 
   /**
    * Total available memory for execution, in bytes.
    */
-  def maxExecutionMemory: Long
+  override def maxExecutionMemory: Long = 0
 
   /**
    * Total available memory for storage, in bytes.
    */
-  def maxStorageMemory: Long
+  override def maxStorageMemory: Long = 0
 
   /**
    * Execution memory currently in use, in bytes.
    */
-  def executionMemoryUsed: Long
+  override def executionMemoryUsed: Long = 0
 
   /**
    * Storage memory currently in use, in bytes.
    */
-  def storageMemoryUsed: Long
+  override def storageMemoryUsed: Long = 0
 
 }
