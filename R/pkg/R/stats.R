@@ -134,8 +134,8 @@ setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
 #' 
 #' @param x A SparkSQL DataFrame
 #' @param col column that defines strata
-#' @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
-#'                  its fraction as zero.
+#' @param fractions A named list giving sampling fraction for each stratum. If a stratum is
+#'                  not specified, we treat its fraction as zero.
 #' @param seed random seed
 #' @return A new DataFrame that represents the stratified sample
 #'
@@ -149,11 +149,13 @@ setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
 #' }
 setMethod("sampleBy",
           signature(x = "DataFrame", col = "character",
-                    fractions = "environment", seed = "numeric"),
+                    fractions = "list", seed = "numeric"),
           function(x, col, fractions, seed) {
+            fractionsEnv <- convertNamedListToEnv(fractions)
+
             statFunctions <- callJMethod(x@sdf, "stat")
             # Seed is expected to be Long on Scala side, here convert it to an integer
             # due to SerDe limitation now.
-            sdf <- callJMethod(statFunctions, "sampleBy", col, fractions, as.integer(seed))
+            sdf <- callJMethod(statFunctions, "sampleBy", col, fractionsEnv, as.integer(seed))
             dataFrame(sdf)
           })

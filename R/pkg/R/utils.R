@@ -605,3 +605,13 @@ structToList <- function(struct) {
   class(struct) <- "list"
   struct
 }
+
+# Convert a named list to an environment to be passed to JVM
+convertNamedListToEnv <- function(namedList) {
+  names <- names(namedList)
+  env <- new.env()
+  for (name in names) {
+    env[[name]] <- namedList[[name]]
+  }
+  env
+}
