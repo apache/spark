@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MetadataCleanerType, Utils}
 
 class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
   import testImplicits._
@@ -409,6 +409,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
     assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
+    assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db") == OracleDialect)
+    assert(JdbcDialects.get("jdbc:netezza://127.0.0.1/db") == NetezzaDialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
@@ -448,8 +450,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
 
   test("DB2Dialect type mapping") {
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
-    assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
-    assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+    assert(db2Dialect.getJDBCType(StringType, null).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(db2Dialect.getJDBCType(BooleanType, null).map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 
   test("PostgresDialect type mapping") {

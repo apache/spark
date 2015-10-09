@@ -82,6 +82,14 @@ abstract class JdbcDialect {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
+   * Retrieve the jdbc / sql type for a given datatype.
+   * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
+   * @param md The metadata
+   * @return The new JdbcType if there is an override for this DataType
+   */
+  def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = None
+
+  /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
@@ -138,7 +146,8 @@ object JdbcDialects {
   registerDialect(PostgresDialect)
   registerDialect(DB2Dialect)
   registerDialect(MsSqlServerDialect)
-
+  registerDialect(OracleDialect)
+  registerDialect(NetezzaDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -173,8 +182,8 @@ class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
     dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md)).headOption
   }
 
-  override def getJDBCType(dt: DataType): Option[JdbcType] = {
-    dialects.flatMap(_.getJDBCType(dt)).headOption
+  override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
+    dialects.flatMap(_.getJDBCType(dt, md)).headOption
   }
 }
 
@@ -209,7 +218,7 @@ case object PostgresDialect extends JdbcDialect {
     } else None
   }
 
-  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+  override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("TEXT", java.sql.Types.CHAR))
     case BinaryType => Some(JdbcType("BYTEA", java.sql.Types.BINARY))
     case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
@@ -257,10 +266,8 @@ case object MySQLDialect extends JdbcDialect {
  */
 @DeveloperApi
 case object DB2Dialect extends JdbcDialect {
-
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:db2")
-
-  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+  override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
     case BooleanType => Some(JdbcType("CHAR(1)", java.sql.Types.CHAR))
     case _ => None
@@ -285,5 +292,61 @@ case object MsSqlServerDialect extends JdbcDialect {
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case _ => None
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+* Default Oracle dialect, mapping string/boolean on write to valid Oracle types.
+*/
+@DeveloperApi
+case object OracleDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (sqlType == Types.VARCHAR && typeName.equals("VARCHAR")) {
+      // Save varchar size to metadata
+      md.putLong("maxlength", size)
+      Some(LongType)
+    } else None
+  }
+
+  override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
+    if (dt == StringType && md.contains("maxlength")) {
+      Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.VARCHAR))
+    } else if (dt == StringType ) {
+      Some(JdbcType("CLOB", java.sql.Types.CLOB))
+    } else if (dt == BooleanType ) {
+      Some(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    } else None
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Default Netezza dialect, mapping string/boolean on write to valid Netezza types.
+ */
+@DeveloperApi
+case object NetezzaDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:netezza")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (sqlType == Types.VARCHAR && typeName.equals("VARCHAR")) {
+      // Save varchar size to metadata
+      md.putLong("maxlength", size)
+      Some(LongType)
+    } else None
+  }
+
+  override def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = {
+    if (dt == StringType && md.contains("maxlength")) {
+      Some(JdbcType(s"VARCHAR(${md.getLong("maxlength")})", java.sql.Types.VARCHAR))
+    } else if (dt == StringType ) {
+      Some(JdbcType("VARCHAR(255)", java.sql.Types.VARCHAR))
+    } else if (dt == BinaryType ) {
+      Some(JdbcType("BYTEINT", java.sql.Types.BINARY))
+    } else if (dt == BooleanType ) {
+      Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
+    } else None
   }
 }
