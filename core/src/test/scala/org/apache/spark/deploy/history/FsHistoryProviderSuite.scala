@@ -416,7 +416,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   test("provider correctly checks whether fs is in safe mode") {
     val provider = spy(new FsHistoryProvider(createTestConf()))
     val dfs = mock(classOf[DistributedFileSystem])
-    // Asserts that safe mode is falsebecause we can't really control the return value of the mock,
+    // Asserts that safe mode is false because we can't really control the return value of the mock,
     // since the API is different between hadoop 1 and 2.
     assert(!provider.isFsInSafeMode(dfs))
   }
