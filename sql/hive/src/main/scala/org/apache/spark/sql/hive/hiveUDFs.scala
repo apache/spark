@@ -616,6 +616,8 @@ private[hive] case class HiveUDAFFunction(
 
   override val aggBufferAttributes: Seq[AttributeReference] = Nil
 
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
   override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
   // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our

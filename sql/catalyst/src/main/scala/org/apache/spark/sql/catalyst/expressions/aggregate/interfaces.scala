@@ -209,6 +209,10 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
     inputAggBufferOffset = newInputAggBufferOffset
   }
 
+  // Note: although all subclasses implement inputAggBufferAttributes by simply cloning
+  // aggBufferAttributes, that common clone code cannot be placed here in the abstract
+  // ImperativeAggregate class, since that will lead to initialization ordering issues.
+
   /**
    * Initializes the mutable aggregation buffer located in `mutableAggBuffer`.
    *

@@ -546,6 +546,8 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
     AttributeReference(s"MS[$i]", LongType)()
   }
 
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 

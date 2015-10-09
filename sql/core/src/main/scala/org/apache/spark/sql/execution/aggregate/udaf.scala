@@ -341,6 +341,8 @@ private[sql] case class ScalaUDAF(
 
   override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
 
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
