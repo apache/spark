@@ -62,7 +62,8 @@ public class RetryingBlockFetcher {
   }
 
   /** Shared executor service used for waiting and retrying. */
-  private static final ExecutorService executorService = new ForkJoinPool();
+  private static final ExecutorService executorService = new ForkJoinPool(
+    10, ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, false);
 
   private final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
 
