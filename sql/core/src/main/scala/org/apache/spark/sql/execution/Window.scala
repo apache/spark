@@ -146,6 +146,8 @@ case class Window(
         // to the result of bound value projection. This is done manually because we want to use
         // Code Generation (if it is enabled).
         val (sortExprs, schema) = exprs.map { case e =>
+          // This AttributeReference does not need to have unique IDs, it's OK to be called
+          // in executor.
           val ref = AttributeReference("ordExpr", e.dataType, e.nullable)()
           (SortOrder(ref, e.direction), ref)
         }.unzip
