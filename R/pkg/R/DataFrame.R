@@ -1907,7 +1907,7 @@ setMethod("attach",
             cols <- columns(bf)
             newEnv <- new.env()
             for (i in 1:length(cols)) {
-              assign(x=cols[i], value=bf[,cols[i]], envir=newEnv)
+              assign(x = cols[i], value = bf[, cols[i]], envir = newEnv)
             }
-            attach(newEnv, pos=pos, name=name, warn.conflicts=warn.conflicts)
+            attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
