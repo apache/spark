@@ -818,7 +818,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           child.getText().toLowerCase(Locale.ENGLISH) match {
             case "orc" =>
               tableDesc = tableDesc.copy(
-                inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.VectorizedOrcInputFormat"),
+                inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
                 outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
               if (tableDesc.serde.isEmpty) {
                 tableDesc = tableDesc.copy(

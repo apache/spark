@@ -75,7 +75,7 @@ private[hive] object HiveSerDe {
 
       "orc" ->
         HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.VectorizedOrcInputFormat"),
+          inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
           outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"),
           serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde")),
 
