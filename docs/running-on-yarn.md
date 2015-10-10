@@ -307,10 +307,9 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td><code>spark.yarn.am.attemptFailuresValidityInterval</code></td>
   <td>(none)</td>
   <td>
-  Defines the validity interval (in millisecond) for AM failure tracking.
-  If the AM has been running for at least long, the AM failure count will be reset.
-  Default value None means this validity interval is not enabled.
-  This feaure is only supported in Hadoop 2.6+.
+  Defines the validity interval for AM failure tracking.
+  If the AM has been running for at least defined interval, the AM failure count will be reset.
+  This feature is not enabled if not configured, and only supported in Hadoop 2.6+.
   </td>
 </tr>
 <tr>
