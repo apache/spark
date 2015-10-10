@@ -97,6 +97,10 @@ class MatricesSuite extends SparkFunSuite {
     assert(sm3 === dm3)
     assert(sm3 !== sm3.transpose)
 
+    val sm3explicit = Matrices.sparse(3, 3, colPtrs = Array(0, 3, 6, 9),
+      rowIndices = Array(0, 1, 2, 0, 1, 2, 0, 1, 2), values = dm3.toArray)
+    assert(sm3 === sm3explicit)
+
     val dmEye = Matrices.eye(10)
     val smEye = Matrices.speye(10)
     assert(smEye === smEye)
