@@ -165,42 +165,44 @@ object Utils {
       case other => Alias(other, other.toString)()
     }
     val distinctColumnAttribute: Attribute = namedDistinctColumnExpression.toAttribute
+    val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
     // 1. Create an Aggregate Operator for partial aggregations.
-    val groupingAttributes = groupingExpressions.map(_.toAttribute)
-    val partialAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
-    val partialAggregateAttributes =
-      partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-    val partialAggregateGroupingExpressions = groupingExpressions :+ namedDistinctColumnExpression
-    val partialAggregateResult =
+    val partialAggregate: SparkPlan = {
+      val partialAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
+      val partialAggregateAttributes =
+        partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+      // We will group by the original grouping expression, plus an additional expression for the
+      // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the the grouping
+      // expressions will be [value, key].
+      val partialAggregateGroupingExpressions = groupingExpressions :+ namedDistinctColumnExpression
+      val partialAggregateResult =
         groupingAttributes ++
-        Seq(distinctColumnAttribute) ++
-        partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
-    val partialAggregate = if (usesTungstenAggregate) {
-      TungstenAggregate(
-        requiredChildDistributionExpressions = None,
-        // The grouping expressions are original groupingExpressions and
-        // distinct columns. For example, for avg(distinct value) ... group by key
-        // the grouping expressions of this Aggregate Operator will be [key, value].
-        groupingExpressions = partialAggregateGroupingExpressions,
-        nonCompleteAggregateExpressions = partialAggregateExpressions,
-        nonCompleteAggregateAttributes = partialAggregateAttributes,
-        completeAggregateExpressions = Nil,
-        completeAggregateAttributes = Nil,
-        initialInputBufferOffset = 0,
-        resultExpressions = partialAggregateResult,
-        child = child)
-    } else {
-      SortBasedAggregate(
-        requiredChildDistributionExpressions = None,
-        groupingExpressions = partialAggregateGroupingExpressions,
-        nonCompleteAggregateExpressions = partialAggregateExpressions,
-        nonCompleteAggregateAttributes = partialAggregateAttributes,
-        completeAggregateExpressions = Nil,
-        completeAggregateAttributes = Nil,
-        initialInputBufferOffset = 0,
-        resultExpressions = partialAggregateResult,
-        child = child)
+          Seq(distinctColumnAttribute) ++
+          partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+      if (usesTungstenAggregate) {
+        TungstenAggregate(
+          requiredChildDistributionExpressions = None,
+          groupingExpressions = partialAggregateGroupingExpressions,
+          nonCompleteAggregateExpressions = partialAggregateExpressions,
+          nonCompleteAggregateAttributes = partialAggregateAttributes,
+          completeAggregateExpressions = Nil,
+          completeAggregateAttributes = Nil,
+          initialInputBufferOffset = 0,
+          resultExpressions = partialAggregateResult,
+          child = child)
+      } else {
+        SortBasedAggregate(
+          requiredChildDistributionExpressions = None,
+          groupingExpressions = partialAggregateGroupingExpressions,
+          nonCompleteAggregateExpressions = partialAggregateExpressions,
+          nonCompleteAggregateAttributes = partialAggregateAttributes,
+          completeAggregateExpressions = Nil,
+          completeAggregateAttributes = Nil,
+          initialInputBufferOffset = 0,
+          resultExpressions = partialAggregateResult,
+          child = child)
+      }
     }
 
     // 2. Create an Aggregate Operator for partial merge aggregations.
