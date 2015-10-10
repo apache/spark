@@ -305,7 +305,7 @@ If you need a reference to the proper location to put log files in the YARN so t
 </tr>
 <tr>
   <td><code>spark.yarn.am.attemptFailuresValidityInterval</code></td>
-  <td>none</td>
+  <td>(none)</td>
   <td>
   Defines the validity interval (in millisecond) for AM failure tracking.
   If the AM has been running for at least long, the AM failure count will be reset.
