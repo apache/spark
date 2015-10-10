@@ -1230,7 +1230,7 @@ object Client extends Logging {
     } else if (fileName != null) {
       addClasspathEntry(buildPath(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
-    } else {
+    } else if (uri != null){
       val localPath = getQualifiedLocalPath(uri, hadoopConf)
       val linkName = Option(uri.getFragment()).getOrElse(localPath.getName())
       addClasspathEntry(buildPath(
