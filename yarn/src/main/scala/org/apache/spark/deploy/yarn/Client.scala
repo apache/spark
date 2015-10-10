@@ -1231,8 +1231,8 @@ object Client extends Logging {
       addClasspathEntry(buildPath(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
     } else {
-      val localPath = getQualifiedLocalPath(localURI, hadoopConf)
-      val linkName = Option(localURI.getFragment()).getOrElse(localPath.getName())
+      val localPath = getQualifiedLocalPath(uri, hadoopConf)
+      val linkName = Option(uri.getFragment()).getOrElse(localPath.getName())
       addClasspathEntry(buildPath(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), linkName), env)
     }
