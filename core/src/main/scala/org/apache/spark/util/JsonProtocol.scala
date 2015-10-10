@@ -282,7 +282,8 @@ private[spark] object JsonProtocol {
     ("ID" -> accumulableInfo.id) ~
     ("Name" -> accumulableInfo.name) ~
     ("Update" -> accumulableInfo.update.map(new JString(_)).getOrElse(JNothing)) ~
-    ("Value" -> accumulableInfo.value)
+    ("Value" -> accumulableInfo.value) ~
+    ("Internal" -> accumulableInfo.internal)
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -696,7 +697,8 @@ private[spark] object JsonProtocol {
     val name = (json \ "Name").extract[String]
     val update = Utils.jsonOption(json \ "Update").map(_.extract[String])
     val value = (json \ "Value").extract[String]
-    AccumulableInfo(id, name, update, value)
+    val internal = (json \ "Internal").extractOpt[Boolean].getOrElse(false)
+    AccumulableInfo(id, name, update, value, internal)
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {
