@@ -211,6 +211,19 @@ class BasicOperationsSuite extends TestSuiteBase {
     )
   }
 
+  test("transform with NULL") {
+    val input = Seq(1 to 4)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (r: DStream[Int]) => r.transform(rdd => null.asInstanceOf[RDD[Int]]),
+        Seq(Seq()),
+        1,
+        false
+      )
+    }
+  }
+
   test("transformWith") {
     val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
     val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
