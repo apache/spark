@@ -53,8 +53,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   type PoolName = String
   type ExecutorId = String
 
-  // Applicatin:
+  // Application:
   @volatile var startTime = -1L
+  @volatile var endTime = -1L
 
   // Jobs:
   val activeJobs = new HashMap[JobId, JobUIData]
@@ -534,6 +535,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   override def onApplicationStart(appStarted: SparkListenerApplicationStart) {
     startTime = appStarted.time
+  }
+
+  override def onApplicationEnd(appEnded: SparkListenerApplicationEnd) {
+    endTime = appEnded.time
   }
 
   /**

@@ -265,6 +265,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     val listener = parent.jobProgresslistener
     listener.synchronized {
       val startTime = listener.startTime
+      val endTime = listener.endTime
       val activeJobs = listener.activeJobs.values.toSeq
       val completedJobs = listener.completedJobs.reverse.toSeq
       val failedJobs = listener.failedJobs.reverse.toSeq
@@ -294,6 +295,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
               <li>
                 <strong>Total Uptime: </strong>
                 {UIUtils.formatDuration(System.currentTimeMillis() - startTime)}
+              </li>
+            } else {
+              // Total duration using the history
+              <li>
+                <strong>Total Uptime: </strong>
+                {UIUtils.formatDuration(endTime - startTime)}
               </li>
             }}
             <li>
