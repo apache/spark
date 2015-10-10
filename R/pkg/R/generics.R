@@ -686,6 +686,10 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
+#' @rdname col
+#' @export
+setGeneric("column", function(x) { standardGeneric("column") })
+
 #' @rdname concat
 #' @export
 setGeneric("concat", function(x, ...) { standardGeneric("concat") })
