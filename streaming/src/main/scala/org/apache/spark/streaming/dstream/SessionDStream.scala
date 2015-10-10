@@ -10,6 +10,7 @@ import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.OpenHashMap
 
 
 // ==================================================
@@ -51,19 +52,14 @@ private[streaming] object Session {
 }
 
 /** Class representing all the specification of session */
-class SessionSpec[K: ClassTag, V: ClassTag, S: ClassTag] private[streaming]() extends Serializable {
-  @volatile private var updateFunction: (V, Option[S]) => Option[S] = null
+class SessionSpec[K: ClassTag, V: ClassTag, S: ClassTag] private[streaming](
+    updateFunction: (V, Option[S]) => Option[S]) extends Serializable {
   @volatile private var partitioner: Partitioner = null
   @volatile private var initialSessionRDD: RDD[(K, S)] = null
   @volatile private var allSessions: Boolean = false
 
   def setPartition(partitioner: Partitioner): this.type = {
     this.partitioner = partitioner
-    this
-  }
-
-  def setUpdateFunction(func: (V, Option[S]) => Option[S]): this.type = {
-    updateFunction = func
     this
   }
 
@@ -92,8 +88,8 @@ class SessionSpec[K: ClassTag, V: ClassTag, S: ClassTag] private[streaming]() ex
 
 object SessionSpec {
   def create[K: ClassTag, V: ClassTag, S: ClassTag](
-                                                     updateFunction: (V, Option[S]) => Option[S]): SessionSpec[K, V, S] = {
-    new SessionSpec[K, V, S].setUpdateFunction(updateFunction)
+      updateFunction: (V, Option[S]) => Option[S]): SessionSpec[K, V, S] = {
+    new SessionSpec[K, V, S](updateFunction)
   }
 }
 
@@ -141,7 +137,7 @@ private[streaming] abstract class SessionStore[K: ClassTag, S: ClassTag] extends
 private[streaming] object SessionStore {
   def empty[K: ClassTag, S: ClassTag]: SessionStore[K, S] = new EmptySessionStore[K, S]
 
-  def create[K: ClassTag, S: ClassTag](): SessionStore[K, S] = new HashMapBasedSessionStore[K, S]()
+  def create[K: ClassTag, S: ClassTag](): SessionStore[K, S] = new OpenHashMapBasedSessionStore[K, S]()
 }
 
 /** Specific implementation of SessionStore interface representing an empty map */
@@ -231,10 +227,108 @@ private[streaming] class HashMapBasedSessionStore[K: ClassTag, S: ClassTag](
 
 private[streaming] object HashMapBasedSessionStore {
 
-  case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
+  private case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
 
   val GENERATION_THRESHOLD_FOR_CONSOLIDATION = 10
 }
+
+
+private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
+    parentSessionStore: SessionStore[K, S], initialCapacity: Int) extends SessionStore[K, S] {
+
+  def this(initialCapacity: Int) = this(new EmptySessionStore[K, S], initialCapacity)
+
+  def this() = this(64)
+
+
+  import OpenHashMapBasedSessionStore._
+
+  private val generation: Int = parentSessionStore match {
+    case map: OpenHashMapBasedSessionStore[_, _] => map.generation + 1
+    case _ => 1
+  }
+
+  private val internalMap = new OpenHashMap[K, SessionInfo[S]]()
+
+  override def put(key: K, session: S): Unit = {
+    val sessionInfo = internalMap(key)
+    if (sessionInfo != null) {
+      sessionInfo.data = session
+    } else {
+      internalMap.update(key, new SessionInfo(session))
+    }
+  }
+
+  /** Get the session data if it exists */
+  override def get(key: K): Option[S] = {
+    val sessionInfo = internalMap(key)
+    if (sessionInfo != null && sessionInfo.deleted == false) {
+      Some(sessionInfo.data)
+    } else {
+      parentSessionStore.get(key)
+    }
+  }
+
+  /** Remove a key */
+  override def remove(key: K): Unit = {
+    internalMap.update(key, new SessionInfo(get(key).getOrElse(null.asInstanceOf[S]), deleted = true))
+  }
+
+  /**
+   * Return an iterator of data in this map. If th flag is true, implementations should
+   * return only the session that were updated since the creation of this map.
+   */
+  override def iterator(updatedSessionsOnly: Boolean): Iterator[Session[K, S]] = {
+    val updatedSessions = internalMap.iterator.map { case (key, sessionInfo) =>
+      Session(key, sessionInfo.data, !sessionInfo.deleted)
+    }
+
+    def previousSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter { session =>
+      !internalMap.contains(session.getKey())
+    }
+
+    if (updatedSessionsOnly) {
+      updatedSessions
+    } else {
+      previousSessions ++ updatedSessions
+    }
+  }
+
+  /**
+   * Shallow copy the map to create a new session store. Updates to the new map
+   * should not mutate `this` map.
+   */
+  override def copy(): SessionStore[K, S] = {
+    doCopy(generation >= HashMapBasedSessionStore.GENERATION_THRESHOLD_FOR_CONSOLIDATION)
+  }
+
+  private[streaming] def doCopy(consolidate: Boolean): SessionStore[K, S] = {
+    if (consolidate) {
+      val newParentMap = new OpenHashMapBasedSessionStore[K, S](sizeHint)
+      iterator(updatedSessionsOnly = false).filter { _.isActive }.foreach { case session =>
+        newParentMap.internalMap.update(session.getKey(), SessionInfo(session.getData(), deleted = false))
+      }
+      new HashMapBasedSessionStore[K, S](newParentMap)
+    } else {
+      new HashMapBasedSessionStore[K, S](this)
+    }
+  }
+
+  private def sizeHint(): Int = internalMap.size + {
+    parentSessionStore match {
+      case s: OpenHashMapBasedSessionStore[_, _] => s.sizeHint()
+      case _ => 0
+    }
+  }
+}
+
+private[streaming] object OpenHashMapBasedSessionStore {
+
+  private case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
+
+  val GENERATION_THRESHOLD_FOR_CONSOLIDATION = 10
+}
+
 
 
 // -----------------------------------------------
