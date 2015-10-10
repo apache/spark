@@ -1367,7 +1367,7 @@ test_that("attach() on a DataFrame", {
   expect_error(age)
   attach(df)
   expect_is(age, "DataFrame")
-  expected_age <- data.frame(age=c(NA, 30, 19))
+  expected_age <- data.frame(age = c(NA, 30, 19))
   expect_equal(head(age), expected_age)
   stat <- summary(age)
   expect_equal(collect(stat)[5, "age"], "30")
