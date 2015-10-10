@@ -19,6 +19,8 @@ package org.apache.spark.mllib.classification
 
 import java.lang.{Iterable => JIterable}
 
+import org.apache.spark.mllib.pmml.PMMLExportable
+
 import scala.collection.JavaConverters._
 
 import org.json4s.JsonDSL._
@@ -47,7 +49,7 @@ class NaiveBayesModel private[spark] (
     @Since("0.9.0") val pi: Array[Double],
     @Since("0.9.0") val theta: Array[Array[Double]],
     @Since("1.4.0") val modelType: String)
-  extends ClassificationModel with Serializable with Saveable {
+  extends ClassificationModel with Serializable with Saveable with PMMLExportable {
 
   import NaiveBayes.{Bernoulli, Multinomial, supportedModelTypes}
 
