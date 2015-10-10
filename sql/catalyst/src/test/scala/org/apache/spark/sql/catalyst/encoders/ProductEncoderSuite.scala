@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.encoders
 
 import java.util
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe._
 
 import org.apache.spark.SparkFunSuite
@@ -54,19 +55,120 @@ class ProductEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(
     BoxedData(null, null, null, null, null, null, null))
 
-  encodeDecodeTest(("Array[Byte] null", null: Array[Byte]))
-  encodeDecodeTestCustom(("Array[Byte]", Array[Byte](1, 2, 3)))
+  encodeDecodeTest(("Seq[(String, String)]",
+    Seq(("a","b"))))
+  encodeDecodeTest(("Seq[(Int, Int)]",
+    Seq((1, 2))))
+  encodeDecodeTest(("Seq[(Long, Long)]",
+    Seq((1L, 2L))))
+  encodeDecodeTest(("Seq[(Float, Float)]",
+    Seq((1.toFloat, 2.toFloat))))
+  encodeDecodeTest(("Seq[(Double, Double)]",
+    Seq((1.toDouble, 2.toDouble))))
+  encodeDecodeTest(("Seq[(Short, Short)]",
+    Seq((1.toShort, 2.toShort))))
+  encodeDecodeTest(("Seq[(Byte, Byte)]",
+    Seq((1.toByte, 2.toByte))))
+  encodeDecodeTest(("Seq[(Boolean, Boolean)]",
+    Seq((true, false))))
+
+  encodeDecodeTest(("ArrayBuffer[(String, String)]",
+    ArrayBuffer(("a","b"))))
+  encodeDecodeTest(("ArrayBuffer[(Int, Int)]",
+    ArrayBuffer((1, 2))))
+  encodeDecodeTest(("ArrayBuffer[(Long, Long)]",
+    ArrayBuffer((1L, 2L))))
+  encodeDecodeTest(("ArrayBuffer[(Float, Float)]",
+    ArrayBuffer((1.toFloat, 2.toFloat))))
+  encodeDecodeTest(("ArrayBuffer[(Double, Double)]",
+    ArrayBuffer((1.toDouble, 2.toDouble))))
+  encodeDecodeTest(("ArrayBuffer[(Short, Short)]",
+    ArrayBuffer((1.toShort, 2.toShort))))
+  encodeDecodeTest(("ArrayBuffer[(Byte, Byte)]",
+    ArrayBuffer((1.toByte, 2.toByte))))
+  encodeDecodeTest(("ArrayBuffer[(Boolean, Boolean)]",
+    ArrayBuffer((true, false))))
+
+  encodeDecodeTest(("Seq[Seq[(Int, Int)]]",
+    Seq(Seq((1, 2)))))
+
+  encodeDecodeTestCustom(("Array[Array[(Int, Int)]]",
+    Array(Array((1, 2)))))
+  { (l, r) => l._2(0)(0) == r._2(0)(0) }
+
+  encodeDecodeTestCustom(("Array[Array[(Int, Int)]]",
+    Array(Array(Array((1, 2))))))
+  { (l, r) => l._2(0)(0)(0) == r._2(0)(0)(0) }
+
+  encodeDecodeTestCustom(("Array[Array[Array[(Int, Int)]]]",
+    Array(Array(Array(Array((1, 2)))))))
+  { (l, r) => l._2(0)(0)(0)(0) == r._2(0)(0)(0)(0) }
+
+  encodeDecodeTestCustom(("Array[Array[Array[Array[(Int, Int)]]]]",
+    Array(Array(Array(Array(Array((1, 2))))))))
+  { (l, r) => l._2(0)(0)(0)(0)(0) == r._2(0)(0)(0)(0)(0) }
+
+
+  encodeDecodeTestCustom(("Array[Array[Int]]",
+    Array(Array(1))))
+  { (l, r) => l._2(0)(0) == r._2(0)(0) }
+
+  encodeDecodeTestCustom(("Array[Array[Int]]",
+    Array(Array(Array(1)))))
+  { (l, r) => l._2(0)(0)(0) == r._2(0)(0)(0) }
+
+  encodeDecodeTestCustom(("Array[Array[Array[Int]]]",
+    Array(Array(Array(Array(1))))))
+  { (l, r) => l._2(0)(0)(0)(0) == r._2(0)(0)(0)(0) }
+
+  encodeDecodeTestCustom(("Array[Array[Array[Array[Int]]]]",
+    Array(Array(Array(Array(Array(1)))))))
+  { (l, r) => l._2(0)(0)(0)(0)(0) == r._2(0)(0)(0)(0)(0) }
+
+  encodeDecodeTest(("Array[Byte] null",
+    null: Array[Byte]))
+  encodeDecodeTestCustom(("Array[Byte]",
+    Array[Byte](1, 2, 3)))
     { (l, r) => util.Arrays.equals(l._2, r._2) }
 
-  encodeDecodeTest(("Array[Int] null", null: Array[Int]))
-  encodeDecodeTestCustom(("Array[Int]", Array[Int](1, 2, 3)))
+  encodeDecodeTest(("Array[Int] null",
+    null: Array[Int]))
+  encodeDecodeTestCustom(("Array[Int]",
+    Array[Int](1, 2, 3)))
     { (l, r) => util.Arrays.equals(l._2, r._2) }
 
-  encodeDecodeTest(("Array[Long] null", null: Array[Long]))
-  encodeDecodeTestCustom(("Array[Long]", Array[Long](1, 2, 3)))
+  encodeDecodeTest(("Array[Long] null",
+    null: Array[Long]))
+  encodeDecodeTestCustom(("Array[Long]",
+    Array[Long](1, 2, 3)))
     { (l, r) => util.Arrays.equals(l._2, r._2) }
 
-  encodeDecodeTestCustom(("java.sql.Timestamp", new java.sql.Timestamp(1)))
+  encodeDecodeTest(("Array[Double] null",
+    null: Array[Double]))
+  encodeDecodeTestCustom(("Array[Double]",
+    Array[Double](1, 2, 3)))
+    { (l, r) => util.Arrays.equals(l._2, r._2) }
+
+  encodeDecodeTest(("Array[Float] null",
+    null: Array[Float]))
+  encodeDecodeTestCustom(("Array[Float]",
+    Array[Float](1, 2, 3)))
+    { (l, r) => util.Arrays.equals(l._2, r._2) }
+
+  encodeDecodeTest(("Array[Boolean] null",
+    null: Array[Boolean]))
+  encodeDecodeTestCustom(("Array[Boolean]",
+    Array[Boolean](true, false)))
+    { (l, r) => util.Arrays.equals(l._2, r._2) }
+
+  encodeDecodeTest(("Array[Short] null",
+    null: Array[Short]))
+  encodeDecodeTestCustom(("Array[Short]",
+    Array[Short](1, 2, 3)))
+    { (l, r) => util.Arrays.equals(l._2, r._2) }
+
+  encodeDecodeTestCustom(("java.sql.Timestamp",
+    new java.sql.Timestamp(1)))
     { (l, r) => l._2.toString == r._2.toString }
 
   encodeDecodeTestCustom(("java.sql.Date", new java.sql.Date(1)))
@@ -110,8 +212,9 @@ class ProductEncoderSuite extends SparkFunSuite {
              |
              |in:  $inputData
              |out: $convertedBack
+             |types: ${convertedBack.productIterator.map(_.getClass.getName).mkString(",")}
              |
-             |Converted: ${convertedData.toSeq(encoder.schema).mkString("[", ",", "]")}
+             |Encoded Data: ${convertedData.toSeq(encoder.schema).mkString("[", ",", "]")}
              |Schema: ${schema.mkString(",")}
              |${encoder.schema.treeString}
              |Construct Expressions:

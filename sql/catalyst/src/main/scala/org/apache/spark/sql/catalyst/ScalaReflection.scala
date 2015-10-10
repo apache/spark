@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -115,12 +115,19 @@ trait ScalaReflection {
       }
   }
 
-  def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], Nil)
+  def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], None)
 
-  def constructorFor(tpe: `Type`, path: Seq[String]): Expression = ScalaReflectionLock.synchronized {
+  def constructorFor(tpe: `Type`, path: Option[Expression]): Expression = ScalaReflectionLock.synchronized {
+    def addToPath(part: String) =
+      path
+        .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
+        .getOrElse(UnresolvedAttribute(part))
+
+    def getPath = path.getOrElse(sys.error("Constructors must start at a class type"))
+
     tpe match {
       case t if !dataTypeFor(t).isInstanceOf[ObjectType] =>
-        UnresolvedAttribute(path)
+        getPath
 
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
@@ -142,7 +149,7 @@ trait ScalaReflection {
             objectType,
             NewInstance(
               boxedType,
-              UnresolvedAttribute(path) :: Nil,
+              getPath :: Nil,
               propagateNull = true,
               objectType))
         }.getOrElse {
@@ -180,14 +187,14 @@ trait ScalaReflection {
           val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
           val dataType = dataTypeFor(fieldType)
 
-          constructorFor(fieldType, path :+ fieldName)
+          constructorFor(fieldType, Some(addToPath(fieldName)))
         }
 
         val newInstance = NewInstance(cls, arguments, propagateNull = false, ObjectType(cls))
 
         if (path.nonEmpty) {
           expressions.If(
-            IsNull(UnresolvedAttribute(path)),
+            IsNull(getPath),
             expressions.Literal.create(null, ObjectType(cls)),
             newInstance
           )
@@ -198,44 +205,44 @@ trait ScalaReflection {
       case t if t <:< localTypeOf[java.lang.Integer] =>
         val boxedType = classOf[java.lang.Integer]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, UnresolvedAttribute(path) :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
 
       case t if t <:< localTypeOf[java.lang.Long] =>
         val boxedType = classOf[java.lang.Long]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, UnresolvedAttribute(path) :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
 
       case t if t <:< localTypeOf[java.lang.Double] =>
         val boxedType = classOf[java.lang.Double]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, UnresolvedAttribute(path) :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
 
       case t if t <:< localTypeOf[java.lang.Float] =>
         val boxedType = classOf[java.lang.Float]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, UnresolvedAttribute(path) :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
 
       case t if t <:< localTypeOf[java.lang.Short] =>
         val boxedType = classOf[java.lang.Short]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, UnresolvedAttribute(path) :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
 
       case t if t <:< localTypeOf[java.lang.Byte] =>
         val boxedType = classOf[java.lang.Byte]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, UnresolvedAttribute(path) :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
 
       case t if t <:< localTypeOf[java.lang.Boolean] =>
         val boxedType = classOf[java.lang.Boolean]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, UnresolvedAttribute(path) :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
 
       case t if t <:< localTypeOf[java.sql.Date] =>
         StaticInvoke(
           DateTimeUtils,
           ObjectType(classOf[java.sql.Date]),
           "toJavaDate",
-          UnresolvedAttribute(path) :: Nil,
+          getPath :: Nil,
           propagateNull = true)
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
@@ -243,14 +250,14 @@ trait ScalaReflection {
           DateTimeUtils,
           ObjectType(classOf[java.sql.Timestamp]),
           "toJavaTimestamp",
-          UnresolvedAttribute(path) :: Nil,
+          getPath :: Nil,
           propagateNull = true)
 
       case t if t <:< localTypeOf[java.lang.String] =>
-        Invoke(UnresolvedAttribute(path), "toString", ObjectType(classOf[String]))
+        Invoke(getPath, "toString", ObjectType(classOf[String]))
 
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
-        Invoke(UnresolvedAttribute(path), "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]))
+        Invoke(getPath, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]))
 
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
@@ -269,10 +276,32 @@ trait ScalaReflection {
         }
 
         primitiveMethod.map { method =>
-          Invoke(UnresolvedAttribute(path), method, dataTypeFor(t))
+          Invoke(getPath, method, dataTypeFor(t))
         }.getOrElse {
+          val returnType = dataTypeFor(t)
+          Invoke(
+            MapObjects(p => constructorFor(elementType, Some(p)), getPath, dataType),
+            "array",
+            returnType)
+        }
+
+      case t if t <:< localTypeOf[Seq[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val elementDataType = dataTypeFor(elementType)
+        val Schema(dataType, nullable) = schemaFor(elementType)
+
+        val arrayData = if (!elementDataType.isInstanceOf[AtomicType]) {
+          MapObjects(p => constructorFor(elementType, Some(p)), getPath, dataType)
+        } else {
           ???
         }
+
+        StaticInvoke(
+          scala.collection.mutable.WrappedArray,
+          ObjectType(classOf[Seq[_]]),
+          "make",
+          Invoke(arrayData, "array", ObjectType(classOf[Array[Any]])) :: Nil)
+
     }
   }
 
