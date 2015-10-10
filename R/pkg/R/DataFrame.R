@@ -1903,11 +1903,11 @@ setMethod("as.data.frame",
 setMethod("attach",
           signature(what = "DataFrame"),
           function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
-            bf <- what
-            cols <- columns(bf)
+            cols <- columns(what)
+            stopifnot(length(cols) > 0)
             newEnv <- new.env()
             for (i in 1:length(cols)) {
-              assign(x = cols[i], value = bf[, cols[i]], envir = newEnv)
+              assign(x = cols[i], value = what[, cols[i]], envir = newEnv)
             }
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
