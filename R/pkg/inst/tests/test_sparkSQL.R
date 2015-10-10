@@ -1377,7 +1377,7 @@ test_that("attach() on a DataFrame", {
   stat2 <- summary(age)
   expect_equal(collect(stat2)[5, "age"], "30")
   detach("df")
-  stat3 <- summary(df[,"age"])
+  stat3 <- summary(df[, "age"])
   expect_equal(collect(stat3)[5, "age"], "30")
   expect_error(age)
 })
