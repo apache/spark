@@ -61,8 +61,7 @@ public class RetryingBlockFetcher {
   }
 
   /** Shared executor service used for waiting and retrying. */
-  private static final ExecutorService executorService = Executors.newCachedThreadPool(
-    NettyUtils.createThreadFactory("Block Fetch Retry"));
+  private static final ExecutorService executorService = new ForkJoinPool();
 
   private final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
 
