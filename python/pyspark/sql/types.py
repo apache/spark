@@ -1210,9 +1210,9 @@ class Row(tuple):
             raise ValueError("No args or kwargs")
 
     def __init__(self, *args, **kwargs):
-        if hasattr(self, "__fields__") and "count" in self.__fields__:
+        if "count" in kwargs:
             self.__dict__["count"] = self.__getattr__("count")
-        if hasattr(self, "__fields__") and "index" in self.__fields__:
+        if "index" in kwargs:
             self.__dict__["index"] = self.__getattr__("index")
 
     def asDict(self, recursive=False):
