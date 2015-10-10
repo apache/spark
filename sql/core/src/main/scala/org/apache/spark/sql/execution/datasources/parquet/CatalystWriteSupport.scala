@@ -431,6 +431,7 @@ private[parquet] object CatalystWriteSupport {
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.set(
       ParquetOutputFormat.WRITER_VERSION,
-      ParquetProperties.WriterVersion.PARQUET_1_0.toString)
+      configuration.get(ParquetOutputFormat.WRITER_VERSION,
+        ParquetProperties.WriterVersion.PARQUET_1_0.toString))
   }
 }
