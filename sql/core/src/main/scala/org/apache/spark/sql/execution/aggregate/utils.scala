@@ -206,86 +206,90 @@ object Utils {
     }
 
     // 2. Create an Aggregate Operator for partial merge aggregations.
-    val partialMergeAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
-    val partialMergeAggregateAttributes =
-      partialMergeAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-    val partialMergeAggregateResult =
+    val partialMergeAggregate: SparkPlan = {
+      val partialMergeAggregateExpressions =
+        functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
+      val partialMergeAggregateAttributes =
+        partialMergeAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+      val partialMergeAggregateResult =
         groupingAttributes ++
-        Seq(distinctColumnAttribute) ++
-        partialMergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
-    val partialMergeAggregate = if (usesTungstenAggregate) {
-      TungstenAggregate(
-        requiredChildDistributionExpressions = Some(groupingAttributes),
-        groupingExpressions = groupingAttributes :+ distinctColumnAttribute,
-        nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
-        nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
-        completeAggregateExpressions = Nil,
-        completeAggregateAttributes = Nil,
-        initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
-        resultExpressions = partialMergeAggregateResult,
-        child = partialAggregate)
-    } else {
-      SortBasedAggregate(
-        requiredChildDistributionExpressions = Some(groupingAttributes),
-        groupingExpressions = groupingAttributes :+ distinctColumnAttribute,
-        nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
-        nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
-        completeAggregateExpressions = Nil,
-        completeAggregateAttributes = Nil,
-        initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
-        resultExpressions = partialMergeAggregateResult,
-        child = partialAggregate)
+          Seq(distinctColumnAttribute) ++
+          partialMergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+      if (usesTungstenAggregate) {
+        TungstenAggregate(
+          requiredChildDistributionExpressions = Some(groupingAttributes),
+          groupingExpressions = groupingAttributes :+ distinctColumnAttribute,
+          nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
+          nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
+          completeAggregateExpressions = Nil,
+          completeAggregateAttributes = Nil,
+          initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
+          resultExpressions = partialMergeAggregateResult,
+          child = partialAggregate)
+      } else {
+        SortBasedAggregate(
+          requiredChildDistributionExpressions = Some(groupingAttributes),
+          groupingExpressions = groupingAttributes :+ distinctColumnAttribute,
+          nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
+          nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
+          completeAggregateExpressions = Nil,
+          completeAggregateAttributes = Nil,
+          initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
+          resultExpressions = partialMergeAggregateResult,
+          child = partialAggregate)
+      }
     }
 
-    // 3. Create an Aggregate Operator for partial merge aggregations.
-    val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
-    // The attributes of the final aggregation buffer, which is presented as input to the result
-    // projection:
-    val finalAggregateAttributes = finalAggregateExpressions.map {
-      expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
-    }
+    // 3. Create an Aggregate Operator for the final aggregation.
+    val finalAndCompleteAggregate: SparkPlan = {
+      val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
+      // The attributes of the final aggregation buffer, which is presented as input to the result
+      // projection:
+      val finalAggregateAttributes = finalAggregateExpressions.map {
+        expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
+      }
 
-    val (completeAggregateExpressions, completeAggregateAttributes) = functionsWithDistinct.map {
-      // Children of an AggregateFunction with DISTINCT keyword has already
-      // been evaluated. At here, we need to replace original children
-      // to AttributeReferences.
-      case agg @ AggregateExpression2(aggregateFunction, mode, true) =>
-        val rewrittenAggregateFunction = aggregateFunction.transformDown {
-          case expr if expr == distinctColumnExpression => distinctColumnAttribute
-        }.asInstanceOf[AggregateFunction2]
-        // We rewrite the aggregate function to a non-distinct aggregation because
-        // its input will have distinct arguments.
-        // We just keep the isDistinct setting to true, so when users look at the query plan,
-        // they still can see distinct aggregations.
-        val rewrittenAggregateExpression =
-          AggregateExpression2(rewrittenAggregateFunction, Complete, isDistinct = true)
+      val (completeAggregateExpressions, completeAggregateAttributes) = functionsWithDistinct.map {
+        // Children of an AggregateFunction with DISTINCT keyword has already
+        // been evaluated. At here, we need to replace original children
+        // to AttributeReferences.
+        case agg @ AggregateExpression2(aggregateFunction, mode, true) =>
+          val rewrittenAggregateFunction = aggregateFunction.transformDown {
+            case expr if expr == distinctColumnExpression => distinctColumnAttribute
+          }.asInstanceOf[AggregateFunction2]
+          // We rewrite the aggregate function to a non-distinct aggregation because
+          // its input will have distinct arguments.
+          // We just keep the isDistinct setting to true, so when users look at the query plan,
+          // they still can see distinct aggregations.
+          val rewrittenAggregateExpression =
+            AggregateExpression2(rewrittenAggregateFunction, Complete, isDistinct = true)
 
-        val aggregateFunctionAttribute = aggregateFunctionToAttribute(agg.aggregateFunction, true)
-        (rewrittenAggregateExpression, aggregateFunctionAttribute)
-    }.unzip
-
-    val finalAndCompleteAggregate = if (usesTungstenAggregate) {
-      TungstenAggregate(
-        requiredChildDistributionExpressions = Some(groupingAttributes),
-        groupingExpressions = groupingAttributes,
-        nonCompleteAggregateExpressions = finalAggregateExpressions,
-        nonCompleteAggregateAttributes = finalAggregateAttributes,
-        completeAggregateExpressions = completeAggregateExpressions,
-        completeAggregateAttributes = completeAggregateAttributes,
-        initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
-        resultExpressions = resultExpressions,
-        child = partialMergeAggregate)
-    } else {
-      SortBasedAggregate(
-        requiredChildDistributionExpressions = Some(groupingAttributes),
-        groupingExpressions = groupingAttributes,
-        nonCompleteAggregateExpressions = finalAggregateExpressions,
-        nonCompleteAggregateAttributes = finalAggregateAttributes,
-        completeAggregateExpressions = completeAggregateExpressions,
-        completeAggregateAttributes = completeAggregateAttributes,
-        initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
-        resultExpressions = resultExpressions,
-        child = partialMergeAggregate)
+          val aggregateFunctionAttribute = aggregateFunctionToAttribute(agg.aggregateFunction, true)
+          (rewrittenAggregateExpression, aggregateFunctionAttribute)
+      }.unzip
+      if (usesTungstenAggregate) {
+        TungstenAggregate(
+          requiredChildDistributionExpressions = Some(groupingAttributes),
+          groupingExpressions = groupingAttributes,
+          nonCompleteAggregateExpressions = finalAggregateExpressions,
+          nonCompleteAggregateAttributes = finalAggregateAttributes,
+          completeAggregateExpressions = completeAggregateExpressions,
+          completeAggregateAttributes = completeAggregateAttributes,
+          initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
+          resultExpressions = resultExpressions,
+          child = partialMergeAggregate)
+      } else {
+        SortBasedAggregate(
+          requiredChildDistributionExpressions = Some(groupingAttributes),
+          groupingExpressions = groupingAttributes,
+          nonCompleteAggregateExpressions = finalAggregateExpressions,
+          nonCompleteAggregateAttributes = finalAggregateAttributes,
+          completeAggregateExpressions = completeAggregateExpressions,
+          completeAggregateAttributes = completeAggregateAttributes,
+          initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
+          resultExpressions = resultExpressions,
+          child = partialMergeAggregate)
+      }
     }
 
     finalAndCompleteAggregate :: Nil
