@@ -54,8 +54,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
 private[spark] class Client(
@@ -69,8 +70,6 @@ private[spark] class Client(
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
-  def this(clientArgs: ClientArguments) = this(clientArgs, new SparkConf())
-
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
   private var credentials: Credentials = null
@@ -83,10 +82,27 @@ private[spark] class Client(
   private var principal: String = null
   private var keytab: String = null
 
+  private val launcherBackend = new LauncherBackend() {
+    override def onStopRequest(): Unit = {
+      if (isClusterMode && appId != null) {
+        yarnClient.killApplication(appId)
+      } else {
+        setState(SparkAppHandle.State.KILLED)
+        stop()
+      }
+    }
+  }
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
+  private var appId: ApplicationId = null
+
+  def reportLauncherState(state: SparkAppHandle.State): Unit = {
+    launcherBackend.setState(state)
+  }
+
   def stop(): Unit = {
+    launcherBackend.close()
     yarnClient.stop()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
@@ -102,6 +118,7 @@ private[spark] class Client(
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
     try {
+      launcherBackend.connect()
       // Setup the credentials before doing anything else,
       // so we have don't have issues at any point.
       setupCredentials()
@@ -115,6 +132,8 @@ private[spark] class Client(
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
+      reportLauncherState(SparkAppHandle.State.SUBMITTED)
+      launcherBackend.setAppId(appId.toString())
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
@@ -730,6 +749,7 @@ private[spark] class Client(
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
+    YarnCommandBuilderUtils.addPermGenSizeOpt(javaOpts)
 
     val userClass =
       if (isClusterMode) {
@@ -879,6 +899,20 @@ private[spark] class Client(
         }
       }
 
+      if (lastState != state) {
+        state match {
+          case YarnApplicationState.RUNNING =>
+            reportLauncherState(SparkAppHandle.State.RUNNING)
+          case YarnApplicationState.FINISHED =>
+            reportLauncherState(SparkAppHandle.State.FINISHED)
+          case YarnApplicationState.FAILED =>
+            reportLauncherState(SparkAppHandle.State.FAILED)
+          case YarnApplicationState.KILLED =>
+            reportLauncherState(SparkAppHandle.State.KILLED)
+          case _ =>
+        }
+      }
+
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
@@ -926,8 +960,8 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    val appId = submitApplication()
-    if (fireAndForget) {
+    this.appId = submitApplication()
+    if (!launcherBackend.isConnected() && fireAndForget) {
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
@@ -969,6 +1003,7 @@ private[spark] class Client(
 }
 
 object Client extends Logging {
+
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
@@ -1153,13 +1188,24 @@ object Client extends Logging {
     }
 
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
-      val userClassPath =
+      // in order to properly add the app jar when user classpath is first
+      // we have to do the mainJar separate in order to send the right thing
+      // into addFileToClasspath
+      val mainJar =
         if (args != null) {
-          getUserClasspath(Option(args.userJar), Option(args.addJars))
+          getMainJarUri(Option(args.userJar))
         } else {
-          getUserClasspath(sparkConf)
+          getMainJarUri(sparkConf.getOption(CONF_SPARK_USER_JAR))
         }
-      userClassPath.foreach { x =>
+      mainJar.foreach(addFileToClasspath(sparkConf, _, APP_JAR, env))
+
+      val secondaryJars =
+        if (args != null) {
+          getSecondaryJarUris(Option(args.addJars))
+        } else {
+          getSecondaryJarUris(sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+        }
+      secondaryJars.foreach { x =>
         addFileToClasspath(sparkConf, x, null, env)
       }
     }
@@ -1176,16 +1222,20 @@ object Client extends Logging {
    * @param conf Spark configuration.
    */
   def getUserClasspath(conf: SparkConf): Array[URI] = {
-    getUserClasspath(conf.getOption(CONF_SPARK_USER_JAR),
-      conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+    val mainUri = getMainJarUri(conf.getOption(CONF_SPARK_USER_JAR))
+    val secondaryUris = getSecondaryJarUris(conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+    (mainUri ++ secondaryUris).toArray
   }
 
-  private def getUserClasspath(
-      mainJar: Option[String],
-      secondaryJars: Option[String]): Array[URI] = {
-    val mainUri = mainJar.orElse(Some(APP_JAR)).map(new URI(_))
-    val secondaryUris = secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
-    (mainUri ++ secondaryUris).toArray
+  private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
+    mainJar.flatMap { path =>
+      val uri = new URI(path)
+      if (uri.getScheme == LOCAL_SCHEME) Some(uri) else None
+    }.orElse(Some(new URI(APP_JAR)))
+  }
+
+  private def getSecondaryJarUris(secondaryJars: Option[String]): Seq[URI] = {
+    secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
   }
 
   /**

@@ -51,22 +51,36 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   private val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
-  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
-  : Unit = {
+  override def registerFunction(
+      name: String,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
     functionBuilders.put(name, (info, builder))
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    val func = functionBuilders.get(name).map(_._2).getOrElse {
-      throw new AnalysisException(s"undefined function $name")
+    val func = synchronized {
+      functionBuilders.get(name).map(_._2).getOrElse {
+        throw new AnalysisException(s"undefined function $name")
+      }
     }
     func(children)
   }
 
-  override def listFunction(): Seq[String] = functionBuilders.iterator.map(_._1).toList.sorted
+  override def listFunction(): Seq[String] = synchronized {
+    functionBuilders.iterator.map(_._1).toList.sorted
+  }
 
-  override def lookupFunction(name: String): Option[ExpressionInfo] = {
+  override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
     functionBuilders.get(name).map(_._1)
+  }
+
+  def copy(): SimpleFunctionRegistry = synchronized {
+    val registry = new SimpleFunctionRegistry
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+      registry.registerFunction(name, info, builder)
+    }
+    registry
   }
 }
 
@@ -257,7 +271,7 @@ object FunctionRegistry {
     expression[InputFileName]("input_file_name")
   )
 
-  val builtin: FunctionRegistry = {
+  val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry
     expressions.foreach { case (name, (info, builder)) => fr.registerFunction(name, info, builder) }
     fr

@@ -33,4 +33,5 @@ Collate:
     'mllib.R'
     'serialize.R'
     'sparkR.R'
+    'stats.R'
     'utils.R'

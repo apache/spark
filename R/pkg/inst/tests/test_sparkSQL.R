@@ -787,7 +787,7 @@ test_that("test HiveContext", {
 })
 
 test_that("column operators", {
-  c <- SparkR:::col("a")
+  c <- column("a")
   c2 <- (- c + 1 - 2) * 3 / 4.0
   c3 <- (c + c2 - c2) * c2 %% c2
   c4 <- (c > c2) & (c2 <= c3) | (c == c2) & (c2 != c3)
@@ -795,7 +795,7 @@ test_that("column operators", {
 })
 
 test_that("column functions", {
-  c <- SparkR:::col("a")
+  c <- column("a")
   c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
   c3 <- cosh(c) + count(c) + crc32(c) + exp(c)
@@ -989,7 +989,7 @@ test_that("arrange() and orderBy() on a DataFrame", {
   sorted <- arrange(df, df$age)
   expect_equal(collect(sorted)[1,2], "Michael")
 
-  sorted2 <- arrange(df, "name")
+  sorted2 <- arrange(df, "name", decreasing = FALSE)
   expect_equal(collect(sorted2)[2,"age"], 19)
 
   sorted3 <- orderBy(df, asc(df$age))
@@ -999,6 +999,15 @@ test_that("arrange() and orderBy() on a DataFrame", {
   sorted4 <- orderBy(df, desc(df$name))
   expect_equal(first(sorted4)$name, "Michael")
   expect_equal(collect(sorted4)[3,"name"], "Andy")
+
+  sorted5 <- arrange(df, "age", "name", decreasing = TRUE)
+  expect_equal(collect(sorted5)[1,2], "Andy")
+
+  sorted6 <- arrange(df, "age","name", decreasing = c(T, F))
+  expect_equal(collect(sorted6)[1,2], "Andy")
+
+  sorted7 <- arrange(df, "name", decreasing = FALSE)
+  expect_equal(collect(sorted7)[2,"age"], 19)
 })
 
 test_that("filter() on a DataFrame", {
@@ -1327,6 +1336,39 @@ test_that("crosstab() on a DataFrame", {
   expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 0, 1), "b1" = c(1, 1, 0),
                          stringsAsFactors = FALSE, row.names = NULL)
   expect_identical(expected, ordered)
+})
+
+test_that("cov() and corr() on a DataFrame", {
+  l <- lapply(c(0:9), function(x) { list(x, x * 2.0) })
+  df <- createDataFrame(sqlContext, l, c("singles", "doubles"))
+  result <- cov(df, "singles", "doubles")
+  expect_true(abs(result - 55.0 / 3) < 1e-12)
+
+  result <- corr(df, "singles", "doubles")
+  expect_true(abs(result - 1.0) < 1e-12)
+  result <- corr(df, "singles", "doubles", "pearson")
+  expect_true(abs(result - 1.0) < 1e-12)
+})
+
+test_that("freqItems() on a DataFrame", {
+  input <- 1:1000
+  rdf <- data.frame(numbers = input, letters = as.character(input),
+                    negDoubles = input * -1.0, stringsAsFactors = F)
+  rdf[ input %% 3 == 0, ] <- c(1, "1", -1)
+  df <- createDataFrame(sqlContext, rdf)
+  multiColResults <- freqItems(df, c("numbers", "letters"), support=0.1)
+  expect_true(1 %in% multiColResults$numbers[[1]])
+  expect_true("1" %in% multiColResults$letters[[1]])
+  singleColResult <- freqItems(df, "negDoubles", support=0.1)
+  expect_true(-1 %in% head(singleColResult$negDoubles)[[1]])
+
+  l <- lapply(c(0:99), function(i) {
+    if (i %% 2 == 0) { list(1L, -1.0) }
+    else { list(i, i * -1.0) }})
+  df <- createDataFrame(sqlContext, l, c("a", "b"))
+  result <- freqItems(df, c("a", "b"), 0.4)
+  expect_identical(result[[1]], list(list(1L, 99L)))
+  expect_identical(result[[2]], list(list(-1, -99)))
 })
 
 test_that("SQL error message is returned from JVM", {
