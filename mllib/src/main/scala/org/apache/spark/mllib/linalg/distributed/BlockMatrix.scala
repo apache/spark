@@ -463,7 +463,7 @@ class BlockMatrix @Since("1.3.0") (
     val a11Inv = new BlockMatrix(a11RDD, this.rowsPerBlock, this.colsPerBlock)
 
     val S = a22.subtract(a21.multiply(a11Inv.multiply(a12)))
-    return S
+    S
   }
 
   /** Returns a rectangular (sub)BlockMatrix with block ranges as specified.  Block Ranges
@@ -487,10 +487,10 @@ class BlockMatrix @Since("1.3.0") (
     val colMin = blockColRange._1 ;   val colMax = blockColRange._2
     val extractedSeq = this.blocks.filter{ case((x, y), matrix) =>
       x >= rowMin && x<= rowMax &&         // finding blocks
-        y >= colMin && y<= colMax }.map{   // shifting indices
+        y >= colMin && y<= colMax }.map {   // shifting indices
       case(((x, y), matrix) ) => ((x-rowMin, y-colMin), matrix)
     }
-    return new BlockMatrix(extractedSeq, rowsPerBlock, colsPerBlock)
+    new BlockMatrix(extractedSeq, rowsPerBlock, colsPerBlock)
   }
 
   /** computes the LU decomposition of a Single Block from BlockMatrix using the
@@ -507,16 +507,33 @@ class BlockMatrix @Since("1.3.0") (
     val L = lowerTriangular(PLU._1) - diag(diag(PLU._1)) + diag(DenseVector.fill(k){1.0})
     val U = upperTriangular(PLU._1);
     var P = diag(DenseVector.fill(k){1.0})
-    val Pi = diag(DenseVector.fill(k){1.0})
+    var Pi = diag(DenseVector.fill(k){1.0})
     // size of square matrix
-    for(i <- 0 to (k - 1)) { // i test populating permutation matrix
-      val I = i match {case 0 => k - 1 case _ => i - 1}
+    // populating permutation matrix
+    var i = 0
+    while (i < k) {
+      val I = {
+        if (i == 0){k - 1}
+        else {i - 1}
+      }
       val J = PLU._2(i) -1
-      if (i != J) {  Pi(i, J) += 1.0; Pi(J, i) += 1.0; Pi(i, i) -= 1.0; Pi(J, J) -= 1.0}
+      if (i != J) {
+        Pi(i, J) += 1.0
+        Pi(J, i) += 1.0
+        Pi(i, i) -= 1.0
+        Pi(J, J) -= 1.0
+      }
       P = Pi * P  // constructor Pi*P for PA=LU
-      if (i != J) { Pi(i, J) -= 1.0; Pi(J, i) -= 1.0; Pi(i, i) += 1.0; Pi(J, J) += 1.0}
+      // resetting Pi for next iteration
+      if (i != J) {
+        Pi(i, J) -= 1.0
+        Pi(J, i) -= 1.0
+        Pi(i, i) += 1.0
+        Pi(J, J) += 1.0
+      }
+      i += 1
     }
-    return List(P, L, U)
+    List(P, L, U)
   }
 
 
@@ -532,10 +549,10 @@ class BlockMatrix @Since("1.3.0") (
     */
   private [mllib] def shiftIndices(rowMin: Int, colMin: Int): RDD[((Int, Int), Matrix)] = {
     // This routine recovers the absolute indexing of the block matrices for reassembly
-    val extractedSeq = this.blocks.map{   // shifting indices
+    val extractedSeq = this.blocks.map {   // shifting indices
       case(((x, y), matrix)) => ((x + rowMin, y + colMin), matrix)
     }
-    return extractedSeq
+    extractedSeq
   }
 
   /** Computes the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
@@ -572,6 +589,40 @@ class BlockMatrix @Since("1.3.0") (
     // accessing the spark context
     val sc = this.blocks.sparkContext
 
+    /** LUSequences is a class that is defined to make the recursiveSequencesBuild section
+     * more readable.
+      *
+      * These are passed as an RDD of blocks:
+      * @param p the permutation matrix.
+      * @param l the lower diagonal matrix.
+      * @param u the upper diagonal matrix.
+      * @param lInv the inverse lower diagonal matrix (only populating (i,i) cells).
+      * @param uInv the inverse upper diagonal matrix (only populating (i,i) cells).
+      * @param lDiag the lower diagonal matrices (only populating (i,i) cells).
+      * @param uDiag the upper diagonal matrices (only populating (i,i) cells).
+      * This is passed as a BlockMatrix
+      * @param a the Schur Complement from the previous iteration, treated as the source matrix
+      *          for the next iteraton.
+      *
+      *
+    @Since("1.6.0")
+    */
+    class LUSequences(p: RDD[((Int, Int), Matrix)], l: RDD[((Int, Int), Matrix)],
+                      u: RDD[((Int, Int), Matrix)],
+                      lInv: RDD[((Int, Int), Matrix)], uInv: RDD[((Int, Int), Matrix)],
+                      lDiag: RDD[((Int, Int), Matrix)], uDiag: RDD[((Int, Int), Matrix)],
+                      a: BlockMatrix) {
+      val P = p // the permutation matrix.
+      val L = l // the lower diagonal matrix.
+      val U = u // the upper diagonal matrix.
+      val Li = lInv // the inverse lower diagonal matrix (only populating (i,i) cells).
+      val Ui = uInv // the inverse upper diagonal matrix (only populating (i,i) cells).
+      val LD = lDiag // the lower diagonal matrices (only populating (i,i) cells).
+      val UD = uDiag // he upper diagonal matrices (only populating (i,i) cells).
+      val A = a // the Schur Complement: BlockMatrix from the previous iteration, treated
+                // as the source matrix for the next iteraton.
+    }
+
     /** Recursive Sequence Build is a nested recursion method that builds up all of the
       * sequences that are converted to BlockMatrix classes for large matrix
       * multiplication operations.  The Schur Complement is calculated at each
@@ -586,32 +637,17 @@ class BlockMatrix @Since("1.3.0") (
       * the cascading Schur calculations, while for LD, (i, j<i) blocks are populated.
       *
       * @param rowI
-      * @param prevTuple
+      * @param prev
       * @return dP, dL, dU, dLi, dUi, LD, UD, S  All are RDDs of Sequences that are
       *         iteratively built, while S is a BlockMatrix used in the recursion loop
       * @since 1.6.0
       */
-    def recursiveSequencesBuild(rowI: Int, prevTuple:
-            (RDD[((Int, Int), Matrix)], RDD[((Int, Int), Matrix)],
-            RDD[((Int, Int), Matrix)], RDD[((Int, Int), Matrix)],
-            RDD[((Int, Int), Matrix)], RDD[((Int, Int), Matrix)],
-            RDD[((Int, Int), Matrix)],
-            BlockMatrix)):
-            (RDD[((Int, Int), Matrix)], RDD[((Int, Int), Matrix)],
-            RDD[((Int, Int), Matrix)], RDD[((Int, Int), Matrix)],
-            RDD[((Int, Int), Matrix)], RDD[((Int, Int), Matrix)],
-            RDD[((Int, Int), Matrix)],
-            BlockMatrix) = {
-      val prevP = prevTuple._1;
-      val prevL = prevTuple._2;   val prevU = prevTuple._3
-      val prevLi = prevTuple._4;  val prevUi = prevTuple._5
-      val prevLD = prevTuple._6;  val prevUD = prevTuple._7
-      val ABlock = prevTuple._8
+    def recursiveSequencesBuild(rowI: Int, prev: LUSequences): LUSequences = {
 
-      val rowsRel = ABlock.numRowBlocks; val colsRel = ABlock.numColBlocks
+      val rowsRel = prev.A.numRowBlocks; val colsRel = prev.A.numColBlocks
       val topRangeRel = (0, 0);            val botRangeRel = (1, rowsRel - 1)
       val topRangeAbs = (rowI, rowI);   val botRangeAbs = (rowI + 1, rowsAbs - 1 )
-      val PLU: List[BDM[Double]] = ABlock.singleBlockPLU;
+      val PLU: List[BDM[Double]] = prev.A.singleBlockPLU;
       val PBrz = PLU(0); val LBrz = PLU(1); val UBrz = PLU(2)
 
       val P = Matrices.dense(PBrz.rows, PBrz.cols, PBrz.toArray)
@@ -626,28 +662,26 @@ class BlockMatrix @Since("1.3.0") (
         val ZB = BDM.zeros[Double](LBrz.rows, LBrz.cols)
         val Z = Matrices.dense(LBrz.rows, LBrz.cols, ZB.toArray)
         val lastZ = sc.parallelize(Seq(((rowsAbs-1, colsAbs-1), Z)))
-        val nextTuple = (nextP ++ prevP, nextL ++ prevL, nextU ++ prevU,
-        lastZ ++ prevLi, lastZ ++ prevUi,
-        lastZ ++ prevLD, lastZ ++ prevUD,
-        ABlock)
-        return nextTuple
+        val nextTuple = new LUSequences(nextP ++ prev.P, nextL ++ prev.L, nextU ++ prev.U,
+                            lastZ ++ prev.Li, lastZ ++ prev.Ui,
+                            lastZ ++ prev.LD, lastZ ++ prev.UD, prev.A)
+        nextTuple
       }
       else {                      // recursion block
-        val SBlock = ABlock.SchurComplement
         val Li = Matrices.dense(LBrz.rows, LBrz.cols, inv(LBrz).toArray)
         val Ui = Matrices.dense(UBrz.rows, UBrz.cols, inv(UBrz).toArray)
         val nextLi = sc.parallelize(Seq(((rowI, rowI), Li)))
         val nextUi = sc.parallelize(Seq(((rowI, rowI), Ui)))
 
-        val nextLD = ABlock.subBlock(botRangeRel, topRangeRel).
+        val nextLD = prev.A.subBlock(botRangeRel, topRangeRel).
           shiftIndices(botRangeAbs._1, topRangeAbs._1)
-        val nextUD = ABlock.subBlock(topRangeRel, botRangeRel).
+        val nextUD = prev.A.subBlock(topRangeRel, botRangeRel).
           shiftIndices(topRangeAbs._1, botRangeAbs._1)
 
-        val nextTuple = (nextP ++ prevP, nextL ++ prevL, nextU ++ prevU,
-                         nextLi ++ prevLi, nextUi ++ prevUi,
-                         prevLD ++ nextLD, prevUD ++ nextUD, SBlock)
-        return recursiveSequencesBuild(rowI + 1, nextTuple)
+        val nextTuple = new LUSequences(nextP ++ prev.P, nextL ++ prev.L, nextU ++ prev.U,
+                            nextLi ++ prev.Li, nextUi ++ prev.Ui,
+                            prev.LD ++ nextLD, prev.UD ++ nextUD, prev.A.SchurComplement)
+        recursiveSequencesBuild(rowI + 1, nextTuple)
       }
     }
 
@@ -678,21 +712,21 @@ class BlockMatrix @Since("1.3.0") (
     val nextUD = this.subBlock(topRange, botRange).
       shiftIndices(topRange._1, botRange._1)
 
-    val nextTuple = (nextP, nextL, nextU, nextLi, nextUi,
+    val nextTuple = new LUSequences(nextP, nextL, nextU, nextLi, nextUi,
                      firstZ ++ nextLD, firstZ ++ nextUD,
                      this.SchurComplement)
 
     // call to recursive build after initialization step
-    val allSequences = recursiveSequencesBuild(1, nextTuple)
+    val lastSequences = recursiveSequencesBuild(1, nextTuple)
     val rowsPerBlock = this.rowsPerBlock;
     val colsPerBlock = this.colsPerBlock
-    val dP = new BlockMatrix(allSequences._1, rowsPerBlock, colsPerBlock)
-    val dL = new BlockMatrix(allSequences._2, rowsPerBlock, colsPerBlock)
-    val dU = new BlockMatrix(allSequences._3, rowsPerBlock, colsPerBlock)
-    val dLi = new BlockMatrix(allSequences._4, rowsPerBlock, colsPerBlock)
-    val dUi = new BlockMatrix(allSequences._5, rowsPerBlock, colsPerBlock)
-    val LD = new BlockMatrix(allSequences._6, rowsPerBlock, colsPerBlock)
-    val UD = new BlockMatrix(allSequences._7, rowsPerBlock, colsPerBlock)
+    val dP = new BlockMatrix(lastSequences.P, rowsPerBlock, colsPerBlock)
+    val dL = new BlockMatrix(lastSequences.L, rowsPerBlock, colsPerBlock)
+    val dU = new BlockMatrix(lastSequences.U, rowsPerBlock, colsPerBlock)
+    val dLi = new BlockMatrix(lastSequences.Li, rowsPerBlock, colsPerBlock)
+    val dUi = new BlockMatrix(lastSequences.Ui, rowsPerBlock, colsPerBlock)
+    val LD = new BlockMatrix(lastSequences.LD, rowsPerBlock, colsPerBlock)
+    val UD = new BlockMatrix(lastSequences.UD, rowsPerBlock, colsPerBlock)
 
     // Large Matrix Multiplication Operations
     // dL and dU are the sets of L and U Matrices along the diagonal blocks,
@@ -709,7 +743,7 @@ class BlockMatrix @Since("1.3.0") (
   // U       = ( d[Linv] * dP * UD + dU )
     val UFin = dLi.multiply(dP.multiply(UD)).add(dU)
  // val UFin =  dLi.multiply(UD).add(dU)
-    return (PFin, LFin, UFin, dLi, dUi)
+    (PFin, LFin, UFin, dLi, dUi)
   }
 
 
@@ -728,7 +762,7 @@ class BlockMatrix @Since("1.3.0") (
       val P = PLU._1
       val L = PLU._2
       val U = PLU._3
-      return (P, L, U)
+      (P, L, U)
   }
 
 /** For the matrix Equation AX=B, where A is NxN blocks, and X, B are matrices of
@@ -786,8 +820,8 @@ class BlockMatrix @Since("1.3.0") (
       val currentY = new BlockMatrix(prevY.blocks ++ nextY.blocks,
         this.rowsPerBlock, this.colsPerBlock)
 
-      if (m == N - 1){return currentY}   // terminal case
-      else { return recursiveYBuild(m + 1, currentY)}     // recursive case
+      if (m == N - 1){currentY}   // terminal case
+      else {recursiveYBuild(m + 1, currentY)}     // recursive case
     }
 
     // Solving LY = PB for Y using (see docs):
@@ -813,8 +847,8 @@ class BlockMatrix @Since("1.3.0") (
         this.rowsPerBlock, this.colsPerBlock)
 
 
-      if (mRev == 0 ){return currentX}   // terminal case
-      else { return recursiveXBuild(mRev - 1, currentX)}     // recursive case
+      if (mRev == 0 ){currentX}   // terminal case
+      else {recursiveXBuild(mRev - 1, currentX)}     // recursive case
     }
 
     // Solving UX = Y for X
@@ -833,7 +867,7 @@ class BlockMatrix @Since("1.3.0") (
       this.rowsPerBlock, this.colsPerBlock)
 
     val X = recursiveXBuild(mRev-1, firstX)
-    return X
+    X
 
   }
 }
