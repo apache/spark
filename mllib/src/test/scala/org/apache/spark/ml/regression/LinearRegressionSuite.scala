@@ -492,7 +492,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert((dataset.schema.fieldNames.toSet + "prediction").subsetOf(
         model.summary.predictions.schema.fieldNames.toSet))
       // Validate that we re-insert a prediction column for evaluation
-      val modelNoPredictionColFieldNames = modelNoPredictionCol.summary.predictions.schema.fieldNames
+      val modelNoPredictionColFieldNames
+        = modelNoPredictionCol.summary.predictions.schema.fieldNames
       assert((dataset.schema.fieldNames.toSet).subsetOf(
         modelNoPredictionColFieldNames.toSet))
       assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
