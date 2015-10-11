@@ -613,7 +613,7 @@ class BlockMatrix @Since("1.3.0") (
      *
      *
      * @Since("1.6.0")
-    */
+     */
     class LUSequences(p: RDD[((Int, Int), Matrix)], l: RDD[((Int, Int), Matrix)],
                       u: RDD[((Int, Int), Matrix)],
                       lInv: RDD[((Int, Int), Matrix)], uInv: RDD[((Int, Int), Matrix)],
