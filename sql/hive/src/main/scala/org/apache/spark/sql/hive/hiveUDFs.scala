@@ -553,10 +553,16 @@ private[hive] case class HiveGenericUDTF(
 private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
-    isUDAFBridgeRequired: Boolean = false)
+    isUDAFBridgeRequired: Boolean = false,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate with HiveInspectors {
 
-  def this() = this(null, null)
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   @transient
   private lazy val resolver =

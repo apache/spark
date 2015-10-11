@@ -162,24 +162,24 @@ class TungstenAggregationIterator(
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
-          func match {
+          val updatedFunc = func match {
             case function: ImperativeAggregate =>
               function.withNewInputAggBufferOffset(inputBufferOffset)
-            case _ =>
+            case function => function
           }
           inputBufferOffset += func.aggBufferSchema.length
-          func
+          updatedFunc
       }
-      // Set mutableBufferOffset for this function. It is important that setting
-      // mutableBufferOffset happens after all potential bindReference operations
-      // because bindReference will create a new instance of the function.
-      funcWithBoundReferences match {
+      val funcWithUpdatedAggBufferOffset = funcWithBoundReferences match {
         case function: ImperativeAggregate =>
+          // Set mutableBufferOffset for this function. It is important that setting
+          // mutableBufferOffset happens after all potential bindReference operations
+          // because bindReference will create a new instance of the function.
           function.withNewMutableAggBufferOffset(mutableBufferOffset)
-        case _ =>
+        case function => function
       }
-      mutableBufferOffset += funcWithBoundReferences.aggBufferSchema.length
-      functions(i) = funcWithBoundReferences
+      mutableBufferOffset += funcWithUpdatedAggBufferOffset.aggBufferSchema.length
+      functions(i) = funcWithUpdatedAggBufferOffset
       i += 1
     }
     functions

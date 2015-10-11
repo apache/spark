@@ -84,7 +84,7 @@ abstract class AggregationIterator(
     var i = 0
     while (i < allAggregateExpressions.length) {
       val func = allAggregateExpressions(i).aggregateFunction
-      val funcWithBoundReferences = allAggregateExpressions(i).mode match {
+      val funcWithBoundReferences: AggregateFunction2 = allAggregateExpressions(i).mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
@@ -95,24 +95,24 @@ abstract class AggregationIterator(
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
-          func match {
+          val updatedFunc = func match {
             case function: ImperativeAggregate =>
               function.withNewInputAggBufferOffset(inputBufferOffset)
-            case _ =>
+            case function => function
           }
           inputBufferOffset += func.aggBufferSchema.length
-          func
+          updatedFunc
       }
-      // Set mutableBufferOffset for this function. It is important that setting
-      // mutableBufferOffset happens after all potential bindReference operations
-      // because bindReference will create a new instance of the function.
-      funcWithBoundReferences match {
+      val funcWithUpdatedAggBufferOffset = funcWithBoundReferences match {
         case function: ImperativeAggregate =>
+          // Set mutableBufferOffset for this function. It is important that setting
+          // mutableBufferOffset happens after all potential bindReference operations
+          // because bindReference will create a new instance of the function.
           function.withNewMutableAggBufferOffset(mutableBufferOffset)
-        case _ =>
+        case function => function
       }
-      mutableBufferOffset += funcWithBoundReferences.aggBufferSchema.length
-      functions(i) = funcWithBoundReferences
+      mutableBufferOffset += funcWithUpdatedAggBufferOffset.aggBufferSchema.length
+      functions(i) = funcWithUpdatedAggBufferOffset
       i += 1
     }
     functions

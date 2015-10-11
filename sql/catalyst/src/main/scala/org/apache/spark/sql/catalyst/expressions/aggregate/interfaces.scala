@@ -172,11 +172,12 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
    *                     avg(y) mutableAggBufferOffset = 2
    *
    */
-  protected var mutableAggBufferOffset: Int = 0
+  protected val mutableAggBufferOffset: Int
 
-  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Unit = {
-    mutableAggBufferOffset = newMutableAggBufferOffset
-  }
+  /**
+   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   */
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate
 
   /**
    * The offset of this function's start buffer value in the underlying shared input aggregation
@@ -203,11 +204,12 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
    *                       avg(y) inputAggBufferOffset = 3
    *
    */
-  protected var inputAggBufferOffset: Int = 0
+  protected val inputAggBufferOffset: Int
 
-  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Unit = {
-    inputAggBufferOffset = newInputAggBufferOffset
-  }
+  /**
+   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   */
+  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate
 
   // Note: although all subclasses implement inputAggBufferAttributes by simply cloning
   // aggBufferAttributes, that common clone code cannot be placed here in the abstract
