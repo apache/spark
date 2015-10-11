@@ -571,7 +571,7 @@ class BlockMatrix @Since("1.3.0") (
    *
    */
 
-  class PLU(p: BlockMatrix, l: BlockMatrix, u: BlockMatrix ){
+  private [mllib] class PLU(p: BlockMatrix, l: BlockMatrix, u: BlockMatrix ){
     val P = p
     val L = l
     val U = u
@@ -590,8 +590,9 @@ class BlockMatrix @Since("1.3.0") (
    * @param uInv The inverse of the upper diagaonal matrices (in (i,i)th
    *             cells only).
    */
-  class PLUandInverses(p: BlockMatrix, l: BlockMatrix, u: BlockMatrix,
-          lInv: BlockMatrix, uInv: BlockMatrix) extends PLU(p, l, u) {
+  private [mllib] class PLUandInverses(p: BlockMatrix, l: BlockMatrix, u: BlockMatrix,
+
+                       lInv: BlockMatrix, uInv: BlockMatrix) extends PLU(p, l, u) {
     val dLi = lInv
     val dUi = uInv
   }
@@ -788,7 +789,6 @@ class BlockMatrix @Since("1.3.0") (
  // val UFin =  dLi.multiply(UD).add(dU)
     new PLUandInverses(PFin, LFin, UFin, dLi, dUi)
   }
-
 
 
 /**
