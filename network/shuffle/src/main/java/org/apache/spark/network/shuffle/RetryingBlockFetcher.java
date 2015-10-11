@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
@@ -63,6 +64,9 @@ public class RetryingBlockFetcher {
   /** Shared executor service used for waiting and retrying. */
   private static final ExecutorService executorService = Executors.newCachedThreadPool(
     NettyUtils.createThreadFactory("Block Fetch Retry"));
+  static {
+    ((ThreadPoolExecutor)executorService).allowCoreThreadTimeOut(true);
+  }
 
   private final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
 
