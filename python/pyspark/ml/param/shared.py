@@ -570,6 +570,33 @@ class HasThresholds(Params):
         return self.getOrDefault(self.thresholds)
 
 
+class HasWeightCol(Params):
+    """
+    Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    weightCol = Param(Params._dummy(), "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+    def __init__(self):
+        super(HasWeightCol, self).__init__()
+        #: param for weight column name. If this is not set or empty, we treat all instance weights as 1.0.
+        self.weightCol = Param(self, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        self._paramMap[self.weightCol] = value
+        return self
+
+    def getWeightCol(self):
+        """
+        Gets the value of weightCol or its default value.
+        """
+        return self.getOrDefault(self.weightCol)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.

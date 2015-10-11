@@ -20,11 +20,9 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
-import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -256,7 +254,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public InternalRow getStruct(int ordinal, int numFields) {
+  public UnsafeRow getStruct(int ordinal, int numFields) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -267,7 +265,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public ArrayData getArray(int ordinal) {
+  public UnsafeArrayData getArray(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -276,7 +274,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public MapData getMap(int ordinal) {
+  public UnsafeMapData getMap(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -286,7 +284,11 @@ public class UnsafeArrayData extends ArrayData {
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    int result = 37;
+    for (int i = 0; i < sizeInBytes; i++) {
+      result = 37 * result + Platform.getByte(baseObject, baseOffset + i);
+    }
+    return result;
   }
 
   @Override
