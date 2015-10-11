@@ -355,12 +355,12 @@ class BlockMatrix @Since("1.3.0") (
   }
 
   /**
-    * subtracts two block matrices A.subtract(B) as A-B.  Works exactly as add
-    *
-    * @param BlockMatrix to be subtracted
-    * @return BlockMatrix
-    * @since 1.6.0
-    */
+   * subtracts two block matrices A.subtract(B) as A-B.  Works exactly as add
+   *
+   * @param BlockMatrix to be subtracted
+   * @return BlockMatrix
+   * @since 1.6.0
+   */
   def subtract(other: BlockMatrix): BlockMatrix = {
     require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
       s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
@@ -391,14 +391,14 @@ class BlockMatrix @Since("1.3.0") (
   }
 
   /**
-    * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
-    * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
-    * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
-    * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
-    * some performance issues until support for multiplying two sparse matrices is added.
-    *
-    * @since 1.3.0
-    */
+   * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
+   * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
+   * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
+   * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
+   * some performance issues until support for multiplying two sparse matrices is added.
+   *
+   * @since 1.3.0
+   */
   def multiply(other: BlockMatrix): BlockMatrix = {
     require(numCols() == other.numRows(), "The number of columns of A and the number of rows " +
       s"of B must be equal. A.numCols: ${numCols()}, B.numRows: ${other.numRows()}. If you " +
@@ -443,13 +443,13 @@ class BlockMatrix @Since("1.3.0") (
   }
 
   /**
-    * Schur Complement of a BlockMatrix.  For a matrix that is in 4 partitions:
-    *  A=[a11, a12; a21; a22], the Schur Complement S is S = a22 - (a21 * a11^-1 * a12).
-    * The Schur Complement is always (n-1) x (n-1), which is the size of a22. a11 is expected
-    * to fit into memory so that Breeze inversions can be computed.
-    *
-    * @return BlockMatrix Schur Complement as BlockMatrix
-    * @since 1.6.0
+   * Schur Complement of a BlockMatrix.  For a matrix that is in 4 partitions:
+   *  A=[a11, a12; a21; a22], the Schur Complement S is S = a22 - (a21 * a11^-1 * a12).
+   * The Schur Complement is always (n-1) x (n-1), which is the size of a22. a11 is expected
+   * to fit into memory so that Breeze inversions can be computed.
+   *
+   * @return BlockMatrix Schur Complement as BlockMatrix
+   * @since 1.6.0
   */
   private[mllib] def SchurComplement: BlockMatrix = {
     require(this.numRowBlocks == this.numColBlocks, "Block Matrix must be square.")
@@ -470,16 +470,16 @@ class BlockMatrix @Since("1.3.0") (
   }
 
   /**
-    * Returns a rectangular (sub)BlockMatrix with block ranges as specified.  Block Ranges
-    * refer to a range of blocks that each contain a matrix.  The returned BlockMatrix
-    * is numbered so that the upper left block is indexed as (0,0).
-    *
-    *
-    * @param blockRowRange The lower and upper row range of blocks, as (Int,Int)
-    * @param blockColRange The lower and upper col range of blocks, as (Int, Int)
-    * @return a BlockMatrix with (0,0) as the upper leftmost block index
-    * @since 1.6.0
-    */
+   * Returns a rectangular (sub)BlockMatrix with block ranges as specified.  Block Ranges
+   * refer to a range of blocks that each contain a matrix.  The returned BlockMatrix
+   * is numbered so that the upper left block is indexed as (0,0).
+   *
+   *
+   * @param blockRowRange The lower and upper row range of blocks, as (Int,Int)
+   * @param blockColRange The lower and upper col range of blocks, as (Int, Int)
+   * @return a BlockMatrix with (0,0) as the upper leftmost block index
+   * @since 1.6.0
+   */
   private [mllib] def subBlock(blockRowRange: (Int, Int), blockColRange: (Int, Int)):
           BlockMatrix = {
     //  Extracts BlockMatrix elements from a specified range of block indices
@@ -498,12 +498,12 @@ class BlockMatrix @Since("1.3.0") (
   }
 
   /**
-    * Computes the LU decomposition of a Single Block from BlockMatrix using the
-    * Breeze LU method.  The method (as written) operates -only- on the upper
-    * left (0,0) corner of the BlockMatrix.
-    *
-    * @return List[BDM[Double]] of Breeze Matrices (BDM) (P,L,U) for blockLU method.
-    * @since 1.6.0
+   * Computes the LU decomposition of a Single Block from BlockMatrix using the
+   * Breeze LU method.  The method (as written) operates -only- on the upper
+   * left (0,0) corner of the BlockMatrix.
+   *
+   * @return List[BDM[Double]] of Breeze Matrices (BDM) (P,L,U) for blockLU method.
+   * @since 1.6.0
    */
   private [mllib] def singleBlockPLU: List[BDM[Double]] = {
     // returns PA = LU factorization from Breeze
@@ -543,16 +543,16 @@ class BlockMatrix @Since("1.3.0") (
 
 
   /**
-    * This method reassigns 'absolute' index locations (i,j), to sequences.  This is
-    * designed to reconsitute the orignal block locations that were lost in the
-    * subBlock method.
-    *
-    * @param rowMin The new lowest row value
-    * @param colMin The new lowest column value
-    * @return an RDD of Sequences with new block indexing
-    * @since 1.6.0
-    *
-    */
+   * This method reassigns 'absolute' index locations (i,j), to sequences.  This is
+   * designed to reconsitute the orignal block locations that were lost in the
+   * subBlock method.
+   *
+   * @param rowMin The new lowest row value
+   * @param colMin The new lowest column value
+   * @return an RDD of Sequences with new block indexing
+   * @since 1.6.0
+   *
+   */
   private [mllib] def shiftIndices(rowMin: Int, colMin: Int): RDD[((Int, Int), Matrix)] = {
     // This routine recovers the absolute indexing of the block matrices for reassembly
     val extractedSeq = this.blocks.map {   // shifting indices
@@ -562,28 +562,28 @@ class BlockMatrix @Since("1.3.0") (
   }
 
   /** Computes the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
-    * LU decomposition computes the Lower Triangular Matrix L, the Upper Triangular
-    * Matrix U, along with a Permutation Matrix P, such that PA=LU.  The Permutation
-    * Matrix addresses cases where zero entries prevent forward substitution
-    * solution of L or U.
-    *
-    * The BlockMatrix version takes a BlockMatrix as an input and returns a Tuple
-    * of 5 BlockMatrix objects:
-    * P, L, U (in that order), such that P.multiply(A)-L.multiply(U) = 0
-    * and Li, Ui, which are the inverse of the block diagonal terms for L and U.
-    *
-    * The blockLU method will return only P,L, and U, but blockLUtoSolver will return
-    * the extra Li and Ui matrices, which will be used by the solve method
-    * so that it does not need to recompute these values.
-    *
-    * The method follows a procedure similar to the method used in ScaLAPACK, but
-    * places more emphasis on preparing BlockMatrix objects as inputs to large
-    * BlockMatrix.multiply operations.
-    *
-    *
-    * @return P,L,U,Li,Ui as a Tuple of BlockMatrix
-    * @since 1.6.0
-    */
+   * LU decomposition computes the Lower Triangular Matrix L, the Upper Triangular
+   * Matrix U, along with a Permutation Matrix P, such that PA=LU.  The Permutation
+   * Matrix addresses cases where zero entries prevent forward substitution
+   * solution of L or U.
+   *
+   * The BlockMatrix version takes a BlockMatrix as an input and returns a Tuple
+   * of 5 BlockMatrix objects:
+   * P, L, U (in that order), such that P.multiply(A)-L.multiply(U) = 0
+   * and Li, Ui, which are the inverse of the block diagonal terms for L and U.
+   *
+   * The blockLU method will return only P,L, and U, but blockLUtoSolver will return
+   * the extra Li and Ui matrices, which will be used by the solve method
+   * so that it does not need to recompute these values.
+   *
+   * The method follows a procedure similar to the method used in ScaLAPACK, but
+   * places more emphasis on preparing BlockMatrix objects as inputs to large
+   * BlockMatrix.multiply operations.
+   *
+   *
+   * @return P,L,U,Li,Ui as a Tuple of BlockMatrix
+   * @since 1.6.0
+   */
   private [mllib] def blockLUtoSolver:
           (BlockMatrix, BlockMatrix, BlockMatrix, BlockMatrix, BlockMatrix) = {
 
@@ -596,23 +596,23 @@ class BlockMatrix @Since("1.3.0") (
     val sc = this.blocks.sparkContext
 
     /**
-      * LUSequences is a class that is defined to make the recursiveSequencesBuild section
-      * more readable.
-      *
-      * These are passed as an RDD of blocks:
-      * @param p the permutation matrix.
-      * @param l the lower diagonal matrix.
-      * @param u the upper diagonal matrix.
-      * @param lInv the inverse lower diagonal matrix (only populating (i,i) cells).
-      * @param uInv the inverse upper diagonal matrix (only populating (i,i) cells).
-      * @param lDiag the lower diagonal matrices (only populating (i,i) cells).
-      * @param uDiag the upper diagonal matrices (only populating (i,i) cells).
-      * This is passed as a BlockMatrix
-      * @param a the Schur Complement from the previous iteration, treated as the source matrix
-      *          for the next iteraton.
-      *
-      *
-    @Since("1.6.0")
+     * LUSequences is a class that is defined to make the recursiveSequencesBuild section
+     * more readable.
+     *
+     * These are passed as an RDD of blocks:
+     * @param p the permutation matrix.
+     * @param l the lower diagonal matrix.
+     * @param u the upper diagonal matrix.
+     * @param lInv the inverse lower diagonal matrix (only populating (i,i) cells).
+     * @param uInv the inverse upper diagonal matrix (only populating (i,i) cells).
+     * @param lDiag the lower diagonal matrices (only populating (i,i) cells).
+     * @param uDiag the upper diagonal matrices (only populating (i,i) cells).
+     * This is passed as a BlockMatrix
+     * @param a the Schur Complement from the previous iteration, treated as the source matrix
+     *          for the next iteraton.
+     *
+     *
+     * @Since("1.6.0")
     */
     class LUSequences(p: RDD[((Int, Int), Matrix)], l: RDD[((Int, Int), Matrix)],
                       u: RDD[((Int, Int), Matrix)],
@@ -631,25 +631,25 @@ class BlockMatrix @Since("1.3.0") (
     }
 
     /**
-      * Recursive Sequence Build is a nested recursion method that builds up all of the
-      * sequences that are converted to BlockMatrix classes for large matrix
-      * multiplication operations.  The Schur Complement is calculated at each
-      * recursion step and fed into the next iteration as the input matrix.
-      *
-      * dP, dL, dU, dLi, dUi have the solutions to LU(S) in the (i,i) (diagonal) blocks.
-      * dLi and dUi, are the inverses of each block in dL and dU.  UD and LD contain the
-      * extracted subBlocks from the incoming matrix (which is the Schur Complement
-      * from the previous iteration).  These matrices occupy the U12 and L21 spaces at
-      * each iteration, and form the strict upper and lower block diagonal matrices,
-      * respectively.  This means that for UD, only (i,j>i) blocks are populated with
-      * the cascading Schur calculations, while for LD, (i, j<i) blocks are populated.
-      *
-      * @param rowI
-      * @param prev
-      * @return dP, dL, dU, dLi, dUi, LD, UD, S  All are RDDs of Sequences that are
-      *         iteratively built, while S is a BlockMatrix used in the recursion loop
-      * @since 1.6.0
-      */
+     * Recursive Sequence Build is a nested recursion method that builds up all of the
+     * sequences that are converted to BlockMatrix classes for large matrix
+     * multiplication operations.  The Schur Complement is calculated at each
+     * recursion step and fed into the next iteration as the input matrix.
+     *
+     * dP, dL, dU, dLi, dUi have the solutions to LU(S) in the (i,i) (diagonal) blocks.
+     * dLi and dUi, are the inverses of each block in dL and dU.  UD and LD contain the
+     * extracted subBlocks from the incoming matrix (which is the Schur Complement
+     * from the previous iteration).  These matrices occupy the U12 and L21 spaces at
+     * each iteration, and form the strict upper and lower block diagonal matrices,
+     * respectively.  This means that for UD, only (i,j>i) blocks are populated with
+     * the cascading Schur calculations, while for LD, (i, j<i) blocks are populated.
+     *
+     * @param rowI
+     * @param prev
+     * @return dP, dL, dU, dLi, dUi, LD, UD, S  All are RDDs of Sequences that are
+     *         iteratively built, while S is a BlockMatrix used in the recursion loop
+     * @since 1.6.0
+     */
     def recursiveSequencesBuild(rowI: Int, prev: LUSequences): LUSequences = {
 
       val rowsRel = prev.A.numRowBlocks; val colsRel = prev.A.numColBlocks
@@ -756,16 +756,16 @@ class BlockMatrix @Since("1.3.0") (
 
 
 /**
-  * Returns the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
-  * LU decomposition computes the Lower Triangular Matrix L, the Upper Triangular
-  * Matrix U, along with a Permutation Matrix P, such that PA=LU.  The Permutation
-  * Matrix addresses cases where zero entries prevent forward substitution
-  * solution of L or U.  The main method, blockLUtoSolver, returns more values that are used
-  * by the solver, and this method returns only P, L, and U.
-  *
-  * @return P,L,U as a Tuple of BlockMatrix
-  * @since 1.6.0
-  */
+ * Returns the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
+ * LU decomposition computes the Lower Triangular Matrix L, the Upper Triangular
+ * Matrix U, along with a Permutation Matrix P, such that PA=LU.  The Permutation
+ * Matrix addresses cases where zero entries prevent forward substitution
+ * solution of L or U.  The main method, blockLUtoSolver, returns more values that are used
+ * by the solver, and this method returns only P, L, and U.
+ *
+ * @return P,L,U as a Tuple of BlockMatrix
+ * @since 1.6.0
+ */
   def blockLU: (BlockMatrix, BlockMatrix, BlockMatrix) = {
       val PLU = this.blockLUtoSolver
       val P = PLU._1
@@ -775,15 +775,15 @@ class BlockMatrix @Since("1.3.0") (
   }
 
 /**
-  * For the matrix Equation AX=B, where A is NxN blocks, and X, B are matrices of
-  * dimension NxW blocks,  A.solve(B) returns X.  B can be a single column vector of length N
-  * (W=1), or a matrix of W column vectors. In all cases, B must be a BlockMatrix with
-  * the same block size and number of row blocks.  The width can vary according to the
-  * number of columns in B.
-  *
-  * @return X as a BlockMatrix
-  * @since 1.6.0
-  */
+ * For the matrix Equation AX=B, where A is NxN blocks, and X, B are matrices of
+ * dimension NxW blocks,  A.solve(B) returns X.  B can be a single column vector of length N
+ * (W=1), or a matrix of W column vectors. In all cases, B must be a BlockMatrix with
+ * the same block size and number of row blocks.  The width can vary according to the
+ * number of columns in B.
+ *
+ * @return X as a BlockMatrix
+ * @since 1.6.0
+ */
   def solve(B: BlockMatrix): BlockMatrix = {
     val solutionPLU = this.blockLUtoSolver
 
