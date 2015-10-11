@@ -21,7 +21,6 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.unsafe.KVIterator
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -411,86 +410,4 @@ abstract class AggregationIterator(
    * for all aggregate functions.
    */
   protected def newBuffer: MutableRow
-}
-
-object AggregationIterator {
-  def kvIterator(
-    groupingExpressions: Seq[NamedExpression],
-    newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
-    inputAttributes: Seq[Attribute],
-    inputIter: Iterator[InternalRow]): KVIterator[InternalRow, InternalRow] = {
-    new KVIterator[InternalRow, InternalRow] {
-      private[this] val groupingKeyGenerator = newProjection(groupingExpressions, inputAttributes)
-
-      private[this] var groupingKey: InternalRow = _
-
-      private[this] var value: InternalRow = _
-
-      override def next(): Boolean = {
-        if (inputIter.hasNext) {
-          // Read the next input row.
-          val inputRow = inputIter.next()
-          // Get groupingKey based on groupingExpressions.
-          groupingKey = groupingKeyGenerator(inputRow)
-          // The value is the inputRow.
-          value = inputRow
-          true
-        } else {
-          false
-        }
-      }
-
-      override def getKey(): InternalRow = {
-        groupingKey
-      }
-
-      override def getValue(): InternalRow = {
-        value
-      }
-
-      override def close(): Unit = {
-        // Do nothing
-      }
-    }
-  }
-
-  def unsafeKVIterator(
-      groupingExpressions: Seq[NamedExpression],
-      inputAttributes: Seq[Attribute],
-      inputIter: Iterator[InternalRow]): KVIterator[UnsafeRow, InternalRow] = {
-    new KVIterator[UnsafeRow, InternalRow] {
-      private[this] val groupingKeyGenerator =
-        UnsafeProjection.create(groupingExpressions, inputAttributes)
-
-      private[this] var groupingKey: UnsafeRow = _
-
-      private[this] var value: InternalRow = _
-
-      override def next(): Boolean = {
-        if (inputIter.hasNext) {
-          // Read the next input row.
-          val inputRow = inputIter.next()
-          // Get groupingKey based on groupingExpressions.
-          groupingKey = groupingKeyGenerator.apply(inputRow)
-          // The value is the inputRow.
-          value = inputRow
-          true
-        } else {
-          false
-        }
-      }
-
-      override def getKey(): UnsafeRow = {
-        groupingKey
-      }
-
-      override def getValue(): InternalRow = {
-        value
-      }
-
-      override def close(): Unit = {
-        // Do nothing
-      }
-    }
-  }
 }
