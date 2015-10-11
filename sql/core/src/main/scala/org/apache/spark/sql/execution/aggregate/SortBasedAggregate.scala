@@ -81,16 +81,13 @@ case class SortBasedAggregate(
         val groupingKeyProjection = if (UnsafeProjection.canSupport(groupingExpressions)) {
           UnsafeProjection.create(groupingExpressions, child.output)
         } else {
-          newProjection(groupingExpressions, child.output)
+          newMutableProjection(groupingExpressions, child.output)()
         }
-        val kvIterator = KVIteratorUtils.fromIterator(
-          iter,
-          keyProjection = groupingKeyProjection,
-          valueProjection = identity)
         val outputIter = new SortBasedAggregationIterator(
+          groupingKeyProjection,
           groupingExpressions.map(_.toAttribute),
           child.output,
-          kvIterator,
+          iter,
           nonCompleteAggregateExpressions,
           nonCompleteAggregateAttributes,
           completeAggregateExpressions,
