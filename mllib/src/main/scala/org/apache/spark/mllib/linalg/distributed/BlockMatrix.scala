@@ -450,7 +450,7 @@ class BlockMatrix @Since("1.3.0") (
    *
    * @return BlockMatrix Schur Complement as BlockMatrix
    * @since 1.6.0
-  */
+   */
   private[mllib] def SchurComplement: BlockMatrix = {
     require(this.numRowBlocks == this.numColBlocks, "Block Matrix must be square.")
     require(this.numRowBlocks > 1, "Block Matrix must be larger than one block.")
