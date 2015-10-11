@@ -119,9 +119,8 @@ class SortBasedAggregationIterator(
     // input row left in the iter.
     while (!findNextPartition && inputIterator.hasNext) {
       // Get the grouping key.
-      val inputRow = inputIterator.next()
-      val groupingKey = groupingKeyProjection(inputRow).copy()
-      val currentRow = inputRow.copy()
+      val currentRow = inputIterator.next()
+      val groupingKey = groupingKeyProjection(currentRow)
       numInputRows += 1
 
       // Check if the current row belongs the current input row.
