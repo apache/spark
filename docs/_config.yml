@@ -2,6 +2,7 @@ highlighter: pygments
 markdown: kramdown
 gems:
   - jekyll-redirect-from
+  - octopress-code-highlighter
 
 # For some reason kramdown seems to behave differently on different
 # OS/packages wrt encoding. So we hard code this config.
@@ -11,6 +12,8 @@ kramdown:
 include:
   - _static
   - _modules
+
+code_dir: ../examples/src/main
 
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala, and Mesos.
