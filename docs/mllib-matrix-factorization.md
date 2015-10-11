@@ -58,10 +58,10 @@ val blocks: RDD[(Int, Int), Matrix] = ... // an RDD of (i,j,m) matrix entries
 val rowsPerBlock = 2; val colsPerBlock = 2; 
  val A = new BlockMatrix(blocks, rowsPerBlock, colsPerBlock)
     
-val PLU = A.blockLU
-val P  = PLU._1
-val L  = PLU._2
-val U  = PLU._3
+val soln = A.blockLU
+val P  = soln.P
+val L  = soln.L
+val U  = soln.U
 
 // computing a residual...
 val residual = L.multiply(U).subtract(P.multiply(A))

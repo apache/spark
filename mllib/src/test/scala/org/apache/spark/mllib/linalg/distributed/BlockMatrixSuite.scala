@@ -310,10 +310,10 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       ((2, 1), new DenseMatrix(1, 2, Array(1.0, 2.0))),
       ((2, 2), new DenseMatrix(1, 1, Array(4.0))))
     val A = new BlockMatrix(sc.parallelize(blocksForLU), 2, 2)
-    val PLU = A.blockLU;
-    val P = PLU._1;
-    val L = PLU._2;
-    val U = PLU._3
+    val soln = A.blockLU
+    val P = soln.P
+    val L = soln.L
+    val U = soln.U
     val residual = (L.multiply(U)).subtract(P.multiply(A))
     val error = residual.toLocalMatrix.toArray.reduce(_ + Math.abs(_))
     assert(error < 6.8e-16) // should be ~ 2.22e-16
@@ -331,10 +331,10 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       ((2, 2), new DenseMatrix(2, 2, Array( 0, 0, 0, 0))))
 
     val A2 = new BlockMatrix(sc.parallelize(blocksForSecondLU), 2, 2)
-    val PLU2 = A2.blockLU;
-    val P2 = PLU2._1;
-    val L2 = PLU2._2;
-    val U2 = PLU2._3
+    val soln2 = A2.blockLU
+    val P2 = soln2.P
+    val L2 = soln2.L
+    val U2 = soln2.U
     val residual2 = (L2.multiply(U2)).subtract(P2.multiply(A2))
     val error2 = residual2.toLocalMatrix.toArray.reduce(_ + Math.abs(_))
     assert(error2 < 2.6e-14) // should be ~ 2.49e-14

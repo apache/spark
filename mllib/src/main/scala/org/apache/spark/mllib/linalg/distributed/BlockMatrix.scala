@@ -561,7 +561,43 @@ class BlockMatrix @Since("1.3.0") (
     extractedSeq
   }
 
-  /** Computes the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
+  /**
+   * A class that contains the 3 main BlockMatrix items to be returned
+   * when calling blockLU.
+   *
+   * @param p The Permutation BlockMatrix
+   * @param l Lower Diagonal BlockMatrix
+   * @param u Upper Diagonal BlockMatrix
+   *
+   */
+
+  class PLU(p: BlockMatrix, l: BlockMatrix, u: BlockMatrix ){
+    val P = p
+    val L = l
+    val U = u
+  }
+
+  /**
+   * Extends the base class PLU with additional matrices that are used
+   * int he solve method.
+   *
+   * @param p The Permutation BlockMatrix
+   * @param l Lower Diagonal BlockMatrix
+   * @param u Upper Diagonal BlockMatrix
+   *
+   * @param lInv The inverse of the lower diagaonal matrices (in (i,i)th
+   *             cells only).
+   * @param uInv The inverse of the upper diagaonal matrices (in (i,i)th
+   *             cells only).
+   */
+  class PLUandInverses(p: BlockMatrix, l: BlockMatrix, u: BlockMatrix,
+          lInv: BlockMatrix, uInv: BlockMatrix) extends PLU(p, l, u) {
+    val dLi = lInv
+    val dUi = uInv
+  }
+
+  /**
+   * Computes the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
    * LU decomposition computes the Lower Triangular Matrix L, the Upper Triangular
    * Matrix U, along with a Permutation Matrix P, such that PA=LU.  The Permutation
    * Matrix addresses cases where zero entries prevent forward substitution
@@ -581,11 +617,10 @@ class BlockMatrix @Since("1.3.0") (
    * BlockMatrix.multiply operations.
    *
    *
-   * @return P,L,U,Li,Ui as a Tuple of BlockMatrix
+   * @return  PLUandInverses(P,L,U,Li,Ui) as a Tuple of BlockMatrix
    * @since 1.6.0
    */
-  private [mllib] def blockLUtoSolver:
-          (BlockMatrix, BlockMatrix, BlockMatrix, BlockMatrix, BlockMatrix) = {
+  private [mllib] def blockLUtoSolver: PLUandInverses = {
 
     // builds up the array as a union of RDD sets
     val nDiagBlocks = this.numColBlocks
@@ -751,8 +786,9 @@ class BlockMatrix @Since("1.3.0") (
   // U       = ( d[Linv] * dP * UD + dU )
     val UFin = dLi.multiply(dP.multiply(UD)).add(dU)
  // val UFin =  dLi.multiply(UD).add(dU)
-    (PFin, LFin, UFin, dLi, dUi)
+    new PLUandInverses(PFin, LFin, UFin, dLi, dUi)
   }
+
 
 
 /**
@@ -763,15 +799,12 @@ class BlockMatrix @Since("1.3.0") (
  * solution of L or U.  The main method, blockLUtoSolver, returns more values that are used
  * by the solver, and this method returns only P, L, and U.
  *
- * @return P,L,U as a Tuple of BlockMatrix
+ * @return PLU(P,L,U) as a Tuple of BlockMatrix
  * @since 1.6.0
  */
-  def blockLU: (BlockMatrix, BlockMatrix, BlockMatrix) = {
-      val PLU = this.blockLUtoSolver
-      val P = PLU._1
-      val L = PLU._2
-      val U = PLU._3
-      (P, L, U)
+  def blockLU: PLU = {
+      val solution = this.blockLUtoSolver
+      new PLU(solution.P, solution.L, solution.U)
   }
 
 /**
@@ -785,13 +818,12 @@ class BlockMatrix @Since("1.3.0") (
  * @since 1.6.0
  */
   def solve(B: BlockMatrix): BlockMatrix = {
-    val solutionPLU = this.blockLUtoSolver
-
-    val P = solutionPLU._1
-    val L = solutionPLU._2
-    val U = solutionPLU._3
-    val Li = solutionPLU._4
-    val Ui = solutionPLU._5
+    val solution = this.blockLUtoSolver
+    val P = solution.P
+    val L = solution.L
+    val U = solution.U
+    val Li = solution.dLi
+    val Ui = solution.dUi
     val pB = P.multiply(B)
     val N = this.numRowBlocks
     val W = B.numColBlocks
@@ -878,6 +910,5 @@ class BlockMatrix @Since("1.3.0") (
 
     val X = recursiveXBuild(mRev-1, firstX)
     X
-
   }
 }
