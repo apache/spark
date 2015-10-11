@@ -338,29 +338,32 @@ class TungstenAggregationIterator(
   // Part 3: Methods and fields used by hash-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
 
+  private[this] def initHashMap(): UnsafeFixedWidthAggregationMap = {
+    new UnsafeFixedWidthAggregationMap(
+      initialAggregationBuffer,
+      StructType.fromAttributes(allAggregateFunctions.flatMap(_.aggBufferAttributes)),
+      StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
+      TaskContext.get.taskMemoryManager(),
+      SparkEnv.get.shuffleMemoryManager,
+      1024 * 16, // initial capacity
+      SparkEnv.get.shuffleMemoryManager.pageSizeBytes,
+      false // disable tracking of performance metrics
+    )
+  }
+
   // This is the hash map used for hash-based aggregation. It is backed by an
   // UnsafeFixedWidthAggregationMap and it is used to store
   // all groups and their corresponding aggregation buffers for hash-based aggregation.
-  private[this] val hashMap = new UnsafeFixedWidthAggregationMap(
-    initialAggregationBuffer,
-    StructType.fromAttributes(allAggregateFunctions.flatMap(_.aggBufferAttributes)),
-    StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
-    TaskContext.get.taskMemoryManager(),
-    SparkEnv.get.shuffleMemoryManager,
-    1024 * 16, // initial capacity
-    SparkEnv.get.shuffleMemoryManager.pageSizeBytes,
-    false // disable tracking of performance metrics
-  )
+  private[this] val hashMap = initHashMap()
 
   // Exposed for testing
   private[aggregate] def getHashMap: UnsafeFixedWidthAggregationMap = hashMap
 
-  // The function used to read and process input rows. When processing input rows,
-  // it first uses hash-based aggregation by putting groups and their buffers in
-  // hashMap. If we could not allocate more memory for the map, we switch to
-  // sort-based aggregation (by calling switchToSortBasedAggregation).
-  private def processInputs(): Unit = {
-    assert(inputIter != null, "attempted to process input when iterator was null")
+  // Process input rows using a given UnsafeFixedWidthAggregationMap.
+  // It returns None if all input rows are processed with the given hash map, and
+  // returns (groupingKey, current input) if we can't allocate more memory for the hash map.
+  private def internalProcessInputs(
+      hashMap: UnsafeFixedWidthAggregationMap): Option[(UnsafeRow, InternalRow)] = {
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
       // Note that it would be better to eliminate the hash map entirely in the future.
@@ -378,13 +381,24 @@ class TungstenAggregationIterator(
         val groupingKey = groupProjection.apply(newInput)
         val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
         if (buffer == null) {
-          // buffer == null means that we could not allocate more memory.
-          // Now, we need to spill the map and switch to sort-based aggregation.
-          switchToSortBasedAggregation(groupingKey, newInput)
+          return Some((groupingKey, newInput))
         } else {
           processRow(buffer, newInput)
         }
       }
+    }
+    None
+  }
+
+  // The function used to read and process input rows. When processing input rows,
+  // it first uses hash-based aggregation by putting groups and their buffers in
+  // hashMap. If we could not allocate more memory for the map, we switch to
+  // sort-based aggregation (by calling switchToSortBasedAggregation).
+  private def processInputs(): Unit = {
+    assert(inputIter != null, "attempted to process input when iterator was null")
+    val ret = internalProcessInputs(hashMap)
+    if (ret.isDefined) {
+      switchToSortBasedAggregation(ret.get._1, ret.get._2)
     }
   }
 
@@ -453,6 +467,8 @@ class TungstenAggregationIterator(
       case _ => false
     }
 
+    var newHashMap = initHashMap()
+
     // Note: Since we spill the sorter's contents immediately after creating it, we must insert
     // something into the sorter here to ensure that we acquire at least a page of memory.
     // This is done through `externalSorter.insertKV`, which will trigger the page allocation.
@@ -470,12 +486,20 @@ class TungstenAggregationIterator(
 
       // Process the rest of input rows.
       while (inputIter.hasNext) {
-        val newInput = inputIter.next()
-        numInputRows += 1
-        val groupingKey = groupProjection.apply(newInput)
-        buffer.copyFrom(initialAggregationBuffer)
-        processRow(buffer, newInput)
-        externalSorter.insertKV(groupingKey, buffer)
+        val ret = internalProcessInputs(newHashMap)
+        if (ret.isDefined) {
+          // If we can't allocate more memory, we insert all records from the hashmap
+          // into externalSorter.
+          val iter = newHashMap.iterator()
+          while(iter.next()) {
+            externalSorter.insertKV(iter.getKey(), iter.getValue())
+          }
+          newHashMap = initHashMap()
+
+          buffer.copyFrom(initialAggregationBuffer)
+          processRow(buffer, ret.get._2)
+          externalSorter.insertKV(ret.get._1, buffer)
+        }
       }
     } else {
       // When needsProcess is false, the format of input rows is groupingKey + aggregation buffer.
