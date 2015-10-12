@@ -119,9 +119,13 @@ class KMeansModel private[ml] (
   @Since("1.5.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters
 
-  // TODO: Replace the temp fix until we have proper evaluators defined for clustering.
+  // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
   @Since("1.6.0")
-  def computeCost(data: RDD[Vector]): Double = parentModel.computeCost(data)
+  def computeCost(dataset: DataFrame): Double = {
+    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    val data = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+    parentModel.computeCost(data)
+  }
 }
 
 /**
