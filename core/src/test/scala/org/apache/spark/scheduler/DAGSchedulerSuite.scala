@@ -1377,17 +1377,28 @@ class DAGSchedulerSuite
 
   test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
     val e = intercept[SparkDriverExecutionException] {
-      val rdd = sc.parallelize(1 to 10, 2)
+      val rdd = sc.parallelize(1 to 10, 2)  // The degree of parallelism of this RDD is not crucial to this test?
+      // Albeit it does create scope for more partitions (and hence more tasks); this could be set to 1 IMHO!
       sc.runJob[Int, Int](
         rdd,
         (context: TaskContext, iter: Iterator[Int]) => iter.size,
-        Seq(0, 1),
-        (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
+        Seq(0),
+  // To ensure we only have a DAGSchedulerSuiteDummyException propagate from the job, there must be only 1 task
+  // hence, use an id of any partition (but just one!) that the RDD is parallilized into.
+        (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)  // The first  task to execute this 
+        // will fail the job.  Any further tasks WILL throw a _legitimate_ java.lang.UnsupportedOperationException: 
+        // "taskSucceeded() called on a finished JobWaiter"
     }
-    assert(e.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+  // If there are more than 1 task, then a race condition can exist between the first raised 
+  // DAGSchedulerSuiteDummyException and any succeeding j.l.UnsupportedOperationExceptions from other tasks;
+  // For the following assert (and the testcase) to be robust, we must limit the opportunity for the race to arise....
+    assert(e.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])  // or, accept an UnsupportedOperationException too.
+  // This assertion is effectively that the desired 'misbehaviour' test setup has occurred.
 
-    // Make sure we can still run commands
-    assert(sc.parallelize(1 to 10, 2).count() === 10)
+    // Make sure we can still run commands on the SparkContext...
+    assert(sc.parallelize(1 to 10, 2).count() === 10)  // Again, the degree of parallelism is not crucial;
+    // indeed, it could be different from the parallization phase with the first RDD during test setup.
+    // Afterall, its the SparkContext that is the subject of this test, not the RDD/work that exercises it.
   }
 
   test("getPartitions exceptions should not crash DAGScheduler and SparkContext (SPARK-8606)") {
