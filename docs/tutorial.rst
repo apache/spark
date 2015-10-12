@@ -424,4 +424,4 @@ Here's a few things you might want to do next:
     * Operators
     * Macros
 
-* Write you first pipeline!
+* Write your first pipeline!
