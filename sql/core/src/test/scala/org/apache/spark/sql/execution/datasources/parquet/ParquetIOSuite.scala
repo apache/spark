@@ -488,6 +488,25 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
+
+  test("read dictionary encoded decimals written as INT32") {
+    checkAnswer(
+      // Decimal column in this file is encoded using plain dictionary
+      readResourceParquetFile("dec-in-i32.parquet"),
+      sqlContext.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
+  }
+
+  test("read dictionary encoded decimals written as INT64") {
+    checkAnswer(
+      // Decimal column in this file is encoded using plain dictionary
+      readResourceParquetFile("dec-in-i64.parquet"),
+      sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
+  }
+
+  // TODO Adds test case for reading dictionary encoded decimals written as `FIXED_LEN_BYTE_ARRAY`
+  // The Parquet writer version Spark 1.6 and prior versions use is `PARQUET_1_0`, which doesn't
+  // provide dictionary encoding support for `FIXED_LEN_BYTE_ARRAY`.  Should add a test here once
+  // we upgrade to `PARQUET_2_0`.
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
