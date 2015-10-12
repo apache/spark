@@ -154,7 +154,7 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
-as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0){
+as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
   createDataFrame(sqlContext, data, schema, samplingRatio)
 }
 
