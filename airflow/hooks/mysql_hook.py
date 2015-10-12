@@ -24,7 +24,8 @@ class MySqlHook(DbApiHook):
         conn = self.get_connection(self.mysql_conn_id)
         conn_config = {
             "user": conn.login,
-            "passwd": conn.password
+            "passwd": conn.password,
+            "local_infile": 1,
         }
 
         conn_config["host"] = conn.host or 'localhost'
