@@ -732,6 +732,9 @@ class SparseVector(Vector):
             raise ValueError("Index %d out of bounds." % index)
 
         insert_index = np.searchsorted(inds, index)
+        if insert_index >= inds.size:
+            return 0.
+
         row_ind = inds[insert_index]
         if row_ind == index:
             return vals[insert_index]
