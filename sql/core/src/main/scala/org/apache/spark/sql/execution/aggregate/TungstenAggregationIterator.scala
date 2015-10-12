@@ -613,7 +613,7 @@ class TungstenAggregationIterator(
       // The originalInputAttributes are using inputAggBufferAttributes. So, we need to use
       // allAggregateFunctions.flatMap(_.inputAggBufferAttributes).
       val bufferExtractor = newMutableProjection(
-        allAggregateFunctions.flatMap(_.inputAggBufferAttributes),
+        originalInputAttributes.drop(initialInputBufferOffset),
         originalInputAttributes)()
       bufferExtractor.target(buffer)
 
