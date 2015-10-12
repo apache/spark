@@ -77,7 +77,6 @@ class HiveToMySqlTransfer(BaseOperator):
 
         logging.info("Inserting rows into MySQL")
 
-
         if self.bulk_load:
             mysql.bulk_load(table=self.mysql_table, tmp_file=tmpfile.name)
             tmpfile.close()
