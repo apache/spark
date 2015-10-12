@@ -173,13 +173,15 @@ def run(args):
         s3_log = filename.replace(log, conf.get('core', 'BASE_LOG_FOLDER'))
         bucket, key = s3_log.lstrip('s3:/').split('/', 1)
         s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
-        s3_key.set_contents_from_filename(filename)
-        try:
-            # try to clean up tmp files
-            os.remove(filename)
-            os.removedirs(os.path.dirname(filename))
-        except:
-            pass
+        if os.path.exists(filename):
+            s3_key.set_contents_from_filename(filename)
+            try:
+                # load log file to s3, if it exists
+                # try to clean up tmp files
+                os.remove(filename)
+                os.removedirs(os.path.dirname(filename))
+            except:
+                pass
 
 
 def task_state(args):
