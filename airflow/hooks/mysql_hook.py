@@ -24,8 +24,7 @@ class MySqlHook(DbApiHook):
         conn = self.get_connection(self.mysql_conn_id)
         conn_config = {
             "user": conn.login,
-            "passwd": conn.password,
-            "local_infile": 1,
+            "passwd": conn.password
         }
 
         conn_config["host"] = conn.host or 'localhost'
@@ -47,7 +46,9 @@ class MySqlHook(DbApiHook):
                 conn_config["cursorclass"] = MySQLdb.cursors.DictCursor
             elif (conn.extra_dejson["cursor"]).lower() == 'ssdictcursor':
                 conn_config["cursorclass"] = MySQLdb.cursors.SSDictCursor
-
+        if conn.extra_dejson.get('local_infile', False):
+            if conn.extra_dejson["local_infile"]:
+                conn_config["local_infile"] = 1
         conn = MySQLdb.connect(**conn_config)
         return conn
 
