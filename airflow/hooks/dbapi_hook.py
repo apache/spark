@@ -151,9 +151,3 @@ class DbApiHook(BaseHook):
         conn.close()
         logging.info(
             "Done loading. Loaded a total of {i} rows".format(**locals()))
-
-    def get_conn(self):
-        """
-        Retuns a sql connection that can be used to retrieve a cursor.
-        """
-        raise NotImplemented()
