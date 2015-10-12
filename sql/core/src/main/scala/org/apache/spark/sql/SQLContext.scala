@@ -26,7 +26,7 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkException, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
@@ -67,6 +67,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
   self =>
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
+
+  // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
+  // wants to create a new root SQLContext (a SLQContext that is not created by newSession).
+  private val allowMultipleContexts =
+    sparkContext.conf.getBoolean(
+      SQLConf.ALLOW_MULTIPLE_CONTEXTS.key,
+      SQLConf.ALLOW_MULTIPLE_CONTEXTS.defaultValue.get)
+
+  // Assert no root SQLContext is running when allowMultipleContexts is false.
+  {
+    val hasInstantiatedContext = SQLContext.lastInstantiatedContext.get() != null
+    if (!allowMultipleContexts && hasInstantiatedContext) {
+      val errMsg = "Only one SQLContext/HiveContext may be running in this JVM. " +
+        s"It is recommended to use SQLContext.getOrCreate to get the instantiated " +
+        s"SQLContext/HiveContext. To ignore this error, " +
+        s"set ${SQLConf.ALLOW_MULTIPLE_CONTEXTS.key} = true in SparkConf."
+      throw new SparkException(errMsg)
+    }
+  }
 
   /**
    * @return Spark SQL configuration
@@ -1330,5 +1349,9 @@ object SQLContext {
     INSTANTIATION_LOCK.synchronized {
       lastInstantiatedContext.set(sqlContext)
     }
+  }
+
+  private[sql] def getLastInstantiatedContextOption(): Option[SQLContext] = {
+    Option(lastInstantiatedContext.get())
   }
 }
