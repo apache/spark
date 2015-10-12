@@ -26,7 +26,7 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkException, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
@@ -65,15 +65,38 @@ import org.apache.spark.util.Utils
 class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
     @transient protected[sql] val cacheManager: CacheManager,
-    @transient private[sql] val listener: SQLListener)
+    @transient private[sql] val listener: SQLListener,
+    val isRootContext: Boolean)
   extends org.apache.spark.Logging with Serializable {
 
   self =>
 
   def this(sparkContext: SparkContext) = {
-    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext))
+    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
   }
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
+
+  // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
+  // wants to create a new root SQLContext (a SLQContext that is not created by newSession).
+  private val allowMultipleContexts =
+    sparkContext.conf.getBoolean(
+      SQLConf.ALLOW_MULTIPLE_CONTEXTS.key,
+      SQLConf.ALLOW_MULTIPLE_CONTEXTS.defaultValue.get)
+
+  // Assert no root SQLContext is running when allowMultipleContexts is false.
+  {
+    if (!allowMultipleContexts && isRootContext) {
+      SQLContext.getInstantiatedContextOption() match {
+        case Some(rootSQLContext) =>
+          val errMsg = "Only one SQLContext/HiveContext may be running in this JVM. " +
+            s"It is recommended to use SQLContext.getOrCreate to get the instantiated " +
+            s"SQLContext/HiveContext. To ignore this error, " +
+            s"set ${SQLConf.ALLOW_MULTIPLE_CONTEXTS.key} = true in SparkConf."
+          throw new SparkException(errMsg)
+        case None => // OK
+      }
+    }
+  }
 
   /**
    * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
@@ -82,7 +105,11 @@ class SQLContext private[sql](
    * @since 1.6.0
    */
   def newSession(): SQLContext = {
-    new SQLContext(sparkContext, cacheManager, listener)
+    new SQLContext(
+      sparkContext = sparkContext,
+      cacheManager = cacheManager,
+      listener = listener,
+      isRootContext = false)
   }
 
   /**
@@ -1237,6 +1264,10 @@ object SQLContext {
     instantiatedContext.compareAndSet(null, sqlContext)
   }
 
+  private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {
+    Option(instantiatedContext.get())
+  }
+
   /**
    * Changes the SQLContext that will be returned in this thread and its children when
    * SQLContext.getOrCreate() is called. This can be used to ensure that a given thread receives
@@ -1256,6 +1287,10 @@ object SQLContext {
    */
   def clearActive(): Unit = {
     activeContext.remove()
+  }
+
+  private[sql] def getActiveContextOption(): Option[SQLContext] = {
+    Option(activeContext.get())
   }
 
   /**

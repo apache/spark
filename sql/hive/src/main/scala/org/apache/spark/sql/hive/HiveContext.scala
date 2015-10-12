@@ -91,12 +91,13 @@ class HiveContext private[hive](
     cacheManager: CacheManager,
     @transient listener: SQLListener,
     @transient execHive: ClientWrapper,
-    @transient metaHive: ClientInterface)
-  extends SQLContext(sc, cacheManager, listener) with Logging {
+    @transient metaHive: ClientInterface,
+    isRootContext: Boolean)
+  extends SQLContext(sc, cacheManager, listener, isRootContext) with Logging {
   self =>
 
   def this(sc: SparkContext) = {
-    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), null, null)
+    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), null, null, true)
   }
   def this(sc: JavaSparkContext) = this(sc.sc)
 
@@ -110,8 +111,13 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    new HiveContext(sc, cacheManager, listener,
-      executionHive.newSession(), metadataHive.newSession())
+    new HiveContext(
+      sc = sc,
+      cacheManager = cacheManager,
+      listener = listener,
+      execHive = executionHive.newSession(),
+      metaHive = metadataHive.newSession(),
+      isRootContext = false)
   }
 
   /**

@@ -55,8 +55,8 @@ import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
 private[spark] class Client(
@@ -70,8 +70,6 @@ private[spark] class Client(
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
-  def this(clientArgs: ClientArguments) = this(clientArgs, new SparkConf())
-
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
   private var credentials: Credentials = null
@@ -84,10 +82,27 @@ private[spark] class Client(
   private var principal: String = null
   private var keytab: String = null
 
+  private val launcherBackend = new LauncherBackend() {
+    override def onStopRequest(): Unit = {
+      if (isClusterMode && appId != null) {
+        yarnClient.killApplication(appId)
+      } else {
+        setState(SparkAppHandle.State.KILLED)
+        stop()
+      }
+    }
+  }
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
+  private var appId: ApplicationId = null
+
+  def reportLauncherState(state: SparkAppHandle.State): Unit = {
+    launcherBackend.setState(state)
+  }
+
   def stop(): Unit = {
+    launcherBackend.close()
     yarnClient.stop()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
@@ -103,6 +118,7 @@ private[spark] class Client(
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
     try {
+      launcherBackend.connect()
       // Setup the credentials before doing anything else,
       // so we have don't have issues at any point.
       setupCredentials()
@@ -116,6 +132,8 @@ private[spark] class Client(
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
+      reportLauncherState(SparkAppHandle.State.SUBMITTED)
+      launcherBackend.setAppId(appId.toString())
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
@@ -340,7 +358,8 @@ private[spark] class Client(
         destName: Option[String] = None,
         targetDir: Option[String] = None,
         appMasterOnly: Boolean = false): (Boolean, String) = {
-      val localURI = new URI(path.trim())
+      val trimmedPath = path.trim()
+      val localURI = Utils.resolveURI(trimmedPath)
       if (localURI.getScheme != LOCAL_SCHEME) {
         if (addDistributedUri(localURI)) {
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)
@@ -356,7 +375,7 @@ private[spark] class Client(
           (false, null)
         }
       } else {
-        (true, path.trim())
+        (true, trimmedPath)
       }
     }
 
@@ -577,10 +596,10 @@ private[spark] class Client(
         LOCALIZED_PYTHON_DIR)
     }
     (pySparkArchives ++ pyArchives).foreach { path =>
-      val uri = new URI(path)
+      val uri = Utils.resolveURI(path)
       if (uri.getScheme != LOCAL_SCHEME) {
         pythonPath += buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-          new Path(path).getName())
+          new Path(uri).getName())
       } else {
         pythonPath += uri.getPath()
       }
@@ -881,6 +900,20 @@ private[spark] class Client(
         }
       }
 
+      if (lastState != state) {
+        state match {
+          case YarnApplicationState.RUNNING =>
+            reportLauncherState(SparkAppHandle.State.RUNNING)
+          case YarnApplicationState.FINISHED =>
+            reportLauncherState(SparkAppHandle.State.FINISHED)
+          case YarnApplicationState.FAILED =>
+            reportLauncherState(SparkAppHandle.State.FAILED)
+          case YarnApplicationState.KILLED =>
+            reportLauncherState(SparkAppHandle.State.KILLED)
+          case _ =>
+        }
+      }
+
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
@@ -928,8 +961,8 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    val appId = submitApplication()
-    if (fireAndForget) {
+    this.appId = submitApplication()
+    if (!launcherBackend.isConnected() && fireAndForget) {
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
@@ -971,6 +1004,7 @@ private[spark] class Client(
 }
 
 object Client extends Logging {
+
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
@@ -1196,7 +1230,7 @@ object Client extends Logging {
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
     mainJar.flatMap { path =>
-      val uri = new URI(path)
+      val uri = Utils.resolveURI(path)
       if (uri.getScheme == LOCAL_SCHEME) Some(uri) else None
     }.orElse(Some(new URI(APP_JAR)))
   }
