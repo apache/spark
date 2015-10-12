@@ -121,7 +121,7 @@
     });
 
     d3.selectAll("div.legend_item.state")
-        .style("cursor", "s-resize")
+        .style("cursor", "pointer")
         .on("mouseover", function(){
             if(!stateIsSet()){
                 state = d3.select(this).text();
@@ -135,7 +135,6 @@
         });
 
     d3.selectAll("div.legend_item.state")
-        .style("cursor", "s-resize")
         .on("click", function(){
             state = d3.select(this).text();
             color = d3.select(this).style("border-color");
