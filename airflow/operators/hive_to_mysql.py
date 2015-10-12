@@ -4,6 +4,7 @@ from airflow.hooks import HiveServer2Hook, MySqlHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 
+from tempfile import NamedTemporaryFile
 
 class HiveToMySqlTransfer(BaseOperator):
     """
