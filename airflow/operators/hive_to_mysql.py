@@ -63,6 +63,7 @@ class HiveToMySqlTransfer(BaseOperator):
         hive = HiveServer2Hook(hiveserver2_conn_id=self.hiveserver2_conn_id)
         logging.info("Extracting data from Hive")
         logging.info(self.sql)
+
         if self.bulk_load:
             tmpfile = NamedTemporaryFile()
             hive.to_csv(self.sql, tmpfile.name)
@@ -75,6 +76,7 @@ class HiveToMySqlTransfer(BaseOperator):
             mysql.run(self.mysql_preoperator)
 
         logging.info("Inserting rows into MySQL")
+
 
         if self.bulk_load:
             mysql.bulk_load(table=self.mysql_table, tmp_file=tmpfile.name)
