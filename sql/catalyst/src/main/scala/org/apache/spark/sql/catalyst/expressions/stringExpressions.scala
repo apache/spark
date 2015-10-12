@@ -50,12 +50,12 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evals = children.map(_.gen(ctx))
     val inputs = evals.map { eval =>
-      s"${eval.isNull} ? null : ${eval.primitive}"
+      s"${eval.isNull} ? null : ${eval.value}"
     }.mkString(", ")
     evals.map(_.code).mkString("\n") + s"""
       boolean ${ev.isNull} = false;
-      UTF8String ${ev.primitive} = UTF8String.concat($inputs);
-      if (${ev.primitive} == null) {
+      UTF8String ${ev.value} = UTF8String.concat($inputs);
+      if (${ev.value} == null) {
         ${ev.isNull} = true;
       }
     """
@@ -104,12 +104,12 @@ case class ConcatWs(children: Seq[Expression])
       val evals = children.map(_.gen(ctx))
 
       val inputs = evals.map { eval =>
-        s"${eval.isNull} ? (UTF8String) null : ${eval.primitive}"
+        s"${eval.isNull} ? (UTF8String) null : ${eval.value}"
       }.mkString(", ")
 
       evals.map(_.code).mkString("\n") + s"""
-        UTF8String ${ev.primitive} = UTF8String.concatWs($inputs);
-        boolean ${ev.isNull} = ${ev.primitive} == null;
+        UTF8String ${ev.value} = UTF8String.concatWs($inputs);
+        boolean ${ev.isNull} = ${ev.value} == null;
       """
     } else {
       val array = ctx.freshName("array")
@@ -121,19 +121,19 @@ case class ConcatWs(children: Seq[Expression])
         child.dataType match {
           case StringType =>
             ("", // we count all the StringType arguments num at once below.
-              s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.primitive};")
+              s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};")
           case _: ArrayType =>
             val size = ctx.freshName("n")
             (s"""
               if (!${eval.isNull}) {
-                $varargNum += ${eval.primitive}.numElements();
+                $varargNum += ${eval.value}.numElements();
               }
             """,
             s"""
             if (!${eval.isNull}) {
-              final int $size = ${eval.primitive}.numElements();
+              final int $size = ${eval.value}.numElements();
               for (int j = 0; j < $size; j ++) {
-                $array[$idxInVararg ++] = ${ctx.getValue(eval.primitive, StringType, "j")};
+                $array[$idxInVararg ++] = ${ctx.getValue(eval.value, StringType, "j")};
               }
             }
             """)
@@ -147,8 +147,8 @@ case class ConcatWs(children: Seq[Expression])
         ${varargCount.mkString("\n")}
         UTF8String[] $array = new UTF8String[$varargNum];
         ${varargBuild.mkString("\n")}
-        UTF8String ${ev.primitive} = UTF8String.concatWs(${evals.head.primitive}, $array);
-        boolean ${ev.isNull} = ${ev.primitive} == null;
+        UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $array);
+        boolean ${ev.isNull} = ${ev.value} == null;
       """
     }
   }
@@ -308,7 +308,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
         ${termDict} = org.apache.spark.sql.catalyst.expressions.StringTranslate
           .buildDict(${termLastMatching}, ${termLastReplace});
       }
-      ${ev.primitive} = ${src}.translate(${termDict});
+      ${ev.value} = ${src}.translate(${termDict});
       """
     })
   }
@@ -334,7 +334,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (word, set) =>
-      s"${ev.primitive} = $set.findInSet($word);"
+      s"${ev.value} = $set.findInSet($word);"
     )
   }
 
@@ -481,7 +481,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     val strGen = str.gen(ctx)
     val startGen = start.gen(ctx)
     s"""
-      int ${ev.primitive} = 0;
+      int ${ev.value} = 0;
       boolean ${ev.isNull} = false;
       ${startGen.code}
       if (!${startGen.isNull}) {
@@ -489,8 +489,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
         if (!${substrGen.isNull}) {
           ${strGen.code}
           if (!${strGen.isNull}) {
-            ${ev.primitive} = ${strGen.primitive}.indexOf(${substrGen.primitive},
-              ${startGen.primitive}) + 1;
+            ${ev.value} = ${strGen.value}.indexOf(${substrGen.value},
+              ${startGen.value}) + 1;
           } else {
             ${ev.isNull} = true;
           }
@@ -586,9 +586,9 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
         if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
           s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
-            s"new ${ctx.boxedType(v._1)}(${v._2.primitive})"
+            s"new ${ctx.boxedType(v._1)}(${v._2.value})"
         } else {
-          s"(${v._2.isNull}) ? null : ${v._2.primitive}"
+          s"(${v._2.isNull}) ? null : ${v._2.value}"
         }
       s + "," + nullSafeString
     })
@@ -600,13 +600,13 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     s"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${argListCode.mkString}
         $stringBuffer $sb = new $stringBuffer();
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
-        $form.format(${pattern.primitive}.toString() $argListString);
-        ${ev.primitive} = UTF8String.fromString($sb.toString());
+        $form.format(${pattern.value}.toString() $argListString);
+        ${ev.value} = UTF8String.fromString($sb.toString());
       }
      """
   }
@@ -682,7 +682,7 @@ case class StringSpace(child: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (length) =>
-      s"""${ev.primitive} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
+      s"""${ev.value} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
   }
 
   override def prettyName: String = "space"
@@ -760,7 +760,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (left, right) =>
-      s"${ev.primitive} = $left.levenshteinDistance($right);")
+      s"${ev.value} = $left.levenshteinDistance($right);")
   }
 }
 
@@ -803,9 +803,9 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
       s"""
         byte[] $bytes = $child.getBytes();
         if ($bytes.length > 0) {
-          ${ev.primitive} = (int) $bytes[0];
+          ${ev.value} = (int) $bytes[0];
         } else {
-          ${ev.primitive} = 0;
+          ${ev.value} = 0;
         }
        """})
   }
@@ -827,7 +827,7 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (child) => {
-      s"""${ev.primitive} = UTF8String.fromBytes(
+      s"""${ev.value} = UTF8String.fromBytes(
             org.apache.commons.codec.binary.Base64.encodeBase64($child));
        """})
   }
@@ -848,7 +848,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (child) => {
       s"""
-         ${ev.primitive} = org.apache.commons.codec.binary.Base64.decodeBase64($child.toString());
+         ${ev.value} = org.apache.commons.codec.binary.Base64.decodeBase64($child.toString());
        """})
   }
 }
@@ -875,7 +875,7 @@ case class Decode(bin: Expression, charset: Expression)
     nullSafeCodeGen(ctx, ev, (bytes, charset) =>
       s"""
         try {
-          ${ev.primitive} = UTF8String.fromString(new String($bytes, $charset.toString()));
+          ${ev.value} = UTF8String.fromString(new String($bytes, $charset.toString()));
         } catch (java.io.UnsupportedEncodingException e) {
           org.apache.spark.unsafe.Platform.throwException(e);
         }
@@ -905,7 +905,7 @@ case class Encode(value: Expression, charset: Expression)
     nullSafeCodeGen(ctx, ev, (string, charset) =>
       s"""
         try {
-          ${ev.primitive} = $string.toString().getBytes($charset.toString());
+          ${ev.value} = $string.toString().getBytes($charset.toString());
         } catch (java.io.UnsupportedEncodingException e) {
           org.apache.spark.unsafe.Platform.throwException(e);
         }""")
@@ -1014,9 +1014,9 @@ case class FormatNumber(x: Expression, d: Expression)
             $lastDValue = $d;
             $numberFormat.applyPattern($dFormat.toPattern());
           }
-          ${ev.primitive} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
+          ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
         } else {
-          ${ev.primitive} = null;
+          ${ev.value} = null;
           ${ev.isNull} = true;
         }
        """
