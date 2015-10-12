@@ -62,7 +62,7 @@ class QueueInputDStream[T: ClassTag](
     } else if (defaultRDD != null) {
       Some(defaultRDD)
     } else {
-      None
+      Some(ssc.sparkContext.emptyRDD)
     }
   }
 
