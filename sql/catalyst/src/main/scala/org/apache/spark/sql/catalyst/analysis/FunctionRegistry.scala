@@ -51,22 +51,36 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   private val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
-  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
-  : Unit = {
+  override def registerFunction(
+      name: String,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
     functionBuilders.put(name, (info, builder))
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    val func = functionBuilders.get(name).map(_._2).getOrElse {
-      throw new AnalysisException(s"undefined function $name")
+    val func = synchronized {
+      functionBuilders.get(name).map(_._2).getOrElse {
+        throw new AnalysisException(s"undefined function $name")
+      }
     }
     func(children)
   }
 
-  override def listFunction(): Seq[String] = functionBuilders.iterator.map(_._1).toList.sorted
+  override def listFunction(): Seq[String] = synchronized {
+    functionBuilders.iterator.map(_._1).toList.sorted
+  }
 
-  override def lookupFunction(name: String): Option[ExpressionInfo] = {
+  override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
     functionBuilders.get(name).map(_._1)
+  }
+
+  def copy(): SimpleFunctionRegistry = synchronized {
+    val registry = new SimpleFunctionRegistry
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+      registry.registerFunction(name, info, builder)
+    }
+    registry
   }
 }
 
@@ -168,6 +182,9 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Max]("max"),
     expression[Min]("min"),
+    expression[Stddev]("stddev"),
+    expression[StddevPop]("stddev_pop"),
+    expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
 
     // string functions
@@ -177,7 +194,11 @@ object FunctionRegistry {
     expression[ConcatWs]("concat_ws"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
+    expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),
+    expression[GetJsonObject]("get_json_object"),
+    expression[InitCap]("initcap"),
+    expression[JsonTuple]("json_tuple"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[Length]("length"),
@@ -194,10 +215,13 @@ object FunctionRegistry {
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
     expression[StringTrimRight]("rtrim"),
+    expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[SubstringIndex]("substring_index"),
+    expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
@@ -205,24 +229,37 @@ object FunctionRegistry {
     expression[Upper]("upper"),
 
     // datetime functions
+    expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[DateDiff]("datediff"),
+    expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
+    expression[DateSub]("date_sub"),
     expression[DayOfMonth]("day"),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
+    expression[FromUnixTime]("from_unixtime"),
+    expression[FromUTCTimestamp]("from_utc_timestamp"),
     expression[Hour]("hour"),
     expression[LastDay]("last_day"),
     expression[Minute]("minute"),
     expression[Month]("month"),
+    expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
+    expression[ToDate]("to_date"),
+    expression[ToUTCTimestamp]("to_utc_timestamp"),
+    expression[TruncDate]("trunc"),
+    expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
 
     // collection functions
     expression[Size]("size"),
+    expression[SortArray]("sort_array"),
+    expression[ArrayContains]("array_contains"),
 
     // misc functions
     expression[Crc32]("crc32"),
@@ -234,7 +271,7 @@ object FunctionRegistry {
     expression[InputFileName]("input_file_name")
   )
 
-  val builtin: FunctionRegistry = {
+  val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry
     expressions.foreach { case (name, (info, builder)) => fr.registerFunction(name, info, builder) }
     fr

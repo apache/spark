@@ -102,6 +102,7 @@ The following code snippets illustrate how to load a sample dataset, train a bin
 data, and evaluate the performance of the algorithm by several binary evaluation metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS) and [`BinaryClassificationMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.BinaryClassificationMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -179,6 +180,7 @@ println("Area under ROC = " + auROC)
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionModel.html) and [`LogisticRegressionWithLBFGS` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -276,6 +278,7 @@ public class BinaryClassification {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`BinaryClassificationMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.BinaryClassificationMetrics) and [`LogisticRegressionWithLBFGS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionWithLBFGS) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
@@ -302,10 +305,10 @@ predictionAndLabels = test.map(lambda lp: (float(model.predict(lp.features)), lp
 metrics = BinaryClassificationMetrics(predictionAndLabels)
 
 # Area under precision-recall curve
-print "Area under PR = %s" % metrics.areaUnderPR
+print("Area under PR = %s" % metrics.areaUnderPR)
 
 # Area under ROC curve
-print "Area under ROC = %s" % metrics.areaUnderROC
+print("Area under ROC = %s" % metrics.areaUnderROC)
 
 {% endhighlight %}
 
@@ -428,6 +431,7 @@ The following code snippets illustrate how to load a sample dataset, train a mul
 the data, and evaluate the performance of the algorithm by several multiclass classification evaluation metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`MulticlassMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MulticlassMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -501,6 +505,7 @@ println(s"Weighted false positive rate: ${metrics.weightedFalsePositiveRate}")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`MulticlassMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MulticlassMetrics.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -580,6 +585,7 @@ public class MulticlassClassification {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`MulticlassMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MulticlassMetrics) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
@@ -606,24 +612,24 @@ metrics = MulticlassMetrics(predictionAndLabels)
 precision = metrics.precision()
 recall = metrics.recall()
 f1Score = metrics.fMeasure()
-print "Summary Stats"
-print "Precision = %s" % precision
-print "Recall = %s" % recall
-print "F1 Score = %s" % f1Score
+print("Summary Stats")
+print("Precision = %s" % precision)
+print("Recall = %s" % recall)
+print("F1 Score = %s" % f1Score)
 
 # Statistics by class
 labels = data.map(lambda lp: lp.label).distinct().collect()
 for label in sorted(labels):
-    print "Class %s precision = %s" % (label, metrics.precision(label))
-    print "Class %s recall = %s" % (label, metrics.recall(label))
-    print "Class %s F1 Measure = %s" % (label, metrics.fMeasure(label, beta=1.0))
+    print("Class %s precision = %s" % (label, metrics.precision(label)))
+    print("Class %s recall = %s" % (label, metrics.recall(label)))
+    print("Class %s F1 Measure = %s" % (label, metrics.fMeasure(label, beta=1.0)))
 
 # Weighted stats
-print "Weighted recall = %s" % metrics.weightedRecall
-print "Weighted precision = %s" % metrics.weightedPrecision
-print "Weighted F(1) Score = %s" % metrics.weightedFMeasure()
-print "Weighted F(0.5) Score = %s" % metrics.weightedFMeasure(beta=0.5)
-print "Weighted false positive rate = %s" % metrics.weightedFalsePositiveRate
+print("Weighted recall = %s" % metrics.weightedRecall)
+print("Weighted precision = %s" % metrics.weightedPrecision)
+print("Weighted F(1) Score = %s" % metrics.weightedFMeasure())
+print("Weighted F(0.5) Score = %s" % metrics.weightedFMeasure(beta=0.5))
+print("Weighted false positive rate = %s" % metrics.weightedFalsePositiveRate)
 {% endhighlight %}
 
 </div>
@@ -758,6 +764,7 @@ True classes:
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`MultilabelMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MultilabelMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
@@ -802,6 +809,7 @@ println(s"Subset accuracy = ${metrics.subsetAccuracy}")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`MultilabelMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MultilabelMetrics.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -864,6 +872,7 @@ public class MultilabelClassification {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`MultilabelMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MultilabelMetrics) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.evaluation import MultilabelMetrics
@@ -881,28 +890,28 @@ scoreAndLabels = sc.parallelize([
 metrics = MultilabelMetrics(scoreAndLabels)
 
 # Summary stats
-print "Recall = %s" % metrics.recall()
-print "Precision = %s" % metrics.precision()
-print "F1 measure = %s" % metrics.f1Measure()
-print "Accuracy = %s" % metrics.accuracy
+print("Recall = %s" % metrics.recall())
+print("Precision = %s" % metrics.precision())
+print("F1 measure = %s" % metrics.f1Measure())
+print("Accuracy = %s" % metrics.accuracy)
 
 # Individual label stats
 labels = scoreAndLabels.flatMap(lambda x: x[1]).distinct().collect()
 for label in labels:
-    print "Class %s precision = %s" % (label, metrics.precision(label))
-    print "Class %s recall = %s" % (label, metrics.recall(label))
-    print "Class %s F1 Measure = %s" % (label, metrics.f1Measure(label))
+    print("Class %s precision = %s" % (label, metrics.precision(label)))
+    print("Class %s recall = %s" % (label, metrics.recall(label)))
+    print("Class %s F1 Measure = %s" % (label, metrics.f1Measure(label)))
 
 # Micro stats
-print "Micro precision = %s" % metrics.microPrecision
-print "Micro recall = %s" % metrics.microRecall
-print "Micro F1 measure = %s" % metrics.microF1Measure
+print("Micro precision = %s" % metrics.microPrecision)
+print("Micro recall = %s" % metrics.microRecall)
+print("Micro F1 measure = %s" % metrics.microF1Measure)
 
 # Hamming loss
-print "Hamming loss = %s" % metrics.hammingLoss
+print("Hamming loss = %s" % metrics.hammingLoss)
 
 # Subset accuracy
-print "Subset accuracy = %s" % metrics.subsetAccuracy
+print("Subset accuracy = %s" % metrics.subsetAccuracy)
 
 {% endhighlight %}
 
@@ -1016,6 +1025,7 @@ expanded world of non-positive weights are "the same as never having interacted 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RankingMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
@@ -1095,6 +1105,7 @@ println(s"R-squared = ${regressionMetrics.r2}")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) and [`RankingMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RankingMetrics.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -1256,6 +1267,7 @@ public class Ranking {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RankingMetrics) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.recommendation import ALS, Rating
@@ -1283,10 +1295,10 @@ scoreAndLabels = predictions.join(ratingsTuple).map(lambda tup: tup[1])
 metrics = RegressionMetrics(scoreAndLabels)
 
 # Root mean sqaured error
-print "RMSE = %s" % metrics.rootMeanSquaredError
+print("RMSE = %s" % metrics.rootMeanSquaredError)
 
 # R-squared
-print "R-squared = %s" % metrics.r2
+print("R-squared = %s" % metrics.r2)
 
 {% endhighlight %}
 
@@ -1336,6 +1348,7 @@ The following code snippets illustrate how to load a sample dataset, train a lin
 and evaluate the performance of the algorithm by several regression metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -1379,6 +1392,7 @@ println(s"Explained variance = ${metrics.explainedVariance}")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -1455,6 +1469,7 @@ public class LinearRegression {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
@@ -1479,17 +1494,17 @@ valuesAndPreds = parsedData.map(lambda p: (float(model.predict(p.features)), p.l
 metrics = RegressionMetrics(valuesAndPreds)
 
 # Squared Error
-print "MSE = %s" % metrics.meanSquaredError
-print "RMSE = %s" % metrics.rootMeanSquaredError
+print("MSE = %s" % metrics.meanSquaredError)
+print("RMSE = %s" % metrics.rootMeanSquaredError)
 
 # R-squared
-print "R-squared = %s" % metrics.r2
+print("R-squared = %s" % metrics.r2)
 
 # Mean absolute error
-print "MAE = %s" % metrics.meanAbsoluteError
+print("MAE = %s" % metrics.meanAbsoluteError)
 
 # Explained variance
-print "Explained variance = %s" % metrics.explainedVariance
+print("Explained variance = %s" % metrics.explainedVariance)
 
 {% endhighlight %}
 

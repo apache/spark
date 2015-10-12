@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 
 /**
+ * :: DeveloperApi ::
+ *
  * This abstract class represents a write ahead log (aka journal) that is used by Spark Streaming
  * to save the received data (by receivers) and associated metadata to a reliable storage, so that
  * they can be recovered after driver failures. See the Spark documentation for more information

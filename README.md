@@ -1,7 +1,7 @@
 # Apache Spark
 
 Spark is a fast and general cluster computing system for Big Data. It provides
-high-level APIs in Scala, Java, and Python, and an optimized engine that
+high-level APIs in Scala, Java, Python, and R, and an optimized engine that
 supports general computation graphs for data analysis. It also supports a
 rich set of higher-level tools including Spark SQL for SQL and DataFrames,
 MLlib for machine learning, GraphX for graph processing,
@@ -59,7 +59,7 @@ will run the Pi example locally.
 
 You can set the MASTER environment variable when running examples to submit
 examples to a cluster. This can be a mesos:// or spark:// URL,
-"yarn-cluster" or "yarn-client" to run on YARN, and "local" to run
+"yarn" to run on YARN, and "local" to run
 locally with one thread, or "local[N]" to run locally with N threads. You
 can also use an abbreviated class name if the class is in the `examples`
 package. For instance:
@@ -94,5 +94,5 @@ distribution.
 
 ## Configuration
 
-Please refer to the [Configuration guide](http://spark.apache.org/docs/latest/configuration.html)
+Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.

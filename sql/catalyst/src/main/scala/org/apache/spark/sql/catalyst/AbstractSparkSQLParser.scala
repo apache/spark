@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def parse(input: String): LogicalPlan = {
+  def parse(input: String): LogicalPlan = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(start)(new lexical.Scanner(input)) match {
@@ -104,6 +104,8 @@ class SqlLexical extends StdLexical {
   override lazy val token: Parser[Token] =
     ( identChar ~ (identChar | digit).* ^^
       { case first ~ rest => processIdent((first :: rest).mkString) }
+    | digit.* ~ identChar ~ (identChar | digit).* ^^
+      { case first ~ middle ~ rest => processIdent((first ++ (middle :: rest)).mkString) }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
         case i ~ None => NumericLit(i.mkString)
         case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)

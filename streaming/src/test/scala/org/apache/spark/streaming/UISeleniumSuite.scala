@@ -100,8 +100,8 @@ class UISeleniumSuite
         // Check stat table
         val statTableHeaders = findAll(cssSelector("#stat-table th")).map(_.text).toSeq
         statTableHeaders.exists(
-          _.matches("Timelines \\(Last \\d+ batches, \\d+ active, \\d+ completed\\)")) should be
-          (true)
+          _.matches("Timelines \\(Last \\d+ batches, \\d+ active, \\d+ completed\\)")
+        ) should be (true)
         statTableHeaders should contain ("Histograms")
 
         val statTableCells = findAll(cssSelector("#stat-table td")).map(_.text).toSeq
@@ -121,7 +121,7 @@ class UISeleniumSuite
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
-            "Total Delay (?)")
+            "Total Delay (?)", "Output Ops: Succeeded/Total")
         }
 
         val batchLinks =
@@ -138,7 +138,7 @@ class UISeleniumSuite
         summaryText should contain ("Total delay:")
 
         findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
-          List("Output Op Id", "Description", "Duration", "Job Id", "Duration",
+          List("Output Op Id", "Description", "Duration", "Status", "Job Id", "Duration",
             "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total", "Error")
         }
 

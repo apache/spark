@@ -95,6 +95,25 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(md.getDependencies.length === 2)
   }
 
+  test("excludes works correctly") {
+    val md = SparkSubmitUtils.getModuleDescriptor
+    val excludes = Seq("a:b", "c:d")
+    excludes.foreach { e =>
+      md.addExcludeRule(SparkSubmitUtils.createExclusion(e + ":*", new IvySettings, "default"))
+    }
+    val rules = md.getAllExcludeRules
+    assert(rules.length === 2)
+    val rule1 = rules(0).getId.getModuleId
+    assert(rule1.getOrganisation === "a")
+    assert(rule1.getName === "b")
+    val rule2 = rules(1).getId.getModuleId
+    assert(rule2.getOrganisation === "c")
+    assert(rule2.getName === "d")
+    intercept[IllegalArgumentException] {
+      SparkSubmitUtils.createExclusion("e:f:g:h", new IvySettings, "default")
+    }
+  }
+
   test("ivy path works correctly") {
     val md = SparkSubmitUtils.getModuleDescriptor
     val artifacts = for (i <- 0 until 3) yield new MDArtifact(md, s"jar-$i", "jar", "jar")
@@ -166,6 +185,17 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       val files = SparkSubmitUtils.resolveMavenCoordinates(coordinates + "," + main.toString,
         Some(repo), None, isTest = true)
       assert(files.indexOf(main.artifactId) >= 0, "Did not return artifact")
+    }
+  }
+
+  test("exclude dependencies end to end") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = "my.great.dep:mydep:0.5"
+    IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
+      val files = SparkSubmitUtils.resolveMavenCoordinates(main.toString,
+        Some(repo), None, Seq("my.great.dep:mydep"), isTest = true)
+      assert(files.indexOf(main.artifactId) >= 0, "Did not return artifact")
+      assert(files.indexOf("my.great.dep") < 0, "Returned excluded artifact")
     }
   }
 }

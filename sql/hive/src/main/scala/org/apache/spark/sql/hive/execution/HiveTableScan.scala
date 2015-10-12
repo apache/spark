@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
@@ -98,7 +98,7 @@ case class HiveTableScan(
       .asInstanceOf[StructObjectInspector]
 
     val columnTypeNames = structOI
-      .getAllStructFieldRefs
+      .getAllStructFieldRefs.asScala
       .map(_.getFieldObjectInspector)
       .map(TypeInfoUtils.getTypeInfoFromObjectInspector(_).getTypeName)
       .mkString(",")
@@ -118,9 +118,8 @@ case class HiveTableScan(
       case None => partitions
       case Some(shouldKeep) => partitions.filter { part =>
         val dataTypes = relation.partitionKeys.map(_.dataType)
-        val castedValues = for ((value, dataType) <- part.getValues.zip(dataTypes)) yield {
-          castFromString(value, dataType)
-        }
+        val castedValues = part.getValues.asScala.zip(dataTypes)
+          .map { case (value, dataType) => castFromString(value, dataType) }
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.

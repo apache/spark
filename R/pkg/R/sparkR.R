@@ -22,7 +22,8 @@
 connExists <- function(env) {
   tryCatch({
     exists(".sparkRCon", envir = env) && isOpen(env[[".sparkRCon"]])
-  }, error = function(err) {
+  },
+  error = function(err) {
     return(FALSE)
   })
 }
@@ -153,12 +154,13 @@ sparkR.init <- function(
   .sparkREnv$backendPort <- backendPort
   tryCatch({
     connectBackend("localhost", backendPort)
-  }, error = function(err) {
+  },
+  error = function(err) {
     stop("Failed to connect JVM\n")
   })
 
   if (nchar(sparkHome) != 0) {
-    sparkHome <- normalizePath(sparkHome)
+    sparkHome <- suppressWarnings(normalizePath(sparkHome))
   }
 
   sparkEnvirMap <- new.env()
@@ -264,7 +266,8 @@ sparkRHive.init <- function(jsc = NULL) {
   ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.HiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     stop("Spark SQL is not built with Hive support")
   })
 

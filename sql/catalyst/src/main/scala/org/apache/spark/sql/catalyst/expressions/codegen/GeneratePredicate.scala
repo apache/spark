@@ -48,15 +48,17 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final $exprType[] expressions;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
+
         public SpecificPredicate($exprType[] expr) {
           expressions = expr;
           ${initMutableStates(ctx)}
         }
 
         @Override
-        public boolean eval(InternalRow i) {
+        public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
-          return !${eval.isNull} && ${eval.primitive};
+          return !${eval.isNull} && ${eval.value};
         }
       }"""
 

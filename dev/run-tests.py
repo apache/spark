@@ -21,6 +21,7 @@ from __future__ import print_function
 import itertools
 from optparse import OptionParser
 import os
+import random
 import re
 import sys
 import subprocess
@@ -117,6 +118,14 @@ def determine_modules_to_test(changed_modules):
     return modules_to_test.union(set(changed_modules))
 
 
+def determine_tags_to_exclude(changed_modules):
+    tags = []
+    for m in modules.all_modules:
+        if m not in changed_modules:
+            tags += m.test_tags
+    return tags
+
+
 # -------------------------------------------------------------------------------------------------
 # Functions for working with subprocesses and shell tools
 # -------------------------------------------------------------------------------------------------
@@ -209,6 +218,18 @@ def run_python_style_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
 
 
+def run_sparkr_style_checks():
+    set_title_and_block("Running R style checks", "BLOCK_R_STYLE")
+
+    if which("R"):
+        # R style check should be executed after `install-dev.sh`.
+        # Since warnings about `no visible global function definition` appear
+        # without the installation. SEE ALSO: SPARK-9121.
+        run_cmd([os.path.join(SPARK_HOME, "dev", "lint-r")])
+    else:
+        print("Ignoring SparkR style check as R was not found in PATH")
+
+
 def build_spark_documentation():
     set_title_and_block("Building Spark Documentation", "BLOCK_DOCUMENTATION")
     os.environ["PRODUCTION"] = "1 jekyll build"
@@ -227,11 +248,32 @@ def build_spark_documentation():
     os.chdir(SPARK_HOME)
 
 
+def get_zinc_port():
+    """
+    Get a randomized port on which to start Zinc
+    """
+    return random.randrange(3030, 4030)
+
+
+def kill_zinc_on_port(zinc_port):
+    """
+    Kill the Zinc process running on the given port, if one exists.
+    """
+    cmd = ("/usr/sbin/lsof -P |grep %s | grep LISTEN "
+           "| awk '{ print $2; }' | xargs kill") % zinc_port
+    subprocess.check_call(cmd, shell=True)
+
+
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    run_cmd([os.path.join(SPARK_HOME, "build", "mvn")] + mvn_args)
+    zinc_port = get_zinc_port()
+    os.environ["ZINC_PORT"] = "%s" % zinc_port
+    zinc_flag = "-DzincPort=%s" % zinc_port
+    flags = [os.path.join(SPARK_HOME, "build", "mvn"), "--force", zinc_flag]
+    run_cmd(flags + mvn_args)
+    kill_zinc_on_port(zinc_port)
 
 
 def exec_sbt(sbt_args=()):
@@ -273,6 +315,7 @@ def get_hadoop_profiles(hadoop_version):
         "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
+        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -289,7 +332,7 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: ",
+    print("[info] Building Spark (w/Hive 1.2.1) using Maven with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
@@ -301,17 +344,20 @@ def build_spark_sbt(hadoop_version):
     sbt_goals = ["package",
                  "assembly/assembly",
                  "streaming-kafka-assembly/assembly",
-                 "streaming-flume-assembly/assembly"]
+                 "streaming-flume-assembly/assembly",
+                 "streaming-mqtt-assembly/assembly",
+                 "streaming-mqtt/test:assembly",
+                 "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: ",
+    print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
 
 def build_apache_spark(build_tool, hadoop_version):
-    """Will build Spark against Hive v0.13.1 given the passed in build tool (either `sbt` or
+    """Will build Spark against Hive v1.2.1 given the passed in build tool (either `sbt` or
     `maven`). Defaults to using `sbt`."""
 
     set_title_and_block("Building Spark", "BLOCK_BUILD")
@@ -331,6 +377,7 @@ def detect_binary_inop_with_mima():
 
 def run_scala_tests_maven(test_profiles):
     mvn_test_goals = ["test", "--fail-at-end"]
+
     profiles_and_goals = test_profiles + mvn_test_goals
 
     print("[info] Running Spark tests using Maven with these arguments: ",
@@ -354,7 +401,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     exec_sbt(profiles_and_goals)
 
 
-def run_scala_tests(build_tool, hadoop_version, test_modules):
+def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
     """Function to properly execute all tests passed in as a set from the
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
@@ -363,6 +410,10 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 
     test_profiles = get_hadoop_profiles(hadoop_version) + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
+
+    if excluded_tags:
+        test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
+
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
     else:
@@ -383,7 +434,6 @@ def run_sparkr_tests():
     set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
 
     if which("R"):
-        run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
         run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
     else:
         print("Ignoring SparkR tests as R was not found in PATH")
@@ -434,6 +484,12 @@ def main():
     if java_version.minor < 8:
         print("[warn] Java 8 tests will not run because JDK version is < 1.8.")
 
+    # install SparkR
+    if which("R"):
+        run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
+    else:
+        print("Can't install SparkR as R is was not found in PATH")
+
     if os.environ.get("AMPLAB_JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
@@ -457,8 +513,10 @@ def main():
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
+        excluded_tags = determine_tags_to_exclude(changed_modules)
     if not changed_modules:
         changed_modules = [modules.root]
+        excluded_tags = []
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
 
@@ -481,6 +539,8 @@ def main():
         run_scala_style_checks()
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
+    if not changed_files or any(f.endswith(".R") for f in changed_files):
+        run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
@@ -491,10 +551,12 @@ def main():
     build_apache_spark(build_tool, hadoop_version)
 
     # backwards compatibility checks
-    detect_binary_inop_with_mima()
+    if build_tool == "sbt":
+        # Note: compatiblity tests only supported in sbt for now
+        detect_binary_inop_with_mima()
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, test_modules)
+    run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:

@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.Future
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
@@ -148,10 +149,30 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 
   /**
+   * Send ExecutorRegistered to the event loop to add a new executor. Only for test.
+   *
+   * @return if HeartbeatReceiver is stopped, return None. Otherwise, return a Some(Future) that
+   *         indicate if this operation is successful.
+   */
+  def addExecutor(executorId: String): Option[Future[Boolean]] = {
+    Option(self).map(_.ask[Boolean](ExecutorRegistered(executorId)))
+  }
+
+  /**
    * If the heartbeat receiver is not stopped, notify it of executor registrations.
    */
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
-    Option(self).foreach(_.ask[Boolean](ExecutorRegistered(executorAdded.executorId)))
+    addExecutor(executorAdded.executorId)
+  }
+
+  /**
+   * Send ExecutorRemoved to the event loop to remove a executor. Only for test.
+   *
+   * @return if HeartbeatReceiver is stopped, return None. Otherwise, return a Some(Future) that
+   *         indicate if this operation is successful.
+   */
+  def removeExecutor(executorId: String): Option[Future[Boolean]] = {
+    Option(self).map(_.ask[Boolean](ExecutorRemoved(executorId)))
   }
 
   /**
@@ -165,7 +186,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * and expire it with loud error messages.
    */
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-    Option(self).foreach(_.ask[Boolean](ExecutorRemoved(executorRemoved.executorId)))
+    removeExecutor(executorRemoved.executorId)
   }
 
   private def expireDeadHosts(): Unit = {
@@ -177,16 +198,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
           s"${now - lastSeenMs} ms exceeds timeout $executorTimeoutMs ms")
         scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
           s"timed out after ${now - lastSeenMs} ms"))
-        if (sc.supportDynamicAllocation) {
           // Asynchronously kill the executor to avoid blocking the current thread
-          killExecutorThread.submit(new Runnable {
-            override def run(): Unit = Utils.tryLogNonFatalError {
-              // Note: we want to get an executor back after expiring this one,
-              // so do not simply call `sc.killExecutor` here (SPARK-8119)
-              sc.killAndReplaceExecutor(executorId)
-            }
-          })
-        }
+        killExecutorThread.submit(new Runnable {
+          override def run(): Unit = Utils.tryLogNonFatalError {
+            // Note: we want to get an executor back after expiring this one,
+            // so do not simply call `sc.killExecutor` here (SPARK-8119)
+            sc.killAndReplaceExecutor(executorId)
+          }
+        })
         executorLastSeen.remove(executorId)
       }
     }

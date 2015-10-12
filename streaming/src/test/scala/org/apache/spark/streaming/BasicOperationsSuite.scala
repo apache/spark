@@ -81,39 +81,41 @@ class BasicOperationsSuite extends TestSuiteBase {
   test("repartition (more partitions)") {
     val input = Seq(1 to 100, 101 to 200, 201 to 300)
     val operation = (r: DStream[Int]) => r.repartition(5)
-    val ssc = setupStreams(input, operation, 2)
-    val output = runStreamsWithPartitions(ssc, 3, 3)
-    assert(output.size === 3)
-    val first = output(0)
-    val second = output(1)
-    val third = output(2)
+    withStreamingContext(setupStreams(input, operation, 2)) { ssc =>
+      val output = runStreamsWithPartitions(ssc, 3, 3)
+      assert(output.size === 3)
+      val first = output(0)
+      val second = output(1)
+      val third = output(2)
 
-    assert(first.size === 5)
-    assert(second.size === 5)
-    assert(third.size === 5)
+      assert(first.size === 5)
+      assert(second.size === 5)
+      assert(third.size === 5)
 
-    assert(first.flatten.toSet.equals((1 to 100).toSet) )
-    assert(second.flatten.toSet.equals((101 to 200).toSet))
-    assert(third.flatten.toSet.equals((201 to 300).toSet))
+      assert(first.flatten.toSet.equals((1 to 100).toSet))
+      assert(second.flatten.toSet.equals((101 to 200).toSet))
+      assert(third.flatten.toSet.equals((201 to 300).toSet))
+    }
   }
 
   test("repartition (fewer partitions)") {
     val input = Seq(1 to 100, 101 to 200, 201 to 300)
     val operation = (r: DStream[Int]) => r.repartition(2)
-    val ssc = setupStreams(input, operation, 5)
-    val output = runStreamsWithPartitions(ssc, 3, 3)
-    assert(output.size === 3)
-    val first = output(0)
-    val second = output(1)
-    val third = output(2)
+    withStreamingContext(setupStreams(input, operation, 5)) { ssc =>
+      val output = runStreamsWithPartitions(ssc, 3, 3)
+      assert(output.size === 3)
+      val first = output(0)
+      val second = output(1)
+      val third = output(2)
 
-    assert(first.size === 2)
-    assert(second.size === 2)
-    assert(third.size === 2)
+      assert(first.size === 2)
+      assert(second.size === 2)
+      assert(third.size === 2)
 
-    assert(first.flatten.toSet.equals((1 to 100).toSet))
-    assert(second.flatten.toSet.equals( (101 to 200).toSet))
-    assert(third.flatten.toSet.equals((201 to 300).toSet))
+      assert(first.flatten.toSet.equals((1 to 100).toSet))
+      assert(second.flatten.toSet.equals((101 to 200).toSet))
+      assert(third.flatten.toSet.equals((201 to 300).toSet))
+    }
   }
 
   test("groupByKey") {
@@ -207,6 +209,19 @@ class BasicOperationsSuite extends TestSuiteBase {
       (r: DStream[Int]) => r.transform(rdd => rdd.map(_.toString)),   // RDD.map in transform
       input.map(_.map(_.toString))
     )
+  }
+
+  test("transform with NULL") {
+    val input = Seq(1 to 4)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (r: DStream[Int]) => r.transform(rdd => null.asInstanceOf[RDD[Int]]),
+        Seq(Seq()),
+        1,
+        false
+      )
+    }
   }
 
   test("transformWith") {

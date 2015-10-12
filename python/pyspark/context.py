@@ -255,7 +255,7 @@ class SparkContext(object):
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise Exception(
             "It appears that you are attempting to reference SparkContext from a broadcast "
-            "variable, action, or transforamtion. SparkContext can only be used on the driver, "
+            "variable, action, or transformation. SparkContext can only be used on the driver, "
             "not in code that it run on workers. For more information, see SPARK-5063."
         )
 
@@ -302,10 +302,10 @@ class SparkContext(object):
         """
         A unique identifier for the Spark application.
         Its format depends on the scheduler implementation.
-        (i.e.
-            in case of local spark app something like 'local-1433865536131'
-            in case of YARN something like 'application_1433865536131_34483'
-        )
+
+        * in case of local spark app something like 'local-1433865536131'
+        * in case of YARN something like 'application_1433865536131_34483'
+
         >>> sc.applicationId  # doctest: +ELLIPSIS
         u'local-...'
         """

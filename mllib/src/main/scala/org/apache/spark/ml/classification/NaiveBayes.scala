@@ -18,11 +18,11 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
-import org.apache.spark.ml.param.{ParamMap, ParamValidators, Param, DoubleParam}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
-import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesModel}
+import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes, NaiveBayesModel => OldNaiveBayesModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
@@ -38,11 +38,11 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
    * (default = 1.0).
    * @group param
    */
-  final val lambda: DoubleParam = new DoubleParam(this, "lambda", "The smoothing parameter.",
+  final val smoothing: DoubleParam = new DoubleParam(this, "smoothing", "The smoothing parameter.",
     ParamValidators.gtEq(0))
 
   /** @group getParam */
-  final def getLambda: Double = $(lambda)
+  final def getSmoothing: Double = $(smoothing)
 
   /**
    * The model type which is a string (case-sensitive).
@@ -59,6 +59,7 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
 }
 
 /**
+ * :: Experimental ::
  * Naive Bayes Classifiers.
  * It supports both Multinomial NB
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
@@ -68,8 +69,9 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html]]).
  * The input feature values must be nonnegative.
  */
+@Experimental
 class NaiveBayes(override val uid: String)
-  extends Predictor[Vector, NaiveBayes, NaiveBayesModel]
+  extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams {
 
   def this() = this(Identifiable.randomUID("nb"))
@@ -79,20 +81,21 @@ class NaiveBayes(override val uid: String)
    * Default is 1.0.
    * @group setParam
    */
-  def setLambda(value: Double): this.type = set(lambda, value)
-  setDefault(lambda -> 1.0)
+  def setSmoothing(value: Double): this.type = set(smoothing, value)
+  setDefault(smoothing -> 1.0)
 
   /**
    * Set the model type using a string (case-sensitive).
    * Supported options: "multinomial" and "bernoulli".
    * Default is "multinomial"
+   * @group setParam
    */
   def setModelType(value: String): this.type = set(modelType, value)
   setDefault(modelType -> OldNaiveBayes.Multinomial)
 
   override protected def train(dataset: DataFrame): NaiveBayesModel = {
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
-    val oldModel = OldNaiveBayes.train(oldDataset, $(lambda), $(modelType))
+    val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
     NaiveBayesModel.fromOld(oldModel, this)
   }
 
@@ -100,13 +103,18 @@ class NaiveBayes(override val uid: String)
 }
 
 /**
+ * :: Experimental ::
  * Model produced by [[NaiveBayes]]
+ * @param pi log of class priors, whose dimension is C (number of classes)
+ * @param theta log of class conditional probabilities, whose dimension is C (number of classes)
+ *              by D (number of features)
  */
+@Experimental
 class NaiveBayesModel private[ml] (
     override val uid: String,
     val pi: Vector,
     val theta: Matrix)
-  extends PredictionModel[Vector, NaiveBayesModel] with NaiveBayesParams {
+  extends ProbabilisticClassificationModel[Vector, NaiveBayesModel] with NaiveBayesParams {
 
   import OldNaiveBayes.{Bernoulli, Multinomial}
 
@@ -129,26 +137,61 @@ class NaiveBayesModel private[ml] (
       throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
 
-  override protected def predict(features: Vector): Double = {
+  override val numFeatures: Int = theta.numCols
+
+  override val numClasses: Int = pi.size
+
+  private def multinomialCalculation(features: Vector) = {
+    val prob = theta.multiply(features)
+    BLAS.axpy(1.0, pi, prob)
+    prob
+  }
+
+  private def bernoulliCalculation(features: Vector) = {
+    features.foreachActive((_, value) =>
+      if (value != 0.0 && value != 1.0) {
+        throw new SparkException(
+          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
+      }
+    )
+    val prob = thetaMinusNegTheta.get.multiply(features)
+    BLAS.axpy(1.0, pi, prob)
+    BLAS.axpy(1.0, negThetaSum.get, prob)
+    prob
+  }
+
+  override protected def predictRaw(features: Vector): Vector = {
     $(modelType) match {
       case Multinomial =>
-        val prob = theta.multiply(features)
-        BLAS.axpy(1.0, pi, prob)
-        prob.argmax
+        multinomialCalculation(features)
       case Bernoulli =>
-        features.foreachActive{ (index, value) =>
-          if (value != 0.0 && value != 1.0) {
-            throw new SparkException(
-              s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features")
-          }
-        }
-        val prob = thetaMinusNegTheta.get.multiply(features)
-        BLAS.axpy(1.0, pi, prob)
-        BLAS.axpy(1.0, negThetaSum.get, prob)
-        prob.argmax
+        bernoulliCalculation(features)
       case _ =>
         // This should never happen.
         throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+    }
+  }
+
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    rawPrediction match {
+      case dv: DenseVector =>
+        var i = 0
+        val size = dv.size
+        val maxLog = dv.values.max
+        while (i < size) {
+          dv.values(i) = math.exp(dv.values(i) - maxLog)
+          i += 1
+        }
+        val probSum = dv.values.sum
+        i = 0
+        while (i < size) {
+          dv.values(i) = dv.values(i) / probSum
+          i += 1
+        }
+        dv
+      case sv: SparseVector =>
+        throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
+          " raw2probabilityInPlace encountered SparseVector")
     }
   }
 
@@ -157,7 +200,7 @@ class NaiveBayesModel private[ml] (
   }
 
   override def toString: String = {
-    s"NaiveBayesModel with ${pi.size} classes"
+    s"NaiveBayesModel (uid=$uid) with ${pi.size} classes"
   }
 
 }

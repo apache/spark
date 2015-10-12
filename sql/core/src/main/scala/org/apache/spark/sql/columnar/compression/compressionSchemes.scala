@@ -270,20 +270,13 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
   class Decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
     extends compression.Decoder[T] {
 
-    private val dictionary = {
-      // TODO Can we clean up this mess? Maybe move this to `DataType`?
-      implicit val classTag = {
-        val mirror = runtimeMirror(Utils.getSparkClassLoader)
-        ClassTag[T#InternalType](mirror.runtimeClass(columnType.scalaTag.tpe))
-      }
-
-      Array.fill(buffer.getInt()) {
-        columnType.extract(buffer)
-      }
+    private val dictionary: Array[Any] = {
+      val elementNum = buffer.getInt()
+      Array.fill[Any](elementNum)(columnType.extract(buffer).asInstanceOf[Any])
     }
 
     override def next(row: MutableRow, ordinal: Int): Unit = {
-      columnType.setField(row, ordinal, dictionary(buffer.getShort()))
+      columnType.setField(row, ordinal, dictionary(buffer.getShort()).asInstanceOf[T#InternalType])
     }
 
     override def hasNext: Boolean = buffer.hasRemaining

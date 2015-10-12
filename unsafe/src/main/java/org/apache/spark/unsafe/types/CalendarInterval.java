@@ -50,6 +50,14 @@ public final class CalendarInterval implements Serializable {
     unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
     unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"));
 
+  private static Pattern yearMonthPattern =
+    Pattern.compile("^(?:['|\"])?([+|-])?(\\d+)-(\\d+)(?:['|\"])?$");
+
+  private static Pattern dayTimePattern =
+    Pattern.compile("^(?:['|\"])?([+|-])?(\\d+) (\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
+
+  private static Pattern quoteTrimPattern = Pattern.compile("^(?:['|\"])?(.*?)(?:['|\"])?$");
+
   private static long toLong(String s) {
     if (s == null) {
       return 0;
@@ -76,6 +84,154 @@ public final class CalendarInterval implements Serializable {
       microseconds += toLong(m.group(8)) * MICROS_PER_MILLI;
       microseconds += toLong(m.group(9));
       return new CalendarInterval((int) months, microseconds);
+    }
+  }
+
+  public static long toLongWithRange(String fieldName,
+      String s, long minValue, long maxValue) throws IllegalArgumentException {
+    long result = 0;
+    if (s != null) {
+      result = Long.valueOf(s);
+      if (result < minValue || result > maxValue) {
+        throw new IllegalArgumentException(String.format("%s %d outside range [%d, %d]",
+          fieldName, result, minValue, maxValue));
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Parse YearMonth string in form: [-]YYYY-MM
+   *
+   * adapted from HiveIntervalYearMonth.valueOf
+   */
+  public static CalendarInterval fromYearMonthString(String s) throws IllegalArgumentException {
+    CalendarInterval result = null;
+    if (s == null) {
+      throw new IllegalArgumentException("Interval year-month string was null");
+    }
+    s = s.trim();
+    Matcher m = yearMonthPattern.matcher(s);
+    if (!m.matches()) {
+      throw new IllegalArgumentException(
+        "Interval string does not match year-month format of 'y-m': " + s);
+    } else {
+      try {
+        int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
+        int years = (int) toLongWithRange("year", m.group(2), 0, Integer.MAX_VALUE);
+        int months = (int) toLongWithRange("month", m.group(3), 0, 11);
+        result = new CalendarInterval(sign * (years * 12 + months), 0);
+      } catch (Exception e) {
+        throw new IllegalArgumentException(
+          "Error parsing interval year-month string: " + e.getMessage(), e);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn
+   *
+   * adapted from HiveIntervalDayTime.valueOf
+   */
+  public static CalendarInterval fromDayTimeString(String s) throws IllegalArgumentException {
+    CalendarInterval result = null;
+    if (s == null) {
+      throw new IllegalArgumentException("Interval day-time string was null");
+    }
+    s = s.trim();
+    Matcher m = dayTimePattern.matcher(s);
+    if (!m.matches()) {
+      throw new IllegalArgumentException(
+        "Interval string does not match day-time format of 'd h:m:s.n': " + s);
+    } else {
+      try {
+        int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
+        long days = toLongWithRange("day", m.group(2), 0, Integer.MAX_VALUE);
+        long hours = toLongWithRange("hour", m.group(3), 0, 23);
+        long minutes = toLongWithRange("minute", m.group(4), 0, 59);
+        long seconds = toLongWithRange("second", m.group(5), 0, 59);
+        // Hive allow nanosecond precision interval
+        long nanos = toLongWithRange("nanosecond", m.group(7), 0L, 999999999L);
+        result = new CalendarInterval(0, sign * (
+          days * MICROS_PER_DAY + hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
+          seconds * MICROS_PER_SECOND + nanos / 1000L));
+      } catch (Exception e) {
+        throw new IllegalArgumentException(
+          "Error parsing interval day-time string: " + e.getMessage(), e);
+      }
+    }
+    return result;
+  }
+
+  public static CalendarInterval fromSingleUnitString(String unit, String s)
+      throws IllegalArgumentException {
+
+    CalendarInterval result = null;
+    if (s == null) {
+      throw new IllegalArgumentException(String.format("Interval %s string was null", unit));
+    }
+    s = s.trim();
+    Matcher m = quoteTrimPattern.matcher(s);
+    if (!m.matches()) {
+      throw new IllegalArgumentException(
+        "Interval string does not match day-time format of 'd h:m:s.n': " + s);
+    } else {
+      try {
+        if (unit.equals("year")) {
+          int year = (int) toLongWithRange("year", m.group(1),
+            Integer.MIN_VALUE / 12, Integer.MAX_VALUE / 12);
+          result = new CalendarInterval(year * 12, 0L);
+
+        } else if (unit.equals("month")) {
+          int month = (int) toLongWithRange("month", m.group(1),
+            Integer.MIN_VALUE, Integer.MAX_VALUE);
+          result = new CalendarInterval(month, 0L);
+
+        } else if (unit.equals("day")) {
+          long day = toLongWithRange("day", m.group(1),
+            Long.MIN_VALUE / MICROS_PER_DAY, Long.MAX_VALUE / MICROS_PER_DAY);
+          result = new CalendarInterval(0, day * MICROS_PER_DAY);
+
+        } else if (unit.equals("hour")) {
+          long hour = toLongWithRange("hour", m.group(1),
+            Long.MIN_VALUE / MICROS_PER_HOUR, Long.MAX_VALUE / MICROS_PER_HOUR);
+          result = new CalendarInterval(0, hour * MICROS_PER_HOUR);
+
+        } else if (unit.equals("minute")) {
+          long minute = toLongWithRange("minute", m.group(1),
+            Long.MIN_VALUE / MICROS_PER_MINUTE, Long.MAX_VALUE / MICROS_PER_MINUTE);
+          result = new CalendarInterval(0, minute * MICROS_PER_MINUTE);
+
+        } else if (unit.equals("second")) {
+          long micros = parseSecondNano(m.group(1));
+          result = new CalendarInterval(0, micros);
+        }
+      } catch (Exception e) {
+        throw new IllegalArgumentException("Error parsing interval string: " + e.getMessage(), e);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Parse second_nano string in ss.nnnnnnnnn format to microseconds
+   */
+  public static long parseSecondNano(String secondNano) throws IllegalArgumentException {
+    String[] parts = secondNano.split("\\.");
+    if (parts.length == 1) {
+      return toLongWithRange("second", parts[0], Long.MIN_VALUE / MICROS_PER_SECOND,
+        Long.MAX_VALUE / MICROS_PER_SECOND) * MICROS_PER_SECOND;
+
+    } else if (parts.length == 2) {
+      long seconds = parts[0].equals("") ? 0L : toLongWithRange("second", parts[0],
+        Long.MIN_VALUE / MICROS_PER_SECOND, Long.MAX_VALUE / MICROS_PER_SECOND);
+      long nanos = toLongWithRange("nanosecond", parts[1], 0L, 999999999L);
+      return seconds * MICROS_PER_SECOND + nanos / 1000L;
+
+    } else {
+      throw new IllegalArgumentException(
+        "Interval string does not match second-nano format of ss.nnnnnnnnn");
     }
   }
 

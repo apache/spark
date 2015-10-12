@@ -32,7 +32,7 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
   }
 
   results <- if (arrSize > 0) {
-    lapply(0:(arrSize - 1),
+    lapply(0 : (arrSize - 1),
           function(index) {
             obj <- callJMethod(jList, "get", as.integer(index))
 
@@ -314,7 +314,8 @@ convertEnvsToList <- function(keys, vals) {
 
 # Utility function to capture the varargs into environment object
 varargsToEnv <- function(...) {
-  pairs <- as.list(substitute(list(...)))[-1L]
+  # Based on http://stackoverflow.com/a/3057419/4577954
+  pairs <- list(...)
   env <- new.env()
   for (name in names(pairs)) {
     env[[name]] <- pairs[[name]]
@@ -358,16 +359,6 @@ numToInt <- function(num) {
     warning(paste("Coercing", as.list(sys.call())[[2]], "to integer."))
   }
   as.integer(num)
-}
-
-# create a Seq in JVM
-toSeq <- function(...) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", list(...))
-}
-
-# create a Seq in JVM from a list
-listToSeq <- function(l) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", l)
 }
 
 # Utility function to recursively traverse the Abstract Syntax Tree (AST) of a
@@ -572,7 +563,7 @@ mergePartitions <- function(rdd, zip) {
           keys <- list()
         }
         if (lengthOfValues > 1) {
-          values <- part[(lengthOfKeys + 1) : (len - 1)]
+          values <- part[ (lengthOfKeys + 1) : (len - 1) ]
         } else {
           values <- list()
         }

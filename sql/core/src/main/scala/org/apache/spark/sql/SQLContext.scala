@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql
 
-import java.beans.Introspector
+import java.beans.{BeanInfo, Introspector}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.immutable
-import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -31,6 +30,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.errors.DialectException
@@ -41,9 +41,10 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.util.Utils
 
 /**
@@ -61,18 +62,35 @@ import org.apache.spark.util.Utils
  *
  * @since 1.0.0
  */
-class SQLContext(@transient val sparkContext: SparkContext)
-  extends org.apache.spark.Logging
-  with Serializable {
+class SQLContext private[sql](
+    @transient val sparkContext: SparkContext,
+    @transient protected[sql] val cacheManager: CacheManager)
+  extends org.apache.spark.Logging with Serializable {
 
   self =>
 
+  def this(sparkContext: SparkContext) = this(sparkContext, new CacheManager)
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
+
+  /**
+   * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
+   * registered functions, but sharing the same SparkContext and CacheManager.
+   *
+   * @since 1.6.0
+   */
+  def newSession(): SQLContext = {
+    new SQLContext(sparkContext, cacheManager)
+  }
 
   /**
    * @return Spark SQL configuration
    */
-  protected[sql] def conf = currentSession().conf
+  protected[sql] lazy val conf = new SQLConf
+
+  // `listener` should be only used in the driver
+  @transient private[sql] val listener = new SQLListener(this)
+  sparkContext.addSparkListener(listener)
+  sparkContext.ui.foreach(new SQLTab(this, _))
 
   /**
    * Set Spark SQL configuration properties.
@@ -134,13 +152,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  // TODO how to handle the temp table per user session?
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
-  // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin
+  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -184,22 +200,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
-  protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String):
+    org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
-
-  @transient
-  protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
-    override def initialValue: SQLSession = defaultSession
-  }
-
-  @transient
-  protected[sql] val defaultSession = createSession()
+  protected[sql] def executePlan(plan: LogicalPlan) =
+    new sparkexecution.QueryExecution(this, plan)
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
     classOf[DefaultParserDialect].getCanonicalName
   } else {
     conf.dialect
+  }
+
+  /**
+   * Add a jar to SQLContext
+   */
+  protected[sql] def addJar(path: String): Unit = {
+    sparkContext.addJar(path)
   }
 
   {
@@ -221,13 +238,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.setConf(properties)
     // After we have populated SQLConf, we call setConf to populate other confs in the subclass
     // (e.g. hiveconf in HiveContext).
-    properties.foreach {
+    properties.asScala.foreach {
       case (key, value) => setConf(key, value)
     }
   }
-
-  @transient
-  protected[sql] val cacheManager = new CacheManager(this)
 
   /**
    * :: Experimental ::
@@ -285,29 +299,30 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   val udf: UDFRegistration = new UDFRegistration(this)
 
-  @transient
-  val udaf: UDAFRegistration = new UDAFRegistration(this)
-
   /**
    * Returns true if the table is currently cached in-memory.
    * @group cachemgmt
    * @since 1.3.0
    */
-  def isCached(tableName: String): Boolean = cacheManager.isCached(tableName)
+  def isCached(tableName: String): Boolean = {
+    cacheManager.lookupCachedData(table(tableName)).nonEmpty
+  }
 
   /**
    * Caches the specified table in-memory.
    * @group cachemgmt
    * @since 1.3.0
    */
-  def cacheTable(tableName: String): Unit = cacheManager.cacheTable(tableName)
+  def cacheTable(tableName: String): Unit = {
+    cacheManager.cacheQuery(table(tableName), Some(tableName))
+  }
 
   /**
    * Removes the specified table from the in-memory cache.
    * @group cachemgmt
    * @since 1.3.0
    */
-  def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
+  def uncacheTable(tableName: String): Unit = cacheManager.uncacheQuery(table(tableName))
 
   /**
    * Removes all cached tables from the in-memory cache.
@@ -331,101 +346,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   @Experimental
-  object implicits extends Serializable {
-    // scalastyle:on
+  object implicits extends SQLImplicits with Serializable {
+    protected override def _sqlContext: SQLContext = self
 
     /**
      * Converts $"col name" into an [[Column]].
      * @since 1.3.0
      */
+    // This must live here to preserve binary compatibility with Spark < 1.5.
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args : _*))
+        new ColumnName(sc.s(args: _*))
       }
-    }
-
-    /**
-     * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
-     * @since 1.3.0
-     */
-    implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
-
-    /**
-     * Creates a DataFrame from an RDD of case classes or tuples.
-     * @since 1.3.0
-     */
-    implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
-      DataFrameHolder(self.createDataFrame(rdd))
-    }
-
-    /**
-     * Creates a DataFrame from a local Seq of Product.
-     * @since 1.3.0
-     */
-    implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
-    {
-      DataFrameHolder(self.createDataFrame(data))
-    }
-
-    // Do NOT add more implicit conversions. They are likely to break source compatibility by
-    // making existing implicit conversions ambiguous. In particular, RDD[Double] is dangerous
-    // because of [[DoubleRDDFunctions]].
-
-    /**
-     * Creates a single column DataFrame from an RDD[Int].
-     * @since 1.3.0
-     */
-    implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrameHolder = {
-      val dataType = IntegerType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.setInt(0, v)
-          row: InternalRow
-        }
-      }
-      DataFrameHolder(
-        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-    }
-
-    /**
-     * Creates a single column DataFrame from an RDD[Long].
-     * @since 1.3.0
-     */
-    implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrameHolder = {
-      val dataType = LongType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.setLong(0, v)
-          row: InternalRow
-        }
-      }
-      DataFrameHolder(
-        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-    }
-
-    /**
-     * Creates a single column DataFrame from an RDD[String].
-     * @since 1.3.0
-     */
-    implicit def stringRddToDataFrameHolder(data: RDD[String]): DataFrameHolder = {
-      val dataType = StringType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.update(0, UTF8String.fromString(v))
-          row: InternalRow
-        }
-      }
-      DataFrameHolder(
-        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
   }
+  // scalastyle:on
 
   /**
    * :: Experimental ::
-   * Creates a DataFrame from an RDD of case classes.
+   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    *
    * @group dataframes
    * @since 1.3.0
@@ -546,6 +485,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: DeveloperApi ::
+   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * It is important to make sure that the structure of every [[Row]] of the provided List matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @group dataframes
+   * @since 1.6.0
+   */
+  @DeveloperApi
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+    DataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+  }
+
+  /**
    * Applies a schema to an RDD of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
@@ -554,21 +507,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
-    val attributeSeq = getSchema(beanClass)
+    val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
       val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
-      val extractors =
-        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
-        (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
-      }
-      iter.map { row =>
-        new GenericInternalRow(
-          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
-        ): InternalRow
-      }
+      SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
     }
     DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
   }
@@ -584,6 +528,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd.rdd, beanClass)
   }
+
+  /**
+   * Applies a schema to an List of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   * @group dataframes
+   * @since 1.6.0
+   */
+  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
+    val attrSeq = getSchema(beanClass)
+    val className = beanClass.getName
+    val beanInfo = Introspector.getBeanInfo(beanClass)
+    val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
+    DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
+  }
+
 
   /**
    * :: Experimental ::
@@ -642,7 +603,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, options.toMap)
+    createExternalTable(tableName, source, options.asScala.toMap)
   }
 
   /**
@@ -659,9 +620,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
-        tableName,
+        tableIdent,
         userSpecifiedSchema = None,
         source,
         temporary = false,
@@ -669,7 +631,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         allowExisting = false,
         managedIfNoPath = false)
     executePlan(cmd).toRdd
-    table(tableName)
+    table(tableIdent)
   }
 
   /**
@@ -686,7 +648,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, schema, options.toMap)
+    createExternalTable(tableName, source, schema, options.asScala.toMap)
   }
 
   /**
@@ -704,9 +666,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
-        tableName,
+        tableIdent,
         userSpecifiedSchema = Some(schema),
         source,
         temporary = false,
@@ -714,7 +677,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         allowExisting = false,
         managedIfNoPath = false)
     executePlan(cmd).toRdd
-    table(tableName)
+    table(tableIdent)
   }
 
   /**
@@ -799,7 +762,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    table(SqlParser.parseTableIdentifier(tableName))
+  }
+
+  private def table(tableIdent: TableIdentifier): DataFrame = {
     DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
   }
 
@@ -851,77 +817,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }.toArray
   }
 
-  protected[sql] class SparkPlanner extends SparkStrategies {
-    val sparkContext: SparkContext = self.sparkContext
-
-    val sqlContext: SQLContext = self
-
-    def codegenEnabled: Boolean = self.conf.codegenEnabled
-
-    def unsafeEnabled: Boolean = self.conf.unsafeEnabled
-
-    def numPartitions: Int = self.conf.numShufflePartitions
-
-    def strategies: Seq[Strategy] =
-      experimental.extraStrategies ++ (
-      DataSourceStrategy ::
-      DDLStrategy ::
-      TakeOrderedAndProject ::
-      HashAggregation ::
-      Aggregation ::
-      LeftSemiJoin ::
-      HashJoin ::
-      InMemoryScans ::
-      BasicOperators ::
-      CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil)
-
-    /**
-     * Used to build table scan operators where complex projection and filtering are done using
-     * separate physical operators.  This function returns the given scan operator with Project and
-     * Filter nodes added only when needed.  For example, a Project operator is only used when the
-     * final desired output requires complex expressions to be evaluated or when columns can be
-     * further eliminated out after filtering has been done.
-     *
-     * The `prunePushedDownFilters` parameter is used to remove those filters that can be optimized
-     * away by the filter pushdown optimization.
-     *
-     * The required attributes for both filtering and expression evaluation are passed to the
-     * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
-     */
-    def pruneFilterProject(
-        projectList: Seq[NamedExpression],
-        filterPredicates: Seq[Expression],
-        prunePushedDownFilters: Seq[Expression] => Seq[Expression],
-        scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
-
-      val projectSet = AttributeSet(projectList.flatMap(_.references))
-      val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-      val filterCondition =
-        prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
-
-      // Right now we still use a projection even if the only evaluation is applying an alias
-      // to a column.  Since this is a no-op, it could be avoided. However, using this
-      // optimization with the current implementation would change the output schema.
-      // TODO: Decouple final output schema from expression evaluation so this copy can be
-      // avoided safely.
-
-      if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
-          filterSet.subsetOf(projectSet)) {
-        // When it is possible to just use column pruning to get the right projection and
-        // when the columns of this projection are enough to evaluate all filter conditions,
-        // just do a scan followed by a filter, with no extra project.
-        val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
-        filterCondition.map(Filter(_, scan)).getOrElse(scan)
-      } else {
-        val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-        Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
-      }
-    }
-  }
+  @deprecated("use org.apache.spark.sql.SparkPlanner", "1.6.0")
+  protected[sql] class SparkPlanner extends sparkexecution.SparkPlanner(this)
 
   @transient
-  protected[sql] val planner = new SparkPlanner
+  protected[sql] val planner: sparkexecution.SparkPlanner = new sparkexecution.SparkPlanner(this)
 
   @transient
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
@@ -938,93 +838,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     )
   }
 
-  protected[sql] def openSession(): SQLSession = {
-    detachSession()
-    val session = createSession()
-    tlSession.set(session)
-
-    session
-  }
-
-  protected[sql] def currentSession(): SQLSession = {
-    tlSession.get()
-  }
-
-  protected[sql] def createSession(): SQLSession = {
-    new this.SQLSession()
-  }
-
-  protected[sql] def detachSession(): Unit = {
-    tlSession.remove()
-  }
-
-  protected[sql] def setSession(session: SQLSession): Unit = {
-    detachSession()
-    tlSession.set(session)
-  }
-
-  protected[sql] class SQLSession {
-    // Note that this is a lazy val so we can override the default value in subclasses.
-    protected[sql] lazy val conf: SQLConf = new SQLConf
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * The primary workflow for executing relational queries using Spark.  Designed to allow easy
-   * access to the intermediate phases of query execution for developers.
-   */
-  @DeveloperApi
-  protected[sql] class QueryExecution(val logical: LogicalPlan) {
-    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
-
-    lazy val analyzed: LogicalPlan = analyzer.execute(logical)
-    lazy val withCachedData: LogicalPlan = {
-      assertAnalyzed()
-      cacheManager.useCachedData(analyzed)
-    }
-    lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
-
-    // TODO: Don't just pick the first one...
-    lazy val sparkPlan: SparkPlan = {
-      SparkPlan.currentContext.set(self)
-      planner.plan(optimizedPlan).next()
-    }
-    // executedPlan should not be used to initialize any SparkPlan. It should be
-    // only used for execution.
-    lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
-
-    /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
-
-    protected def stringOrError[A](f: => A): String =
-      try f.toString catch { case e: Throwable => e.toString }
-
-    def simpleString: String =
-      s"""== Physical Plan ==
-         |${stringOrError(executedPlan)}
-      """.stripMargin.trim
-
-    override def toString: String = {
-      def output =
-        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
-
-      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
-      // however, the `toRdd` will cause the real execution, which is not what we want.
-      // We need to think about how to avoid the side effect.
-      s"""== Parsed Logical Plan ==
-         |${stringOrError(logical)}
-         |== Analyzed Logical Plan ==
-         |${stringOrError(output)}
-         |${stringOrError(analyzed)}
-         |== Optimized Logical Plan ==
-         |${stringOrError(optimizedPlan)}
-         |== Physical Plan ==
-         |${stringOrError(executedPlan)}
-         |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
-         |== RDD ==
-      """.stripMargin.trim
-    }
-  }
+  @deprecated("use org.apache.spark.sql.QueryExecution", "1.6.0")
+  protected[sql] class QueryExecution(logical: LogicalPlan)
+    extends sparkexecution.QueryExecution(this, logical)
 
   /**
    * Parses the data type in our internal string representation. The data type string should
@@ -1358,45 +1174,108 @@ class SQLContext(@transient val sparkContext: SparkContext)
   // Register a succesfully instantiatd context to the singleton. This should be at the end of
   // the class definition so that the singleton is updated only if there is no exception in the
   // construction of the instance.
-  SQLContext.setLastInstantiatedContext(self)
+  sparkContext.addSparkListener(new SparkListener {
+    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+      SQLContext.clearInstantiatedContext(self)
+    }
+  })
+
+  SQLContext.setInstantiatedContext(self)
 }
 
 /**
  * This SQLContext object contains utility functions to create a singleton SQLContext instance,
- * or to get the last created SQLContext instance.
+ * or to get the created SQLContext instance.
+ *
+ * It also provides utility functions to support preference for threads in multiple sessions
+ * scenario, setActive could set a SQLContext for current thread, which will be returned by
+ * getOrCreate instead of the global one.
  */
 object SQLContext {
 
-  private val INSTANTIATION_LOCK = new Object()
+  /**
+   * The active SQLContext for the current thread.
+   */
+  private val activeContext: InheritableThreadLocal[SQLContext] =
+    new InheritableThreadLocal[SQLContext]
 
   /**
-   * Reference to the last created SQLContext.
+   * Reference to the created SQLContext.
    */
-  @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
+  @transient private val instantiatedContext = new AtomicReference[SQLContext]()
 
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
+   *
    * This function can be used to create a singleton SQLContext object that can be shared across
    * the JVM.
+   *
+   * If there is an active SQLContext for current thread, it will be returned instead of the global
+   * one.
+   *
+   * @since 1.5.0
    */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
-    INSTANTIATION_LOCK.synchronized {
-      if (lastInstantiatedContext.get() == null) {
+    val ctx = activeContext.get()
+    if (ctx != null) {
+      return ctx
+    }
+
+    synchronized {
+      val ctx = instantiatedContext.get()
+      if (ctx == null) {
         new SQLContext(sparkContext)
+      } else {
+        ctx
       }
     }
-    lastInstantiatedContext.get()
   }
 
-  private[sql] def clearLastInstantiatedContext(): Unit = {
-    INSTANTIATION_LOCK.synchronized {
-      lastInstantiatedContext.set(null)
+  private[sql] def clearInstantiatedContext(sqlContext: SQLContext): Unit = {
+    instantiatedContext.compareAndSet(sqlContext, null)
+  }
+
+  private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
+    instantiatedContext.compareAndSet(null, sqlContext)
+  }
+
+  /**
+   * Changes the SQLContext that will be returned in this thread and its children when
+   * SQLContext.getOrCreate() is called. This can be used to ensure that a given thread receives
+   * a SQLContext with an isolated session, instead of the global (first created) context.
+   *
+   * @since 1.6.0
+   */
+  def setActive(sqlContext: SQLContext): Unit = {
+    activeContext.set(sqlContext)
+  }
+
+  /**
+   * Clears the active SQLContext for current thread. Subsequent calls to getOrCreate will
+   * return the first created context instead of a thread-local override.
+   *
+   * @since 1.6.0
+   */
+  def clearActive(): Unit = {
+    activeContext.remove()
+  }
+
+  /**
+   * Converts an iterator of Java Beans to InternalRow using the provided
+   * bean info & schema. This is not related to the singleton, but is a static
+   * method for internal use.
+   */
+  private def beansToRows(data: Iterator[_], beanInfo: BeanInfo, attrs: Seq[AttributeReference]):
+      Iterator[InternalRow] = {
+    val extractors =
+      beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+    val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
+      (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
     }
-  }
-
-  private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
-    INSTANTIATION_LOCK.synchronized {
-      lastInstantiatedContext.set(sqlContext)
+    data.map{ element =>
+      new GenericInternalRow(
+        methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
+      ): InternalRow
     }
   }
 }

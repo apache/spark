@@ -17,11 +17,21 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 
 /**
  * :: Experimental ::
  * Represents singular value decomposition (SVD) factors.
  */
+@Since("1.0.0")
 @Experimental
 case class SingularValueDecomposition[UType, VType](U: UType, s: Vector, V: VType)
+
+/**
+ * :: Experimental ::
+ * Represents QR factors.
+ */
+@Since("1.5.0")
+@Experimental
+case class QRDecomposition[QType, RType](Q: QType, R: RType)
+

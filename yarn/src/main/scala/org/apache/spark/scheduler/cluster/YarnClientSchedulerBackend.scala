@@ -23,6 +23,7 @@ import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
+import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class YarnClientSchedulerBackend(
@@ -33,7 +34,7 @@ private[spark] class YarnClientSchedulerBackend(
 
   private var client: Client = null
   private var appId: ApplicationId = null
-  private var monitorThread: Thread = null
+  private var monitorThread: MonitorThread = null
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -81,8 +82,6 @@ private[spark] class YarnClientSchedulerBackend(
     // List of (target Client argument, environment variable, Spark property)
     val optionTuples =
       List(
-        ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.executor.instances"),
-        ("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
         ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
         ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
@@ -92,7 +91,6 @@ private[spark] class YarnClientSchedulerBackend(
       )
     // Warn against the following deprecated environment variables: env var -> suggestion
     val deprecatedEnvVars = Map(
-      "SPARK_WORKER_INSTANCES" -> "SPARK_WORKER_INSTANCES or --num-executors through spark-submit",
       "SPARK_WORKER_MEMORY" -> "SPARK_EXECUTOR_MEMORY or --executor-memory through spark-submit",
       "SPARK_WORKER_CORES" -> "SPARK_EXECUTOR_CORES or --executor-cores through spark-submit")
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>
@@ -132,23 +130,41 @@ private[spark] class YarnClientSchedulerBackend(
   }
 
   /**
+   * We create this class for SPARK-9519. Basically when we interrupt the monitor thread it's
+   * because the SparkContext is being shut down(sc.stop() called by user code), but if
+   * monitorApplication return, it means the Yarn application finished before sc.stop() was called,
+   * which means we should call sc.stop() here, and we don't allow the monitor to be interrupted
+   * before SparkContext stops successfully.
+   */
+  private class MonitorThread extends Thread {
+    private var allowInterrupt = true
+
+    override def run() {
+      try {
+        val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
+        logError(s"Yarn application has already exited with state $state!")
+        allowInterrupt = false
+        sc.stop()
+      } catch {
+        case e: InterruptedException => logInfo("Interrupting monitor thread")
+      }
+    }
+
+    def stopMonitor(): Unit = {
+      if (allowInterrupt) {
+        this.interrupt()
+      }
+    }
+  }
+
+  /**
    * Monitor the application state in a separate thread.
    * If the application has exited for any reason, stop the SparkContext.
    * This assumes both `client` and `appId` have already been set.
    */
-  private def asyncMonitorApplication(): Thread = {
+  private def asyncMonitorApplication(): MonitorThread = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
-    val t = new Thread {
-      override def run() {
-        try {
-          val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
-          logError(s"Yarn application has already exited with state $state!")
-          sc.stop()
-        } catch {
-          case e: InterruptedException => logInfo("Interrupting monitor thread")
-        }
-      }
-    }
+    val t = new MonitorThread
     t.setName("Yarn application state monitor")
     t.setDaemon(true)
     t
@@ -160,11 +176,20 @@ private[spark] class YarnClientSchedulerBackend(
   override def stop() {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
     if (monitorThread != null) {
-      monitorThread.interrupt()
+      monitorThread.stopMonitor()
     }
+
+    // Report a final state to the launcher if one is connected. This is needed since in client
+    // mode this backend doesn't let the app monitor loop run to completion, so it does not report
+    // the final state itself.
+    //
+    // Note: there's not enough information at this point to provide a better final state,
+    // so assume the application was successful.
+    client.reportLauncherState(SparkAppHandle.State.FINISHED)
+
     super.stop()
-    client.stop()
     YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
+    client.stop()
     logInfo("Stopped")
   }
 
@@ -174,5 +199,4 @@ private[spark] class YarnClientSchedulerBackend(
       super.applicationId
     }
   }
-
 }
