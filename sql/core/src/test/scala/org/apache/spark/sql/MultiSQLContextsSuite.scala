@@ -70,7 +70,7 @@ class MultiSQLContextsSuite extends SparkFunSuite with BeforeAndAfterAll {
         val message = intercept[SparkException] {
           new SQLContext(sparkContext)
         }.getMessage
-        assert(message.contains("Only one SparkContext/HiveContext may be running"))
+        assert(message.contains("Only one SQLContext/HiveContext may be running"))
       }
     } finally {
       sparkContext.stop()

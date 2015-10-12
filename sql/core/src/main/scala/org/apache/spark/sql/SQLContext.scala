@@ -80,9 +80,20 @@ class SQLContext private[sql](
       SQLConf.ALLOW_MULTIPLE_CONTEXTS.key,
       SQLConf.ALLOW_MULTIPLE_CONTEXTS.defaultValue.get)
 
-  SQLContext.assertNoRootSQLContextIsRunning(
-    isRootContext,
-    allowMultipleContexts)
+  // Assert no root SQLContext is running when allowMultipleContexts is false.
+  {
+    if (!allowMultipleContexts && isRootContext) {
+      SQLContext.getInstantiatedContextOption() match {
+        case Some(rootSQLContext) =>
+          val errMsg = "Only one SQLContext/HiveContext may be running in this JVM. " +
+            s"It is recommended to use SQLContext.getOrCreate to get the instantiated " +
+            s"SQLContext/HiveContext. To ignore this error, " +
+            s"set ${SQLConf.ALLOW_MULTIPLE_CONTEXTS.key} = true in SparkConf."
+          throw new SparkException(errMsg)
+        case None => // OK
+      }
+    }
+  }
 
   /**
    * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
@@ -1256,20 +1267,6 @@ object SQLContext {
 
   private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {
     Option(instantiatedContext.get())
-  }
-
-  private[sql] def assertNoRootSQLContextIsRunning(
-      isRootContext: Boolean,
-      allowMultipleRootSQLContexts: Boolean): Unit = {
-    if (!allowMultipleRootSQLContexts && isRootContext) {
-      getInstantiatedContextOption() match {
-        case Some(rootSQLContext) =>
-          val errMsg = "Only one SparkContext/HiveContext may be running in this JVM." +
-          s" To ignore this error, set ${SQLConf.ALLOW_MULTIPLE_CONTEXTS.key} = true."
-          throw new SparkException(errMsg)
-        case None => // OK
-      }
-    }
   }
 
   /**
