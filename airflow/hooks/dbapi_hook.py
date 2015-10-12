@@ -20,8 +20,6 @@ class DbApiHook(BaseHook):
     supports_autocommit = False
     # Override with the object that exposes the connect method
     connector = None
-    # Whether the db supports a special type of autocmmit
-    supports_autocommit = False
 
     def __init__(self, *args, **kwargs):
         if not self.conn_name_attr:
