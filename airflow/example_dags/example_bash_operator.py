@@ -10,7 +10,9 @@ args = {
     'start_date': seven_days_ago,
 }
 
-dag = DAG(dag_id='example_bash_operator', default_args=args)
+dag = DAG(
+    dag_id='example_bash_operator', default_args=args,
+    schedule_interval='0 0 * * *')
 
 cmd = 'ls -l'
 run_this_last = DummyOperator(task_id='run_this_last', dag=dag)

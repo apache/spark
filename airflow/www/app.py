@@ -45,23 +45,17 @@ def create_app(config=None):
         admin.add_view(views.Airflow(name='DAGs'))
 
         admin.add_view(views.SlaMissModelView(models.SlaMiss, Session, name="SLA Misses", category="Browse"))
-        admin.add_view(
-            views.TaskInstanceModelView(models.TaskInstance, Session, name="Task Instances", category="Browse")
-        )
-
+        admin.add_view(views.TaskInstanceModelView(models.TaskInstance, Session, name="Task Instances", category="Browse"))
         admin.add_view(views.LogModelView(models.Log, Session, name="Logs", category="Browse"))
         admin.add_view(views.JobModelView(jobs.BaseJob, Session, name="Jobs", category="Browse"))
-
         admin.add_view(views.QueryView(name='Ad Hoc Query', category="Data Profiling"))
         admin.add_view(views.ChartModelView(models.Chart, Session, name="Charts", category="Data Profiling"))
         admin.add_view(views.KnowEventView(models.KnownEvent, Session, name="Known Events", category="Data Profiling"))
-
         admin.add_view(views.PoolModelView(models.Pool, Session, name="Pools", category="Admin"))
         admin.add_view(views.ConfigurationView(name='Configuration', category="Admin"))
         admin.add_view(views.UserModelView(models.User, Session, name="Users", category="Admin"))
         admin.add_view(views.ConnectionModelView(models.Connection, Session, name="Connections", category="Admin"))
         admin.add_view(views.VariableView(models.Variable, Session, name="Variables", category="Admin"))
-
         admin.add_link(base.MenuLink(category='Docs', name='Documentation', url='http://pythonhosted.org/airflow/'))
         admin.add_link(base.MenuLink(category='Docs',name='Github',url='https://github.com/airbnb/airflow'))
 

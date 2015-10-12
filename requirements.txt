@@ -5,6 +5,7 @@ chartkick
 cryptography
 coverage
 coveralls
+croniter
 dill
 flake8
 flask

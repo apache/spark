@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import signal
+import six
 import smtplib
 from tempfile import mkdtemp
 
@@ -34,6 +35,7 @@ from sqlalchemy import event, exc
 from sqlalchemy.pool import Pool
 
 import numpy as np
+from croniter import croniter
 
 from airflow import settings
 from airflow import configuration
@@ -283,11 +285,36 @@ def validate_key(k, max_length=250):
 
 
 def date_range(start_date, end_date=datetime.now(), delta=timedelta(1)):
+    """
+    Get a set of dates as a list based on a start, end and delta, delta
+    can be something that can be added to ``datetime.datetime``
+    or a cron expression as a ``str``
+
+    >>> date_range(datetime(2016, 1, 1), datetime(2016, 1, 3))
+    [datetime.datetime(2016, 1, 1, 0, 0),
+     datetime.datetime(2016, 1, 2, 0, 0),
+     datetime.datetime(2016, 1, 3, 0, 0)]
+    >>> date_range(datetime(2016, 1, 1), datetime(2016, 1, 3), '0 0 * * *')
+    [datetime.datetime(2016, 1, 1, 0, 0),
+     datetime.datetime(2016, 1, 2, 0, 0),
+     datetime.datetime(2016, 1, 3, 0, 0)]
+    >>> date_range(datetime(2016, 1, 1), datetime(2016, 3, 3), delta="0 0 0 * *")
+    [datetime.datetime(2016, 1, 1, 0, 0),
+      datetime.datetime(2016, 2, 1, 0, 0),
+      datetime.datetime(2016, 3, 1, 0, 0)]
+    """
+    delta_iscron = False
+    if isinstance(delta, six.string_types):
+        delta_iscron = True
+        cron = croniter(delta, start_date)
     l = []
     if end_date >= start_date:
         while start_date <= end_date:
             l.append(start_date)
-            start_date += delta
+            if delta_iscron:
+                start_date = cron.get_next(datetime)
+            else:
+                start_date += delta
     else:
         raise AirflowException("start_date can't be after end_date")
     return l
@@ -566,6 +593,16 @@ def round_time(dt, delta, start_date=datetime.min):
     >>> round_time(datetime(2015, 9, 13, 0, 0), timedelta(1), datetime(2015, 9, 14, 0, 0))
     datetime.datetime(2015, 9, 14, 0, 0)
     """
+
+    if isinstance(delta, six.string_types):
+        # It's cron based, so it's easy
+        cron = croniter(delta, start_date)
+        prev = cron.get_prev(datetime)
+        if prev == start_date:
+            return start_date
+        else:
+            return prev
+
     # Ignore the microseconds of dt
     dt -= timedelta(microseconds = dt.microsecond)
 

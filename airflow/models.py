@@ -32,6 +32,9 @@ from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship, synonym
 
+from croniter import croniter
+import six
+
 from airflow import settings, utils
 from airflow.executors import DEFAULT_EXECUTOR, LocalExecutor
 from airflow import configuration
@@ -677,7 +680,7 @@ class TaskInstance(Base):
             return False
         elif self.task.end_date and self.execution_date > self.task.end_date:
             return False
-        elif self.state == State.SKIPPED:
+        elif self.state in (State.SKIPPED, State.QUEUED):
             return False
         elif (
                 self.state in State.runnable() and
@@ -748,7 +751,7 @@ class TaskInstance(Base):
                 TI.dag_id == self.dag_id,
                 TI.task_id == task.task_id,
                 TI.execution_date ==
-                self.execution_date-task.schedule_interval,
+                    self.task.dag.previous_schedule(self.execution_date),
                 TI.state == State.SUCCESS,
             ).first()
             if not previous_ti:
@@ -1858,7 +1861,8 @@ class DAG(object):
         timedelta object gets added to your latest task instance's
         execution_date to figure out the next schedule
     :type schedule_interval: datetime.timedelta or
-        dateutil.relativedelta.relativedelta
+        dateutil.relativedelta.relativedelta or str that acts as a cron
+        expression
     :param start_date: The timestamp from which the scheduler will
         attempt to backfill
     :type start_date: datetime.datetime
@@ -1953,6 +1957,20 @@ class DAG(object):
                 hash_components.append(repr(val))
         return hash(tuple(hash_components))
 
+    def following_schedule(self, dttm):
+        if isinstance(self.schedule_interval, six.string_types):
+            cron = croniter(self.schedule_interval, dttm)
+            return cron.get_next(datetime)
+        else:
+            return dttm + self.schedule_interval
+
+    def previous_schedule(self, dttm):
+        if isinstance(self.schedule_interval, six.string_types):
+            cron = croniter(self.schedule_interval, dttm)
+            return cron.get_prev(datetime)
+        else:
+            return dttm - self.schedule_interval
+
     @property
     def task_ids(self):
         return [t.task_id for t in self.tasks]
@@ -2005,6 +2023,41 @@ class DAG(object):
                 l.append(task.subdag)
                 l += task.subdag.subdags
         return l
+
+    def get_active_runs(self):
+        """
+        Maintains and returns the currently active runs as a list of dates
+        """
+        TI = TaskInstance
+        session =  settings.Session()
+        # Checking state of active DagRuns
+        active_runs = []
+        active_runs = (
+            session.query(DagRun)
+            .filter(
+                DagRun.dag_id == self.dag_id,
+                DagRun.state == State.RUNNING)
+            .all()
+        )
+        for run in active_runs:
+            logging.info("Checking state for " + str(run))
+            task_instances = session.query(TI).filter(
+                TI.dag_id == run.dag_id,
+                TI.task_id.in_(self.task_ids),
+                TI.execution_date == run.execution_date,
+            ).all()
+            if len(task_instances) == len(self.tasks):
+                task_states = [ti.state for ti in task_instances]
+                if State.FAILED in task_states:
+                    logging.info('Marking run {} failed'.format(run))
+                    run.state = State.FAILED
+                elif set(task_states) == set([State.SUCCESS]):
+                    logging.info('Marking run {} successful'.format(run))
+                    run.state = State.SUCCESS
+                else:
+                    active_runs.append(run.execution_date)
+        session.commit()
+        return active_runs
 
     def resolve_template_files(self):
         for t in self.tasks:
@@ -2298,7 +2351,7 @@ class Chart(Base):
     id = Column(Integer, primary_key=True)
     label = Column(String(200))
     conn_id = Column(String(ID_LEN), nullable=False)
-    user_id = Column(Integer(), ForeignKey('user.id'),)
+    user_id = Column(Integer(), ForeignKey('user.id'), nullable=True)
     chart_type = Column(String(100), default="line")
     sql_layout = Column(String(50), default="series")
     sql = Column(Text, default="SELECT series, x, y FROM table")
@@ -2514,24 +2567,23 @@ class XCom(Base):
 class DagRun(Base):
     """
     DagRun describes an instance of a Dag. It can be created
-    by a scheduled of a Dag or by an external trigger
+    by the scheduler (for regular runs) or by an external trigger
     """
     __tablename__ = "dag_run"
 
     dag_id = Column(String(ID_LEN), primary_key=True)
     execution_date = Column(DateTime, primary_key=True)
+    state = Column(String(50))
     run_id = Column(String(ID_LEN))
     external_trigger = Column(Boolean, default=False)
 
     def __repr__(self):
         return '<DagRun {dag_id} @ {execution_date}: {run_id}, \
             externally triggered: {external_trigger}>'.format(
-            task_id=self.task_id,
+            dag_id=self.dag_id,
             execution_date=self.execution_date,
             run_id=self.run_id,
             external_trigger=self.external_trigger)
-        return str((
-            self.dag_id, self.run_id, self.execution_date.isoformat()))
 
 
 class Pool(Base):
