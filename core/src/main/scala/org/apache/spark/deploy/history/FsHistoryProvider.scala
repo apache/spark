@@ -225,7 +225,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getConfig(): Map[String, String] = {
     val safeMode = if (isFsInSafeMode()) {
-      Map("HDFS State" -> "In safe mode.")
+      Map("HDFS State" -> "In safe mode, application logs not available.")
     } else {
       Map()
     }
@@ -659,11 +659,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Note that DistributedFileSystem is a `@LimitedPrivate` class, which for all practical reasons
    * makes it more public than not.
    */
-  private[history] def isFsInSafeMode(): Boolean = {
-    if (!fs.isInstanceOf[DistributedFileSystem]) {
-      return false
-    }
-    isFsInSafeMode(fs.asInstanceOf[DistributedFileSystem])
+  private[history] def isFsInSafeMode(): Boolean = fs match {
+    case dfs: DistributedFileSystem =>
+      isFsInSafeMode(dfs)
+    case _ =>
+      false
   }
 
   // For testing.
