@@ -205,6 +205,11 @@ can be set to control the SBT build. For example:
 
     build/sbt -Pyarn -Phadoop-2.3 assembly
 
+To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
+in interactive mode by running `build/sbt`, and then run all build commands at the command
+prompt. For more recommendations on reducing build time, refer to the
+[wiki page](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-ReducingBuildTimes).
+
 # Testing with SBT
 
 Some of the tests require Spark to be packaged first, so always run `build/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
