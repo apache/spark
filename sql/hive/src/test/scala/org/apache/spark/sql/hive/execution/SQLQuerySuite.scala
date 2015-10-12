@@ -284,54 +284,51 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
 
-    val originalConf = convertCTAS
-
-    setConf(HiveContext.CONVERT_CTAS, true)
-
-    try {
-      sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      var message = intercept[AnalysisException] {
+    withTable("ctas1") {
+      withSQLConf(("spark.sql.hive.convertCTAS", "true")) {
         sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      }.getMessage
-      assert(message.contains("ctas1 already exists"))
-      checkRelation("ctas1", true)
-      sql("DROP TABLE ctas1")
+        sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+        var message = intercept[AnalysisException] {
+          sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+        }.getMessage
+        assert(message.contains("ctas1 already exists"))
+        checkRelation("ctas1", true)
+        sql("DROP TABLE ctas1")
 
-      // Specifying database name for query can be converted to data source write path
-      // is not allowed right now.
-      message = intercept[AnalysisException] {
-        sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      }.getMessage
-      assert(
-        message.contains("Cannot specify database name in a CTAS statement"),
-        "When spark.sql.hive.convertCTAS is true, we should not allow " +
-            "database name specified.")
+        // Specifying database name for query can be converted to data source write path
+        // is not allowed right now.
+        message = intercept[AnalysisException] {
+          sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+        }.getMessage
+        assert(
+          message.contains("Cannot specify database name in a CTAS statement"),
+          "When spark.sql.hive.convertCTAS is true, we should not allow " +
+              "database name specified.")
 
-      sql("CREATE TABLE ctas1 stored as textfile" +
-          " AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", true)
-      sql("DROP TABLE ctas1")
-
-      sql("CREATE TABLE ctas1 stored as sequencefile" +
+        sql("CREATE TABLE ctas1 stored as textfile" +
             " AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", true)
-      sql("DROP TABLE ctas1")
+        checkRelation("ctas1", true)
+        sql("DROP TABLE ctas1")
 
-      sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
-      sql("DROP TABLE ctas1")
+        sql("CREATE TABLE ctas1 stored as sequencefile" +
+            " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", true)
+        sql("DROP TABLE ctas1")
 
-      sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
-      sql("DROP TABLE ctas1")
+        sql("CREATE TABLE ctas1 stored as rcfile" +
+            " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", false)
+        sql("DROP TABLE ctas1")
 
-      sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
-      sql("DROP TABLE ctas1")
-    } finally {
-      setConf(HiveContext.CONVERT_CTAS, originalConf)
-      sql("DROP TABLE IF EXISTS ctas1")
+        sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", false)
+        sql("DROP TABLE ctas1")
+
+        sql("CREATE TABLE ctas1 stored as parquet" +
+              " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", false)
+        sql("DROP TABLE ctas1")
+      }
     }
   }
 
@@ -365,109 +362,110 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with serde") {
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
-    sql(
-      """CREATE TABLE ctas2
-        | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
-        | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
-        | STORED AS RCFile
-        | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-        | AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
-    sql(
-      """CREATE TABLE ctas3
-        | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
-        | STORED AS textfile AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
+    withTable("ctas1", "ctas2", "ctas3", "ctas4", "ctas5") {
+      sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
+      sql(
+        """CREATE TABLE ctas2
+          | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+          | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+          | STORED AS RCFile
+          | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+          | AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin).collect()
+      sql(
+        """CREATE TABLE ctas3
+          | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
+          | STORED AS textfile AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin).collect()
 
-    // the table schema may like (key: integer, value: string)
-    sql(
-      """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect()
-    // do nothing cause the table ctas4 already existed.
-    sql(
-      """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
-
-    checkAnswer(
-      sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
-      sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
-    checkAnswer(
-      sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
+      // the table schema may like (key: integer, value: string)
       sql(
-        """
-          SELECT key, value
-          FROM src
-          ORDER BY key, value""").collect().toSeq)
-    checkAnswer(
-      sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
+        """CREATE TABLE IF NOT EXISTS ctas4 AS
+          | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect()
+      // do nothing cause the table ctas4 already existed.
       sql(
-        """
-          SELECT key, value
-          FROM src
-          ORDER BY key, value""").collect().toSeq)
-    intercept[AnalysisException] {
-      sql(
-        """CREATE TABLE ctas4 AS
+        """CREATE TABLE IF NOT EXISTS ctas4 AS
           | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
-    }
-    checkAnswer(
-      sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
-      sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
 
-    checkExistence(sql("DESC EXTENDED ctas2"), true,
-      "name:key", "type:string", "name:value", "ctas2",
-      "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
-      "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
-      "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
-      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
-    )
-
-    sql(
-      """CREATE TABLE ctas5
-        | STORED AS parquet AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
-
-    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
-      checkExistence(sql("DESC EXTENDED ctas5"), true,
-        "name:key", "type:string", "name:value", "ctas5",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-        "MANAGED_TABLE"
-      )
-    }
-
-    // use the Hive SerDe for parquet tables
-    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
       checkAnswer(
-        sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+        sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
         sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+      checkAnswer(
+        sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
+        sql(
+          """
+            SELECT key, value
+            FROM src
+            ORDER BY key, value""").collect().toSeq)
+      checkAnswer(
+        sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
+        sql(
+          """
+            SELECT key, value
+            FROM src
+            ORDER BY key, value""").collect().toSeq)
+      intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE ctas4 AS
+            | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
+      }
+      checkAnswer(
+        sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
+        sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
+
+      checkExistence(sql("DESC EXTENDED ctas2"), true,
+        "name:key", "type:string", "name:value", "ctas2",
+        "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
+        "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
+        "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
+        "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
+      )
+
+      sql(
+        """CREATE TABLE ctas5
+          | STORED AS parquet AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin).collect()
+
+      withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
+        checkExistence(sql("DESC EXTENDED ctas5"), true,
+          "name:key", "type:string", "name:value", "ctas5",
+          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+          "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+          "MANAGED_TABLE"
+        )
+      }
+
+      // use the Hive SerDe for parquet tables
+      withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
+        checkAnswer(
+          sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+          sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+      }
     }
   }
 
   test("specifying the column list for CTAS") {
-    Seq((1, "111111"), (2, "222222")).toDF("key", "value").registerTempTable("mytable1")
+    withTable("gen__tmp", "mytable1") {
+      Seq((1, "111111"), (2, "222222")).toDF("key", "value").registerTempTable("mytable1")
 
-    sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
-    checkAnswer(
-      sql("SELECT a, b from gen__tmp"),
-      sql("select key, value from mytable1").collect())
-    sql("DROP TABLE gen__tmp")
+      sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+      checkAnswer(
+        sql("SELECT a, b from gen__tmp"),
+        sql("select key, value from mytable1").collect())
+      sql("DROP TABLE gen__tmp")
 
-    sql("create table gen__tmp(a double, b double) as select key, value from mytable1")
-    checkAnswer(
-      sql("SELECT a, b from gen__tmp"),
-      sql("select cast(key as double), cast(value as double) from mytable1").collect())
-    sql("DROP TABLE gen__tmp")
-
-    sql("drop table mytable1")
+      sql("create table gen__tmp(a double, b double) as select key, value from mytable1")
+      checkAnswer(
+        sql("SELECT a, b from gen__tmp"),
+        sql("select cast(key as double), cast(value as double) from mytable1").collect())
+    }
   }
 
   test("command substitution") {
@@ -524,23 +522,27 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("test CTAS") {
-    sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
-    checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
-      sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+    withTable("test_ctas_123") {
+      sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
+      checkAnswer(
+        sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
+        sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+    }
   }
 
   test("SPARK-4825 save join to table") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
-    sql("CREATE TABLE test1 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).insertInto("test1")
-    sql("CREATE TABLE test2 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).insertInto("test2")
-    testData.write.mode(SaveMode.Append).insertInto("test2")
-    sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
-    checkAnswer(
-      table("test"),
-      sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
+    withTable("test1", "test2") {
+      val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
+      sql("CREATE TABLE test1 (key INT, value STRING)")
+      testData.write.mode(SaveMode.Append).insertInto("test1")
+      sql("CREATE TABLE test2 (key INT, value STRING)")
+      testData.write.mode(SaveMode.Append).insertInto("test2")
+      testData.write.mode(SaveMode.Append).insertInto("test2")
+      sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
+      checkAnswer(
+        table("test"),
+        sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
+    }
   }
 
   test("SPARK-3708 Backticks aren't handled correctly is aliases") {
@@ -607,38 +609,40 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-5284 Insert into Hive throws NPE when a inner complex type field has a null value") {
-    val schema = StructType(
-      StructField("s",
-        StructType(
-          StructField("innerStruct", StructType(StructField("s1", StringType, true) :: Nil)) ::
-            StructField("innerArray", ArrayType(IntegerType), true) ::
-            StructField("innerMap", MapType(StringType, IntegerType)) :: Nil), true) :: Nil)
-    val row = Row(Row(null, null, null))
+    withTable("nullValuesInInnerComplexTypes") {
+      val schema = StructType(
+        StructField("s",
+          StructType(
+            StructField("innerStruct", StructType(StructField("s1", StringType, true) :: Nil)) ::
+              StructField("innerArray", ArrayType(IntegerType), true) ::
+              StructField("innerMap", MapType(StringType, IntegerType)) :: Nil), true) :: Nil)
+      val row = Row(Row(null, null, null))
 
-    val rowRdd = sparkContext.parallelize(row :: Nil)
+      val rowRdd = sparkContext.parallelize(row :: Nil)
 
     hiveContext.createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
-    sql(
-      """CREATE TABLE nullValuesInInnerComplexTypes
-        |  (s struct<innerStruct: struct<s1:string>,
-        |            innerArray:array<int>,
-        |            innerMap: map<string, int>>)
-      """.stripMargin).collect()
+      sql(
+        """CREATE TABLE nullValuesInInnerComplexTypes
+          |  (s struct<innerStruct: struct<s1:string>,
+          |            innerArray:array<int>,
+          |            innerMap: map<string, int>>)
+        """.stripMargin).collect()
 
-    sql(
-      """
-        |INSERT OVERWRITE TABLE nullValuesInInnerComplexTypes
-        |SELECT * FROM testTable
-      """.stripMargin)
+      sql(
+        """
+          |INSERT OVERWRITE TABLE nullValuesInInnerComplexTypes
+          |SELECT * FROM testTable
+        """.stripMargin)
 
-    checkAnswer(
-      sql("SELECT * FROM nullValuesInInnerComplexTypes"),
-      Row(Row(null, null, null))
-    )
+      checkAnswer(
+        sql("SELECT * FROM nullValuesInInnerComplexTypes"),
+        Row(Row(null, null, null))
+      )
 
-    sql("DROP TABLE nullValuesInInnerComplexTypes")
-    dropTempTable("testTable")
+      sql("DROP TABLE nullValuesInInnerComplexTypes")
+      dropTempTable("testTable")
+    }
   }
 
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
@@ -693,40 +697,43 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // is not in a valid state (cannot be executed). Because of this bug, the analysis rule of
     // PreInsertionCasts will actually start to work before ImplicitGenerate and then
     // generates an invalid query plan.
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1 }]}"""))
     read.json(rdd).registerTempTable("data")
     val originalConf = convertCTAS
     setConf(HiveContext.CONVERT_CTAS, false)
 
-    try {
-      sql("CREATE TABLE explodeTest (key bigInt)")
-      table("explodeTest").queryExecution.analyzed match {
-        case metastoreRelation: MetastoreRelation => // OK
-        case _ =>
-          fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
+    withSQLConf(("spark.sql.hive.convertCTAS", "false")) {
+      withTable("explodeTest") {
+        try {
+          sql("CREATE TABLE explodeTest (key bigInt)")
+          table("explodeTest").queryExecution.analyzed match {
+            case metastoreRelation: MetastoreRelation => // OK
+            case _ =>
+              fail("To correctly test the fix of SPARK-5875," +
+                  " explodeTest should be a MetastoreRelation")
+          }
+
+          sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
+          checkAnswer(
+            sql("SELECT key from explodeTest"),
+            (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
+          )
+        } finally {
+          dropTempTable("data")
+        }
       }
-
-      sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
-      checkAnswer(
-        sql("SELECT key from explodeTest"),
-        (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
-      )
-
-      sql("DROP TABLE explodeTest")
-      dropTempTable("data")
-    } finally {
-      setConf(HiveContext.CONVERT_CTAS, originalConf)
     }
   }
 
   test("sanity test for SPARK-6618") {
-    (1 to 100).par.map { i =>
+    (1 to 100).par.foreach { i =>
       val tableName = s"SPARK_6618_table_$i"
-      sql(s"CREATE TABLE $tableName (col1 string)")
-      catalog.lookupRelation(Seq(tableName))
-      table(tableName)
-      tables()
-      sql(s"DROP TABLE $tableName")
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName (col1 string)")
+        catalog.lookupRelation(Seq(tableName))
+        table(tableName)
+        tables()
+      }
     }
   }
 
