@@ -831,6 +831,10 @@ class Analyzer(
             val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
             extractedExprBuffer += withName
             withName.toAttribute
+
+          // Extracts other attributes
+          case attr: Attribute => extractExpr(attr)
+
         }.asInstanceOf[NamedExpression]
       }
 

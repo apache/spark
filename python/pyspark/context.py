@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import shutil
+import signal
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
@@ -216,6 +217,12 @@ class SparkContext(object):
             self.profiler_collector = ProfilerCollector(profiler_cls, dump_path)
         else:
             self.profiler_collector = None
+
+        # create a signal handler which would be invoked on receiving SIGINT
+        def signal_handler(signal, frame):
+            self.cancelAllJobs()
+
+        signal.signal(signal.SIGINT, signal_handler)
 
     def _initialize_context(self, jconf):
         """
