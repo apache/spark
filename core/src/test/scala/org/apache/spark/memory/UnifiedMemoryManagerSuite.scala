@@ -19,14 +19,15 @@ package org.apache.spark.memory
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, TestBlockId}
 
 
-class UnifiedMemoryManagerSuite extends MemoryManagerSuite {
-  private val storageFraction = 0.5
-  private val conf = new SparkConf().set("spark.memory.storageFraction", storageFraction.toString)
-  private val dummyBlock = TestBlockId("shining shimmering splendid")
+class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
+  private val conf = new SparkConf().set("spark.storage.memoryFraction", "0.5")
+  private val dummyBlock = TestBlockId("--")
   private val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
   /**
@@ -36,6 +37,19 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite {
     val mm = new UnifiedMemoryManager(conf, maxMemory)
     val ms = makeMemoryStore(mm)
     (mm, ms)
+  }
+
+  private def getStorageRegionSize(mm: UnifiedMemoryManager): Long = {
+    mm invokePrivate PrivateMethod[Long]('storageRegionSize)()
+  }
+
+  test("storage region size") {
+    val maxMemory = 1000L
+    val (mm, _) = makeThings(maxMemory)
+    val storageFraction = conf.get("spark.storage.memoryFraction").toDouble
+    val expectedStorageRegionSize = maxMemory * storageFraction
+    val actualStorageRegionSize = getStorageRegionSize(mm)
+    assert(expectedStorageRegionSize === actualStorageRegionSize)
   }
 
   test("basic execution memory") {
@@ -101,40 +115,94 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite {
   test("execution evicts storage") {
     val maxMemory = 1000L
     val (mm, ms) = makeThings(maxMemory)
+    // First, ensure the test classes are set up as expected
+    val expectedStorageRegionSize = 500L
+    val expectedExecutionRegionSize = 500L
+    val storageRegionSize = getStorageRegionSize(mm)
+    val executionRegionSize = maxMemory - expectedStorageRegionSize
+    require(storageRegionSize === expectedStorageRegionSize,
+      "bad test: storage region size is unexpected")
+    require(executionRegionSize === expectedExecutionRegionSize,
+      "bad test: storage region size is unexpected")
+    // Acquire enough storage memory to exceed the storage region
     assert(mm.acquireStorageMemory(dummyBlock, 750L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 750L)
     assert(mm.executionMemoryUsed === 0L)
     assert(mm.storageMemoryUsed === 750L)
-    // Needed 250 bytes to evict storage memory, but acquire only 100
+    require(mm.storageMemoryUsed > storageRegionSize,
+      s"bad test: storage memory used should exceed the storage region")
+    // Execution needs to request 250 bytes to evict storage memory
     assert(mm.acquireExecutionMemory(100L, evictedBlocks) === 100L)
     assert(mm.executionMemoryUsed === 100L)
     assert(mm.storageMemoryUsed === 750L)
     assertEnsureFreeSpaceNotCalled(ms)
-    // Execution wants 200 bytes but there are only 150 left, so it evicts storage
+    // Execution wants 200 bytes but only 150 are free, so storage is evicted
     assert(mm.acquireExecutionMemory(200L, evictedBlocks) === 200L)
     assertEnsureFreeSpaceCalled(ms, 200L)
     assert(mm.executionMemoryUsed === 300L)
     mm.releaseStorageMemory()
-    // Acquire some storage memory again, but keep it below the storage fraction
-    val storageRegionSize = maxMemory * storageFraction
-    val executionRegionSize = maxMemory - storageRegionSize
-    require(storageRegionSize === 500L, "bad test: storage region should be 500 bytes")
-    require(executionRegionSize === 500L, "bad test: execution region should be 500 bytes")
-    require(executionRegionSize > mm.executionMemoryUsed,
-      s"bad test: execution memory used should be within $executionRegionSize bytes")
-    require(mm.storageMemoryUsed === 0, "bad test: storage memory used should be 0")
+    require(mm.executionMemoryUsed < executionRegionSize,
+      s"bad test: execution memory used should be within the execution region")
+    require(mm.storageMemoryUsed === 0, "bad test: all storage memory should have been released")
+    // Acquire some storage memory again, but this time keep it within the storage region
     assert(mm.acquireStorageMemory(dummyBlock, 400L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 400L)
-    require(storageRegionSize > mm.storageMemoryUsed,
-      s"bad test: storage memory used should be within $storageRegionSize bytes")
-    // Execution cannot evict storage because the latter is within the storage fraction
-    // Execution already had 300 bytes and storage 400, so grant only 300
+    require(mm.storageMemoryUsed < storageRegionSize,
+      s"bad test: storage memory used should be within the storage region")
+    // Execution cannot evict storage because the latter is within the storage fraction,
+    // so grant only what's remaining without evicting anything, i.e. 1000 - 300 - 400 = 300
     assert(mm.acquireExecutionMemory(400L, evictedBlocks) === 300L)
     assert(mm.executionMemoryUsed === 600L)
     assert(mm.storageMemoryUsed === 400L)
     assertEnsureFreeSpaceNotCalled(ms)
   }
 
-  // TODO: test a few more cases
+  test("storage does not evict execution") {
+    val maxMemory = 1000L
+    val (mm, ms) = makeThings(maxMemory)
+    // First, ensure the test classes are set up as expected
+    val expectedStorageRegionSize = 500L
+    val expectedExecutionRegionSize = 500L
+    val storageRegionSize = getStorageRegionSize(mm)
+    val executionRegionSize = maxMemory - expectedStorageRegionSize
+    require(storageRegionSize === expectedStorageRegionSize,
+      "bad test: storage region size is unexpected")
+    require(executionRegionSize === expectedExecutionRegionSize,
+      "bad test: storage region size is unexpected")
+    // Acquire enough execution memory to exceed the execution region
+    assert(mm.acquireExecutionMemory(800L, evictedBlocks) === 800L)
+    assert(mm.executionMemoryUsed === 800L)
+    assert(mm.storageMemoryUsed === 0L)
+    assertEnsureFreeSpaceNotCalled(ms)
+    require(mm.executionMemoryUsed > executionRegionSize,
+      s"bad test: execution memory used should exceed the execution region")
+    // Storage should not be able to evict execution
+    assert(mm.acquireStorageMemory(dummyBlock, 100L, evictedBlocks))
+    assert(mm.executionMemoryUsed === 800L)
+    assert(mm.storageMemoryUsed === 100L)
+    assertEnsureFreeSpaceCalled(ms, 100L)
+    assert(!mm.acquireStorageMemory(dummyBlock, 250L, evictedBlocks))
+    assert(mm.executionMemoryUsed === 800L)
+    assert(mm.storageMemoryUsed === 100L)
+    assertEnsureFreeSpaceCalled(ms, 250L)
+    mm.releaseExecutionMemory(maxMemory)
+    mm.releaseStorageMemory(maxMemory)
+    // Acquire some execution memory again, but this time keep it within the execution region
+    assert(mm.acquireExecutionMemory(200L, evictedBlocks) === 200L)
+    assert(mm.executionMemoryUsed === 200L)
+    assert(mm.storageMemoryUsed === 0L)
+    assertEnsureFreeSpaceNotCalled(ms)
+    require(mm.executionMemoryUsed < executionRegionSize,
+      s"bad test: execution memory used should be within the execution region")
+    // Storage should still not be able to evict execution
+    assert(mm.acquireStorageMemory(dummyBlock, 750L, evictedBlocks))
+    assert(mm.executionMemoryUsed === 200L)
+    assert(mm.storageMemoryUsed === 750L)
+    assertEnsureFreeSpaceCalled(ms, 750L)
+    assert(!mm.acquireStorageMemory(dummyBlock, 850L, evictedBlocks))
+    assert(mm.executionMemoryUsed === 200L)
+    assert(mm.storageMemoryUsed === 750L)
+    assertEnsureFreeSpaceCalled(ms, 850L)
+  }
 
 }

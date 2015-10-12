@@ -419,6 +419,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
     // Validate memory fractions
     val memoryKeys = Seq(
+      "spark.memory.fraction",
+      "spark.memory.storageFraction",
+      // deprecated
       "spark.storage.memoryFraction",
       "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",
