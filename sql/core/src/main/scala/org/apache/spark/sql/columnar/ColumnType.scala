@@ -512,22 +512,20 @@ private[sql] case class ARRAY(dataType: ArrayType) extends ColumnType[UnsafeArra
   }
 
   override def append(value: UnsafeArrayData, buffer: ByteBuffer): Unit = {
+    buffer.putInt(4 + value.getSizeInBytes)
     buffer.putInt(value.numElements())
-    buffer.putInt(value.getSizeInBytes)
     value.writeTo(buffer)
   }
 
   override def extract(buffer: ByteBuffer): UnsafeArrayData = {
-    val numElements = buffer.getInt
-    val sizeInBytes = buffer.getInt
+    val numBytes = buffer.getInt
     assert(buffer.hasArray)
-    val base = buffer.array()
-    val offset = buffer.arrayOffset()
     val cursor = buffer.position()
-    buffer.position(cursor + sizeInBytes)
-    val array = new UnsafeArrayData
-    array.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numElements, sizeInBytes)
-    array
+    buffer.position(cursor + numBytes)
+    UnsafeReaders.readArray(
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
+      numBytes)
   }
 
   override def clone(v: UnsafeArrayData): UnsafeArrayData = v.copy()
@@ -551,28 +549,22 @@ private[sql] case class MAP(dataType: MapType) extends ColumnType[UnsafeMapData]
   }
 
   override def append(value: UnsafeMapData, buffer: ByteBuffer): Unit = {
+    buffer.putInt(8 + value.keyArray().getSizeInBytes + value.valueArray().getSizeInBytes)
     buffer.putInt(value.numElements())
     buffer.putInt(value.keyArray().getSizeInBytes)
-    buffer.putInt(value.valueArray().getSizeInBytes)
     value.keyArray().writeTo(buffer)
     value.valueArray().writeTo(buffer)
   }
 
   override def extract(buffer: ByteBuffer): UnsafeMapData = {
-    val numElements = buffer.getInt
-    val keyArraySize = buffer.getInt
-    val valueArraySize = buffer.getInt
+    val numBytes = buffer.getInt
     assert(buffer.hasArray)
-    val base = buffer.array()
-    val offset = buffer.arrayOffset()
     val cursor = buffer.position()
-    val keyArray = new UnsafeArrayData
-    keyArray.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numElements, keyArraySize)
-    val valueArray = new UnsafeArrayData
-    valueArray.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor + keyArraySize,
-      numElements, valueArraySize)
-    buffer.position(cursor + keyArraySize + valueArraySize)
-    new UnsafeMapData(keyArray, valueArray)
+    buffer.position(cursor + numBytes)
+    UnsafeReaders.readMap(
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
+      numBytes)
   }
 
   override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()

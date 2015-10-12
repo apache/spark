@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
-import java.nio.ByteBuffer
+import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -100,7 +100,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   def testColumnType[JvmType](columnType: ColumnType[JvmType]): Unit = {
 
-    val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE)
+    val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).order(ByteOrder.nativeOrder())
     val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
     val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
     val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
