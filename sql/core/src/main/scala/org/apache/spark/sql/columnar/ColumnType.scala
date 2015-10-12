@@ -34,8 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @tparam JvmType Underlying Java type to represent the elements.
  */
-private[sql]
-sealed abstract class ColumnType[@specialized(Boolean, Byte, Short, Int, Long) JvmType] {
+private[sql] sealed abstract class ColumnType[JvmType] {
 
   // The catalyst data type of this column.
   def dataType: DataType
@@ -88,6 +87,10 @@ sealed abstract class ColumnType[@specialized(Boolean, Byte, Short, Int, Long) J
    */
   def setField(row: MutableRow, ordinal: Int, value: JvmType): Unit
 
+  /**
+   * Copies `from(fromOrdinal)` to `to(toOrdinal)`. Subclasses should override this method to avoid
+   * boxing/unboxing costs whenever possible.
+   */
   def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
@@ -143,6 +146,11 @@ private[sql] object INT extends NativeColumnType(IntegerType, 4) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Int = row.getInt(ordinal)
+
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setInt(toOrdinal, from.getInt(fromOrdinal))
+  }
 }
 
 private[sql] object LONG extends NativeColumnType(LongType, 8) {
@@ -167,6 +175,10 @@ private[sql] object LONG extends NativeColumnType(LongType, 8) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Long = row.getLong(ordinal)
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setLong(toOrdinal, from.getLong(fromOrdinal))
+  }
 }
 
 private[sql] object FLOAT extends NativeColumnType(FloatType, 4) {
@@ -191,6 +203,10 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 4) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Float = row.getFloat(ordinal)
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setFloat(toOrdinal, from.getFloat(fromOrdinal))
+  }
 }
 
 private[sql] object DOUBLE extends NativeColumnType(DoubleType, 8) {
@@ -215,6 +231,10 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 8) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Double = row.getDouble(ordinal)
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setDouble(toOrdinal, from.getDouble(fromOrdinal))
+  }
 }
 
 private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
@@ -237,6 +257,10 @@ private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Boolean = row.getBoolean(ordinal)
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setBoolean(toOrdinal, from.getBoolean(fromOrdinal))
+  }
 }
 
 private[sql] object BYTE extends NativeColumnType(ByteType, 1) {
@@ -261,6 +285,10 @@ private[sql] object BYTE extends NativeColumnType(ByteType, 1) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Byte = row.getByte(ordinal)
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setByte(toOrdinal, from.getByte(fromOrdinal))
+  }
 }
 
 private[sql] object SHORT extends NativeColumnType(ShortType, 2) {
@@ -285,6 +313,10 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 2) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Short = row.getShort(ordinal)
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setShort(toOrdinal, from.getShort(fromOrdinal))
+  }
 }
 
 private[sql] object STRING extends NativeColumnType(StringType, 8) {
@@ -315,6 +347,10 @@ private[sql] object STRING extends NativeColumnType(StringType, 8) {
     row.getUTF8String(ordinal)
   }
 
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    setField(to, toOrdinal, getField(from, fromOrdinal))
+  }
+
   override def clone(v: UTF8String): UTF8String = v.clone()
 }
 
@@ -335,6 +371,10 @@ private[sql] case class COMPACT_DECIMAL(precision: Int, scale: Int)
 
   override def setField(row: MutableRow, ordinal: Int, value: Decimal): Unit = {
     row.setDecimal(ordinal, value, precision)
+  }
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 }
 
