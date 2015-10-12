@@ -70,7 +70,7 @@ case class JobSet(
       submissionTime,
       if (processingStartTime >= 0) Some(processingStartTime) else None,
       if (processingEndTime >= 0) Some(processingEndTime) else None,
-      jobs.size
+      jobs.map { job => (job.outputOpId, job.toOutputOperationInfo) }.toMap
     )
   }
 }

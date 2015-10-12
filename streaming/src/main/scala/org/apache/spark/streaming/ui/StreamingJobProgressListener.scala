@@ -105,11 +105,9 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     synchronized {
-      val oldBatchUIData = getBatchUIData(batchCompleted.batchInfo.batchTime)
       waitingBatchUIData.remove(batchCompleted.batchInfo.batchTime)
       runningBatchUIData.remove(batchCompleted.batchInfo.batchTime)
       val batchUIData = BatchUIData(batchCompleted.batchInfo)
-      batchUIData.outputOperations = oldBatchUIData.map(_.outputOperations).getOrElse(HashMap())
       completedBatchUIData.enqueue(batchUIData)
       if (completedBatchUIData.size > batchUIDataLimit) {
         val removedBatch = completedBatchUIData.dequeue()

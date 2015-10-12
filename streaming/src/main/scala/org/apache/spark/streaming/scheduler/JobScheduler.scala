@@ -162,36 +162,16 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       // correct "jobSet.processingStartTime".
       listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
     }
-    listenerBus.post(StreamingListenerOutputOperationStarted(
-      OutputOperationInfo(
-        job.time,
-        job.outputOpId,
-        job.callSite.shortForm,
-        job.callSite.longForm,
-        Some(startTime),
-        endTime = None,
-        failureReason = None)))
+    job.setStartTime(startTime)
+    listenerBus.post(StreamingListenerOutputOperationStarted(job.toOutputOperationInfo))
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
   private def handleJobCompletion(job: Job, completedTime: Long) {
     val jobSet = jobSets.get(job.time)
     jobSet.handleJobCompletion(job)
-    val failureReason =
-      if (job.result.isFailure) {
-        Some(Utils.exceptionString(job.result.asInstanceOf[Failure[_]].exception))
-      } else {
-        None
-      }
-    listenerBus.post(StreamingListenerOutputOperationCompleted(
-      OutputOperationInfo(
-        job.time,
-        job.outputOpId,
-        job.callSite.shortForm,
-        job.callSite.longForm,
-        startTime = None,
-        Some(completedTime),
-        failureReason)))
+    job.setEndTime(completedTime)
+    listenerBus.post(StreamingListenerOutputOperationCompleted(job.toOutputOperationInfo))
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
     if (jobSet.hasCompleted) {
       jobSets.remove(jobSet.time)

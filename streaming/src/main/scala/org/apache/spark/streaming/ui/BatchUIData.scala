@@ -32,8 +32,7 @@ private[ui] case class BatchUIData(
     val submissionTime: Long,
     val processingStartTime: Option[Long],
     val processingEndTime: Option[Long],
-    val numOutputOp: Int,
-    var outputOperations: mutable.HashMap[OutputOpId, OutputOperationUIData] = mutable.HashMap(),
+    val outputOperations: mutable.HashMap[OutputOpId, OutputOperationUIData] = mutable.HashMap(),
     var outputOpIdSparkJobIdPairs: Seq[OutputOpIdAndSparkJobId] = Seq.empty) {
 
   /**
@@ -69,23 +68,7 @@ private[ui] case class BatchUIData(
    */
   def updateOutputOperationInfo(outputOperationInfo: OutputOperationInfo): Unit = {
     assert(batchTime == outputOperationInfo.batchTime)
-    if (outputOperationInfo.startTime.nonEmpty) {
-      // This is a start info
-      assert(!outputOperations.contains(outputOperationInfo.id))
-      outputOperations(outputOperationInfo.id) =
-        OutputOperationUIData(
-          outputOperationInfo.id,
-          outputOperationInfo.name,
-          outputOperationInfo.description,
-          outputOperationInfo.startTime,
-          None,
-          None)
-    } else {
-      // This is a completed info, we only need endTime and failureReason
-      assert(outputOperations.contains(outputOperationInfo.id))
-      outputOperations(outputOperationInfo.id).endTime = outputOperationInfo.endTime
-      outputOperations(outputOperationInfo.id).failureReason = outputOperationInfo.failureReason
-    }
+    outputOperations(outputOperationInfo.id) = OutputOperationUIData(outputOperationInfo)
   }
 
   /**
@@ -114,13 +97,15 @@ private[ui] case class BatchUIData(
 private[ui] object BatchUIData {
 
   def apply(batchInfo: BatchInfo): BatchUIData = {
+    val outputOperations = mutable.HashMap[OutputOpId, OutputOperationUIData]()
+    outputOperations ++= batchInfo.outputOperationInfos.mapValues(OutputOperationUIData.apply)
     new BatchUIData(
       batchInfo.batchTime,
       batchInfo.streamIdToInputInfo,
       batchInfo.submissionTime,
       batchInfo.processingStartTime,
       batchInfo.processingEndTime,
-      batchInfo.numOutputOp
+      outputOperations
     )
   }
 }
@@ -130,8 +115,22 @@ private[ui] case class OutputOperationUIData(
     name: String,
     description: String,
     startTime: Option[Long],
-    var endTime: Option[Long],
-    var failureReason: Option[String]) {
+    endTime: Option[Long],
+    failureReason: Option[String]) {
 
   def duration: Option[Long] = for (s <- startTime; e <- endTime) yield e - s
+}
+
+private[ui] object OutputOperationUIData {
+
+  def apply(outputOperationInfo: OutputOperationInfo): OutputOperationUIData = {
+    OutputOperationUIData(
+      outputOperationInfo.id,
+      outputOperationInfo.name,
+      outputOperationInfo.description,
+      outputOperationInfo.startTime,
+      outputOperationInfo.endTime,
+      outputOperationInfo.failureReason
+    )
+  }
 }
