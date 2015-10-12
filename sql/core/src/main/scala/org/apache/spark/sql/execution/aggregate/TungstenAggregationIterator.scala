@@ -467,8 +467,6 @@ class TungstenAggregationIterator(
       case _ => false
     }
 
-    var newHashMap = initHashMap()
-
     // Note: Since we spill the sorter's contents immediately after creating it, we must insert
     // something into the sorter here to ensure that we acquire at least a page of memory.
     // This is done through `externalSorter.insertKV`, which will trigger the page allocation.
@@ -486,6 +484,7 @@ class TungstenAggregationIterator(
 
       // Process the rest of input rows.
       while (inputIter.hasNext) {
+        var newHashMap = initHashMap()
         val ret = internalProcessInputs(newHashMap)
         if (ret.isDefined) {
           // If we can't allocate more memory, we insert all records from the hashmap
@@ -494,11 +493,17 @@ class TungstenAggregationIterator(
           while(iter.next()) {
             externalSorter.insertKV(iter.getKey(), iter.getValue())
           }
-          newHashMap = initHashMap()
+          newHashMap.free()
 
           buffer.copyFrom(initialAggregationBuffer)
           processRow(buffer, ret.get._2)
           externalSorter.insertKV(ret.get._1, buffer)
+        } else {
+          val iter = newHashMap.iterator()
+          while(iter.next()) {
+            externalSorter.insertKV(iter.getKey(), iter.getValue())
+          }
+          newHashMap.free()
         }
       }
     } else {
