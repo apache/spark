@@ -290,19 +290,14 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {if (parent.sc.isDefined) {
-              // Total duration is not meaningful unless the UI is live
-              <li>
-                <strong>Total Uptime: </strong>
-                {UIUtils.formatDuration(System.currentTimeMillis() - startTime)}
-              </li>
+            <li>
+              <strong>Total Uptime: </strong>
+              {if (parent.sc.isDefined) {
+              {UIUtils.formatDuration(System.currentTimeMillis() - startTime)}
             } else {
-              // Total duration using the history
-              <li>
-                <strong>Total Uptime: </strong>
-                {UIUtils.formatDuration(endTime - startTime)}
-              </li>
+              {UIUtils.formatDuration(endTime - startTime)}
             }}
+            </li>
             <li>
               <strong>Scheduling Mode: </strong>
               {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
