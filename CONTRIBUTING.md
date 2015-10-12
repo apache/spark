@@ -9,7 +9,7 @@ You can contribute in many ways:
 
 ### Report Bugs
 
-Report bugs through Gihub
+Report bugs through Github
 
 If you are reporting a bug, please include:
 
