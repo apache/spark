@@ -477,7 +477,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression model training summary") {
-    Seq("auto", "l-bfgs", "normal").foreach { solver => {
+    Seq("l-bfgs").foreach { solver => {
       val trainer = new LinearRegression().setSolver(solver)
       val model = trainer.fit(dataset)
       val trainerNoPredictionCol = trainer.setPredictionCol("")
@@ -493,7 +493,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         model.summary.predictions.schema.fieldNames.toSet))
       // Validate that we re-insert a prediction column for evaluation
       val modelNoPredictionColFieldNames
-        = modelNoPredictionCol.summary.predictions.schema.fieldNames
+      = modelNoPredictionCol.summary.predictions.schema.fieldNames
       assert((dataset.schema.fieldNames.toSet).subsetOf(
         modelNoPredictionColFieldNames.toSet))
       assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
