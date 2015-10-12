@@ -145,13 +145,10 @@ case class Window(
         // Construct the ordering. This is used to compare the result of current value projection
         // to the result of bound value projection. This is done manually because we want to use
         // Code Generation (if it is enabled).
-        val (sortExprs, schema) = exprs.map { case e =>
-          // This AttributeReference does not need to have unique IDs, it's OK to be called
-          // in executor.
-          val ref = AttributeReference("ordExpr", e.dataType, e.nullable)()
-          (SortOrder(ref, e.direction), ref)
-        }.unzip
-        val ordering = newOrdering(sortExprs, schema)
+        val sortExprs = exprs.zipWithIndex.map { case (e, i) =>
+          SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction)
+        }
+        val ordering = newOrdering(sortExprs, Nil)
         RangeBoundOrdering(ordering, current, bound)
       case RowFrame => RowBoundOrdering(offset)
     }
@@ -203,17 +200,19 @@ case class Window(
    * This method uses Code Generation. It can only be used on the executor side.
    *
    * @param expressions unbound ordered function expressions.
-   * @param attributes output attributes
    * @return the final resulting projection.
    */
   private[this] def createResultProjection(
-      expressions: Seq[Expression],
-      attributes: Seq[Attribute]): MutableProjection = {
-    val unboundToAttrMap = expressions.zip(attributes).toMap
-    val patchedWindowExpression = windowExpression.map(_.transform(unboundToAttrMap))
+      expressions: Seq[Expression]): MutableProjection = {
+    val references = expressions.zipWithIndex.map{ case (e, i) =>
+      // Results of window expressions will be on the right side of child's output
+      BoundReference(child.output.size + i, e.dataType, e.nullable)
+    }
+    val unboundToRefMap = expressions.zip(references).toMap
+    val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
     newMutableProjection(
       projectList ++ patchedWindowExpression,
-      child.output ++ attributes)()
+      child.output)()
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -248,17 +247,12 @@ case class Window(
         factories(index) = () => createFrameProcessor(frame, functions, ordinal)
     }
 
-    // AttributeReference can only be created in driver, or the id will not be unique
-    val outputAttributes = unboundExpressions.map {
-      e => AttributeReference("windowResult", e.dataType, e.nullable)()
-    }
-
     // Start processing.
     child.execute().mapPartitions { stream =>
       new Iterator[InternalRow] {
 
         // Get all relevant projections.
-        val result = createResultProjection(unboundExpressions, outputAttributes)
+        val result = createResultProjection(unboundExpressions)
         val grouping = if (child.outputsUnsafeRows) {
           UnsafeProjection.create(partitionSpec, child.output)
         } else {
