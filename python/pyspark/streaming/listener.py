@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from py4j.java_gateway import JavaObject
+
 class StreamingListenerEvent(object):
 
 class StreamingListenerBatchSubmitted(StreamingListenerEvent, batchInfo):
@@ -30,6 +32,9 @@ class StreamingListenerReceiverError(StreamingListenerEvent, receiverInfo):
 class StreamingListenerReceiverStopped(StreamingListenerEvent, receiverInfo):
 
 class StreamingListener(object):
+
+    def __init__(self):
+
 
     # Called when a receiver has been started.
     def onReceiverStarted(self, receiverStarted):
