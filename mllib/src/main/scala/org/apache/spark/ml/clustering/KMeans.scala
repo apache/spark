@@ -24,6 +24,7 @@ import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -117,6 +118,10 @@ class KMeansModel private[ml] (
 
   @Since("1.5.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters
+
+  // TODO: Replace the temp fix until we have proper evaluators defined for clustering.
+  @Since("1.6.0")
+  def computeCost(data: RDD[Vector]): Double = parentModel.computeCost(data)
 }
 
 /**
