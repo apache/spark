@@ -118,7 +118,7 @@ object LDAExample {
     // Load documents, and prepare them for LDA.
     val preprocessStart = System.nanoTime()
     val (corpus, vocabArray, actualNumTokens) =
-      preProcess(sc, params.input, params.vocabSize, params.stopwordFile)
+      preprocess(sc, params.input, params.vocabSize, params.stopwordFile)
     corpus.cache()
     val actualCorpusSize = corpus.count()
     val actualVocabSize = vocabArray.size
@@ -186,29 +186,28 @@ object LDAExample {
    * Load documents, tokenize them, create vocabulary, and prepare documents as term count vectors.
    * @return (corpus, vocabulary as array, total token count in corpus)
    */
-  private def preProcess(
+  private def preprocess(
       sc: SparkContext,
       paths: Seq[String],
       vocabSize: Int,
-      stopWordFile: String): (RDD[(Long, Vector)], Array[String], Long) = {
+      stopwordFile: String): (RDD[(Long, Vector)], Array[String], Long) = {
+
+    val sqlContext = SQLContext.getOrCreate(sc)
+    import sqlContext.implicits._
 
     // Get dataset of document texts
     // One document per line in each text file. If the input consists of many small files,
     // this can result in a large number of small partitions, which can degrade performance.
     // In this case, consider using coalesce() to create fewer, larger partitions.
-    val textRDD: RDD[String] = sc.textFile(paths.mkString(","))
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
-
-    val df = textRDD.toDF("texts")
-    val customizedStopWords: Array[String] = if (stopWordFile.isEmpty) {
+    val df = sc.textFile(paths.mkString(",")).toDF("docs")
+    val customizedStopWords: Array[String] = if (stopwordFile.isEmpty) {
       Array.empty[String]
     } else {
-      val stopWordText = sc.textFile(stopWordFile).collect()
+      val stopWordText = sc.textFile(stopwordFile).collect()
       stopWordText.flatMap(_.stripMargin.split("\\s+"))
     }
     val tokenizer = new RegexTokenizer()
-      .setInputCol("texts")
+      .setInputCol("docs")
       .setOutputCol("rawTokens")
     val stopWordsRemover = new StopWordsRemover()
       .setInputCol("rawTokens")
