@@ -49,3 +49,15 @@ class MySqlHook(DbApiHook):
 
         conn = MySQLdb.connect(**conn_config)
         return conn
+
+    def bulk_load(self, table, tmp_file):
+        """
+        Loads a tab-delimited file into a database table
+        """
+        conn = self.get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            LOAD DATA LOCAL INFILE '{tmp_file}'
+            INTO TABLE {table}
+            """.format(**locals()))
+        conn.commit()
