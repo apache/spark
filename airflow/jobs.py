@@ -15,7 +15,7 @@ import subprocess
 import sys
 from time import sleep
 
-from sqlalchemy import Column, Integer, String, DateTime, func, Index
+from sqlalchemy import Column, Integer, String, DateTime, func, Index, and_
 from sqlalchemy.orm.session import make_transient
 
 from airflow import executors, models, settings, utils
@@ -334,6 +334,37 @@ class SchedulerJob(BaseJob):
                 filename=filename, stacktrace=stacktrace))
         session.commit()
 
+
+    def schedule_dag(self, dag):
+        """
+        This method checks whether a new DagRun needs to be created
+        for a DAG based on scheduling interval
+        """
+        DagRun = models.DagRun
+        session = settings.Session()
+        qry = session.query(func.max(DagRun.execution_date)).filter(and_(
+            DagRun.dag_id == dag.dag_id,
+            DagRun.external_trigger == False
+        ))
+        last_scheduled_run = qry.scalar()
+        if not last_scheduled_run or last_scheduled_run <= datetime.now():
+            if last_scheduled_run:
+                next_run_date = last_scheduled_run + dag.schedule_interval
+            else:
+                next_run_date = dag.default_args['start_date']
+            if not next_run_date:
+                raise Exception('no next_run_date defined!')
+            next_run = DagRun(
+                dag_id=dag.dag_id,
+                run_id='scheduled',
+                execution_date=next_run_date,
+                external_trigger=False
+            )
+            session.add(next_run)
+            session.commit()
+
+
+
     def process_dag(self, dag, executor):
         """
         This method schedules a single DAG by looking at the latest
@@ -397,6 +428,7 @@ class SchedulerJob(BaseJob):
             if task.adhoc:
                 continue
             if task.task_id not in ti_dict:
+                # TODO: Needs this be changed with DagRun refactoring
                 # Brand new task, let's get started
                 ti = TI(task, task.start_date)
                 ti.refresh_from_db()
@@ -420,13 +452,15 @@ class SchedulerJob(BaseJob):
                     # in self.prioritize_queued
                     continue
                 else:
-                    # Trying to run the next schedule
-                    next_schedule = (
-                        ti.execution_date + task.schedule_interval)
-                    if (
-                            ti.task.end_date and
-                            next_schedule > ti.task.end_date):
+                    # Checking whether there is a dag for which no task exists
+                    # up to now
+                    qry = session.query(func.min(models.DagRun.execution_date)).filter(
+                        and_(models.DagRun.dag_id == dag.dag_id,
+                        models.DagRun.execution_date > ti.execution_date))
+                    next_schedule = qry.scalar()
+                    if not next_schedule:
                         continue
+
                     ti = TI(
                         task=task,
                         execution_date=next_schedule,
@@ -549,6 +583,7 @@ class SchedulerJob(BaseJob):
                     if not dag or (dag.dag_id in paused_dag_ids):
                         continue
                     try:
+                        self.schedule_dag(dag)
                         self.process_dag(dag, executor)
                         self.manage_slas(dag)
                     except Exception as e:
