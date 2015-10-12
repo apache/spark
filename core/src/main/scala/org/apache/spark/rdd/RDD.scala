@@ -1521,8 +1521,15 @@ abstract class RDD[T: ClassTag](
     }
 
     checkpointData match {
-      case Some(reliable: ReliableRDDCheckpointData[_]) => logWarning(
-        "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
+      case Some(reliable: ReliableRDDCheckpointData[_]) =>
+        if (isCheckpointed) {
+          logWarning(
+            "RDD was already materialized and checkpointed: can't override with local checkpoint.")
+          return this
+        } else {
+          logWarning(
+            "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
+        }
       case _ =>
     }
     checkpointData = Some(new LocalRDDCheckpointData(this))
