@@ -53,7 +53,6 @@ DEFAULT_CONFIGS = {
 
 
 class SparkContext(object):
-
     """
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD} and
@@ -254,7 +253,7 @@ class SparkContext(object):
     def __getnewargs__(self):
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise Exception(
-            "It appears that you are attempting to reference SparkContext from a broadcast "
+            "It appears that you are attempting to refer SparkContext from a broadcast "
             "variable, action, or transformation. SparkContext can only be used on the driver, "
             "not in code that it run on workers. For more information, see SPARK-5063."
         )
