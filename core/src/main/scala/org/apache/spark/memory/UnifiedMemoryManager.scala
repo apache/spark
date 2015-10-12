@@ -79,7 +79,7 @@ private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) exte
    * Total available memory for storage, in bytes.
    * In this model, this is equivalent to the amount of memory not occupied by execution.
    */
-  override val maxStorageMemory: Long = synchronized {
+  override def maxStorageMemory: Long = synchronized {
     maxMemory - _executionMemoryUsed
   }
 
