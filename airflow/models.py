@@ -1059,21 +1059,8 @@ class TaskInstance(Base):
         for attr in task.__class__.template_fields:
             content = getattr(task, attr)
             if content:
-                if isinstance(content, basestring):
-                    result = rt(content, jinja_context)
-                elif isinstance(content, (list, tuple)):
-                    result = [rt(s, jinja_context) for s in content]
-                elif isinstance(content, dict):
-                    result = {
-                        k: rt(v, jinja_context)
-                        for k, v in list(content.items())}
-                else:
-                    param_type = type(content)
-                    msg = (
-                        "Type '{param_type}' used for parameter '{attr}' is "
-                        "not supported for templating").format(**locals())
-                    raise AirflowException(msg)
-                setattr(task, attr, result)
+                rendered_content = self.task.render_template(content, jinja_context)
+                setattr(task, attr, rendered_content)
 
     def email_alert(self, exception, is_retry=False):
         task = self.task
@@ -1519,18 +1506,43 @@ class BaseOperator(object):
 
         return result
 
-    def render_template(self, content, context):
-        if hasattr(self, 'dag'):
-            env = self.dag.get_template_env()
+    def render_template_from_field(self, content, context, jinja_env):
+        '''
+        Renders a template from a field. If the field is a string, it will
+        simply render the string and return the result. If it is a collection or
+        nested set of collections, it will traverse the structure and render
+        all strings in it.
+        '''
+        rt = self.render_template_from_field
+        if isinstance(content, basestring):
+            result = jinja_env.from_string(content).render(**context)
+        elif isinstance(content, (list, tuple)):
+            result = [rt(e, context, jinja_env) for e in content]
+        elif isinstance(content, dict):
+            result = {
+                k: rt(v, context, jinja_env)
+                for k, v in list(content.items())}
         else:
-            env = jinja2.Environment(cache_size=0)
+            param_type = type(content)
+            msg = (
+                "Type '{param_type}' used for parameter '{attr}' is "
+                "not supported for templating").format(**locals())
+            raise AirflowException(msg)
+        return result
+
+    def render_template(self, content, context):
+        '''
+        Renders a template either from a file or directly in a field, and returns
+        the rendered result.
+        '''
+        jinja_env = self.dag.get_template_env() \
+            if hasattr(self, 'dag') \
+            else jinja2.Environment(cache_size=0)
 
         exts = self.__class__.template_ext
-        if any([content.endswith(ext) for ext in exts]):
-            template = env.get_template(content)
-        else:
-            template = env.from_string(content)
-        return template.render(**context)
+        return jinja_env.get_template(content).render(**context) \
+            if isinstance(content, basestring) and any([content.endswith(ext) for ext in exts]) \
+            else self.render_template_from_field(content, context, jinja_env)
 
     def prepare_template(self):
         '''
