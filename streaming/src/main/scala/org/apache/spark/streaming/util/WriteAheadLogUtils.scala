@@ -36,6 +36,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   val DRIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.driver.writeAheadLog.rollingIntervalSecs"
   val DRIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.driver.writeAheadLog.maxFailures"
+  val DRIVER_WAL_BATCHING_CONF_KEY = "spark.streaming.driver.writeAheadLog.enableBatching"
 
   val DEFAULT_ROLLING_INTERVAL_SECS = 60
   val DEFAULT_MAX_FAILURES = 3
@@ -58,6 +59,11 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     } else {
       conf.getInt(RECEIVER_WAL_MAX_FAILURES_CONF_KEY, DEFAULT_MAX_FAILURES)
     }
+  }
+
+  def isBatchingEnabled(conf: SparkConf): Boolean = {
+    conf.getBoolean(DRIVER_WAL_BATCHING_CONF_KEY, defaultValue = false) || sys.props.getOrElse(
+      DRIVER_WAL_BATCHING_CONF_KEY, "false").toBoolean
   }
 
   /**

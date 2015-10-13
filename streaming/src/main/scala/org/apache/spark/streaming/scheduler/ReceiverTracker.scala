@@ -198,7 +198,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Allocate all unallocated blocks to the given batch. */
   def allocateBlocksToBatch(batchTime: Time): Unit = {
     if (receiverInputStreams.nonEmpty) {
-      receivedBlockTracker.allocateBlocksToBatch(batchTime)
+      if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
+        receivedBlockTracker.allocateBlocksToBatchAsync(batchTime)
+      } else {
+        receivedBlockTracker.allocateBlocksToBatch(batchTime)
+      }
     }
   }
 
@@ -218,7 +222,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    */
   def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
     // Clean up old block and batch metadata
-    receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
+    if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
+      receivedBlockTracker.cleanupOldBatchesAsync(cleanupThreshTime, waitForCompletion = false)
+    } else {
+      receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
+    }
 
     // Signal the receivers to delete old block data
     if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
@@ -310,7 +318,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Add new blocks for the given stream */
   private def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
-    receivedBlockTracker.addBlock(receivedBlockInfo)
+    if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
+      receivedBlockTracker.addBlockAsync(receivedBlockInfo)
+    } else {
+      receivedBlockTracker.addBlock(receivedBlockInfo)
+    }
   }
 
   /** Report error sent by a receiver */
