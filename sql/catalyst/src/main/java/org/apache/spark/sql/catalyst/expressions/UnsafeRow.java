@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -326,6 +327,8 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return getArray(ordinal);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof UserDefinedType) {
+      return get(ordinal, ((UserDefinedType)dataType).sqlType());
     } else {
       throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
@@ -600,6 +603,15 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert (buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + sizeInBytes);
   }
 
   @Override
