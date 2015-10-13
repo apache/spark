@@ -689,13 +689,16 @@ class DataFrame private[sql](
   def as(alias: Symbol): DataFrame = as(alias.name)
 
   /**
+   * :: Experimental ::
    * Declares that the values of the given column are unique.
    */
+  @Experimental
   def uniqueKey(col: String): DataFrame = {
     KeyHintCollapsing(KeyHint(List(UniqueKey(UnresolvedAttribute(col))), logicalPlan))
   }
 
   /**
+   * :: Experimental ::
    * Declares that the values of the given column reference a unique column from another
    * [[DataFrame]]. The referenced column must be declared as a unique key within the referenced
    * [[DataFrame]]:
@@ -704,6 +707,7 @@ class DataFrame private[sql](
    *   employee.foreignKey("departmentId", department, "id")
    * }}}
    */
+  @Experimental
   def foreignKey(col: String, referencedDF: DataFrame, referencedCol: String): DataFrame =
     KeyHintCollapsing(
       KeyHint(List(ForeignKey(
