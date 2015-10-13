@@ -137,7 +137,7 @@ private[streaming] abstract class SessionStore[K: ClassTag, S: ClassTag] extends
 private[streaming] object SessionStore {
   def empty[K: ClassTag, S: ClassTag]: SessionStore[K, S] = new EmptySessionStore[K, S]
 
-  def create[K: ClassTag, S: ClassTag](conf: SparkConf = null): SessionStore[K, S] = {
+  def create[K: ClassTag, S: ClassTag](conf: SparkConf): SessionStore[K, S] = {
     val deltaChainThreshold = conf.getInt("spark.streaming.sessionByKey.deltaChainThreshold",
       OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
     new OpenHashMapBasedSessionStore[K, S](64, deltaChainThreshold)
@@ -419,7 +419,7 @@ private[streaming] object SessionRDD {
       pairRDD: RDD[(K, S)], partitioner: Partitioner): RDD[SessionStore[K, S]] = {
 
     val createStateMap = (iterator: Iterator[(K, S)]) => {
-      val newSessionStore = SessionStore.create[K, S]()
+      val newSessionStore = SessionStore.create[K, S](SparkEnv.get.conf)
       iterator.foreach { case (key, state) => newSessionStore.put(key, state) }
       Iterator(newSessionStore)
     }
