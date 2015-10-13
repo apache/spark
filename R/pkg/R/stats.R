@@ -100,3 +100,30 @@ setMethod("corr",
             statFunctions <- callJMethod(x@sdf, "stat")
             callJMethod(statFunctions, "corr", col1, col2, method)
           })
+
+#' freqItems
+#'
+#' Finding frequent items for columns, possibly with false positives.
+#' Using the frequent element count algorithm described in
+#' \url{http://dx.doi.org/10.1145/762471.762473}, proposed by Karp, Schenker, and Papadimitriou.
+#'
+#' @param x A SparkSQL DataFrame.
+#' @param cols A vector column names to search frequent items in.
+#' @param support (Optional) The minimum frequency for an item to be considered `frequent`. 
+#'                Should be greater than 1e-4. Default support = 0.01.
+#' @return a local R data.frame with the frequent items in each column
+#'
+#' @rdname statfunctions
+#' @name freqItems
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' fi = freqItems(df, c("title", "gender"))
+#' }
+setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
+          function(x, cols, support = 0.01) {
+            statFunctions <- callJMethod(x@sdf, "stat")
+            sct <- callJMethod(statFunctions, "freqItems", as.list(cols), support)
+            collect(dataFrame(sct))
+          })

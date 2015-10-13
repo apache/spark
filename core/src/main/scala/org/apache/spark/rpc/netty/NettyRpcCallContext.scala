@@ -26,7 +26,8 @@ import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
 private[netty] abstract class NettyRpcCallContext(
     endpointRef: NettyRpcEndpointRef,
     override val senderAddress: RpcAddress,
-    needReply: Boolean) extends RpcCallContext with Logging {
+    needReply: Boolean)
+  extends RpcCallContext with Logging {
 
   protected def send(message: Any): Unit
 
@@ -35,7 +36,7 @@ private[netty] abstract class NettyRpcCallContext(
       send(AskResponse(endpointRef, response))
     } else {
       throw new IllegalStateException(
-        s"Cannot send $response to the sender because the sender won't handle it")
+        s"Cannot send $response to the sender because the sender does not expect a reply")
     }
   }
 
@@ -63,7 +64,8 @@ private[netty] class LocalNettyRpcCallContext(
     endpointRef: NettyRpcEndpointRef,
     senderAddress: RpcAddress,
     needReply: Boolean,
-    p: Promise[Any]) extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
+    p: Promise[Any])
+  extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
 
   override protected def send(message: Any): Unit = {
     p.success(message)
@@ -78,7 +80,8 @@ private[netty] class RemoteNettyRpcCallContext(
     endpointRef: NettyRpcEndpointRef,
     callback: RpcResponseCallback,
     senderAddress: RpcAddress,
-    needReply: Boolean) extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
+    needReply: Boolean)
+  extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
 
   override protected def send(message: Any): Unit = {
     val reply = nettyEnv.serialize(message)

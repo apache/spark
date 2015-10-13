@@ -30,7 +30,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-public class SparkSubmitCommandBuilderSuite {
+public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private static File dummyPropsFile;
   private static SparkSubmitOptionParser parser;
@@ -161,7 +161,7 @@ public class SparkSubmitCommandBuilderSuite {
     launcher.appResource = "/foo";
     launcher.appName = "MyApp";
     launcher.mainClass = "my.Class";
-    launcher.propertiesFile = dummyPropsFile.getAbsolutePath();
+    launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
     launcher.appArgs.add("foo");
     launcher.appArgs.add("bar");
     launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
