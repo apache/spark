@@ -294,9 +294,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
               <strong>Total Uptime:</strong>
               {
                 if (endTime < 0) {
-                  val endTime = System.currentTimeMillis();
+                  UIUtils.formatDuration(System.currentTimeMillis() - startTime)
+                } else {
+                  UIUtils.formatDuration(endTime - startTime)
                 }
-                UIUtils.formatDuration(endTime - startTime)
               }
             </li>
             <li>
