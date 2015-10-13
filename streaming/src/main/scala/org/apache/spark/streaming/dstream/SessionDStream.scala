@@ -234,14 +234,14 @@ private[streaming] object HashMapBasedSessionStore {
 
 private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
     @volatile private var parentSessionStore: SessionStore[K, S],
-    @volatile private var deltaChainThreshold: Int,
-    initialCapacity: Int = 64
+    initialCapacity: Int = 64,
+    @volatile private var deltaChainThreshold: Int = OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD
   ) extends SessionStore[K, S] {
 
   def this(initialCapacity: Int, deltaChainThreshold: Int) =
-    this(new EmptySessionStore[K, S], initialCapacity, deltaChainThreshold)
+    this(new EmptySessionStore[K, S], initialCapacity = initialCapacity, deltaChainThreshold = deltaChainThreshold)
 
-  def this(deltaChainThreshold: Int) = this(64, deltaChainThreshold)
+  def this(deltaChainThreshold: Int) = this(initialCapacity = 64, deltaChainThreshold = deltaChainThreshold)
 
   def this() = this(OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
 
