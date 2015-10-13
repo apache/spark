@@ -39,7 +39,8 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * Similarly, execution can borrow as much storage memory as is free. However, execution
  * memory is *never* evicted by storage due to the complexities involved in implementing this.
  * The implication is that attempts to cache blocks may fail if execution has already eaten
- * up most of the storage space, in which case the new blocks will be evicted directly.
+ * up most of the storage space, in which case the new blocks will be evicted immediately
+ * according to their respective storage levels.
  */
 private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) extends MemoryManager {
 

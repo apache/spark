@@ -92,7 +92,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 1L)
     assert(mm.storageMemoryUsed === 201L)
-    mm.releaseStorageMemory()
+    mm.releaseAllStorageMemory()
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 1L)
@@ -124,7 +124,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 67L)
     // Only storage memory should be released
-    mm.releaseStorageMemory()
+    mm.releaseAllStorageMemory()
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 67L)
   }

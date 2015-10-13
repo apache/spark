@@ -102,7 +102,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 1L)
     assert(mm.storageMemoryUsed === 201L)
-    mm.releaseStorageMemory()
+    mm.releaseAllStorageMemory()
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 1L)
@@ -140,7 +140,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.acquireExecutionMemory(200L, evictedBlocks) === 200L)
     assertEnsureFreeSpaceCalled(ms, 200L)
     assert(mm.executionMemoryUsed === 300L)
-    mm.releaseStorageMemory()
+    mm.releaseAllStorageMemory()
     require(mm.executionMemoryUsed < executionRegionSize,
       s"bad test: execution memory used should be within the execution region")
     require(mm.storageMemoryUsed === 0, "bad test: all storage memory should have been released")

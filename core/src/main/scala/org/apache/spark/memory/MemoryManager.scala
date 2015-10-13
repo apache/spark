@@ -86,7 +86,12 @@ private[spark] abstract class MemoryManager extends Logging {
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
+   *
+   * This extra method allows subclasses to differentiate behavior between acquiring storage
+   * memory and acquiring unroll memory. For instance, the memory management model in Spark
+   * 1.5 and before places a limit on the amount of space that can be freed from unrolling.
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
+   *
    * @return whether all N bytes were successfully granted.
    */
   def acquireUnrollMemory(
@@ -125,7 +130,7 @@ private[spark] abstract class MemoryManager extends Logging {
   /**
    * Release all storage memory acquired.
    */
-  def releaseStorageMemory(): Unit = synchronized {
+  def releaseAllStorageMemory(): Unit = synchronized {
     _storageMemoryUsed = 0
   }
 

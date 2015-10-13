@@ -230,7 +230,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
     unrollMemoryMap.clear()
     pendingUnrollMemoryMap.clear()
-    memoryManager.releaseStorageMemory()
+    memoryManager.releaseAllStorageMemory()
     logInfo("MemoryStore cleared")
   }
 
