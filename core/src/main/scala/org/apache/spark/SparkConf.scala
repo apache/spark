@@ -421,7 +421,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val memoryKeys = Seq(
       "spark.memory.fraction",
       "spark.memory.storageFraction",
-      // TODO: warn against these deprecated fractions
+      // deprecated
       "spark.storage.memoryFraction",
       "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",
@@ -512,6 +512,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
 private[spark] object SparkConf extends Logging {
 
+  // Deprecation message for memory fraction configs used in the old memory management model
+  private val deprecatedMemoryFractionMessage =
+    "As of Spark 1.6, execution and storage memory management are unified. " +
+      "All memory fractions used in the old model are now deprecated and no longer read."
+
   /**
    * Maps deprecated config keys to information about the deprecation.
    *
@@ -528,7 +533,12 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
-          "are no longer accepted. To specify the equivalent now, one may use '64k'.")
+          "are no longer accepted. To specify the equivalent now, one may use '64k'."),
+      DeprecatedConfig("spark.shuffle.memoryFraction", "1.6", deprecatedMemoryFractionMessage),
+      DeprecatedConfig("spark.shuffle.safetyFraction", "1.6", deprecatedMemoryFractionMessage),
+      DeprecatedConfig("spark.storage.memoryFraction", "1.6", deprecatedMemoryFractionMessage),
+      DeprecatedConfig("spark.storage.safetyFraction", "1.6", deprecatedMemoryFractionMessage),
+      DeprecatedConfig("spark.storage.unrollFraction", "1.6", deprecatedMemoryFractionMessage)
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
