@@ -26,8 +26,8 @@ private[netty] case class ID(name: String)
 /**
  * An [[RpcEndpoint]] for remote [[RpcEnv]]s to query if a [[RpcEndpoint]] exists in this [[RpcEnv]]
  */
-private[netty] class IDVerifier(
-    override val rpcEnv: RpcEnv, dispatcher: Dispatcher) extends RpcEndpoint {
+private[netty] class IDVerifier(override val rpcEnv: RpcEnv, dispatcher: Dispatcher)
+  extends RpcEndpoint {
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ID(name) => context.reply(dispatcher.verify(name))
