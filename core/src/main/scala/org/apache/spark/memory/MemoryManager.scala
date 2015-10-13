@@ -63,6 +63,8 @@ private[spark] abstract class MemoryManager extends Logging {
    */
   def maxStorageMemory: Long
 
+  // TODO: avoid passing evicted blocks around to simplify method signatures (SPARK-10985)
+
   /**
    * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.

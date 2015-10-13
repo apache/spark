@@ -421,7 +421,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val memoryKeys = Seq(
       "spark.memory.fraction",
       "spark.memory.storageFraction",
-      // deprecated
+      // TODO: warn against these deprecated fractions
       "spark.storage.memoryFraction",
       "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",

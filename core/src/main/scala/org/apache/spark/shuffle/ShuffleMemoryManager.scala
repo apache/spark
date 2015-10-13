@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
  * If there are N tasks, it ensures that each tasks can acquire at least 1 / 2N of the memory
  * before it has to spill, and at most 1 / N. Because N varies dynamically, we keep track of the
  * set of active tasks and redo the calculations of 1 / 2N and 1 / N in waiting tasks whenever
- * this set changes. This is all done by synchronizing access to `memoryLock` to mutate state
+ * this set changes. This is all done by synchronizing access to `memoryManager` to mutate state
  * and using wait() and notifyAll() to signal changes.
  *
  * Use `ShuffleMemoryManager.create()` factory method to create a new instance.
@@ -120,8 +120,8 @@ class ShuffleMemoryManager protected (
     val taskAttemptId = currentTaskAttemptId()
     val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val acquired = memoryManager.acquireExecutionMemory(numBytes, evictedBlocks)
-    // Register evicted blocks, if any, with task metrics
-    // TODO: just do this within `acquireExecutionMemory` itself (SPARK-10985)
+    // Register evicted blocks, if any, with the active task metrics
+    // TODO: just do this in `acquireExecutionMemory` (SPARK-10985)
     Option(TaskContext.get()).foreach { tc =>
       val metrics = tc.taskMetrics()
       val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())

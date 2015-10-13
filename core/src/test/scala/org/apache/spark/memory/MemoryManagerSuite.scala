@@ -51,7 +51,8 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
    * Make a mocked [[MemoryStore]] whose [[MemoryStore.ensureFreeSpace]] method is stubbed.
    *
    * This allows our test code to release storage memory when [[MemoryStore.ensureFreeSpace]]
-   * is called pulling in [[org.apache.spark.storage.BlockManager]] and all of its dependencies.
+   * is called without relying on [[org.apache.spark.storage.BlockManager]] and all of its
+   * dependencies.
    */
   protected def makeMemoryStore(mm: MemoryManager): MemoryStore = {
     val ms = mock(classOf[MemoryStore])

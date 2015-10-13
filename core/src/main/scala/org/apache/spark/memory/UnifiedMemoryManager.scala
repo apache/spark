@@ -43,6 +43,8 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  */
 private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) extends MemoryManager {
 
+  // TODO: document this feature
+
   def this(conf: SparkConf) {
     this(conf, UnifiedMemoryManager.getMaxMemory(conf))
   }
