@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -24,7 +25,12 @@ import org.apache.spark.sql.types._
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
-  def newExprId: ExprId = ExprId(curId.getAndIncrement())
+  def newExprId: ExprId = {
+    if (Option(TaskContext.get()).isDefined) {
+      throw new IllegalStateException("Expression ids should not be allocated inside of tasks")
+    }
+    ExprId(curId.getAndIncrement())
+  }
   def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
 }
 
