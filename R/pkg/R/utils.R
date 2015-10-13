@@ -588,3 +588,20 @@ mergePartitions <- function(rdd, zip) {
 
   PipelinedRDD(rdd, partitionFunc)
 }
+
+# Convert a named list to struct so that
+# SerDe won't confuse between a normal named list and struct
+listToStruct <- function(list) {
+  stopifnot(class(list) == "list")
+  stopifnot(!is.null(names(list)))
+  class(list) <- "struct"
+  list
+}
+
+# Convert a struct to a named list
+structToList <- function(struct) {
+  stopifnot(class(list) == "struct")
+
+  class(struct) <- "list"
+  struct
+}

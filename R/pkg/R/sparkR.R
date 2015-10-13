@@ -178,7 +178,7 @@ sparkR.init <- function(
   }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- sapply(nonEmptyJars,
+  localJarPaths <- lapply(nonEmptyJars,
                           function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
 
   # Set the start time to identify jobjs
@@ -193,7 +193,7 @@ sparkR.init <- function(
       master,
       appName,
       as.character(sparkHome),
-      as.list(localJarPaths),
+      localJarPaths,
       sparkEnvirMap,
       sparkExecutorEnvMap),
     envir = .sparkREnv
