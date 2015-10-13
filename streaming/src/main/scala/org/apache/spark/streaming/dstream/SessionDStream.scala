@@ -1,6 +1,6 @@
 package org.apache.spark.streaming.dstream
 
-import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -233,9 +233,9 @@ private[streaming] object HashMapBasedSessionStore {
 
 
 private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
-    @volatile private var parentSessionStore: SessionStore[K, S],
+    @transient @volatile private var parentSessionStore: SessionStore[K, S],
     initialCapacity: Int = 64,
-    @volatile private var deltaChainThreshold: Int = OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD
+    deltaChainThreshold: Int = OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD
   ) extends SessionStore[K, S] {
 
   def this(initialCapacity: Int, deltaChainThreshold: Int) =
@@ -245,7 +245,7 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
 
   def this() = this(OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
 
-  private var deltaMap = new OpenHashMap[K, SessionInfo[S]](initialCapacity)
+  @transient @volatile private var deltaMap = new OpenHashMap[K, SessionInfo[S]](initialCapacity)
 
   override def put(key: K, session: S): Unit = {
     val sessionInfo = deltaMap(key)
@@ -324,6 +324,91 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
     }
   }
 
+
+
+
+  private def writeObject(outputStream: ObjectOutputStream): Unit = {
+    outputStream.defaultWriteObject()
+
+    // Write the deltaMap
+    outputStream.writeInt(deltaMap.size)
+    val deltaMapIterator = deltaMap.iterator
+    var deltaMapCount = 0
+    while (deltaMapIterator.hasNext) {
+      deltaMapCount += 1
+      val keyedSessionInfo = deltaMapIterator.next()
+      outputStream.writeObject(keyedSessionInfo._1)
+      outputStream.writeObject(keyedSessionInfo._2)
+    }
+    assert(deltaMapCount == deltaMap.size)
+
+    // Write the parentSessionStore while consolidating
+    val consolidate = deltaChainLength > deltaChainThreshold
+    val newParentSessionStore = if (consolidate) {
+      new OpenHashMapBasedSessionStore[K, S](initialCapacity = sizeHint, deltaChainThreshold)
+    } else { null }
+
+    val iterOfActiveSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter { _.isActive }
+
+    var parentSessionCount = 0
+
+    outputStream.writeInt(sizeHint)
+
+    while(iterOfActiveSessions.hasNext) {
+      parentSessionCount += 1
+
+      val session = iterOfActiveSessions.next()
+      outputStream.writeObject(session.getKey())
+      outputStream.writeObject(session.getData())
+
+      if (consolidate) {
+        newParentSessionStore.deltaMap.update(
+          session.getKey(), SessionInfo(session.getData(), deleted = false))
+      }
+    }
+    val limiterObj = new Limiter(parentSessionCount)
+    outputStream.writeObject(limiterObj)
+    if (consolidate) {
+      parentSessionStore = newParentSessionStore
+    }
+  }
+
+  private def readObject(inputStream: ObjectInputStream): Unit = {
+    inputStream.defaultReadObject()
+
+    val deltaMapSize = inputStream.readInt()
+    deltaMap = new OpenHashMap[K, SessionInfo[S]]()
+    var deltaMapCount = 0
+    while (deltaMapCount < deltaMapSize) {
+      val key = inputStream.readObject().asInstanceOf[K]
+      val sessionInfo = inputStream.readObject().asInstanceOf[SessionInfo[S]]
+      deltaMap.update(key, sessionInfo)
+      deltaMapCount += 1
+    }
+
+    val parentSessionStoreSizeHint = inputStream.readInt()
+    val newParentSessionStore = new OpenHashMapBasedSessionStore[K, S](
+      initialCapacity = parentSessionStoreSizeHint, deltaChainThreshold)
+
+    var parentSessionLoopDone = false
+    while(!parentSessionLoopDone) {
+      val obj = inputStream.readObject()
+      //println("Read: " + obj)
+      if (obj.isInstanceOf[Limiter]) {
+        parentSessionLoopDone = true
+        val expectedCount = obj.asInstanceOf[Limiter].num
+        assert(expectedCount == newParentSessionStore.deltaMap.size)
+      } else {
+        val key = obj.asInstanceOf[K]
+        val state = inputStream.readObject().asInstanceOf[S]
+        newParentSessionStore.deltaMap.update(
+          key, SessionInfo(state, deleted = false))
+      }
+    }
+    parentSessionStore = newParentSessionStore
+  }
+
+/*
   private def writeObject(outputStream: ObjectOutputStream): Unit = {
     if (deltaChainLength > deltaChainThreshold) {
       val newParentSessionStore =
@@ -340,42 +425,12 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
       parentSessionStore = newParentSessionStore
     }
     outputStream.defaultWriteObject()
-
-    /*
-    outputStream.writeInt(deltaChainThreshold)
-    outputStream.writeInt(deltaMap.size)
-    val deltaMapIterator = deltaMap.iterator
-    var deltaMapCount = 0
-    while (deltaMapIterator.hasNext) {
-      deltaMapCount += 1
-      val keyedSessionInfo = deltaMapIterator.next()
-      outputStream.writeObject(keyedSessionInfo._1)
-      outputStream.writeObject(keyedSessionInfo._2)
-    }
-    assert(deltaMapCount == deltaMap.size)
-    */
   }
 
   private def readObject(inputStream: ObjectInputStream): Unit = {
     inputStream.defaultReadObject()
-
-    /*
-    deltaChainThreshold = inputStream.readInt()
-    val deltaMapSize = inputStream.readInt()
-    println(deltaMapSize)
-    deltaMap = new OpenHashMap[K, SessionInfo[S]]()
-    var deltaMapCount = 0
-    while (deltaMapCount < deltaMapSize) {
-      val key = inputStream.readObject().asInstanceOf[K]
-      val sessionInfo = inputStream.readObject().asInstanceOf[SessionInfo[S]]
-      deltaMap.update(key, sessionInfo)
-      deltaMapCount += 1
-    }
-    parentSessionStore = inputStream.readObject().asInstanceOf[SessionStore[K, S]]
-    */
-
   }
-
+*/
 
 }
 
@@ -385,7 +440,7 @@ case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: 
 
 private[streaming] object OpenHashMapBasedSessionStore {
 
-  val DELTA_CHAIN_LENGTH_THRESHOLD = 20
+  val DELTA_CHAIN_LENGTH_THRESHOLD = 10
 }
 
 
