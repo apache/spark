@@ -213,11 +213,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("compute when only some partitions fit in memory") {
-    val conf = new SparkConf().set("spark.storage.memoryFraction", "0.01")
-    sc = new SparkContext(clusterUrl, "test", conf)
-    // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
-    // to only 5 MB (0.01 of 512 MB), so not all of it will fit in memory; we use 20 partitions
-    // to make sure that *some* of them do fit though
+    sc = new SparkContext(clusterUrl, "test", new SparkConf)
+    // TODO: verify that only a subset of partitions fit in memory (SPARK-11078)
     val data = sc.parallelize(1 to 4000000, 20).persist(StorageLevel.MEMORY_ONLY_SER)
     assert(data.count() === 4000000)
     assert(data.count() === 4000000)

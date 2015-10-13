@@ -24,6 +24,8 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 
+// TODO: some of these spilling tests probably aren't actually spilling (SPARK-11078)
+
 class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   private def createSparkConf(loadDefaults: Boolean, kryo: Boolean): SparkConf = {
     val conf = new SparkConf(loadDefaults)
@@ -595,7 +597,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   test("spilling with many hash collisions") {
     val conf = createSparkConf(true, false)
-    conf.set("spark.shuffle.memoryFraction", "0.0001")
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 
     val agg = new Aggregator[FixedHashObject, Int, Int](_ => 1, _ + _, _ + _)
@@ -676,7 +677,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   private def sortWithoutBreakingSortingContracts(conf: SparkConf) {
-    conf.set("spark.shuffle.memoryFraction", "0.01")
     conf.set("spark.shuffle.manager", "sort")
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 

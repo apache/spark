@@ -26,7 +26,7 @@ import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, TestBlockId}
 
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
-  private val conf = new SparkConf().set("spark.storage.memoryFraction", "0.5")
+  private val conf = new SparkConf().set("spark.memory.storageFraction", "0.5")
   private val dummyBlock = TestBlockId("--")
   private val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
@@ -46,7 +46,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   test("storage region size") {
     val maxMemory = 1000L
     val (mm, _) = makeThings(maxMemory)
-    val storageFraction = conf.get("spark.storage.memoryFraction").toDouble
+    val storageFraction = conf.get("spark.memory.storageFraction").toDouble
     val expectedStorageRegionSize = maxMemory * storageFraction
     val actualStorageRegionSize = getStorageRegionSize(mm)
     assert(expectedStorageRegionSize === actualStorageRegionSize)
