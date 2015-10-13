@@ -44,7 +44,15 @@ trait Encoder[T] {
    */
   def toRow(t: T): InternalRow
 
+  /**
+   * Returns an object of type `T`, extracting the required values from the provided row.  Note that
+   * you must bind` and encoder to a specific schema before you can call this function.
+   */
   def fromRow(row: InternalRow): T
 
+  /**
+   * Returns a new copy of this encoder, where the expressions used by `fromRow` are bound to the
+   * given schema
+   */
   def bind(schema: Seq[Attribute]): Encoder[T]
 }

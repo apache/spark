@@ -73,7 +73,9 @@ public class UnsafeArrayData extends ArrayData {
     assert ordinal < numElements : "ordinal (" + ordinal + ") should < " + numElements;
   }
 
-  public Object[] array() { return null; }
+  public Object[] array() {
+    throw new UnsupportedOperationException("Only supported on GenericArrayData.");
+  }
 
   /**
    * Construct a new UnsafeArrayData. The resulting UnsafeArrayData won't be usable until
