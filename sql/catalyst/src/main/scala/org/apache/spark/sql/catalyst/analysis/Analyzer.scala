@@ -372,7 +372,7 @@ class Analyzer(
               }
             val newRight = applyRewrites(right)
             // Also apply the rewrites to foreign keys on the left side, because these are meant to
-            // reference the right side. (TODO: Why duplicate them instead of replacing?)
+            // reference the right side.
             val newLeft =
               if (left.keys.nonEmpty) {
                 left.transform {
@@ -400,7 +400,6 @@ class Analyzer(
         Sort(newOrdering, global, child)
 
       // Resolve referenced attributes of foreign keys using the referenced relation
-      // TODO: move this to its own rule?
       case h @ KeyHint(keys, child) if child.resolved && !h.foreignKeyReferencesResolved =>
         KeyHint(keys.map {
           case ForeignKey(k, r, u @ UnresolvedAttribute(nameParts)) => withPosition(u) {

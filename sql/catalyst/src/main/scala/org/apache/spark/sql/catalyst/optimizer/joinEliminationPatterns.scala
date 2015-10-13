@@ -161,7 +161,6 @@ private class ForeignKeyFinder(plan: LogicalPlan, referencedPlan: LogicalPlan) {
     }
     s
   }
-
 }
 
 private class MutableDisjointAttributeSets() {
