@@ -133,6 +133,8 @@ private object UnifiedMemoryManager {
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
   private def getMaxMemory(conf: SparkConf): Long = {
-    (Runtime.getRuntime.maxMemory * conf.getDouble("spark.memory.fraction", 0.75)).toLong
+    val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
+    val memoryFraction = conf.getDouble("spark.memory.fraction", 0.75)
+    (systemMaxMemory * memoryFraction).toLong
   }
 }

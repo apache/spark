@@ -127,9 +127,10 @@ private[spark] object StaticMemoryManager {
    * Return the total amount of memory available for the storage region, in bytes.
    */
   private def getMaxStorageMemory(conf: SparkConf): Long = {
+    val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+    (systemMaxMemory * memoryFraction * safetyFraction).toLong
   }
 
 
@@ -137,9 +138,10 @@ private[spark] object StaticMemoryManager {
    * Return the total amount of memory available for the execution region, in bytes.
    */
   private def getMaxExecutionMemory(conf: SparkConf): Long = {
+    val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+    (systemMaxMemory * memoryFraction * safetyFraction).toLong
   }
 
 }

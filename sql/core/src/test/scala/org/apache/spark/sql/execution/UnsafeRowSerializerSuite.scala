@@ -103,7 +103,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
       val conf = new SparkConf()
         .set("spark.shuffle.spill.initialMemoryThreshold", "1024")
         .set("spark.shuffle.sort.bypassMergeThreshold", "0")
-        .set("spark.shuffle.memoryFraction", "0.0001")
+        .set("spark.testing.memory", "80000")
 
       sc = new SparkContext("local", "test", conf)
       outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
