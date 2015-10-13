@@ -37,7 +37,7 @@ class ParamsSuite extends SparkFunSuite {
     }
 
     { // IntParam
-    val param = new IntParam(dummy, "name", "doc")
+      val param = new IntParam(dummy, "name", "doc")
       for (value <- Seq(Int.MinValue, -1, 0, 1, Int.MaxValue)) {
         val json = param.jsonEncode(value)
         assert(param.jsonDecode(json) === value)
@@ -45,7 +45,7 @@ class ParamsSuite extends SparkFunSuite {
     }
 
     { // LongParam
-    val param = new LongParam(dummy, "name", "doc")
+      val param = new LongParam(dummy, "name", "doc")
       for (value <- Seq(Long.MinValue, -1L, 0L, 1L, Long.MaxValue)) {
         val json = param.jsonEncode(value)
         assert(param.jsonDecode(json) === value)
@@ -53,7 +53,7 @@ class ParamsSuite extends SparkFunSuite {
     }
 
     { // FloatParam
-    val param = new FloatParam(dummy, "name", "doc")
+      val param = new FloatParam(dummy, "name", "doc")
       for (value <- Seq(Float.NaN, Float.NegativeInfinity, Float.MinValue, -1.0f, -0.5f, 0.0f,
         Float.MinPositiveValue, 0.5f, 1.0f, Float.MaxValue, Float.PositiveInfinity)) {
         val json = param.jsonEncode(value)
@@ -67,7 +67,7 @@ class ParamsSuite extends SparkFunSuite {
     }
 
     { // DoubleParam
-    val param = new DoubleParam(dummy, "name", "doc")
+      val param = new DoubleParam(dummy, "name", "doc")
       for (value <- Seq(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, -0.5, 0.0,
           Double.MinPositiveValue, 0.5, 1.0, Double.MaxValue, Double.PositiveInfinity)) {
         val json = param.jsonEncode(value)
@@ -123,7 +123,7 @@ class ParamsSuite extends SparkFunSuite {
     }
 
     { // StringArrayParam
-    val param = new StringArrayParam(dummy, "name", "doc")
+      val param = new StringArrayParam(dummy, "name", "doc")
       val values: Seq[Array[String]] = Seq(
         Array(),
         Array(""),

@@ -262,7 +262,7 @@ private[param] object DoubleParam {
       case JDouble(x) =>
         x
       case _ =>
-        throw new IllegalArgumentException(s"Cannot parse $jValue to Double.")
+        throw new IllegalArgumentException(s"Cannot decode $jValue to Double.")
     }
   }
 }
@@ -352,7 +352,7 @@ private object FloatParam {
       case JDouble(x) =>
         x.toFloat
       case _ =>
-        throw new IllegalArgumentException(s"Cannot convert $jValue into float.")
+        throw new IllegalArgumentException(s"Cannot decode $jValue to Float.")
     }
   }
 }
@@ -459,7 +459,7 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
       case JArray(values) =>
         values.map(DoubleParam.jValueDecode).toArray
       case _ =>
-        throw new IllegalArgumentException(s"Cannot convert $json to Array[Double].")
+        throw new IllegalArgumentException(s"Cannot decode $json to Array[Double].")
     }
   }
 }
