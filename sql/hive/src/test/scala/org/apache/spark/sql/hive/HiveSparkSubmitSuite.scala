@@ -343,22 +343,17 @@ object SPARK_11009 extends QueryTest {
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.ui.enabled", "false")
-        .set("spark.sql.shuffle.partitions", "3"))
+        .set("spark.sql.shuffle.partitions", "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
     sqlContext = hiveContext
 
     try {
-      val df = sqlContext.range(1<<20)
+      val df = sqlContext.range(1 << 20)
       val df2 = df.select((df("id") % 1000).alias("A"), (df("id") / 1000).alias("B"))
       val ws = Window.partitionBy(df2("A")).orderBy(df2("B"))
-      val df3 =
-        df2
-          .select(df2("A"), df2("B"), rowNumber().over(ws).alias("rn"))
-          .filter("rn < 0")
-      if (df3.rdd.count() == 0) {
-        throw new Exception(s"df3 should has 0 row.")
-      }
+      val df3 = df2.select(df2("A"), df2("B"), rowNumber().over(ws).alias("rn")).filter("rn < 0")
+      assert(df3.rdd.count() === 0)
     } finally {
       sparkContext.stop()
     }
