@@ -27,8 +27,6 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
-  def keys: Seq[Key] = Seq.empty
-
   private var _analyzed: Boolean = false
 
   /**
@@ -77,6 +75,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       case p => p.transformExpressions(r)
     }
   }
+
+  /**
+   * The unique and foreign key constraints that will hold for the output of this plan. Specific
+   * plan nodes can override this to introduce or propagate keys.
+   */
+  def keys: Seq[Key] = Seq.empty
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output

@@ -65,6 +65,8 @@ object DefaultOptimizer extends Optimizer {
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
+    // Hints are necessary for some operator optimizations but interfere with others, so we run the
+    // rules with them, then remove them and run the rules again.
     Batch("Operator Optimizations", FixedPoint(100),
       operatorOptimizations: _*) ::
     Batch("Remove Hints", FixedPoint(100),
@@ -277,6 +279,9 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Combines two adjacent [[KeyHint]]s into one by merging their key lists.
+ */
 object KeyHintCollapsing extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case KeyHint(keys1, KeyHint(keys2, child)) =>
@@ -314,12 +319,6 @@ object JoinElimination extends Rule[LogicalPlan] {
     }.asInstanceOf[NamedExpression])
   }
 
-}
-
-object RemoveKeyHints extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case KeyHint(_, child) => child
-  }
 }
 
 /**
@@ -806,6 +805,15 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
       case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
+  }
+}
+
+/**
+ * Removes [[KeyHint]]s from the plan to avoid interfering with other rules.
+ */
+object RemoveKeyHints extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case KeyHint(_, child) => child
   }
 }
 

@@ -19,11 +19,17 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
+/**
+ * A key constraint on the output of a [[LogicalPlan]].
+ */
 sealed abstract class Key {
   def transformAttribute(rule: PartialFunction[Attribute, Attribute]): Key
   def resolved: Boolean
 }
 
+/**
+ * Declares that the values of `attr` are unique.
+ */
 case class UniqueKey(attr: Attribute) extends Key {
   override def transformAttribute(rule: PartialFunction[Attribute, Attribute]): Key =
     UniqueKey(rule.applyOrElse(attr, identity[Attribute]))
@@ -31,7 +37,11 @@ case class UniqueKey(attr: Attribute) extends Key {
   override def resolved: Boolean = attr.resolved
 }
 
-/** Referenced column must be unique. Referenced relation must already be resolved. */
+/**
+ * Declares that the values of `attr` reference `referencedAttr`, which is a unique key in
+ * `referencedRelation`. Note that the `referencedRelation` plan must contain a unique key
+ * constraint on `referencedAttr`, and it must be resolved.
+ */
 case class ForeignKey(
     attr: Attribute,
     referencedRelation: LogicalPlan,
