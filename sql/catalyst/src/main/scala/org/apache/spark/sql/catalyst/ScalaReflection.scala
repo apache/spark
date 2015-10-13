@@ -115,6 +115,11 @@ trait ScalaReflection {
       }
   }
 
+  /**
+   * Given a type `T` this function constructs and ObjectType that holds a class of type
+   * Array[T].  Special handling is performed for primitive types to map them back to their raw
+   * JVM form instead of the Scala Array that handles auto boxing.
+   */
   def arrayClassFor(tpe: `Type`): DataType = {
     val cls = tpe match {
       case t if t <:< definitions.IntTpe => classOf[Array[Int]]
@@ -133,9 +138,15 @@ trait ScalaReflection {
     ObjectType(cls)
   }
 
+  /**
+   * Returns an expression that can be used to construct an object of type `T` given a an input
+   * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
+   * of the same name as the constructor arguments.  Nested classes will have their fields accessed
+   * using UnresolvedExtractValue.
+   */
   def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], None)
 
-  def constructorFor(
+  protected def constructorFor(
       tpe: `Type`,
       path: Option[Expression]): Expression = ScalaReflectionLock.synchronized {
 
