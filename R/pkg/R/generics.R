@@ -63,6 +63,10 @@ setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 # @export
 setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
+# @rdname statfunctions
+# @export
+setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("freqItems") })
+
 # @rdname distinct
 # @export
 setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })
@@ -682,6 +686,10 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
+#' @rdname col
+#' @export
+setGeneric("column", function(x) { standardGeneric("column") })
+
 #' @rdname concat
 #' @export
 setGeneric("concat", function(x, ...) { standardGeneric("concat") })
@@ -995,3 +1003,7 @@ setGeneric("rbind", signature = "...")
 #' @rdname as.data.frame
 #' @export
 setGeneric("as.data.frame")
+
+#' @rdname attach
+#' @export
+setGeneric("attach")

@@ -30,6 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcEnv}
@@ -69,6 +70,8 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
+    // TODO: unify these *MemoryManager classes (SPARK-10984)
+    val memoryManager: MemoryManager,
     val shuffleMemoryManager: ShuffleMemoryManager,
     val executorMemoryManager: ExecutorMemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
@@ -332,7 +335,15 @@ object SparkEnv extends Logging {
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
-    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)
+    val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
+    val memoryManager: MemoryManager =
+      if (useLegacyMemoryManager) {
+        new StaticMemoryManager(conf)
+      } else {
+        new UnifiedMemoryManager(conf)
+      }
+
+    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, memoryManager, numUsableCores)
 
     val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
 
@@ -343,8 +354,8 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
-      numUsableCores)
+      serializer, conf, memoryManager, mapOutputTracker, shuffleManager,
+      blockTransferService, securityManager, numUsableCores)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
@@ -417,6 +428,7 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
+      memoryManager,
       shuffleMemoryManager,
       executorMemoryManager,
       outputCommitCoordinator,

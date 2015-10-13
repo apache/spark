@@ -186,6 +186,16 @@ private[spark] object SQLConf {
 
   import SQLConfEntry._
 
+  val ALLOW_MULTIPLE_CONTEXTS = booleanConf("spark.sql.allowMultipleContexts",
+    defaultValue = Some(true),
+    doc = "When set to true, creating multiple SQLContexts/HiveContexts is allowed." +
+      "When set to false, only one SQLContext/HiveContext is allowed to be created " +
+      "through the constructor (new SQLContexts/HiveContexts created through newSession " +
+      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once" +
+      "a SQLContext/HiveContext has been created, changing the value of this conf will not" +
+      "have effect.",
+    isPublic = true)
+
   val COMPRESS_CACHED = booleanConf("spark.sql.inMemoryColumnarStorage.compressed",
     defaultValue = Some(true),
     doc = "When set to true Spark SQL will automatically select a compression codec for each " +
@@ -292,10 +302,9 @@ private[spark] object SQLConf {
 
   val PARQUET_WRITE_LEGACY_FORMAT = booleanConf(
     key = "spark.sql.parquet.writeLegacyFormat",
-    defaultValue = Some(true),
+    defaultValue = Some(false),
     doc = "Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.",
-    isPublic = false)
+      "Spark SQL schema and vice versa.")
 
   val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
     key = "spark.sql.parquet.output.committer.class",

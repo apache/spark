@@ -484,7 +484,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
-  test("SPARK-10301 requested schema clipping - UDT") {
+  testStandardAndLegacyModes("SPARK-10301 requested schema clipping - UDT") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -516,6 +516,50 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         sqlContext.read.schema(userDefinedSchema).parquet(path),
         Row(Row(NestedStruct(1, 2L, 3.5D))))
     }
+  }
+
+  test("expand UDT in StructType") {
+    val schema = new StructType().add("n", new NestedStructUDT, nullable = true)
+    val expected = new StructType().add("n", new NestedStructUDT().sqlType, nullable = true)
+    assert(CatalystReadSupport.expandUDT(schema) === expected)
+  }
+
+  test("expand UDT in ArrayType") {
+    val schema = new StructType().add(
+      "n",
+      ArrayType(
+        elementType = new NestedStructUDT,
+        containsNull = false),
+      nullable = true)
+
+    val expected = new StructType().add(
+      "n",
+      ArrayType(
+        elementType = new NestedStructUDT().sqlType,
+        containsNull = false),
+      nullable = true)
+
+    assert(CatalystReadSupport.expandUDT(schema) === expected)
+  }
+
+  test("expand UDT in MapType") {
+    val schema = new StructType().add(
+      "n",
+      MapType(
+        keyType = IntegerType,
+        valueType = new NestedStructUDT,
+        valueContainsNull = false),
+      nullable = true)
+
+    val expected = new StructType().add(
+      "n",
+      MapType(
+        keyType = IntegerType,
+        valueType = new NestedStructUDT().sqlType,
+        valueContainsNull = false),
+      nullable = true)
+
+    assert(CatalystReadSupport.expandUDT(schema) === expected)
   }
 }
 
