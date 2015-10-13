@@ -411,8 +411,7 @@ class Analyzer(
             // Enforce the constraint that foreign keys can only reference unique keys
             if (referencedAttr.resolved) {
               val referencedAttrIsUnique = r.keys.exists {
-                // TODO: use semanticEquals
-                case UniqueKey(attr) if attr == referencedAttr => true
+                case UniqueKey(attr) if attr semanticEquals referencedAttr => true
                 case _ => false
               }
               if (!referencedAttrIsUnique) {

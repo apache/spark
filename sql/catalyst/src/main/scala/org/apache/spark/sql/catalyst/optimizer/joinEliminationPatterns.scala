@@ -146,13 +146,14 @@ private class ForeignKeyFinder(plan: LogicalPlan, referencedPlan: LogicalPlan) {
   def foreignKeyExists(attr: Attribute, referencedAttr: Attribute): Boolean = {
     plan.keys.exists {
       case ForeignKey(attr2, _, referencedAttr2)
-          if attr == attr2 && equivalent.query(referencedAttr, referencedAttr2) => true
+          if (attr semanticEquals attr2)
+            && equivalent.query(referencedAttr, referencedAttr2) => true
       case _ => false
     }
   }
 
-  private def equivalences(plan: LogicalPlan): MutableDisjointSet[Attribute] = {
-    val s = new MutableDisjointSet[Attribute]
+  private def equivalences(plan: LogicalPlan): MutableDisjointAttributeSets = {
+    val s = new MutableDisjointAttributeSets
     plan.collect {
       case Project(projectList, _) => projectList.collect {
         case a @ Alias(old: Attribute, _) => s.union(old, a.toAttribute)
@@ -163,15 +164,14 @@ private class ForeignKeyFinder(plan: LogicalPlan, referencedPlan: LogicalPlan) {
 
 }
 
-private class MutableDisjointSet[A]() {
-  import scala.collection.mutable.Set
-  private var sets = Set[Set[A]]()
-  def add(x: A): Unit = {
+private class MutableDisjointAttributeSets() {
+  private var sets = Set[AttributeSet]()
+  def add(x: Attribute): Unit = {
     if (!sets.exists(_.contains(x))) {
-      sets += Set(x)
+      sets += AttributeSet(x)
     }
   }
-  def union(x: A, y: A): Unit = {
+  def union(x: Attribute, y: Attribute): Unit = {
     add(x)
     add(y)
     val xSet = sets.find(_.contains(x)).get
@@ -180,7 +180,7 @@ private class MutableDisjointSet[A]() {
     sets -= ySet
     sets += (xSet ++ ySet)
   }
-  def query(x: A, y: A): Boolean = {
-    x == y || sets.exists(s => s.contains(x) && s.contains(y))
+  def query(x: Attribute, y: Attribute): Boolean = {
+    (x semanticEquals y) || sets.exists(s => s.contains(x) && s.contains(y))
   }
 }
