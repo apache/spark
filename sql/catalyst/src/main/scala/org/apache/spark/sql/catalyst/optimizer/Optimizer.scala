@@ -350,8 +350,6 @@ object KeyHintCollapsing extends Rule[LogicalPlan] {
 
 /**
  * Eliminates keyed equi-joins when followed by a [[Project]] that only keeps columns from one side.
- *
- * See [[http://www.info.teradata.com/HTMLPubs/DB_TTU_14_00/index.html#page/SQL_Reference/B035_1142_111A/ch02.124.042.html#ww17434326]].
  */
 object JoinElimination extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

@@ -63,8 +63,6 @@ object CanEliminateUniqueKeyOuterJoin {
  * containing the referenced unique key is referred to as the parent table.
  *
  * For inner joins, all involved foreign keys must be non-nullable.
- *
- * See [[http://www.info.teradata.com/HTMLPubs/DB_TTU_14_00/index.html#page/SQL_Reference/B035_1142_111A/ch02.124.045.html]].
  */
 object CanEliminateReferentialIntegrityJoin {
   /** (parent, child, primaryForeignMap, projectList) */
