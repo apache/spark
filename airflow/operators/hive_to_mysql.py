@@ -30,7 +30,9 @@ class HiveToMySqlTransfer(BaseOperator):
         and issue cleanup commands.
     :type mysql_postoperator: str
     :param bulk_load: flag to use bulk_load option.  This loads mysql directly
-        from a tab-delimited text file in a single statement.
+        from a tab-delimited text file using the LOAD DATA LOCAL INFILE command.
+        This option requires an extra connection parameter for the
+        destination MySQL connection: {'local_infile': true}.
     :type bulk_load: bool
     """
 
