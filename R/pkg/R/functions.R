@@ -233,6 +233,28 @@ setMethod("ceil",
             column(jc)
           })
 
+#' Though scala functions has "col" function, we don't expose it in SparkR
+#' because we don't want to conflict with the "col" function in the R base
+#' package and we also have "column" function exported which is an alias of "col".
+col <- function(x) {
+  column(callJStatic("org.apache.spark.sql.functions", "col", x))
+}
+
+#' column
+#'
+#' Returns a Column based on the given column name.
+#'
+#' @rdname col
+#' @name column
+#' @family normal_funcs
+#' @export
+#' @examples \dontrun{column(df)}
+setMethod("column",
+          signature(x = "character"),
+          function(x) {
+            col(x)
+          })
+
 #' cos
 #'
 #' Computes the cosine of the given value.
