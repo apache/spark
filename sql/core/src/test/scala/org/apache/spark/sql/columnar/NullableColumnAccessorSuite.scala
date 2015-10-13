@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
 import org.apache.spark.sql.types._
 
 class TestNullableColumnAccessor[JvmType](
@@ -64,10 +64,11 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
     test(s"Nullable $typeName column accessor: access null values") {
       val builder = TestNullableColumnBuilder(columnType)
       val randomRow = makeRandomRow(columnType)
+      val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
 
       (0 until 4).foreach { _ =>
-        builder.appendFrom(randomRow, 0)
-        builder.appendFrom(nullRow, 0)
+        builder.appendFrom(proj(randomRow), 0)
+        builder.appendFrom(proj(nullRow), 0)
       }
 
       val accessor = TestNullableColumnAccessor(builder.build(), columnType)

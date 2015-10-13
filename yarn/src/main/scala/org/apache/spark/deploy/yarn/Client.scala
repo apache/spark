@@ -208,6 +208,20 @@ private[spark] class Client(
       case None => logDebug("spark.yarn.maxAppAttempts is not set. " +
           "Cluster's default value will be used.")
     }
+
+    if (sparkConf.contains("spark.yarn.am.attemptFailuresValidityInterval")) {
+      try {
+        val interval = sparkConf.getTimeAsMs("spark.yarn.am.attemptFailuresValidityInterval")
+        val method = appContext.getClass().getMethod(
+          "setAttemptFailuresValidityInterval", classOf[Long])
+        method.invoke(appContext, interval: java.lang.Long)
+      } catch {
+        case e: NoSuchMethodException =>
+          logWarning("Ignoring spark.yarn.am.attemptFailuresValidityInterval because the version " +
+            "of YARN does not support it")
+      }
+    }
+
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(args.amMemory + amMemoryOverhead)
     capability.setVirtualCores(args.amCores)
@@ -358,7 +372,8 @@ private[spark] class Client(
         destName: Option[String] = None,
         targetDir: Option[String] = None,
         appMasterOnly: Boolean = false): (Boolean, String) = {
-      val localURI = new URI(path.trim())
+      val trimmedPath = path.trim()
+      val localURI = Utils.resolveURI(trimmedPath)
       if (localURI.getScheme != LOCAL_SCHEME) {
         if (addDistributedUri(localURI)) {
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)
@@ -374,7 +389,7 @@ private[spark] class Client(
           (false, null)
         }
       } else {
-        (true, path.trim())
+        (true, trimmedPath)
       }
     }
 
@@ -595,10 +610,10 @@ private[spark] class Client(
         LOCALIZED_PYTHON_DIR)
     }
     (pySparkArchives ++ pyArchives).foreach { path =>
-      val uri = new URI(path)
+      val uri = Utils.resolveURI(path)
       if (uri.getScheme != LOCAL_SCHEME) {
         pythonPath += buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-          new Path(path).getName())
+          new Path(uri).getName())
       } else {
         pythonPath += uri.getPath()
       }
@@ -1229,7 +1244,7 @@ object Client extends Logging {
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
     mainJar.flatMap { path =>
-      val uri = new URI(path)
+      val uri = Utils.resolveURI(path)
       if (uri.getScheme == LOCAL_SCHEME) Some(uri) else None
     }.orElse(Some(new URI(APP_JAR)))
   }
