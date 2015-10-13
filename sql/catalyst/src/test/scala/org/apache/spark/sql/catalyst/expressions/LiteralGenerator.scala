@@ -78,7 +78,17 @@ object LiteralGenerator {
         Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity)
     } yield Literal.create(f, DoubleType)
 
-  // TODO: decimal type
+
+  // TODO cache the generated data, and boarder the value range
+  // Since scalacheck doesn't support the decimal yet in `Choose`.
+  def decimalLiteralGen(precision: Int, scale: Int): Gen[Literal] = {
+    Gen.chooseNum(Double.MinValue, Double.MaxValue,
+      Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity) map { bd =>
+      val d = Decimal(bd)
+      d.changePrecision(precision, scale)
+      Literal.create(d, DecimalType(precision, scale))
+    }
+  }
 
   lazy val stringLiteralGen: Gen[Literal] =
     for { s <- Arbitrary.arbString.arbitrary } yield Literal.create(s, StringType)
@@ -122,6 +132,7 @@ object LiteralGenerator {
       case StringType => stringLiteralGen
       case BinaryType => binaryLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
+      case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }
   }
