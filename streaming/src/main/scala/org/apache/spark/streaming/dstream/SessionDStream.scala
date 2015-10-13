@@ -137,7 +137,11 @@ private[streaming] abstract class SessionStore[K: ClassTag, S: ClassTag] extends
 private[streaming] object SessionStore {
   def empty[K: ClassTag, S: ClassTag]: SessionStore[K, S] = new EmptySessionStore[K, S]
 
-  def create[K: ClassTag, S: ClassTag](): SessionStore[K, S] = new OpenHashMapBasedSessionStore[K, S]()
+  def create[K: ClassTag, S: ClassTag](conf: SparkConf = null): SessionStore[K, S] = {
+    val deltaChainThreshold = conf.getInt("spark.streaming.sessionByKey.deltaChainThreshold",
+      OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
+    new OpenHashMapBasedSessionStore[K, S](64, deltaChainThreshold)
+  }
 }
 
 /** Specific implementation of SessionStore interface representing an empty map */
@@ -158,9 +162,9 @@ private[streaming] class HashMapBasedSessionStore[K: ClassTag, S: ClassTag](
 
   import HashMapBasedSessionStore._
 
-  private val generation: Int = parentSessionStore match {
-    case map: HashMapBasedSessionStore[_, _] => map.generation + 1
-    case _ => 1
+  private val deltaChainLength: Int = parentSessionStore match {
+    case map: HashMapBasedSessionStore[_, _] => map.deltaChainLength + 1
+    case _ => 0
   }
 
   private val internalMap = new mutable.HashMap[K, SessionInfo[S]]
@@ -209,7 +213,7 @@ private[streaming] class HashMapBasedSessionStore[K: ClassTag, S: ClassTag](
    * should not mutate `this` map.
    */
   override def copy(): SessionStore[K, S] = {
-    doCopy(generation >= HashMapBasedSessionStore.GENERATION_THRESHOLD_FOR_CONSOLIDATION)
+    doCopy(deltaChainLength >= HashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
   }
 
   def doCopy(consolidate: Boolean): SessionStore[K, S] = {
@@ -229,29 +233,31 @@ private[streaming] object HashMapBasedSessionStore {
 
   private case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
 
-  val GENERATION_THRESHOLD_FOR_CONSOLIDATION = 10
+  val DELTA_CHAIN_LENGTH_THRESHOLD = 10
 }
 
 
 private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
     parentSessionStore: SessionStore[K, S],
+    deltaChainThreshold: Int,
     initialCapacity: Int = 64
   ) extends SessionStore[K, S] {
 
-  def this(initialCapacity: Int) = this(new EmptySessionStore[K, S], initialCapacity)
+  def this(initialCapacity: Int, deltaChainThreshold: Int) =
+    this(new EmptySessionStore[K, S], initialCapacity, deltaChainThreshold)
 
-  def this() = this(new EmptySessionStore[K, S])
+  def this(deltaChainThreshold: Int) = this(64, deltaChainThreshold)
+
+  def this() = this(OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
 
   import OpenHashMapBasedSessionStore._
 
-  private val generation: Int = parentSessionStore match {
-    case map: OpenHashMapBasedSessionStore[_, _] => map.generation + 1
-    case _ => 1
+  private val deltaChainLength: Int = parentSessionStore match {
+    case map: OpenHashMapBasedSessionStore[_, _] => map.deltaChainLength + 1
+    case _ => 0
   }
 
-  println("Generation " + generation)
-
-  private val internalMap = new OpenHashMap[K, SessionInfo[S]]()
+  private val internalMap = new OpenHashMap[K, SessionInfo[S]](initialCapacity)
 
   override def put(key: K, session: S): Unit = {
     val sessionInfo = internalMap(key)
@@ -302,18 +308,19 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
    * should not mutate `this` map.
    */
   override def copy(): SessionStore[K, S] = {
-    doCopy(generation >= GENERATION_THRESHOLD_FOR_CONSOLIDATION)
+    doCopy(deltaChainLength >= DELTA_CHAIN_LENGTH_THRESHOLD)
   }
 
   private[streaming] def doCopy(consolidate: Boolean): SessionStore[K, S] = {
     if (consolidate) {
-      val newParentMap = new OpenHashMapBasedSessionStore[K, S](initialCapacity = sizeHint)
+      val newParentMap = new OpenHashMapBasedSessionStore[K, S](
+        initialCapacity = sizeHint, deltaChainThreshold)
       iterator(updatedSessionsOnly = false).filter { _.isActive }.foreach { case session =>
         newParentMap.internalMap.update(session.getKey(), SessionInfo(session.getData(), deleted = false))
       }
-      new OpenHashMapBasedSessionStore[K, S](newParentMap)
+      new OpenHashMapBasedSessionStore[K, S](newParentMap, deltaChainThreshold = deltaChainThreshold)
     } else {
-      new OpenHashMapBasedSessionStore[K, S](this)
+      new OpenHashMapBasedSessionStore[K, S](this, deltaChainThreshold = deltaChainThreshold)
     }
   }
 
@@ -329,7 +336,7 @@ private[streaming] object OpenHashMapBasedSessionStore {
 
   private case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
 
-  val GENERATION_THRESHOLD_FOR_CONSOLIDATION = 10
+  val DELTA_CHAIN_LENGTH_THRESHOLD = 10
 }
 
 
