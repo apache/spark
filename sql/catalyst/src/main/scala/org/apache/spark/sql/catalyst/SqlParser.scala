@@ -345,7 +345,12 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     )
 
   protected lazy val unsignedDecimal: Parser[String] =
-    elem("decimal", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
+    ( "." ~> decimalLit ^^ { u => "0." + u }
+    | elem("scientific_notation", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
+    )
+
+  def decimalLit: Parser[String] =
+    elem("scientific_notation", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
 
   protected lazy val sign: Parser[String] = ("+" | "-")
 

@@ -175,7 +175,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.collect().filter(_.getInt(0) > 90).toSeq)
 
     checkAnswer(
-      testData.filter("key > 9.e+1"),
+      testData.filter("key > .9e+2"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
+
+    checkAnswer(
+      testData.filter("key > 0.9e+2"),
       testData.collect().filter(_.getInt(0) > 90).toSeq)
 
     checkAnswer(
