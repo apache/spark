@@ -69,6 +69,18 @@ class RegexTokenizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     ))
     testRegexTokenizer(tokenizer2, dataset2)
   }
+
+  test("RegexTokenizer with toLowercase true"){
+    val tokenizer = new RegexTokenizer()
+      .setInputCol("rawText")
+      .setOutputCol("tokens")
+      .setToLowercase(true)
+    val dataset = sqlContext.createDataFrame(Seq(
+      TokenizerTestData("JAVA SCALA", Array("java", "scala")),
+      TokenizerTestData("java scala", Array("java", "scala"))
+    ))
+    testRegexTokenizer(tokenizer, dataset)
+  }
 }
 
 object RegexTokenizerSuite extends SparkFunSuite {
