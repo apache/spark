@@ -18,9 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.TestSQLContext
 
-private object KeyHintTestData {
+private object KeyHintSuite {
   case class Customer(id: Int, name: String)
   case class Employee(id: Int, name: String)
   case class Order(id: Int, customerId: Int, employeeId: Option[Int])
@@ -29,85 +30,76 @@ private object KeyHintTestData {
   case class BannedCustomer(name: String)
 }
 
-private class KeyHintTestData(ctx: SQLContext) {
-  import ctx.implicits._
-  import KeyHintTestData._
+class KeyHintSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
+  import KeyHintSuite._
 
-  val customer = ctx.sparkContext.parallelize(Seq(
+  lazy val customer = sqlContext.sparkContext.parallelize(Seq(
     Customer(0, "alice"),
     Customer(1, "bob"),
     Customer(2, "alice"))).toDF()
     .uniqueKey("id")
-  val employee = ctx.sparkContext.parallelize(Seq(
+  lazy val employee = sqlContext.sparkContext.parallelize(Seq(
     Employee(0, "charlie"),
     Employee(1, "dan"))).toDF()
     .uniqueKey("id")
-  val order = ctx.sparkContext.parallelize(Seq(
+  lazy val order = sqlContext.sparkContext.parallelize(Seq(
     Order(0, 0, Some(0)),
     Order(1, 1, None))).toDF()
     .foreignKey("customerId", customer, "id")
     .foreignKey("employeeId", employee, "id")
-  val manager = ctx.sparkContext.parallelize(Seq(
+  lazy val manager = sqlContext.sparkContext.parallelize(Seq(
     Manager(0, 1))).toDF()
     .foreignKey("managerId", employee, "id")
     .foreignKey("subordinateId", employee, "id")
-  val bestFriend = {
-    val tmp = ctx.sparkContext.parallelize(Seq(
+  lazy val bestFriend = {
+    val tmp = sqlContext.sparkContext.parallelize(Seq(
       BestFriend(0, 1),
       BestFriend(1, 2),
       BestFriend(2, 0))).toDF()
       .uniqueKey("id")
     tmp.foreignKey("friendId", tmp, "id")
   }
-  val bannedCustomer = ctx.sparkContext.parallelize(Seq(
+  lazy val bannedCustomer = sqlContext.sparkContext.parallelize(Seq(
     BannedCustomer("alice"),
     BannedCustomer("eve"))).toDF()
     .uniqueKey("name")
 
   // Joins involving referential integrity (a foreign key referencing a unique key)
-  val orderInnerJoinView = order
+  lazy val orderInnerJoinView = order
     .join(customer, order("customerId") === customer("id"))
     .join(employee, order("employeeId") === employee("id"))
 
-  val orderLeftOuterJoinView = order
+  lazy val orderLeftOuterJoinView = order
     .join(customer, order("customerId") === customer("id"), "left_outer")
     .join(employee, order("employeeId") === employee("id"), "left_outer")
 
-  val orderRightOuterJoinView = employee.join(
+  lazy val orderRightOuterJoinView = employee.join(
     customer.join(order, order("customerId") === customer("id"), "right_outer"),
     order("employeeId") === employee("id"), "right_outer")
 
-  val orderCustomerFullOuterJoinView = order
+  lazy val orderCustomerFullOuterJoinView = order
     .join(customer, order("customerId") === customer("id"), "full_outer")
 
-  val orderEmployeeFullOuterJoinView = order
+  lazy val orderEmployeeFullOuterJoinView = order
     .join(employee, order("employeeId") === employee("id"), "full_outer")
 
-  val managerInnerJoinView = manager
+  lazy val managerInnerJoinView = manager
     .join(employee.as("emp_manager"), manager("managerId") === $"emp_manager.id")
     .join(employee.as("emp_subordinate"), manager("subordinateId") === $"emp_subordinate.id")
 
-  val bestFriendInnerJoinView = bestFriend
+  lazy val bestFriendInnerJoinView = bestFriend
     .join(bestFriend.as("bestFriend2"), bestFriend("friendId") === $"bestFriend2.id")
 
   // Joins involving only a unique key
-  val bannedCustomerInnerJoinView = customer
+  lazy val bannedCustomerInnerJoinView = customer
     .join(bannedCustomer, bannedCustomer("name") === customer("name"))
 
-  val bannedCustomerLeftOuterJoinView = customer
+  lazy val bannedCustomerLeftOuterJoinView = customer
     .join(bannedCustomer, bannedCustomer("name") === customer("name"), "left_outer")
 
-  val bannedCustomerFullOuterJoinView = customer
+  lazy val bannedCustomerFullOuterJoinView = customer
     .join(bannedCustomer, bannedCustomer("name") === customer("name"), "full_outer")
-}
-
-class KeyHintSuite extends QueryTest {
-
-  val ctx = new TestSQLContext()
-  private val data = new KeyHintTestData(ctx)
-
-  import data._
-  import ctx.implicits._
 
   def checkJoinCount(df: DataFrame, joinCount: Int): Unit = {
     val joins = df.queryExecution.optimizedPlan.collect {
