@@ -356,7 +356,7 @@ object SPARK_11009 extends QueryTest {
         df2
           .select(df2("A"), df2("B"), rowNumber().over(ws).alias("rn"))
           .filter("rn < 0")
-      if (df3.count() == 0) {
+      if (df3.rdd.count() == 0) {
         throw new Exception(s"df3 should has 0 row.")
       }
     } finally {
