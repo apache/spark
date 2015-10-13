@@ -3,6 +3,7 @@ import MySQLdb.cursors
 
 from airflow.hooks.dbapi_hook import DbApiHook
 
+import logging
 
 class MySqlHook(DbApiHook):
     '''
@@ -46,9 +47,9 @@ class MySqlHook(DbApiHook):
                 conn_config["cursorclass"] = MySQLdb.cursors.DictCursor
             elif (conn.extra_dejson["cursor"]).lower() == 'ssdictcursor':
                 conn_config["cursorclass"] = MySQLdb.cursors.SSDictCursor
-        if conn.extra_dejson.get('local_infile', False):
-            if conn.extra_dejson["local_infile"]:
-                conn_config["local_infile"] = 1
+        local_infile = conn.extra_dejson.get('local_infile',False)
+        if local_infile:
+            conn_config["local_infile"] = 1
         conn = MySQLdb.connect(**conn_config)
         return conn
 
