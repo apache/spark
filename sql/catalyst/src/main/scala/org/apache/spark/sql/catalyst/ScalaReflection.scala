@@ -115,14 +115,37 @@ trait ScalaReflection {
       }
   }
 
+  def arrayClassFor(tpe: `Type`): DataType = {
+    val cls = tpe match {
+      case t if t <:< definitions.IntTpe => classOf[Array[Int]]
+      case t if t <:< definitions.LongTpe => classOf[Array[Long]]
+      case t if t <:< definitions.DoubleTpe => classOf[Array[Double]]
+      case t if t <:< definitions.FloatTpe => classOf[Array[Float]]
+      case t if t <:< definitions.ShortTpe => classOf[Array[Short]]
+      case t if t <:< definitions.ByteTpe => classOf[Array[Byte]]
+      case t if t <:< definitions.BooleanTpe => classOf[Array[Boolean]]
+      case other =>
+        // There is probably a better way to do this, but I couldn't find it...
+        val elementType = dataTypeFor(other).asInstanceOf[ObjectType].cls
+        java.lang.reflect.Array.newInstance(elementType, 1).getClass
+
+    }
+    ObjectType(cls)
+  }
+
   def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], None)
 
-  def constructorFor(tpe: `Type`, path: Option[Expression]): Expression = ScalaReflectionLock.synchronized {
+  def constructorFor(
+      tpe: `Type`,
+      path: Option[Expression]): Expression = ScalaReflectionLock.synchronized {
+
+    /** Returns the current path with a sub-field extracted. */
     def addToPath(part: String) =
       path
         .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
         .getOrElse(UnresolvedAttribute(part))
 
+    /** Returns the current path or throws an error. */
     def getPath = path.getOrElse(sys.error("Constructors must start at a class type"))
 
     tpe match {
@@ -158,48 +181,6 @@ trait ScalaReflection {
           val objectType = ObjectType(cls)
 
           WrapOption(objectType, constructorFor(optType, path))
-        }
-
-      case t if t <:< localTypeOf[Product] =>
-        val formalTypeArgs = t.typeSymbol.asClass.typeParams
-        val TypeRef(_, _, actualTypeArgs) = t
-        val constructorSymbol = t.member(nme.CONSTRUCTOR)
-        val params = if (constructorSymbol.isMethod) {
-          constructorSymbol.asMethod.paramss
-        } else {
-          // Find the primary constructor, and use its parameter ordering.
-          val primaryConstructorSymbol: Option[Symbol] =
-            constructorSymbol.asTerm.alternatives.find(s =>
-              s.isMethod && s.asMethod.isPrimaryConstructor)
-
-          if (primaryConstructorSymbol.isEmpty) {
-            sys.error("Internal SQL error: Product object did not have a primary constructor.")
-          } else {
-            primaryConstructorSymbol.get.asMethod.paramss
-          }
-        }
-
-        val className: String = t.erasure.typeSymbol.asClass.fullName
-        val cls = Utils.classForName(className)
-
-        val arguments = params.head.map { p =>
-          val fieldName = p.name.toString
-          val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
-          val dataType = dataTypeFor(fieldType)
-
-          constructorFor(fieldType, Some(addToPath(fieldName)))
-        }
-
-        val newInstance = NewInstance(cls, arguments, propagateNull = false, ObjectType(cls))
-
-        if (path.nonEmpty) {
-          expressions.If(
-            IsNull(getPath),
-            expressions.Literal.create(null, ObjectType(cls)),
-            newInstance
-          )
-        } else {
-          newInstance
         }
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
@@ -285,22 +266,132 @@ trait ScalaReflection {
             returnType)
         }
 
+      case t if t <:< localTypeOf[Map[_, _]] =>
+        val TypeRef(_, _, Seq(keyType, valueType)) = t
+        val Schema(keyDataType, _) = schemaFor(keyType)
+        val Schema(valueDataType, valueNullable) = schemaFor(valueType)
+
+        val primitiveMethodKey = keyType match {
+          case t if t <:< definitions.IntTpe => Some("toIntArray")
+          case t if t <:< definitions.LongTpe => Some("toLongArray")
+          case t if t <:< definitions.DoubleTpe => Some("toDoubleArray")
+          case t if t <:< definitions.FloatTpe => Some("toFloatArray")
+          case t if t <:< definitions.ShortTpe => Some("toShortArray")
+          case t if t <:< definitions.ByteTpe => Some("toByteArray")
+          case t if t <:< definitions.BooleanTpe => Some("toBooleanArray")
+          case _ => None
+        }
+
+        val keyData =
+          Invoke(
+            MapObjects(
+              p => constructorFor(keyType, Some(p)),
+              Invoke(getPath, "keyArray", ArrayType(keyDataType)),
+              keyDataType),
+            "array",
+            ObjectType(classOf[Array[Any]]))
+
+        val primitiveMethodValue = valueType match {
+          case t if t <:< definitions.IntTpe => Some("toIntArray")
+          case t if t <:< definitions.LongTpe => Some("toLongArray")
+          case t if t <:< definitions.DoubleTpe => Some("toDoubleArray")
+          case t if t <:< definitions.FloatTpe => Some("toFloatArray")
+          case t if t <:< definitions.ShortTpe => Some("toShortArray")
+          case t if t <:< definitions.ByteTpe => Some("toByteArray")
+          case t if t <:< definitions.BooleanTpe => Some("toBooleanArray")
+          case _ => None
+        }
+
+        val valueData =
+          Invoke(
+            MapObjects(
+              p => constructorFor(valueType, Some(p)),
+              Invoke(getPath, "valueArray", ArrayType(valueDataType)),
+              valueDataType),
+            "array",
+            ObjectType(classOf[Array[Any]]))
+
+        StaticInvoke(
+          ArrayBasedMapData,
+          ObjectType(classOf[Map[_, _]]),
+          "toScalaMap",
+          keyData :: valueData :: Nil)
+
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val elementDataType = dataTypeFor(elementType)
         val Schema(dataType, nullable) = schemaFor(elementType)
 
-        val arrayData = if (!elementDataType.isInstanceOf[AtomicType]) {
-          MapObjects(p => constructorFor(elementType, Some(p)), getPath, dataType)
-        } else {
-          ???
+        // Avoid boxing when possible by just wrapping a primitive array.
+        val primitiveMethod = elementType match {
+          case _ if nullable => None
+          case t if t <:< definitions.IntTpe => Some("toIntArray")
+          case t if t <:< definitions.LongTpe => Some("toLongArray")
+          case t if t <:< definitions.DoubleTpe => Some("toDoubleArray")
+          case t if t <:< definitions.FloatTpe => Some("toFloatArray")
+          case t if t <:< definitions.ShortTpe => Some("toShortArray")
+          case t if t <:< definitions.ByteTpe => Some("toByteArray")
+          case t if t <:< definitions.BooleanTpe => Some("toBooleanArray")
+          case _ => None
+        }
+
+        val arrayData = primitiveMethod.map { method =>
+          Invoke(getPath, method, arrayClassFor(elementType))
+        }.getOrElse {
+          Invoke(
+            MapObjects(p => constructorFor(elementType, Some(p)), getPath, dataType),
+            "array",
+            arrayClassFor(elementType))
         }
 
         StaticInvoke(
           scala.collection.mutable.WrappedArray,
           ObjectType(classOf[Seq[_]]),
           "make",
-          Invoke(arrayData, "array", ObjectType(classOf[Array[Any]])) :: Nil)
+          arrayData :: Nil)
+
+
+      case t if t <:< localTypeOf[Product] =>
+        val formalTypeArgs = t.typeSymbol.asClass.typeParams
+        val TypeRef(_, _, actualTypeArgs) = t
+        val constructorSymbol = t.member(nme.CONSTRUCTOR)
+        val params = if (constructorSymbol.isMethod) {
+          constructorSymbol.asMethod.paramss
+        } else {
+          // Find the primary constructor, and use its parameter ordering.
+          val primaryConstructorSymbol: Option[Symbol] =
+            constructorSymbol.asTerm.alternatives.find(s =>
+              s.isMethod && s.asMethod.isPrimaryConstructor)
+
+          if (primaryConstructorSymbol.isEmpty) {
+            sys.error("Internal SQL error: Product object did not have a primary constructor.")
+          } else {
+            primaryConstructorSymbol.get.asMethod.paramss
+          }
+        }
+
+        val className: String = t.erasure.typeSymbol.asClass.fullName
+        val cls = Utils.classForName(className)
+
+        val arguments = params.head.map { p =>
+          val fieldName = p.name.toString
+          val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+          val dataType = dataTypeFor(fieldType)
+
+          constructorFor(fieldType, Some(addToPath(fieldName)))
+        }
+
+        val newInstance = NewInstance(cls, arguments, propagateNull = false, ObjectType(cls))
+
+        if (path.nonEmpty) {
+          expressions.If(
+            IsNull(getPath),
+            expressions.Literal.create(null, ObjectType(cls)),
+            newInstance
+          )
+        } else {
+          newInstance
+        }
 
     }
   }
@@ -418,13 +509,13 @@ trait ScalaReflection {
           val elementDataType = dataTypeFor(elementType)
           val Schema(dataType, nullable) = schemaFor(elementType)
 
-          if (!elementDataType.isInstanceOf[AtomicType]) {
-            MapObjects(extractorFor(_, elementType), inputObject, elementDataType)
-          } else {
+          if (dataType.isInstanceOf[AtomicType]) {
             NewInstance(
               classOf[GenericArrayData],
               inputObject :: Nil,
               dataType = ArrayType(dataType, nullable))
+          } else {
+            MapObjects(extractorFor(_, elementType), inputObject, elementDataType)
           }
 
         case t if t <:< localTypeOf[Map[_, _]] =>

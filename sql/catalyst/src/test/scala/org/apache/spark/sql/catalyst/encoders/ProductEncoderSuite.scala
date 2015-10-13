@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.encoders
 
 import java.util
 
+import org.apache.spark.sql.types.{StructField, ArrayType, ArrayData}
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe._
 
@@ -38,9 +40,21 @@ case class BoxedData(
     byteField: java.lang.Byte,
     booleanField: java.lang.Boolean)
 
+case class RepeatedData(
+    arrayField: Seq[Int],
+    arrayFieldContainsNull: Seq[java.lang.Integer],
+    mapField: scala.collection.Map[Int, Long],
+    mapFieldNull: scala.collection.Map[Int, java.lang.Long],
+    structField: PrimitiveData)
+
+case class SpecificCollection(l: List[Int])
+
 class ProductEncoderSuite extends SparkFunSuite {
 
   encodeDecodeTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
+
+  // TODO: Support creating specific subclasses of Seq.
+  ignore("Specific collection types") { encodeDecodeTest(SpecificCollection(1 :: Nil)) }
 
   encodeDecodeTest(
     OptionalData(
@@ -55,8 +69,21 @@ class ProductEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(
     BoxedData(null, null, null, null, null, null, null))
 
+  encodeDecodeTest(
+    RepeatedStruct(PrimitiveData(1, 1, 1, 1, 1, 1, true) :: Nil))
+
+  encodeDecodeTest(
+    RepeatedData(
+      Seq(1, 2),
+      Seq(new Integer(1), null, new Integer(2)),
+      Map(1 -> 2L),
+      Map(1 -> null),
+      PrimitiveData(1, 1, 1, 1, 1, 1, true)))
+
+  encodeDecodeTest(("nullable Seq[Integer]", Seq[Integer](1, null)))
+
   encodeDecodeTest(("Seq[(String, String)]",
-    Seq(("a","b"))))
+    Seq(("a", "b"))))
   encodeDecodeTest(("Seq[(Int, Int)]",
     Seq((1, 2))))
   encodeDecodeTest(("Seq[(Long, Long)]",
@@ -73,7 +100,7 @@ class ProductEncoderSuite extends SparkFunSuite {
     Seq((true, false))))
 
   encodeDecodeTest(("ArrayBuffer[(String, String)]",
-    ArrayBuffer(("a","b"))))
+    ArrayBuffer(("a", "b"))))
   encodeDecodeTest(("ArrayBuffer[(Int, Int)]",
     ArrayBuffer((1, 2))))
   encodeDecodeTest(("ArrayBuffer[(Long, Long)]",
@@ -108,6 +135,10 @@ class ProductEncoderSuite extends SparkFunSuite {
     Array(Array(Array(Array(Array((1, 2))))))))
   { (l, r) => l._2(0)(0)(0)(0)(0) == r._2(0)(0)(0)(0)(0) }
 
+
+  encodeDecodeTestCustom(("Array[Array[Integer]]",
+    Array(Array[Integer](1))))
+  { (l, r) => l._2(0)(0) == r._2(0)(0) }
 
   encodeDecodeTestCustom(("Array[Array[Int]]",
     Array(Array(1))))
@@ -174,7 +205,7 @@ class ProductEncoderSuite extends SparkFunSuite {
   encodeDecodeTestCustom(("java.sql.Date", new java.sql.Date(1)))
     { (l, r) => l._2.toString == r._2.toString }
 
-  /** Simplified encodeDecodeTestCustom, where the comparison function can be `Object.equals`.*/
+  /** Simplified encodeDecodeTestCustom, where the comparison function can be `Object.equals`. */
   protected def encodeDecodeTest[T <: Product : TypeTag](inputData: T) =
     encodeDecodeTestCustom[T](inputData)((l, r) => l == r)
 
@@ -200,23 +231,38 @@ class ProductEncoderSuite extends SparkFunSuite {
               |Converted: $convertedData
               |Schema: ${schema.mkString(",")}
               |${encoder.schema.treeString}
+              |
               |Construct Expressions:
               |${boundEncoder.constructExpression.treeString}
               |
             """.stripMargin, e)
       }
 
-      if (!c(inputData,convertedBack)) {
+      if (!c(inputData, convertedBack)) {
+        val types =
+          convertedBack.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
+
+        val encodedData = convertedData.toSeq(encoder.schema).zip(encoder.schema).map {
+          case (a: ArrayData, StructField(_, at: ArrayType, _, _)) =>
+            a.toArray[Any](at.elementType).toSeq
+          case (other, _) =>
+            other
+        }.mkString("[", ",", "]")
+
         fail(
           s"""Encoded/Decoded data does not match input data
              |
              |in:  $inputData
              |out: $convertedBack
-             |types: ${convertedBack.productIterator.map(_.getClass.getName).mkString(",")}
+             |types: $types
              |
-             |Encoded Data: ${convertedData.toSeq(encoder.schema).mkString("[", ",", "]")}
+             |Encoded Data: $encodedData
              |Schema: ${schema.mkString(",")}
              |${encoder.schema.treeString}
+             |
+             |Extract Expressions:
+             |${boundEncoder.extractExpressions.map(_.treeString).mkString("\n")}
+             |
              |Construct Expressions:
              |${boundEncoder.constructExpression.treeString}
              |
@@ -224,152 +270,4 @@ class ProductEncoderSuite extends SparkFunSuite {
       }
     }
   }
-
-//  test("convert PrimitiveData to InternalRow") {
-//    val inputData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-//    val encoder = ProductEncoder[PrimitiveData]
-//    val convertedData = encoder.toRow(inputData)
-//
-//    assert(convertedData.getInt(0) == 1)
-//    assert(convertedData.getLong(1) == 1.toLong)
-//    assert(convertedData.getDouble(2) == 1.toDouble)
-//    assert(convertedData.getFloat(3) == 1.toFloat)
-//    assert(convertedData.getShort(4) == 1.toShort)
-//    assert(convertedData.getByte(5) == 1.toByte)
-//    assert(convertedData.getBoolean(6) == true)
-//
-//    val schema = encoder.schema.toAttributes
-//    val boundEncoder = encoder.bind(schema)
-//    val convertedBack = boundEncoder.fromRow(convertedData)
-//    assert(inputData == convertedBack)
-//  }
-//
-//  test("convert Some[_] to InternalRow") {
-//    val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-//    val inputData = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-//      Some(primitiveData))
-//
-//    val encoder = ProductEncoder[OptionalData]
-//    val convertedData = encoder.toRow(inputData)
-//
-//    assert(convertedData.getInt(0) == 2)
-//    assert(convertedData.getLong(1) == 2.toLong)
-//    assert(convertedData.getDouble(2) == 2.toDouble)
-//    assert(convertedData.getFloat(3) == 2.toFloat)
-//    assert(convertedData.getShort(4) == 2.toShort)
-//    assert(convertedData.getByte(5) == 2.toByte)
-//    assert(convertedData.getBoolean(6) == true)
-//
-//    val nestedRow = convertedData.getStruct(7, 7)
-//    assert(nestedRow.getInt(0) == 1)
-//    assert(nestedRow.getLong(1) == 1.toLong)
-//    assert(nestedRow.getDouble(2) == 1.toDouble)
-//    assert(nestedRow.getFloat(3) == 1.toFloat)
-//    assert(nestedRow.getShort(4) == 1.toShort)
-//    assert(nestedRow.getByte(5) == 1.toByte)
-//    assert(nestedRow.getBoolean(6) == true)
-//  }
-//
-//  test("convert None to InternalRow") {
-//    val inputData = OptionalData(None, None, None, None, None, None, None, None)
-//    val encoder = ProductEncoder[OptionalData]
-//    val convertedData = encoder.toRow(inputData)
-//
-//    assert(convertedData.isNullAt(0))
-//    assert(convertedData.isNullAt(1))
-//    assert(convertedData.isNullAt(2))
-//    assert(convertedData.isNullAt(3))
-//    assert(convertedData.isNullAt(4))
-//    assert(convertedData.isNullAt(5))
-//    assert(convertedData.isNullAt(6))
-//    assert(convertedData.isNullAt(7))
-//  }
-//
-//  test("convert nullable but present data to InternalRow") {
-//    val inputData = NullableData(
-//      1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true, "test", new java.math.BigDecimal(1), new Date(0),
-//      new Timestamp(0), Array[Byte](1, 2, 3))
-//
-//    val encoder = ProductEncoder[NullableData]
-//    val convertedData = encoder.toRow(inputData)
-//
-//    assert(convertedData.getInt(0) == 1)
-//    assert(convertedData.getLong(1) == 1.toLong)
-//    assert(convertedData.getDouble(2) == 1.toDouble)
-//    assert(convertedData.getFloat(3) == 1.toFloat)
-//    assert(convertedData.getShort(4) == 1.toShort)
-//    assert(convertedData.getByte(5) == 1.toByte)
-//    assert(convertedData.getBoolean(6) == true)
-//
-//    assert(!convertedData.isNullAt(9))
-//  }
-//
-//  test("convert nullable data to InternalRow") {
-//    val inputData =
-//      NullableData(null, null, null, null, null, null, null, null, null, null, null, null)
-//
-//    val encoder = ProductEncoder[NullableData]
-//    val convertedData = encoder.toRow(inputData)
-//
-//    assert(convertedData.isNullAt(0))
-//    assert(convertedData.isNullAt(1))
-//    assert(convertedData.isNullAt(2))
-//    assert(convertedData.isNullAt(3))
-//    assert(convertedData.isNullAt(4))
-//    assert(convertedData.isNullAt(5))
-//    assert(convertedData.isNullAt(6))
-//    assert(convertedData.isNullAt(7))
-//    assert(convertedData.isNullAt(8))
-//    assert(convertedData.isNullAt(9))
-//    assert(convertedData.isNullAt(10))
-//    assert(convertedData.isNullAt(11))
-//  }
-//
-//  test("convert repeated struct") {
-//    val inputData = RepeatedStruct(PrimitiveData(1, 1, 1, 1, 1, 1, true) :: Nil)
-//    val encoder = ProductEncoder[RepeatedStruct]
-//
-//    val converted = encoder.toRow(inputData)
-//    val convertedStruct = converted.getArray(0).getStruct(0, 7)
-//    assert(convertedStruct.getInt(0) == 1)
-//    assert(convertedStruct.getLong(1) == 1.toLong)
-//    assert(convertedStruct.getDouble(2) == 1.toDouble)
-//    assert(convertedStruct.getFloat(3) == 1.toFloat)
-//    assert(convertedStruct.getShort(4) == 1.toShort)
-//    assert(convertedStruct.getByte(5) == 1.toByte)
-//    assert(convertedStruct.getBoolean(6) == true)
-//  }
-//
-//  test("convert nested seq") {
-//    val convertedData = ProductEncoder[Tuple1[Seq[Seq[Int]]]].toRow(Tuple1(Seq(Seq(1))))
-//    assert(convertedData.getArray(0).getArray(0).getInt(0) == 1)
-//
-//    val convertedData2 = ProductEncoder[Tuple1[Seq[Seq[Seq[Int]]]]].toRow(Tuple1(Seq(Seq(Seq(1)))))
-//    assert(convertedData2.getArray(0).getArray(0).getArray(0).getInt(0) == 1)
-//  }
-//
-//  test("convert nested array") {
-//    val convertedData = ProductEncoder[Tuple1[Array[Array[Int]]]].toRow(Tuple1(Array(Array(1))))
-//  }
-//
-//  test("convert complex") {
-//    val inputData = ComplexData(
-//      Seq(1, 2),
-//      Array(1, 2),
-//      1 :: 2 :: Nil,
-//      Seq(new Integer(1), null, new Integer(2)),
-//      Map(1 -> 2L),
-//      Map(1 -> new java.lang.Long(2)),
-//      PrimitiveData(1, 1, 1, 1, 1, 1, true),
-//      Array(Array(1)))
-//
-//    val encoder = ProductEncoder[ComplexData]
-//    val convertedData = encoder.toRow(inputData)
-//
-//    assert(!convertedData.isNullAt(0))
-//    val seq = convertedData.getArray(0)
-//    assert(seq.numElements() == 2)
-//    assert(seq.getInt(0) == 1)
-//    assert(seq.getInt(1) == 2)
-//  }
 }

@@ -118,18 +118,30 @@ case class Invoke(
 
   lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      cls.getMethods.find(_.getName == functionName).get.getReturnType.getName
+      cls
+        .getMethods
+        .find(_.getName == functionName)
+        .getOrElse(sys.error(s"Couldn't find $functionName on $cls"))
+        .getReturnType
+        .getName
     case _ => ""
   }
 
   lazy val unboxer = (dataType, method) match {
-    case (IntegerType, "java.lang.Object") => (s: String) => s"((java.lang.Integer)$s).intValue()"
-    case (LongType, "java.lang.Object") => (s: String) => s"((java.lang.Long)$s).longValue()"
-    case (FloatType, "java.lang.Object") => (s: String) => s"((java.lang.Float)$s).floatValue()"
-    case (ShortType, "java.lang.Object") => (s: String) => s"((java.lang.Short)$s).shortValue()"
-    case (ByteType, "java.lang.Object") => (s: String) => s"((java.lang.Byte)$s).byteValue()"
-    case (DoubleType, "java.lang.Object") => (s: String) => s"((java.lang.Double)$s).doubleValue()"
-    case (BooleanType, "java.lang.Object") => (s: String) => s"((java.lang.Boolean)$s).booleanValue()"
+    case (IntegerType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Integer)$s).intValue()"
+    case (LongType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Long)$s).longValue()"
+    case (FloatType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Float)$s).floatValue()"
+    case (ShortType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Short)$s).shortValue()"
+    case (ByteType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Byte)$s).byteValue()"
+    case (DoubleType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Double)$s).doubleValue()"
+    case (BooleanType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Boolean)$s).booleanValue()"
     case _ => identity[String] _
   }
 
@@ -255,10 +267,16 @@ case class UnwrapOption(
   }
 }
 
+/**
+ * Converts the result of evaluating `child` into an option, checking both the isNull bit and
+ * (in the case of reference types) equality with null.
+ * @param optionType The datatype to be held inside of the Option.
+ * @param child The expression to evaluate and wrap.
+ */
 case class WrapOption(optionType: DataType, child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
-  override def dataType = ObjectType(classOf[Option[_]])
+  override def dataType: DataType = ObjectType(classOf[Option[_]])
 
   override def nullable: Boolean = true
 
@@ -276,12 +294,16 @@ case class WrapOption(optionType: DataType, child: Expression)
 
       boolean ${ev.isNull} = false;
       scala.Option<$javaType> ${ev.value} =
-        ${inputObject.isNull} ? scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
+        ${inputObject.isNull} ?
+        scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
     """
   }
 }
 
-
+/**
+ * A place holder for the loop variable used in [[MapObjects]].  This should never be constructed
+ * manually, but will instead be passed into the provided lambda function.
+ */
 case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
@@ -319,29 +341,29 @@ case class MapObjects(
   private lazy val loopAttribute = AttributeReference("loopVar", elementType)()
   private lazy val completeFunction = function(loopAttribute)
 
-  private lazy val (lengthFunction, itemAccessor) = inputData.dataType match {
+  private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
     case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-      (".size()", (i: String) => s".apply($i)")
+      (".size()", (i: String) => s".apply($i)", false)
     case ObjectType(cls) if cls.isArray =>
-      (".length", (i: String) => s"[$i]")
+      (".length", (i: String) => s"[$i]", false)
     case ArrayType(s: StructType, _) =>
-      (".numElements()", (i: String) => s".getStruct($i, ${s.size})")
+      (".numElements()", (i: String) => s".getStruct($i, ${s.size})", false)
     case ArrayType(a: ArrayType, _) =>
-      (".numElements()", (i: String) => s".getArray($i)")
+      (".numElements()", (i: String) => s".getArray($i)", true)
     case ArrayType(IntegerType, _) =>
-      (".numElements()", (i: String) => s".getInt($i})")
+      (".numElements()", (i: String) => s".getInt($i)", true)
     case ArrayType(LongType, _) =>
-      (".numElements()", (i: String) => s".getLong($i})")
+      (".numElements()", (i: String) => s".getLong($i)", true)
     case ArrayType(FloatType, _) =>
-      (".numElements()", (i: String) => s".getFloat($i})")
+      (".numElements()", (i: String) => s".getFloat($i)", true)
     case ArrayType(DoubleType, _) =>
-      (".numElements()", (i: String) => s".getDouble($i})")
+      (".numElements()", (i: String) => s".getDouble($i)", true)
     case ArrayType(ByteType, _) =>
-      (".numElements()", (i: String) => s".getByte($i})")
+      (".numElements()", (i: String) => s".getByte($i)", true)
     case ArrayType(ShortType, _) =>
-      (".numElements()", (i: String) => s".getShort($i})")
+      (".numElements()", (i: String) => s".getShort($i)", true)
     case ArrayType(BooleanType, _) =>
-      (".numElements()", (i: String) => s".getBoolean($i})")
+      (".numElements()", (i: String) => s".getBoolean($i)", true)
   }
 
   override def nullable: Boolean = true
@@ -389,6 +411,11 @@ case class MapObjects(
       s"new $convertedType[$dataLength]"
     }
 
+    val loopNullCheck = if (primitiveElement) {
+      s"boolean $loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
+    } else {
+      s"boolean $loopIsNull = ${genInputData.isNull} || $loopValue == null;"
+    }
 
     s"""
       ${genInputData.code}
@@ -405,7 +432,7 @@ case class MapObjects(
         while ($loopIndex < $dataLength) {
           $elementJavaType $loopValue =
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
-          boolean $loopIsNull = $loopValue == null;
+          $loopNullCheck
 
           ${genFunction.code}
 
