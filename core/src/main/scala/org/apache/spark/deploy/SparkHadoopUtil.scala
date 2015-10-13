@@ -22,7 +22,7 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Comparator}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
@@ -71,7 +71,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
-    for (token <- source.getTokens()) {
+    for (token <- source.getTokens.asScala) {
       dest.addToken(token)
     }
   }
@@ -175,8 +175,8 @@ class SparkHadoopUtil extends Logging {
   }
 
   private def getFileSystemThreadStatistics(): Seq[AnyRef] = {
-    val stats = FileSystem.getAllStatistics()
-    stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+    FileSystem.getAllStatistics.asScala.map(
+      Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
   }
 
   private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
@@ -192,7 +192,9 @@ class SparkHadoopUtil extends Logging {
    * while it's interface in Hadoop 2.+.
    */
   def getConfigurationFromJobContext(context: JobContext): Configuration = {
+    // scalastyle:off jobconfig
     val method = context.getClass.getMethod("getConfiguration")
+    // scalastyle:on jobconfig
     method.invoke(context).asInstanceOf[Configuration]
   }
 
@@ -204,7 +206,9 @@ class SparkHadoopUtil extends Logging {
    */
   def getTaskAttemptIDFromTaskAttemptContext(
       context: MapReduceTaskAttemptContext): MapReduceTaskAttemptID = {
+    // scalastyle:off jobconfig
     val method = context.getClass.getMethod("getTaskAttemptID")
+    // scalastyle:on jobconfig
     method.invoke(context).asInstanceOf[MapReduceTaskAttemptID]
   }
 
@@ -306,12 +310,13 @@ class SparkHadoopUtil extends Logging {
     val renewalInterval =
       sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
 
-    credentials.getAllTokens.filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+    credentials.getAllTokens.asScala
+      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .map { t =>
-      val identifier = new DelegationTokenIdentifier()
-      identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-      (identifier.getIssueDate + fraction * renewalInterval).toLong - now
-    }.foldLeft(0L)(math.max)
+        val identifier = new DelegationTokenIdentifier()
+        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+        (identifier.getIssueDate + fraction * renewalInterval).toLong - now
+      }.foldLeft(0L)(math.max)
   }
 
 
@@ -380,20 +385,13 @@ class SparkHadoopUtil extends Logging {
 
 object SparkHadoopUtil {
 
-  private val hadoop = {
-    val yarnMode = java.lang.Boolean.valueOf(
-        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
-    if (yarnMode) {
-      try {
-        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
-          .newInstance()
-          .asInstanceOf[SparkHadoopUtil]
-      } catch {
-       case e: Exception => throw new SparkException("Unable to load YARN support", e)
-      }
-    } else {
-      new SparkHadoopUtil
-    }
+  private lazy val hadoop = new SparkHadoopUtil
+  private lazy val yarn = try {
+    Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+      .newInstance()
+      .asInstanceOf[SparkHadoopUtil]
+  } catch {
+    case e: Exception => throw new SparkException("Unable to load YARN support", e)
   }
 
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
@@ -401,6 +399,13 @@ object SparkHadoopUtil {
   val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
 
   def get: SparkHadoopUtil = {
-    hadoop
+    // Check each time to support changing to/from YARN
+    val yarnMode = java.lang.Boolean.valueOf(
+        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+    if (yarnMode) {
+      yarn
+    } else {
+      hadoop
+    }
   }
 }

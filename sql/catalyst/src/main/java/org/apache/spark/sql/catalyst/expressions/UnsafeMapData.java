@@ -17,18 +17,23 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.sql.types.ArrayData;
 import org.apache.spark.sql.types.MapData;
 
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.
  *
  * Currently we just use 2 UnsafeArrayData to represent UnsafeMapData.
+ *
+ * Note that when we write out this map, we should write out the `numElements` at first 4 bytes,
+ * and numBytes of key array at second 4 bytes, then follows key array content and value array
+ * content without `numElements` header.
+ * When we read in a map, we should read first 4 bytes as `numElements` and second 4 bytes as
+ * numBytes of key array, and construct unsafe key array and value array with these 2 information.
  */
 public class UnsafeMapData extends MapData {
 
-  public final UnsafeArrayData keys;
-  public final UnsafeArrayData values;
+  private final UnsafeArrayData keys;
+  private final UnsafeArrayData values;
   // The number of elements in this array
   private int numElements;
   // The size of this array's backing data, in bytes
@@ -50,12 +55,12 @@ public class UnsafeMapData extends MapData {
   }
 
   @Override
-  public ArrayData keyArray() {
+  public UnsafeArrayData keyArray() {
     return keys;
   }
 
   @Override
-  public ArrayData valueArray() {
+  public UnsafeArrayData valueArray() {
     return values;
   }
 

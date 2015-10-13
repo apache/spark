@@ -22,7 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, InterpretedMutableProjection, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction2
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, AggregateFunction2}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -40,6 +40,9 @@ sealed trait BufferSetterGetterUtils {
     var i = 0
     while (i < getters.length) {
       getters(i) = dataTypes(i) match {
+        case NullType =>
+          (row: InternalRow, ordinal: Int) => null
+
         case BooleanType =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getBoolean(ordinal)
@@ -74,6 +77,14 @@ sealed trait BufferSetterGetterUtils {
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getDecimal(ordinal, precision, scale)
 
+        case DateType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
+
+        case TimestampType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
+
         case other =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.get(ordinal, other)
@@ -92,6 +103,9 @@ sealed trait BufferSetterGetterUtils {
     var i = 0
     while (i < setters.length) {
       setters(i) = dataTypes(i) match {
+        case NullType =>
+          (row: MutableRow, ordinal: Int, value: Any) => row.setNullAt(ordinal)
+
         case b: BooleanType =>
           (row: MutableRow, ordinal: Int, value: Any) =>
             if (value != null) {
@@ -151,8 +165,22 @@ sealed trait BufferSetterGetterUtils {
         case dt: DecimalType =>
           val precision = dt.precision
           (row: MutableRow, ordinal: Int, value: Any) =>
+            // To make it work with UnsafeRow, we cannot use setNullAt.
+            // Please see the comment of UnsafeRow's setDecimal.
+            row.setDecimal(ordinal, value.asInstanceOf[Decimal], precision)
+
+        case DateType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
             if (value != null) {
-              row.setDecimal(ordinal, value.asInstanceOf[Decimal], precision)
+              row.setInt(ordinal, value.asInstanceOf[Int])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case TimestampType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setLong(ordinal, value.asInstanceOf[Long])
             } else {
               row.setNullAt(ordinal)
             }
@@ -205,6 +233,7 @@ private[sql] class MutableAggregationBufferImpl (
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
+
     toScalaConverters(i)(bufferValueGetters(i)(underlyingBuffer, offsets(i)))
   }
 
@@ -289,13 +318,11 @@ private[sql] class InputAggregationBuffer private[sql] (
 /**
  * The internal wrapper used to hook a [[UserDefinedAggregateFunction]] `udaf` in the
  * internal aggregation code path.
- * @param children
- * @param udaf
  */
 private[sql] case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction)
-  extends AggregateFunction2 with Logging {
+  extends ImperativeAggregate with Logging {
 
   require(
     children.length == udaf.inputSchema.length,
@@ -304,17 +331,15 @@ private[sql] case class ScalaUDAF(
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType = udaf.returnDataType
+  override def dataType: DataType = udaf.dataType
 
   override def deterministic: Boolean = udaf.deterministic
 
   override val inputTypes: Seq[DataType] = udaf.inputSchema.map(_.dataType)
 
-  override val bufferSchema: StructType = udaf.bufferSchema
+  override val aggBufferSchema: StructType = udaf.bufferSchema
 
-  override val bufferAttributes: Seq[AttributeReference] = bufferSchema.toAttributes
-
-  override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
+  override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
 
   private[this] lazy val childrenSchema: StructType = {
     val inputFields = children.zipWithIndex.map {
@@ -341,15 +366,19 @@ private[sql] case class ScalaUDAF(
     CatalystTypeConverters.createToScalaConverter(childrenSchema)
 
   private[this] lazy val bufferValuesToCatalystConverters: Array[Any => Any] = {
-    bufferSchema.fields.map { field =>
+    aggBufferSchema.fields.map { field =>
       CatalystTypeConverters.createToCatalystConverter(field.dataType)
     }
   }
 
   private[this] lazy val bufferValuesToScalaConverters: Array[Any => Any] = {
-    bufferSchema.fields.map { field =>
+    aggBufferSchema.fields.map { field =>
       CatalystTypeConverters.createToScalaConverter(field.dataType)
     }
+  }
+
+  private[this] lazy val outputToCatalystConverter: Any => Any = {
+    CatalystTypeConverters.createToCatalystConverter(dataType)
   }
 
   // This buffer is only used at executor side.
@@ -365,15 +394,15 @@ private[sql] case class ScalaUDAF(
    * Sets the inputBufferOffset to newInputBufferOffset and then create a new instance of
    * `inputAggregateBuffer` based on this new inputBufferOffset.
    */
-  override def withNewInputBufferOffset(newInputBufferOffset: Int): Unit = {
-    super.withNewInputBufferOffset(newInputBufferOffset)
+  override def withNewInputAggBufferOffset(newInputBufferOffset: Int): Unit = {
+    super.withNewInputAggBufferOffset(newInputBufferOffset)
     // inputBufferOffset has been updated.
     inputAggregateBuffer =
       new InputAggregationBuffer(
-        bufferSchema,
+        aggBufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
-        inputBufferOffset,
+        inputAggBufferOffset,
         null)
   }
 
@@ -381,22 +410,22 @@ private[sql] case class ScalaUDAF(
    * Sets the mutableBufferOffset to newMutableBufferOffset and then create a new instance of
    * `mutableAggregateBuffer` and `evalAggregateBuffer` based on this new mutableBufferOffset.
    */
-  override def withNewMutableBufferOffset(newMutableBufferOffset: Int): Unit = {
-    super.withNewMutableBufferOffset(newMutableBufferOffset)
+  override def withNewMutableAggBufferOffset(newMutableBufferOffset: Int): Unit = {
+    super.withNewMutableAggBufferOffset(newMutableBufferOffset)
     // mutableBufferOffset has been updated.
     mutableAggregateBuffer =
       new MutableAggregationBufferImpl(
-        bufferSchema,
+        aggBufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
-        mutableBufferOffset,
+        mutableAggBufferOffset,
         null)
     evalAggregateBuffer =
       new InputAggregationBuffer(
-        bufferSchema,
+        aggBufferSchema,
         bufferValuesToCatalystConverters,
         bufferValuesToScalaConverters,
-        mutableBufferOffset,
+        mutableAggBufferOffset,
         null)
   }
 
@@ -424,7 +453,7 @@ private[sql] case class ScalaUDAF(
   override def eval(buffer: InternalRow): Any = {
     evalAggregateBuffer.underlyingInputBuffer = buffer
 
-    udaf.evaluate(evalAggregateBuffer)
+    outputToCatalystConverter(udaf.evaluate(evalAggregateBuffer))
   }
 
   override def toString: String = {

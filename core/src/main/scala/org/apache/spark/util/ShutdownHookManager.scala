@@ -217,7 +217,9 @@ private [util] class SparkShutdownHookManager {
     }
     Try(Utils.classForName("org.apache.hadoop.util.ShutdownHookManager")) match {
       case Success(shmClass) =>
-        val fsPriority = classOf[FileSystem].getField("SHUTDOWN_HOOK_PRIORITY").get()
+        val fsPriority = classOf[FileSystem]
+          .getField("SHUTDOWN_HOOK_PRIORITY")
+          .get(null) // static field, the value is not used
           .asInstanceOf[Int]
         val shm = shmClass.getMethod("get").invoke(null)
         shm.getClass().getMethod("addShutdownHook", classOf[Runnable], classOf[Int])

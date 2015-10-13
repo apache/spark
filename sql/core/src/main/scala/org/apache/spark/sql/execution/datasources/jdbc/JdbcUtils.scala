@@ -42,10 +42,13 @@ object JdbcUtils extends Logging {
   /**
    * Returns true if the table already exists in the JDBC database.
    */
-  def tableExists(conn: Connection, table: String): Boolean = {
+  def tableExists(conn: Connection, url: String, table: String): Boolean = {
+    val dialect = JdbcDialects.get(url)
+
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
-    // SQL database systems, considering "table" could also include the database name.
-    Try(conn.prepareStatement(s"SELECT 1 FROM $table LIMIT 1").executeQuery().next()).isSuccess
+    // SQL database systems using JDBC meta data calls, considering "table" could also include
+    // the database name. Query used to find table exists can be overriden by the dialects.
+    Try(conn.prepareStatement(dialect.getTableExistsQuery(table)).executeQuery()).isSuccess
   }
 
   /**
@@ -88,13 +91,15 @@ object JdbcUtils extends Logging {
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
-      nullTypes: Array[Int]): Iterator[Byte] = {
+      nullTypes: Array[Int],
+      batchSize: Int): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
     try {
       conn.setAutoCommit(false) // Everything in the same db transaction.
       val stmt = insertStatement(conn, table, rddSchema)
       try {
+        var rowCount = 0
         while (iterator.hasNext) {
           val row = iterator.next()
           val numFields = rddSchema.fields.length
@@ -122,7 +127,15 @@ object JdbcUtils extends Logging {
             }
             i = i + 1
           }
-          stmt.executeUpdate()
+          stmt.addBatch()
+          rowCount += 1
+          if (rowCount % batchSize == 0) {
+            stmt.executeBatch()
+            rowCount = 0
+          }
+        }
+        if (rowCount > 0) {
+          stmt.executeBatch()
         }
       } finally {
         stmt.close()
@@ -211,8 +224,9 @@ object JdbcUtils extends Logging {
     val rddSchema = df.schema
     val driver: String = DriverRegistry.getDriverClassName(url)
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
+    val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes)
+      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize)
     }
   }
 

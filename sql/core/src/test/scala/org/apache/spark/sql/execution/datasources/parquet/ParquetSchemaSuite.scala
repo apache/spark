@@ -34,32 +34,29 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
   protected def testSchemaInference[T <: Product: ClassTag: TypeTag](
       testName: String,
       messageType: String,
-      binaryAsString: Boolean = true,
-      int96AsTimestamp: Boolean = true,
-      followParquetFormatSpec: Boolean = false,
-      isThriftDerived: Boolean = false): Unit = {
+      binaryAsString: Boolean,
+      int96AsTimestamp: Boolean,
+      writeLegacyParquetFormat: Boolean): Unit = {
     testSchema(
       testName,
       StructType.fromAttributes(ScalaReflection.attributesFor[T]),
       messageType,
       binaryAsString,
       int96AsTimestamp,
-      followParquetFormatSpec,
-      isThriftDerived)
+      writeLegacyParquetFormat)
   }
 
   protected def testParquetToCatalyst(
       testName: String,
       sqlSchema: StructType,
       parquetSchema: String,
-      binaryAsString: Boolean = true,
-      int96AsTimestamp: Boolean = true,
-      followParquetFormatSpec: Boolean = false,
-      isThriftDerived: Boolean = false): Unit = {
+      binaryAsString: Boolean,
+      int96AsTimestamp: Boolean,
+      writeLegacyParquetFormat: Boolean): Unit = {
     val converter = new CatalystSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
-      followParquetFormatSpec = followParquetFormatSpec)
+      writeLegacyParquetFormat = writeLegacyParquetFormat)
 
     test(s"sql <= parquet: $testName") {
       val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
@@ -77,14 +74,13 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       testName: String,
       sqlSchema: StructType,
       parquetSchema: String,
-      binaryAsString: Boolean = true,
-      int96AsTimestamp: Boolean = true,
-      followParquetFormatSpec: Boolean = false,
-      isThriftDerived: Boolean = false): Unit = {
+      binaryAsString: Boolean,
+      int96AsTimestamp: Boolean,
+      writeLegacyParquetFormat: Boolean): Unit = {
     val converter = new CatalystSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
-      followParquetFormatSpec = followParquetFormatSpec)
+      writeLegacyParquetFormat = writeLegacyParquetFormat)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -98,10 +94,9 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       testName: String,
       sqlSchema: StructType,
       parquetSchema: String,
-      binaryAsString: Boolean = true,
-      int96AsTimestamp: Boolean = true,
-      followParquetFormatSpec: Boolean = false,
-      isThriftDerived: Boolean = false): Unit = {
+      binaryAsString: Boolean,
+      int96AsTimestamp: Boolean,
+      writeLegacyParquetFormat: Boolean): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -109,8 +104,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp,
-      followParquetFormatSpec,
-      isThriftDerived)
+      writeLegacyParquetFormat)
 
     testParquetToCatalyst(
       testName,
@@ -118,8 +112,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp,
-      followParquetFormatSpec,
-      isThriftDerived)
+      writeLegacyParquetFormat)
   }
 }
 
@@ -136,7 +129,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  optional binary  _6;
       |}
     """.stripMargin,
-    binaryAsString = false)
+    binaryAsString = false,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchemaInference[(Byte, Short, Int, Long, java.sql.Date)](
     "logical integral types",
@@ -148,7 +143,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  required int64 _4 (INT_64);
       |  optional int32 _5 (DATE);
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchemaInference[Tuple1[String]](
     "string",
@@ -157,7 +155,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  optional binary _1 (UTF8);
       |}
     """.stripMargin,
-    binaryAsString = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchemaInference[Tuple1[String]](
     "binary enum as string",
@@ -165,7 +165,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |message root {
       |  optional binary _1 (ENUM);
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchemaInference[Tuple1[Seq[Int]]](
     "non-nullable array - non-standard",
@@ -175,7 +178,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |    repeated int32 array;
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchemaInference[Tuple1[Seq[Int]]](
     "non-nullable array - standard",
@@ -188,7 +194,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchemaInference[Tuple1[Seq[Integer]]](
     "nullable array - non-standard",
@@ -196,11 +204,14 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |message root {
       |  optional group _1 (LIST) {
       |    repeated group bag {
-      |      optional int32 array_element;
+      |      optional int32 array;
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchemaInference[Tuple1[Seq[Integer]]](
     "nullable array - standard",
@@ -213,7 +224,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchemaInference[Tuple1[Map[Int, String]]](
     "map - standard",
@@ -227,7 +240,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchemaInference[Tuple1[Map[Int, String]]](
     "map - non-standard",
@@ -240,7 +255,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchemaInference[Tuple1[Pair[Int, String]]](
     "struct",
@@ -252,7 +270,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchemaInference[Tuple1[Map[Int, (String, Seq[(Int, Double)])]]](
     "deeply nested type - non-standard",
@@ -265,7 +285,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |        optional binary _1 (UTF8);
       |        optional group _2 (LIST) {
       |          repeated group bag {
-      |            optional group array_element {
+      |            optional group array {
       |              required int32 _1;
       |              required double _2;
       |            }
@@ -275,7 +295,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchemaInference[Tuple1[Map[Int, (String, Seq[(Int, Double)])]]](
     "deeply nested type - standard",
@@ -299,7 +322,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchemaInference[(Option[Int], Map[Int, Option[Double]])](
     "optional types",
@@ -314,36 +339,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
-
-  // Parquet files generated by parquet-thrift are already handled by the schema converter, but
-  // let's leave this test here until both read path and write path are all updated.
-  ignore("thrift generated parquet schema") {
-    // Test for SPARK-4520 -- ensure that thrift generated parquet schema is generated
-    // as expected from attributes
-    testSchemaInference[(
-      Array[Byte], Array[Byte], Array[Byte], Seq[Int], Map[Array[Byte], Seq[Int]])](
-      "thrift generated parquet schema",
-      """
-        |message root {
-        |  optional binary _1 (UTF8);
-        |  optional binary _2 (UTF8);
-        |  optional binary _3 (UTF8);
-        |  optional group _4 (LIST) {
-        |    repeated int32 _4_tuple;
-        |  }
-        |  optional group _5 (MAP) {
-        |    repeated group map (MAP_KEY_VALUE) {
-        |      required binary key (UTF8);
-        |      optional group value (LIST) {
-        |        repeated int32 value_tuple;
-        |      }
-        |    }
-        |  }
-        |}
-      """.stripMargin,
-      isThriftDerived = true)
-  }
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 }
 
 class ParquetSchemaSuite extends ParquetSchemaTest {
@@ -359,8 +357,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     val jsonString = """{"type":"struct","fields":[{"name":"c1","type":"integer","nullable":false,"metadata":{}},{"name":"c2","type":"binary","nullable":true,"metadata":{}}]}"""
     // scalastyle:on
 
-    val fromCaseClassString = ParquetTypesConverter.convertFromString(caseClassString)
-    val fromJson = ParquetTypesConverter.convertFromString(jsonString)
+    val fromCaseClassString = StructType.fromString(caseClassString)
+    val fromJson = StructType.fromString(jsonString)
 
     (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
       assert(a.name == b.name)
@@ -469,7 +467,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with nullable element type - 2",
@@ -485,7 +486,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 1 - standard",
@@ -498,7 +502,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 2",
@@ -511,7 +518,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 3",
@@ -522,7 +532,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    repeated int32 element;
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 4",
@@ -543,7 +556,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 5 - parquet-avro style",
@@ -562,7 +578,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 6 - parquet-thrift style",
@@ -581,7 +600,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type 7 - " +
@@ -591,7 +613,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  repeated int32 f1;
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type 8 - " +
@@ -611,7 +636,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    required int32 c2;
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   // =======================================================
   // Tests for converting Catalyst ArrayType to Parquet LIST
@@ -632,7 +660,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
     "Backwards-compatibility: LIST with nullable element type - 2 - prior to 1.4.x",
@@ -644,11 +674,14 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional group f1 (LIST) {
       |    repeated group bag {
-      |      optional int32 array_element;
+      |      optional int32 array;
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testCatalystToParquet(
     "Backwards-compatibility: LIST with non-nullable element type - 1 - standard",
@@ -665,7 +698,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
     "Backwards-compatibility: LIST with non-nullable element type - 2 - prior to 1.4.x",
@@ -679,7 +714,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    repeated int32 array;
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   // ====================================================
   // Tests for converting Parquet Map to Catalyst MapType
@@ -700,7 +738,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with non-nullable value type - 2",
@@ -717,7 +758,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with non-nullable value type - 3 - prior to 1.4.x",
@@ -734,7 +778,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 1 - standard",
@@ -751,7 +798,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 2",
@@ -768,7 +818,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 3 - parquet-avro style",
@@ -785,7 +838,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   // ====================================================
   // Tests for converting Catalyst MapType to Parquet Map
@@ -807,7 +863,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
     "Backwards-compatibility: MAP with non-nullable value type - 2 - prior to 1.4.x",
@@ -824,7 +882,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testCatalystToParquet(
     "Backwards-compatibility: MAP with nullable value type - 1 - standard",
@@ -842,7 +903,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
     "Backwards-compatibility: MAP with nullable value type - 3 - prior to 1.4.x",
@@ -859,7 +922,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   // =================================
   // Tests for conversion for decimals
@@ -872,7 +938,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  optional int32 f1 (DECIMAL(1, 0));
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchema(
     "DECIMAL(8, 3) - standard",
@@ -881,7 +949,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  optional int32 f1 (DECIMAL(8, 3));
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchema(
     "DECIMAL(9, 3) - standard",
@@ -890,7 +960,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  optional int32 f1 (DECIMAL(9, 3));
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchema(
     "DECIMAL(18, 3) - standard",
@@ -899,7 +971,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  optional int64 f1 (DECIMAL(18, 3));
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchema(
     "DECIMAL(19, 3) - standard",
@@ -908,7 +982,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  optional fixed_len_byte_array(9) f1 (DECIMAL(19, 3));
       |}
     """.stripMargin,
-    followParquetFormatSpec = true)
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
 
   testSchema(
     "DECIMAL(1, 0) - prior to 1.4.x",
@@ -916,7 +992,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional fixed_len_byte_array(1) f1 (DECIMAL(1, 0));
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchema(
     "DECIMAL(8, 3) - prior to 1.4.x",
@@ -924,7 +1003,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional fixed_len_byte_array(4) f1 (DECIMAL(8, 3));
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchema(
     "DECIMAL(9, 3) - prior to 1.4.x",
@@ -932,7 +1014,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional fixed_len_byte_array(5) f1 (DECIMAL(9, 3));
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
 
   testSchema(
     "DECIMAL(18, 3) - prior to 1.4.x",
@@ -940,5 +1025,535 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional fixed_len_byte_array(8) f1 (DECIMAL(18, 3));
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
+
+  private def testSchemaClipping(
+      testName: String,
+      parquetSchema: String,
+      catalystSchema: StructType,
+      expectedSchema: String): Unit = {
+    test(s"Clipping - $testName") {
+      val expected = MessageTypeParser.parseMessageType(expectedSchema)
+      val actual = CatalystReadSupport.clipParquetSchema(
+        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
+
+      try {
+        expected.checkContains(actual)
+        actual.checkContains(expected)
+      } catch { case cause: Throwable =>
+        fail(
+          s"""Expected clipped schema:
+             |$expected
+             |Actual clipped schema:
+             |$actual
+           """.stripMargin,
+          cause)
+      }
+    }
+  }
+
+  testSchemaClipping(
+    "simple nested struct",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional int32 f00;
+        |    optional int32 f01;
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f0Type = new StructType().add("f00", IntegerType, nullable = true)
+      new StructType()
+        .add("f0", f0Type, nullable = false)
+        .add("f1", IntegerType, nullable = true)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional int32 f00;
+        |  }
+        |  optional int32 f1;
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-protobuf style array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    repeated binary f00 (UTF8);
+        |    repeated group f01 {
+        |      optional int32 f010;
+        |      optional double f011;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f00Type = ArrayType(StringType, containsNull = false)
+      val f01Type = ArrayType(
+        new StructType()
+          .add("f011", DoubleType, nullable = true),
+        containsNull = false)
+
+      val f0Type = new StructType()
+        .add("f00", f00Type, nullable = false)
+        .add("f01", f01Type, nullable = false)
+      val f1Type = ArrayType(IntegerType, containsNull = true)
+
+      new StructType()
+        .add("f0", f0Type, nullable = false)
+        .add("f1", f1Type, nullable = true)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    repeated binary f00 (UTF8);
+        |    repeated group f01 {
+        |      optional double f011;
+        |    }
+        |  }
+        |
+        |  optional group f1 (LIST) {
+        |    repeated group list {
+        |      optional int32 element;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-thrift style array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated binary f00_tuple (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group f01_tuple {
+        |        optional int32 f010;
+        |        optional double f011;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated binary f00_tuple (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group f01_tuple {
+        |        optional double f011;
+        |        optional int64 f012;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-avro style array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated binary array (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group array {
+        |        optional int32 f010;
+        |        optional double f011;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated binary array (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group array {
+        |        optional double f011;
+        |        optional int64 f012;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-hive style array",
+
+    parquetSchema =
+      """message root {
+        |  optional group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group bag {
+        |        optional binary array_element;
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group bag {
+        |        optional group array_element {
+        |          optional int32 f010;
+        |          optional double f011;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = true), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = true), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = true)
+    },
+
+    expectedSchema =
+      """message root {
+        |  optional group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group bag {
+        |        optional binary array_element;
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group bag {
+        |        optional group array_element {
+        |          optional double f011;
+        |          optional int64 f012;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "2-level list of required struct",
+
+    parquetSchema =
+      s"""message root {
+         |  required group f0 {
+         |    required group f00 (LIST) {
+         |      repeated group element {
+         |        required int32 f000;
+         |        optional int64 f001;
+         |      }
+         |    }
+         |  }
+         |}
+       """.stripMargin,
+
+    catalystSchema = {
+      val f00ElementType =
+        new StructType()
+          .add("f001", LongType, nullable = true)
+          .add("f002", DoubleType, nullable = false)
+
+      val f00Type = ArrayType(f00ElementType, containsNull = false)
+      val f0Type = new StructType().add("f00", f00Type, nullable = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      s"""message root {
+         |  required group f0 {
+         |    required group f00 (LIST) {
+         |      repeated group element {
+         |        optional int64 f001;
+         |        required double f002;
+         |      }
+         |    }
+         |  }
+         |}
+       """.stripMargin)
+
+  testSchemaClipping(
+    "standard array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group list {
+        |        required binary element (UTF8);
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group list {
+        |        required group element {
+        |          optional int32 f010;
+        |          optional double f011;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group list {
+        |        required binary element (UTF8);
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group list {
+        |        required group element {
+        |          optional double f011;
+        |          optional int64 f012;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "empty requested schema",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    required int32 f00;
+        |    required int64 f01;
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = new StructType(),
+
+    expectedSchema = "message root {}")
+
+  testSchemaClipping(
+    "disjoint field sets",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    required int32 f00;
+        |    required int64 f01;
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema =
+      new StructType()
+        .add(
+          "f0",
+          new StructType()
+            .add("f02", FloatType, nullable = true)
+            .add("f03", DoubleType, nullable = true),
+          nullable = true),
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional float f02;
+        |    optional double f03;
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-avro style map",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group map (MAP_KEY_VALUE) {
+        |      required int32 key;
+        |      required group value {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val valueType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(IntegerType, valueType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group map (MAP_KEY_VALUE) {
+        |      required int32 key;
+        |      required group value {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "standard map",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required int32 key;
+        |      required group value {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val valueType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(IntegerType, valueType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required int32 key;
+        |      required group value {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "standard map with complex key",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required group key {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |      required int32 value;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val keyType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(keyType, IntegerType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required group key {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |      required int32 value;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 }

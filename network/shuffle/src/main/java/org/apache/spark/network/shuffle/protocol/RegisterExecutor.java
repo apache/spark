@@ -27,7 +27,7 @@ import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Typ
 
 /**
  * Initial registration message between an executor and its local shuffle server.
- * Returns nothing (empty bye array).
+ * Returns nothing (empty byte array).
  */
 public class RegisterExecutor extends BlockTransferMessage {
   public final String appId;

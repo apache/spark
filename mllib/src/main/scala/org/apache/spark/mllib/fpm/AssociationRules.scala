@@ -20,7 +20,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.fpm.AssociationRules.Rule
@@ -33,24 +33,22 @@ import org.apache.spark.rdd.RDD
  * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
  * association rules which have a single item as the consequent.
  *
- * @since 1.5.0
  */
+@Since("1.5.0")
 @Experimental
 class AssociationRules private[fpm] (
     private var minConfidence: Double) extends Logging with Serializable {
 
   /**
    * Constructs a default instance with default parameters {minConfidence = 0.8}.
-   *
-   * @since 1.5.0
    */
+  @Since("1.5.0")
   def this() = this(0.8)
 
   /**
    * Sets the minimal confidence (default: `0.8`).
-   *
-   * @since 1.5.0
    */
+  @Since("1.5.0")
   def setMinConfidence(minConfidence: Double): this.type = {
     require(minConfidence >= 0.0 && minConfidence <= 1.0)
     this.minConfidence = minConfidence
@@ -62,8 +60,8 @@ class AssociationRules private[fpm] (
    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
    * @return a [[Set[Rule[Item]]] containing the assocation rules.
    *
-   * @since 1.5.0
    */
+  @Since("1.5.0")
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
     // For candidate rule X => Y, generate (X, (Y, freq(X union Y)))
     val candidates = freqItemsets.flatMap { itemset =>
@@ -84,12 +82,15 @@ class AssociationRules private[fpm] (
     }.filter(_.confidence >= minConfidence)
   }
 
+  /** Java-friendly version of [[run]]. */
+  @Since("1.5.0")
   def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]]): JavaRDD[Rule[Item]] = {
     val tag = fakeClassTag[Item]
     run(freqItemsets.rdd)(tag)
   }
 }
 
+@Since("1.5.0")
 object AssociationRules {
 
   /**
@@ -102,20 +103,20 @@ object AssociationRules {
    *                   instead.
    * @tparam Item item type
    *
-   * @since 1.5.0
    */
+  @Since("1.5.0")
   @Experimental
   class Rule[Item] private[fpm] (
-      val antecedent: Array[Item],
-      val consequent: Array[Item],
+      @Since("1.5.0") val antecedent: Array[Item],
+      @Since("1.5.0") val consequent: Array[Item],
       freqUnion: Double,
       freqAntecedent: Double) extends Serializable {
 
     /**
      * Returns the confidence of the rule.
      *
-     * @since 1.5.0
      */
+    @Since("1.5.0")
     def confidence: Double = freqUnion.toDouble / freqAntecedent
 
     require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
@@ -127,8 +128,8 @@ object AssociationRules {
     /**
      * Returns antecedent in a Java List.
      *
-     * @since 1.5.0
      */
+    @Since("1.5.0")
     def javaAntecedent: java.util.List[Item] = {
       antecedent.toList.asJava
     }
@@ -136,10 +137,15 @@ object AssociationRules {
     /**
      * Returns consequent in a Java List.
      *
-     * @since 1.5.0
      */
+    @Since("1.5.0")
     def javaConsequent: java.util.List[Item] = {
       consequent.toList.asJava
+    }
+
+    override def toString: String = {
+      s"${antecedent.mkString("{", ",", "}")} => " +
+        s"${consequent.mkString("{", ",", "}")}: ${confidence}"
     }
   }
 }

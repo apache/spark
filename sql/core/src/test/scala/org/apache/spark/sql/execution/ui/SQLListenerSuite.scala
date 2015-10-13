@@ -54,9 +54,9 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     details = ""
   )
 
-  private def createTaskInfo(taskId: Int, attempt: Int): TaskInfo = new TaskInfo(
+  private def createTaskInfo(taskId: Int, attemptNumber: Int): TaskInfo = new TaskInfo(
     taskId = taskId,
-    attempt = attempt,
+    attemptNumber = attemptNumber,
     // The following fields are not used in tests
     index = 0,
     launchTime = 0,
@@ -74,7 +74,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("basic") {
-    val listener = new SQLListener(ctx)
+    val listener = new SQLListener(sqlContext)
     val executionId = 0
     val df = createTestDataFrame
     val accumulatorIds =
@@ -212,7 +212,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("onExecutionEnd happens before onJobEnd(JobSucceeded)") {
-    val listener = new SQLListener(ctx)
+    val listener = new SQLListener(sqlContext)
     val executionId = 0
     val df = createTestDataFrame
     listener.onExecutionStart(
@@ -241,7 +241,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("onExecutionEnd happens before multiple onJobEnd(JobSucceeded)s") {
-    val listener = new SQLListener(ctx)
+    val listener = new SQLListener(sqlContext)
     val executionId = 0
     val df = createTestDataFrame
     listener.onExecutionStart(
@@ -281,7 +281,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("onExecutionEnd happens before onJobEnd(JobFailed)") {
-    val listener = new SQLListener(ctx)
+    val listener = new SQLListener(sqlContext)
     val executionId = 0
     val df = createTestDataFrame
     listener.onExecutionStart(

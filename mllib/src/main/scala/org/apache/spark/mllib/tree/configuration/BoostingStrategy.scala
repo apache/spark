@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree.configuration
 
 import scala.beans.BeanProperty
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
 
@@ -34,21 +34,28 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                      weak hypotheses used in the final model.
  * @param learningRate Learning rate for shrinking the contribution of each estimator. The
  *                     learning rate should be between in the interval (0, 1]
- * @param validationTol Useful when runWithValidation is used. If the error rate on the
- *                      validation input between two iterations is less than the validationTol
- *                      then stop.  Ignored when
+ * @param validationTol validationTol is a condition which decides iteration termination when
+ *                      runWithValidation is used.
+ *                      The end of iteration is decided based on below logic:
+ *                      If the current loss on the validation set is > 0.01, the diff
+ *                      of validation error is compared to relative tolerance which is
+ *                      validationTol * (current loss on the validation set).
+ *                      If the current loss on the validation set is <= 0.01, the diff
+ *                      of validation error is compared to absolute tolerance which is
+ *                      validationTol * 0.01.
+ *                      Ignored when
  *                      [[org.apache.spark.mllib.tree.GradientBoostedTrees.run()]] is used.
- * @since 1.2.0
  */
+@Since("1.2.0")
 @Experimental
-case class BoostingStrategy(
+case class BoostingStrategy @Since("1.4.0") (
     // Required boosting parameters
-    @BeanProperty var treeStrategy: Strategy,
-    @BeanProperty var loss: Loss,
+    @Since("1.2.0") @BeanProperty var treeStrategy: Strategy,
+    @Since("1.2.0") @BeanProperty var loss: Loss,
     // Optional boosting parameters
-    @BeanProperty var numIterations: Int = 100,
-    @BeanProperty var learningRate: Double = 0.1,
-    @BeanProperty var validationTol: Double = 1e-5) extends Serializable {
+    @Since("1.2.0") @BeanProperty var numIterations: Int = 100,
+    @Since("1.2.0") @BeanProperty var learningRate: Double = 0.1,
+    @Since("1.4.0") @BeanProperty var validationTol: Double = 0.001) extends Serializable {
 
   /**
    * Check validity of parameters.
@@ -71,9 +78,7 @@ case class BoostingStrategy(
   }
 }
 
-/**
- * @since 1.2.0
- */
+@Since("1.2.0")
 @Experimental
 object BoostingStrategy {
 
@@ -81,8 +86,8 @@ object BoostingStrategy {
    * Returns default configuration for the boosting algorithm
    * @param algo Learning goal.  Supported: "Classification" or "Regression"
    * @return Configuration for boosting algorithm
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def defaultParams(algo: String): BoostingStrategy = {
     defaultParams(Algo.fromString(algo))
   }
@@ -93,8 +98,8 @@ object BoostingStrategy {
    *             [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
    *             [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
    * @return Configuration for boosting algorithm
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def defaultParams(algo: Algo): BoostingStrategy = {
     val treeStrategy = Strategy.defaultStrategy(algo)
     treeStrategy.maxDepth = 3

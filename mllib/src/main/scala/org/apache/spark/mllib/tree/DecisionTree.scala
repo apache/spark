@@ -19,10 +19,9 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
@@ -43,10 +42,11 @@ import org.apache.spark.util.random.XORShiftRandom
  * @param strategy The configuration parameters for the tree algorithm which specify the type
  *                 of algorithm (classification, regression, etc.), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
- * @since 1.0.0
  */
+@Since("1.0.0")
 @Experimental
-class DecisionTree (private val strategy: Strategy) extends Serializable with Logging {
+class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
+  extends Serializable with Logging {
 
   strategy.assertValid()
 
@@ -54,8 +54,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * Method to train a decision tree model over an RDD
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
     // Note: random seed will not be used since numTrees = 1.
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
@@ -64,9 +64,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
   }
 }
 
-/**
- * @since 1.0.0
- */
+@Since("1.0.0")
 object DecisionTree extends Serializable with Logging {
 
   /**
@@ -84,8 +82,8 @@ object DecisionTree extends Serializable with Logging {
    *                 of algorithm (classification, regression, etc.), feature type (continuous,
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.0.0
-  */
+   */
+ @Since("1.0.0")
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
     new DecisionTree(strategy).run(input)
   }
@@ -106,8 +104,8 @@ object DecisionTree extends Serializable with Logging {
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def train(
       input: RDD[LabeledPoint],
       algo: Algo,
@@ -134,8 +132,8 @@ object DecisionTree extends Serializable with Logging {
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param numClasses number of classes for classification. Default value of 2.
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def train(
       input: RDD[LabeledPoint],
       algo: Algo,
@@ -168,8 +166,8 @@ object DecisionTree extends Serializable with Logging {
    *                                E.g., an entry (n -> k) indicates that feature n is categorical
    *                                with k categories indexed from 0: {0, 1, ..., k-1}.
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def train(
       input: RDD[LabeledPoint],
       algo: Algo,
@@ -201,8 +199,8 @@ object DecisionTree extends Serializable with Logging {
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 32)
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def trainClassifier(
       input: RDD[LabeledPoint],
       numClasses: Int,
@@ -217,8 +215,8 @@ object DecisionTree extends Serializable with Logging {
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def trainClassifier(
       input: JavaRDD[LabeledPoint],
       numClasses: Int,
@@ -247,8 +245,8 @@ object DecisionTree extends Serializable with Logging {
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 32)
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def trainRegressor(
       input: RDD[LabeledPoint],
       categoricalFeaturesInfo: Map[Int, Int],
@@ -261,8 +259,8 @@ object DecisionTree extends Serializable with Logging {
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def trainRegressor(
       input: JavaRDD[LabeledPoint],
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
@@ -644,8 +642,8 @@ object DecisionTree extends Serializable with Logging {
 
     val nodeToBestSplits = partitionAggregates.reduceByKey((a, b) => a.merge(b))
         .map { case (nodeIndex, aggStats) =>
-          val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
-            Some(nodeToFeatures(nodeIndex))
+          val featuresForNode = nodeToFeaturesBc.value.map { nodeToFeatures =>
+            nodeToFeatures(nodeIndex)
           }
 
           // find best split for each node
@@ -977,8 +975,8 @@ object DecisionTree extends Serializable with Logging {
     val numFeatures = metadata.numFeatures
 
     // Sample the input only if there are continuous features.
-    val hasContinuousFeatures = Range(0, numFeatures).exists(metadata.isContinuous)
-    val sampledInput = if (hasContinuousFeatures) {
+    val continuousFeatures = Range(0, numFeatures).filter(metadata.isContinuous)
+    val sampledInput = if (continuousFeatures.nonEmpty) {
       // Calculate the number of samples for approximate quantile calculation.
       val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
       val fraction = if (requiredSamples < metadata.numExamples) {
@@ -987,86 +985,95 @@ object DecisionTree extends Serializable with Logging {
         1.0
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
-      input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
+      input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt())
     } else {
-      new Array[LabeledPoint](0)
+      input.sparkContext.emptyRDD[LabeledPoint]
     }
 
     metadata.quantileStrategy match {
       case Sort =>
-        val splits = new Array[Array[Split]](numFeatures)
-        val bins = new Array[Array[Bin]](numFeatures)
-
-        // Find all splits.
-        // Iterate over all features.
-        var featureIndex = 0
-        while (featureIndex < numFeatures) {
-          if (metadata.isContinuous(featureIndex)) {
-            val featureSamples = sampledInput.map(lp => lp.features(featureIndex))
-            val featureSplits = findSplitsForContinuousFeature(featureSamples,
-              metadata, featureIndex)
-
-            val numSplits = featureSplits.length
-            val numBins = numSplits + 1
-            logDebug(s"featureIndex = $featureIndex, numSplits = $numSplits")
-            splits(featureIndex) = new Array[Split](numSplits)
-            bins(featureIndex) = new Array[Bin](numBins)
-
-            var splitIndex = 0
-            while (splitIndex < numSplits) {
-              val threshold = featureSplits(splitIndex)
-              splits(featureIndex)(splitIndex) =
-                new Split(featureIndex, threshold, Continuous, List())
-              splitIndex += 1
-            }
-            bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
-              splits(featureIndex)(0), Continuous, Double.MinValue)
-
-            splitIndex = 1
-            while (splitIndex < numSplits) {
-              bins(featureIndex)(splitIndex) =
-                new Bin(splits(featureIndex)(splitIndex - 1), splits(featureIndex)(splitIndex),
-                  Continuous, Double.MinValue)
-              splitIndex += 1
-            }
-            bins(featureIndex)(numSplits) = new Bin(splits(featureIndex)(numSplits - 1),
-              new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
-          } else {
-            val numSplits = metadata.numSplits(featureIndex)
-            val numBins = metadata.numBins(featureIndex)
-            // Categorical feature
-            val featureArity = metadata.featureArity(featureIndex)
-            if (metadata.isUnordered(featureIndex)) {
-              // Unordered features
-              // 2^(maxFeatureValue - 1) - 1 combinations
-              splits(featureIndex) = new Array[Split](numSplits)
-              var splitIndex = 0
-              while (splitIndex < numSplits) {
-                val categories: List[Double] =
-                  extractMultiClassCategories(splitIndex + 1, featureArity)
-                splits(featureIndex)(splitIndex) =
-                  new Split(featureIndex, Double.MinValue, Categorical, categories)
-                splitIndex += 1
-              }
-            } else {
-              // Ordered features
-              //   Bins correspond to feature values, so we do not need to compute splits or bins
-              //   beforehand.  Splits are constructed as needed during training.
-              splits(featureIndex) = new Array[Split](0)
-            }
-            // For ordered features, bins correspond to feature values.
-            // For unordered categorical features, there is no need to construct the bins.
-            // since there is a one-to-one correspondence between the splits and the bins.
-            bins(featureIndex) = new Array[Bin](0)
-          }
-          featureIndex += 1
-        }
-        (splits, bins)
+        findSplitsBinsBySorting(sampledInput, metadata, continuousFeatures)
       case MinMax =>
         throw new UnsupportedOperationException("minmax not supported yet.")
       case ApproxHist =>
         throw new UnsupportedOperationException("approximate histogram not supported yet.")
     }
+  }
+
+  private def findSplitsBinsBySorting(
+      input: RDD[LabeledPoint],
+      metadata: DecisionTreeMetadata,
+      continuousFeatures: IndexedSeq[Int]): (Array[Array[Split]], Array[Array[Bin]]) = {
+    def findSplits(
+        featureIndex: Int,
+        featureSamples: Iterable[Double]): (Int, (Array[Split], Array[Bin])) = {
+      val splits = {
+        val featureSplits = findSplitsForContinuousFeature(
+          featureSamples.toArray,
+          metadata,
+          featureIndex)
+        logDebug(s"featureIndex = $featureIndex, numSplits = ${featureSplits.length}")
+
+        featureSplits.map(threshold => new Split(featureIndex, threshold, Continuous, Nil))
+      }
+
+      val bins = {
+        val lowSplit = new DummyLowSplit(featureIndex, Continuous)
+        val highSplit = new DummyHighSplit(featureIndex, Continuous)
+
+        // tack the dummy splits on either side of the computed splits
+        val allSplits = lowSplit +: splits.toSeq :+ highSplit
+
+        // slide across the split points pairwise to allocate the bins
+        allSplits.sliding(2).map {
+          case Seq(left, right) => new Bin(left, right, Continuous, Double.MinValue)
+        }.toArray
+      }
+
+      (featureIndex, (splits, bins))
+    }
+
+    val continuousSplits = {
+      // reduce the parallelism for split computations when there are less
+      // continuous features than input partitions. this prevents tasks from
+      // being spun up that will definitely do no work.
+      val numPartitions = math.min(continuousFeatures.length, input.partitions.length)
+
+      input
+        .flatMap(point => continuousFeatures.map(idx => (idx, point.features(idx))))
+        .groupByKey(numPartitions)
+        .map { case (k, v) => findSplits(k, v) }
+        .collectAsMap()
+    }
+
+    val numFeatures = metadata.numFeatures
+    val (splits, bins) = Range(0, numFeatures).unzip {
+      case i if metadata.isContinuous(i) =>
+        val (split, bin) = continuousSplits(i)
+        metadata.setNumSplits(i, split.length)
+        (split, bin)
+
+      case i if metadata.isCategorical(i) && metadata.isUnordered(i) =>
+        // Unordered features
+        // 2^(maxFeatureValue - 1) - 1 combinations
+        val featureArity = metadata.featureArity(i)
+        val split = Range(0, metadata.numSplits(i)).map { splitIndex =>
+          val categories = extractMultiClassCategories(splitIndex + 1, featureArity)
+          new Split(i, Double.MinValue, Categorical, categories)
+        }
+
+        // For unordered categorical features, there is no need to construct the bins.
+        // since there is a one-to-one correspondence between the splits and the bins.
+        (split.toArray, Array.empty[Bin])
+
+      case i if metadata.isCategorical(i) =>
+        // Ordered features
+        //   Bins correspond to feature values, so we do not need to compute splits or bins
+        //   beforehand.  Splits are constructed as needed during training.
+        (Array.empty[Split], Array.empty[Bin])
+    }
+
+    (splits.toArray, bins.toArray)
   }
 
   /**
@@ -1132,7 +1139,7 @@ object DecisionTree extends Serializable with Logging {
         logDebug("stride = " + stride)
 
         // iterate `valueCount` to find splits
-        val splitsBuilder = ArrayBuilder.make[Double]
+        val splitsBuilder = Array.newBuilder[Double]
         var index = 1
         // currentCount: sum of counts of values that have been visited
         var currentCount = valueCounts(0)._2
@@ -1164,8 +1171,8 @@ object DecisionTree extends Serializable with Logging {
     assert(splits.length > 0,
       s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
         "  Please remove this feature and then try again.")
-    // set number of splits accordingly
-    metadata.setNumSplits(featureIndex, splits.length)
+
+    // the split metadata must be updated on the driver
 
     splits
   }

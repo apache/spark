@@ -18,8 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.File
-
-import scala.collection.JavaConversions._
+import java.util.Arrays
 
 import org.apache.spark.{SparkEnv, SparkException}
 
@@ -45,7 +44,7 @@ private[spark] object RUtils {
         (sys.props("spark.master"), sys.props("spark.submit.deployMode"))
       } else {
         val sparkConf = SparkEnv.get.conf
-        (sparkConf.get("spark.master"), sparkConf.get("spark.submit.deployMode"))
+        (sparkConf.get("spark.master"), sparkConf.get("spark.submit.deployMode", "client"))
       }
 
     val isYarnCluster = master != null && master.contains("yarn") && deployMode == "cluster"
@@ -68,7 +67,7 @@ private[spark] object RUtils {
   /** Check if R is installed before running tests that use R commands. */
   def isRInstalled: Boolean = {
     try {
-      val builder = new ProcessBuilder(Seq("R", "--version"))
+      val builder = new ProcessBuilder(Arrays.asList("R", "--version"))
       builder.start().waitFor() == 0
     } catch {
       case e: Exception => false

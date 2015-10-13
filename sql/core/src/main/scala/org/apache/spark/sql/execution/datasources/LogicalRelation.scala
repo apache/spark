@@ -17,23 +17,40 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
+ *
+ * Note that sometimes we need to use `LogicalRelation` to replace an existing leaf node without
+ * changing the output attributes' IDs.  The `expectedOutputAttributes` parameter is used for
+ * this purpose.  See https://issues.apache.org/jira/browse/SPARK-10741 for more details.
  */
-private[sql] case class LogicalRelation(relation: BaseRelation)
-  extends LeafNode
-  with MultiInstanceRelation {
+case class LogicalRelation(
+    relation: BaseRelation,
+    expectedOutputAttributes: Option[Seq[Attribute]] = None)
+  extends LeafNode with MultiInstanceRelation {
 
-  override val output: Seq[AttributeReference] = relation.schema.toAttributes
+  override val output: Seq[AttributeReference] = {
+    val attrs = relation.schema.toAttributes
+    expectedOutputAttributes.map { expectedAttrs =>
+      assert(expectedAttrs.length == attrs.length)
+      attrs.zip(expectedAttrs).map {
+        // We should respect the attribute names provided by base relation and only use the
+        // exprId in `expectedOutputAttributes`.
+        // The reason is that, some relations(like parquet) will reconcile attribute names to
+        // workaround case insensitivity issue.
+        case (attr, expected) => attr.withExprId(expected.exprId)
+      }
+    }.getOrElse(attrs)
+  }
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any): Boolean = other match {
-    case l @ LogicalRelation(otherRelation) => relation == otherRelation && output == l.output
-    case  _ => false
+    case l @ LogicalRelation(otherRelation, _) => relation == otherRelation && output == l.output
+    case _ => false
   }
 
   override def hashCode: Int = {
@@ -41,7 +58,7 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
   }
 
   override def sameResult(otherPlan: LogicalPlan): Boolean = otherPlan match {
-    case LogicalRelation(otherRelation) => relation == otherRelation
+    case LogicalRelation(otherRelation, _) => relation == otherRelation
     case _ => false
   }
 

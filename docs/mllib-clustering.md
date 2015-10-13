@@ -4,10 +4,10 @@ title: Clustering - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Clustering
 ---
 
-Clustering is an unsupervised learning problem whereby we aim to group subsets
+[Clustering](https://en.wikipedia.org/wiki/Cluster_analysis) is an unsupervised learning problem whereby we aim to group subsets
 of entities with one another based on some notion of similarity.  Clustering is
 often used for exploratory analysis and/or as a component of a hierarchical
-supervised learning pipeline (in which distinct classifiers or regression
+[supervised learning](https://en.wikipedia.org/wiki/Supervised_learning) pipeline (in which distinct classifiers or regression
 models are trained for each cluster).
 
 MLlib supports the following models:
@@ -47,6 +47,8 @@ into two clusters. The number of desired clusters is passed to the algorithm. We
 Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact the
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
+Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`KMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeansModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
 import org.apache.spark.mllib.linalg.Vectors
@@ -76,6 +78,8 @@ way you do in Scala. The only caveat is that the methods take Scala RDD objects,
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
+
+Refer to the [`KMeans` Java docs](api/java/org/apache/spark/mllib/clustering/KMeans.html) and [`KMeansModel` Java docs](api/java/org/apache/spark/mllib/clustering/KMeansModel.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.*;
@@ -132,6 +136,8 @@ data into two clusters. The number of desired clusters is passed to the algorith
 Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In
 fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
+Refer to the [`KMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeans) and [`KMeansModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeansModel) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.clustering import KMeans, KMeansModel
 from numpy import array
@@ -184,6 +190,8 @@ In the following example after loading and parsing data, we use a
 object to cluster the data into two clusters. The number of desired clusters is passed
 to the algorithm. We then output the parameters of the mixture model.
 
+Refer to the [`GaussianMixture` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) and [`GaussianMixtureModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixtureModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.GaussianMixture
 import org.apache.spark.mllib.clustering.GaussianMixtureModel
@@ -215,6 +223,8 @@ way you do in Scala. The only caveat is that the methods take Scala RDD objects,
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
+
+Refer to the [`GaussianMixture` Java docs](api/java/org/apache/spark/mllib/clustering/GaussianMixture.html) and [`GaussianMixtureModel` Java docs](api/java/org/apache/spark/mllib/clustering/GaussianMixtureModel.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.*;
@@ -267,6 +277,8 @@ In the following example after loading and parsing data, we use a
 [GaussianMixture](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture)
 object to cluster the data into two clusters. The number of desired clusters is passed
 to the algorithm. We then output the parameters of the mixture model.
+
+Refer to the [`GaussianMixture` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture) and [`GaussianMixtureModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixtureModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.clustering import GaussianMixture
@@ -324,6 +336,8 @@ Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel),
 which contains the computed clustering assignments.
 
+Refer to the [`PowerIterationClustering` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
 import org.apache.spark.mllib.linalg.Vectors
@@ -364,6 +378,8 @@ affinity matrix.
 Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html)
 which contains the computed clustering assignments.
+
+Refer to the [`PowerIterationClustering` Java docs](api/java/org/apache/spark/mllib/clustering/PowerIterationClustering.html) and [`PowerIterationClusteringModel` Java docs](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -411,6 +427,8 @@ Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering),
 which contains the computed clustering assignments.
 
+Refer to the [`PowerIterationClustering` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClusteringModel) for more details on the API.
+
 {% highlight python %}
 from __future__ import print_function
 from pyspark.mllib.clustering import PowerIterationClustering, PowerIterationClusteringModel
@@ -438,28 +456,129 @@ sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
 is a topic model which infers topics from a collection of text documents.
 LDA can be thought of as a clustering algorithm as follows:
 
-* Topics correspond to cluster centers, and documents correspond to examples (rows) in a dataset.
-* Topics and documents both exist in a feature space, where feature vectors are vectors of word counts.
-* Rather than estimating a clustering using a traditional distance, LDA uses a function based
- on a statistical model of how text documents are generated.
+* Topics correspond to cluster centers, and documents correspond to
+examples (rows) in a dataset.
+* Topics and documents both exist in a feature space, where feature
+vectors are vectors of word counts (bag of words).
+* Rather than estimating a clustering using a traditional distance, LDA
+uses a function based on a statistical model of how text documents are
+generated.
 
-LDA takes in a collection of documents as vectors of word counts.
-It supports different inference algorithms via `setOptimizer` function. EMLDAOptimizer learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
-on the likelihood function and yields comprehensive results, while OnlineLDAOptimizer uses iterative mini-batch sampling for [online variational inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf) and is generally memory friendly. After fitting on the documents, LDA provides:
+LDA supports different inference algorithms via `setOptimizer` function.
+`EMLDAOptimizer` learns clustering using
+[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+on the likelihood function and yields comprehensive results, while
+`OnlineLDAOptimizer` uses iterative mini-batch sampling for [online
+variational
+inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf)
+and is generally memory friendly.
 
-* Topics: Inferred topics, each of which is a probability distribution over terms (words).
-* Topic distributions for documents: For each non empty document in the training set, LDA gives a probability distribution over topics. (EM only). Note that for empty documents, we don't create the topic distributions. (EM only)
-
-LDA takes the following parameters:
+LDA takes in a collection of documents as vectors of word counts and the
+following parameters (set using the builder pattern):
 
 * `k`: Number of topics (i.e., cluster centers)
-* `maxIterations`: Limit on the number of iterations of EM used for learning
-* `docConcentration`: Hyperparameter for prior over documents' distributions over topics. Currently must be > 1, where larger values encourage smoother inferred distributions.
-* `topicConcentration`: Hyperparameter for prior over topics' distributions over terms (words). Currently must be > 1, where larger values encourage smoother inferred distributions.
-* `checkpointInterval`: If using checkpointing (set in the Spark configuration), this parameter specifies the frequency with which checkpoints will be created.  If `maxIterations` is large, using checkpointing can help reduce shuffle file sizes on disk and help with failure recovery.
+* `optimizer`: Optimizer to use for learning the LDA model, either
+`EMLDAOptimizer` or `OnlineLDAOptimizer`
+* `docConcentration`: Dirichlet parameter for prior over documents'
+distributions over topics. Larger values encourage smoother inferred
+distributions.
+* `topicConcentration`: Dirichlet parameter for prior over topics'
+distributions over terms (words). Larger values encourage smoother
+inferred distributions.
+* `maxIterations`: Limit on the number of iterations.
+* `checkpointInterval`: If using checkpointing (set in the Spark
+configuration), this parameter specifies the frequency with which
+checkpoints will be created.  If `maxIterations` is large, using
+checkpointing can help reduce shuffle file sizes on disk and help with
+failure recovery.
 
-*Note*: LDA is a new feature with some missing functionality.  In particular, it does not yet
-support prediction on new documents, and it does not have a Python API.  These will be added in the future.
+
+All of MLlib's LDA models support:
+
+* `describeTopics`: Returns topics as arrays of most important terms and
+term weights
+* `topicsMatrix`: Returns a `vocabSize` by `k` matrix where each column
+is a topic
+
+*Note*: LDA is still an experimental feature under active development.
+As a result, certain features are only available in one of the two
+optimizers / models generated by the optimizer. Currently, a distributed
+model can be converted into a local model, but not vice-versa.
+
+The following discussion will describe each optimizer/model pair
+separately.
+
+**Expectation Maximization**
+
+Implemented in
+[`EMLDAOptimizer`](api/scala/index.html#org.apache.spark.mllib.clustering.EMLDAOptimizer)
+and
+[`DistributedLDAModel`](api/scala/index.html#org.apache.spark.mllib.clustering.DistributedLDAModel).
+
+For the parameters provided to `LDA`:
+
+* `docConcentration`: Only symmetric priors are supported, so all values
+in the provided `k`-dimensional vector must be identical. All values
+must also be $> 1.0$. Providing `Vector(-1)` results in default behavior
+(uniform `k` dimensional vector with value $(50 / k) + 1$
+* `topicConcentration`: Only symmetric priors supported. Values must be
+$> 1.0$. Providing `-1` results in defaulting to a value of $0.1 + 1$.
+* `maxIterations`: The maximum number of EM iterations.
+
+*Note*: It is important to do enough iterations.  In early iterations, EM often has useless topics,
+but those topics improve dramatically after more iterations.  Using at least 20 and possibly
+50-100 iterations is often reasonable, depending on your dataset.
+
+`EMLDAOptimizer` produces a `DistributedLDAModel`, which stores not only
+the inferred topics but also the full training corpus and topic
+distributions for each document in the training corpus. A
+`DistributedLDAModel` supports:
+
+ * `topTopicsPerDocument`: The top topics and their weights for
+ each document in the training corpus
+ * `topDocumentsPerTopic`: The top documents for each topic and
+ the corresponding weight of the topic in the documents.
+ * `logPrior`: log probability of the estimated topics and
+ document-topic distributions given the hyperparameters
+ `docConcentration` and `topicConcentration`
+ * `logLikelihood`: log likelihood of the training corpus, given the
+ inferred topics and document-topic distributions
+
+**Online Variational Bayes**
+
+Implemented in
+[`OnlineLDAOptimizer`](api/scala/org/apache/spark/mllib/clustering/OnlineLDAOptimizer.html)
+and
+[`LocalLDAModel`](api/scala/org/apache/spark/mllib/clustering/LocalLDAModel.html).
+
+For the parameters provided to `LDA`:
+
+* `docConcentration`: Asymmetric priors can be used by passing in a
+vector with values equal to the Dirichlet parameter in each of the `k`
+dimensions. Values should be $>= 0$. Providing `Vector(-1)` results in
+default behavior (uniform `k` dimensional vector with value $(1.0 / k)$)
+* `topicConcentration`: Only symmetric priors supported. Values must be
+$>= 0$. Providing `-1` results in defaulting to a value of $(1.0 / k)$.
+* `maxIterations`: Maximum number of minibatches to submit.
+
+In addition, `OnlineLDAOptimizer` accepts the following parameters:
+
+* `miniBatchFraction`: Fraction of corpus sampled and used at each
+iteration
+* `optimizeDocConcentration`: If set to true, performs maximum-likelihood
+estimation of the hyperparameter `docConcentration` (aka `alpha`)
+after each minibatch and sets the optimized `docConcentration` in the
+returned `LocalLDAModel`
+* `tau0` and `kappa`: Used for learning-rate decay, which is computed by
+$(\tau_0 + iter)^{-\kappa}$ where $iter$ is the current number of iterations.
+
+`OnlineLDAOptimizer` produces a `LocalLDAModel`, which only stores the
+inferred topics. A `LocalLDAModel` supports:
+
+* `logLikelihood(documents)`: Calculates a lower bound on the provided
+`documents` given the inferred topics.
+* `logPerplexity(documents)`: Calculates an upper bound on the
+perplexity of the provided `documents` given the inferred topics.
 
 **Examples**
 
@@ -470,6 +589,7 @@ to the algorithm. We then output the topics, represented as probability distribu
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+Refer to the [`LDA` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) and [`DistributedLDAModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.DistributedLDAModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{LDA, DistributedLDAModel}
@@ -501,6 +621,8 @@ val sameModel = DistributedLDAModel.load(sc, "myLDAModel")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`LDA` Java docs](api/java/org/apache/spark/mllib/clustering/LDA.html) and [`DistributedLDAModel` Java docs](api/java/org/apache/spark/mllib/clustering/DistributedLDAModel.html) for details on the API.
+
 {% highlight java %}
 import scala.Tuple2;
 
@@ -565,6 +687,8 @@ public class JavaLDAExample {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`LDA` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDA) and [`LDAModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDAModel) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.clustering import LDA, LDAModel
 from pyspark.mllib.linalg import Vectors
@@ -629,6 +753,7 @@ This example shows how to estimate clusters on streaming data.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`StreamingKMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.StreamingKMeans) for details on the API.
 
 First we import the neccessary classes.
 
@@ -679,6 +804,8 @@ ssc.awaitTermination()
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`StreamingKMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.StreamingKMeans) for more details on the API.
+
 First we import the neccessary classes.
 
 {% highlight python %}
