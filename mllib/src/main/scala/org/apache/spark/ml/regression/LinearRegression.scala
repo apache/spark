@@ -144,18 +144,16 @@ class LinearRegression(override val uid: String)
   override protected def train(dataset: DataFrame): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).limit(1).map {
-      case Row(features: Vector) =>
-        features.size
+      case Row(features: Vector) => features.size
     }.toArray()(0)
-    // Extract columns from data.  If dataset is persisted, do not persist instances.
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    if ($(solver) == "normal" || ($(solver) == "auto"
-      && $(elasticNetParam) == 0.0 && numFeatures <= 4096)) {
+    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 && numFeatures <= 4096) ||
+      $(solver) == "normal") {
       require($(elasticNetParam) == 0.0, "Only L2 regularization can be used when normal " +
-        "solver is selected.'")
-      // In case of feature size is small, WeightedLeastSquares can train more efficiently
-      // because it requires one pass through to the data. (SPARK-10668)
+        "solver is used.'")
+      // For low dimensional data, WeightedLeastSquares is more efficiently since the
+      // training algorithm only requires one pass through the data. (SPARK-10668)
       val instances: RDD[WeightedLeastSquares.Instance] = dataset.select(
         col($(labelCol)), w, col($(featuresCol))).map {
           case Row(label: Double, weight: Double, features: Vector) =>
@@ -167,7 +165,7 @@ class LinearRegression(override val uid: String)
       val model = optimizer.fit(instances)
       // When it is trained by WeightedLeastSquares, training summary does not
       // attached returned model.
-      val lrModel = new LinearRegressionModel(uid, model.coefficients, model.intercept)
+      val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
       // WeightedLeastSquares does not run through iterations. So it does not generate
       // an objective history.
       val trainingSummary = new LinearRegressionTrainingSummary(
@@ -176,7 +174,7 @@ class LinearRegression(override val uid: String)
         $(labelCol),
         $(featuresCol),
         Array(0D))
-      return copyValues(lrModel.setSummary(trainingSummary))
+      return lrModel.setSummary(trainingSummary)
     }
 
     val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {

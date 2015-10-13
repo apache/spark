@@ -94,7 +94,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression with intercept without regularization") {
-    Seq("auto", "l-bfgs", "normal").foreach { solver => {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer1 = new LinearRegression().setSolver(solver)
       // The result should be the same regardless of standardization without regularization
       val trainer2 = (new LinearRegression).setStandardization(false).setSolver(solver)
@@ -130,11 +130,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
           assert(prediction1 ~== prediction2 relTol 1E-5)
       }
-    }}
+    }
   }
 
   test("linear regression without intercept without regularization") {
-    Seq("auto", "l-bfgs", "normal").foreach { solver => {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer1 = (new LinearRegression).setFitIntercept(false).setSolver(solver)
       // Without regularization the results should be the same
       val trainer2 = (new LinearRegression).setFitIntercept(false).setStandardization(false)
@@ -176,15 +176,16 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(modelWithoutIntercept1.weights ~= weightsWithoutInterceptR relTol 1E-3)
       assert(modelWithoutIntercept2.intercept ~== 0 absTol 1E-3)
       assert(modelWithoutIntercept2.weights ~= weightsWithoutInterceptR relTol 1E-3)
-    }}
+    }
   }
 
   test("linear regression with intercept with L1 regularization") {
-    Seq("auto").foreach { solver => {
+    Seq("auto", "l-bfgs").foreach { solver =>
       val trainer1 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
         .setSolver(solver)
       val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
         .setSolver(solver).setStandardization(false)
+
       val model1 = trainer1.fit(dataset)
       val model2 = trainer2.fit(dataset)
 
@@ -224,11 +225,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
           assert(prediction1 ~== prediction2 relTol 1E-5)
       }
-    }}
+    }
   }
 
   test("linear regression without intercept with L1 regularization") {
-    Seq("auto").foreach { solver => {
+    Seq("auto", "l-bfgs").foreach { solver =>
       val trainer1 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
         .setFitIntercept(false).setSolver(solver)
       val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
@@ -275,11 +276,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
           assert(prediction1 ~== prediction2 relTol 1E-5)
       }
-    }}
+    }
   }
 
   test("linear regression with intercept with L2 regularization") {
-    Seq("auto", "l-bfgs", "normal").foreach { solver => {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer1 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
         .setSolver(solver)
       val trainer2 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
@@ -324,11 +325,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
           assert(prediction1 ~== prediction2 relTol 1E-5)
       }
-    }}
+    }
   }
 
   test("linear regression without intercept with L2 regularization") {
-    Seq("auto", "l-bfgs", "normal").foreach { solver => {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer1 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
         .setFitIntercept(false).setSolver(solver)
       val trainer2 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
@@ -374,11 +375,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
           assert(prediction1 ~== prediction2 relTol 1E-5)
       }
-    }}
+    }
   }
 
   test("linear regression with intercept with ElasticNet regularization") {
-    Seq("auto").foreach { solver => {
+    Seq("auto", "l-bfgs").foreach { solver =>
       val trainer1 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
         .setSolver(solver)
       val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
@@ -423,11 +424,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
           assert(prediction1 ~== prediction2 relTol 1E-5)
       }
-    }}
+    }
   }
 
   test("linear regression without intercept with ElasticNet regularization") {
-    Seq("auto").foreach { solver => {
+    Seq("auto", "l-bfgs").foreach { solver =>
       val trainer1 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
         .setFitIntercept(false).setSolver(solver)
       val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
@@ -473,11 +474,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
           assert(prediction1 ~== prediction2 relTol 1E-5)
       }
-    }}
+    }
   }
 
   test("linear regression model training summary") {
-    Seq("l-bfgs").foreach { solver => {
+    Seq("l-bfgs").foreach { solver =>
       val trainer = new LinearRegression().setSolver(solver)
       val model = trainer.fit(dataset)
       val trainerNoPredictionCol = trainer.setPredictionCol("")
@@ -538,11 +539,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             .sliding(2)
             .forall(x => x(0) >= x(1)))
       }
-    }}
+    }
   }
 
   test("linear regression model testset evaluation summary") {
-    Seq("auto", "l-bfgs", "normal").foreach { solver => {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer = new LinearRegression().setSolver(solver)
       val model = trainer.fit(dataset)
 
@@ -553,11 +554,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       model.summary.residuals.select("residuals").collect()
         .zip(testSummary.residuals.select("residuals").collect())
         .forall { case (Row(r1: Double), Row(r2: Double)) => r1 ~== r2 relTol 1E-5 }
-    }}
+    }
   }
 
   test("linear regression with weighted samples"){
-    Seq("auto", "l-bfgs").foreach { solver => {
+    Seq("auto", "l-bfgs").foreach { solver =>
       val (data, weightedData) = {
         val activeData = LinearDataGenerator.generateLinearInput(
           6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
@@ -640,7 +641,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val model4b = trainer4b.fit(weightedData)
       assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
       assert(model4a0.weights ~== model4b.weights absTol 1E-3)
-    }}
+    }
   }
 
   test("linear regression normal solver must be used with only L2 regularization") {

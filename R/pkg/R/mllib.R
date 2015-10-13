@@ -47,11 +47,11 @@ setClass("PipelineModel", representation(model = "jobj"))
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
           function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
             solver = "auto") {
-              family <- match.arg(family)
-              model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
-                                 alpha, solver)
-              return(new("PipelineModel", model = model))
+            family <- match.arg(family)
+            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                               "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
+                               alpha, solver)
+            return(new("PipelineModel", model = model))
           })
 
 #' Make predictions from a model
