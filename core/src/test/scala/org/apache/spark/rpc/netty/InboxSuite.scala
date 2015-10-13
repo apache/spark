@@ -113,7 +113,7 @@ class InboxSuite extends SparkFunSuite {
     val remoteAddress = RpcAddress("localhost", 11111)
 
     val inbox = new Inbox(endpointRef, endpoint)
-    inbox.post(Associated(remoteAddress))
+    inbox.post(RemoteProcessConnected(remoteAddress))
     inbox.process(dispatcher)
 
     endpoint.verifySingleOnConnectedMessage(remoteAddress)
@@ -127,7 +127,7 @@ class InboxSuite extends SparkFunSuite {
     val remoteAddress = RpcAddress("localhost", 11111)
 
     val inbox = new Inbox(endpointRef, endpoint)
-    inbox.post(Disassociated(remoteAddress))
+    inbox.post(RemoteProcessDisconnected(remoteAddress))
     inbox.process(dispatcher)
 
     endpoint.verifySingleOnDisconnectedMessage(remoteAddress)
@@ -142,7 +142,7 @@ class InboxSuite extends SparkFunSuite {
     val cause = new RuntimeException("Oops")
 
     val inbox = new Inbox(endpointRef, endpoint)
-    inbox.post(AssociationError(cause, remoteAddress))
+    inbox.post(RemoteProcessConnectionError(cause, remoteAddress))
     inbox.process(dispatcher)
 
     endpoint.verifySingleOnNetworkErrorMessage(cause, remoteAddress)
