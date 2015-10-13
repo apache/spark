@@ -99,6 +99,12 @@ class ProductEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(("Seq[(Boolean, Boolean)]",
     Seq((true, false))))
 
+  // TODO: Decoding/encoding of complex maps.
+  ignore("complex maps") {
+    encodeDecodeTest(("Map[Int, (String, String)]",
+      Map(1 ->("a", "b"))))
+  }
+
   encodeDecodeTest(("ArrayBuffer[(String, String)]",
     ArrayBuffer(("a", "b"))))
   encodeDecodeTest(("ArrayBuffer[(Int, Int)]",

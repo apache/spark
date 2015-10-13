@@ -81,6 +81,9 @@ trait ScalaReflection {
    * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping
    * to a native type, an ObjectType is returned. Special handling is also used for Arrays including
    * those that hold primitive types.
+   *
+   * Unlike `schemaFor`, this function doesn't do any massaging of types into the Spark SQL type
+   * system.  As a result, ObjectType will be returned for things like boxed Integers
    */
   def dataTypeFor(tpe: `Type`): DataType = tpe match {
     case t if t <:< definitions.IntTpe => IntegerType
