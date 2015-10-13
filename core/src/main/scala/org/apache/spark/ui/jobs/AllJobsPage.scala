@@ -292,11 +292,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           <ul class="unstyled">
             <li>
               <strong>Total Uptime: </strong>
-              {if (parent.sc.isDefined) {
-              {UIUtils.formatDuration(System.currentTimeMillis() - startTime)}
-            } else {
-              {UIUtils.formatDuration(endTime - startTime)}
-            }}
+              {if (endTime < 0) {
+              val endTime = System.currentTimeMillis();
+            }
+              {UIUtils.formatDuration(endTime - startTime)}}
             </li>
             <li>
               <strong>Scheduling Mode: </strong>
