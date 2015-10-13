@@ -31,7 +31,7 @@ case class KeyHint(newKeys: Seq[Key], child: LogicalPlan) extends UnaryNode {
   override lazy val resolved: Boolean = newKeys.forall(_.resolved) && childrenResolved
 
   def foreignKeyReferencesResolved: Boolean = newKeys.forall {
-    case ForeignKey(_, referencedAttr) => referencedAttr.resolved
+    case ForeignKey(_, _, referencedAttr) => referencedAttr.resolved
     case _ => true
   }
 
@@ -59,8 +59,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
     child.keys.collect {
       case UniqueKey(attr) if aliasMap.contains(attr) =>
         UniqueKey(aliasMap(attr))
-      case ForeignKey(attr, referencedAttr) if aliasMap.contains(attr) =>
-        ForeignKey(aliasMap(attr), referencedAttr)
+      case ForeignKey(attr, referencedRelation, referencedAttr) if aliasMap.contains(attr) =>
+        ForeignKey(aliasMap(attr), referencedRelation, referencedAttr)
     }
   }
 

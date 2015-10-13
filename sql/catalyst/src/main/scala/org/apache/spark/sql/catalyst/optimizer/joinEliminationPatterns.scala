@@ -145,7 +145,7 @@ private class ForeignKeyFinder(plan: LogicalPlan, referencedPlan: LogicalPlan) {
 
   def foreignKeyExists(attr: Attribute, referencedAttr: Attribute): Boolean = {
     plan.keys.exists {
-      case ForeignKey(attr2, referencedAttr2)
+      case ForeignKey(attr2, _, referencedAttr2)
           if attr == attr2 && equivalent.query(referencedAttr, referencedAttr2) => true
       case _ => false
     }

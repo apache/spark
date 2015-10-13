@@ -31,10 +31,15 @@ case class UniqueKey(attr: Attribute) extends Key {
   override def resolved: Boolean = attr.resolved
 }
 
-/** Referenced column must be unique. */
-case class ForeignKey(attr: Attribute, referencedAttr: Attribute) extends Key {
+/** Referenced column must be unique. Referenced relation must already be resolved. */
+case class ForeignKey(
+    attr: Attribute,
+    referencedRelation: LogicalPlan,
+    referencedAttr: Attribute) extends Key {
+  assert(referencedRelation.resolved)
+
   override def transformAttribute(rule: PartialFunction[Attribute, Attribute]): Key =
-    ForeignKey(rule.applyOrElse(attr, identity[Attribute]), referencedAttr)
+    ForeignKey(rule.applyOrElse(attr, identity[Attribute]), referencedRelation, referencedAttr)
 
   override def resolved: Boolean = attr.resolved && referencedAttr.resolved
 }

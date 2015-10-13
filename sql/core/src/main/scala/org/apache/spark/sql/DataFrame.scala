@@ -677,13 +677,16 @@ class DataFrame private[sql](
    * Declares a foreign key referencing a key from this or another DataFrame. The referenced key
    * must be declared as a unique key.
    * {{{
-   *   department.uniqueKey("id").registerTempTable("department")
-   *   employee.foreignKey("departmentId", "department.id")
+   *   val department = dept.uniqueKey("id")
+   *   employee.foreignKey("departmentId", department, "id")
    * }}}
    */
-  def foreignKey(col: String, referencedCol: String): DataFrame =
+  def foreignKey(col: String, referencedDF: DataFrame, referencedCol: String): DataFrame =
     KeyHintCollapsing(
-      KeyHint(List(ForeignKey(UnresolvedAttribute(col), UnresolvedAttribute(referencedCol))),
+      KeyHint(List(ForeignKey(
+        UnresolvedAttribute(col),
+        referencedDF.logicalPlan,
+        UnresolvedAttribute(referencedCol))),
       logicalPlan))
 
   /**

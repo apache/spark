@@ -38,30 +38,27 @@ private class KeyHintTestData(ctx: SQLContext) {
     Customer(1, "bob"),
     Customer(2, "alice"))).toDF()
     .uniqueKey("id")
-  customer.registerTempTable("customer")
   val employee = ctx.sparkContext.parallelize(Seq(
     Employee(0, "charlie"),
     Employee(1, "dan"))).toDF()
     .uniqueKey("id")
-  employee.registerTempTable("employee")
   val order = ctx.sparkContext.parallelize(Seq(
     Order(0, 0, Some(0)),
     Order(1, 1, None))).toDF()
-    .foreignKey("customerId", "customer.id")
-    .foreignKey("employeeId", "employee.id")
+    .foreignKey("customerId", customer, "id")
+    .foreignKey("employeeId", employee, "id")
   val manager = ctx.sparkContext.parallelize(Seq(
     Manager(0, 1))).toDF()
-    .foreignKey("managerId", "employee.id")
-    .foreignKey("subordinateId", "employee.id")
-  ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
-  val bestFriend = ctx.sparkContext.parallelize(Seq(
-    BestFriend(0, 1),
-    BestFriend(1, 2),
-    BestFriend(2, 0))).toDF()
-    .uniqueKey("id")
-    .foreignKey("friendId", "bestFriend.id")
-  bestFriend.registerTempTable("bestFriend")
-  ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, true)
+    .foreignKey("managerId", employee, "id")
+    .foreignKey("subordinateId", employee, "id")
+  val bestFriend = {
+    val tmp = ctx.sparkContext.parallelize(Seq(
+      BestFriend(0, 1),
+      BestFriend(1, 2),
+      BestFriend(2, 0))).toDF()
+      .uniqueKey("id")
+    tmp.foreignKey("friendId", tmp, "id")
+  }
   val bannedCustomer = ctx.sparkContext.parallelize(Seq(
     BannedCustomer("alice"),
     BannedCustomer("eve"))).toDF()
@@ -193,7 +190,7 @@ class KeyHintSuite extends QueryTest {
 
   test("can't create foreign key referencing non-unique column") {
     intercept[AnalysisException] {
-      bannedCustomer.foreignKey("name", "customer.name")
+      bannedCustomer.foreignKey("name", customer, "name")
     }
   }
 

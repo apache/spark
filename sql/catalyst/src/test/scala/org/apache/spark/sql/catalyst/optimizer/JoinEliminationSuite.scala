@@ -52,8 +52,8 @@ class JoinEliminationSuite extends PlanTest {
       'orderId.int.notNull, 'o_customerId.int.notNull, 'o_employeeId.int)
     KeyHint(List(
       UniqueKey(r.output(0)),
-      ForeignKey(r.output(1), customer.output(0)),
-      ForeignKey(r.output(2), employee.output(0))), r)
+      ForeignKey(r.output(1), customer, customer.output(0)),
+      ForeignKey(r.output(2), employee, employee.output(0))), r)
   }
   val bannedCustomer = {
     val r = LocalRelation('bannedCustomerName.string.notNull)
