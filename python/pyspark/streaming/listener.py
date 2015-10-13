@@ -15,8 +15,11 @@
 # limitations under the License.
 #
 
-from py4j.java_gateway import JavaObject
 
+from py4j.java_gateway import JavaGateway
+
+
+"""
 class StreamingListenerEvent(object):
 
 class StreamingListenerBatchSubmitted(StreamingListenerEvent, batchInfo):
@@ -30,11 +33,14 @@ class StreamingListenerStarted(StreamingListenerEvent, receiverInfo):
 class StreamingListenerReceiverError(StreamingListenerEvent, receiverInfo):
 
 class StreamingListenerReceiverStopped(StreamingListenerEvent, receiverInfo):
+"""
+
+__all__ = ["StreamingListener"]
+
 
 class StreamingListener(object):
 
     def __init__(self):
-
 
     # Called when a receiver has been started.
     def onReceiverStarted(self, receiverStarted):
@@ -50,7 +56,6 @@ class StreamingListener(object):
 
     # Called when a batch of jobs has been submitted for processing.
     def onBatchSubmitted(self, batchSubmitted):
-        pass
 
     # Called when processing of a batch of jobs has started.
     def onBatchStarted(self, batchStarted):
@@ -59,3 +64,15 @@ class StreamingListener(object):
     # Called when processing of a batch of jobs has completed.
     def onBatchCompleted(self, batchCompleted):
         pass
+
+    # Called when processing of a job of a batch has started.
+    def onOutputOperationStarted(self, outputOperationStarted):
+        pass
+
+    # Called when processing of a job of a batch has completed
+    def onOutputOperationCompleted(self, outputOperationCompleted):
+        pass
+
+    class Java:
+        implements = ["org.apache.spark.streaming.scheduler.StreamingListener"]
+

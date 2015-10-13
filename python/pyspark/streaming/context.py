@@ -28,6 +28,7 @@ from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
+from pyspark.streaming.listener import StreamingListener
 
 __all__ = ["StreamingContext"]
 
@@ -401,3 +402,11 @@ class StreamingContext(object):
         first = dstreams[0]
         jrest = [d._jdstream for d in dstreams[1:]]
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+
+    def addStreamingListener(self):
+        """
+
+        :return:
+        """
+        self._jssc.addStreamingListener(StreamingListener())
+        #pass
