@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -43,6 +44,7 @@ object DefaultOptimizer extends Optimizer {
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
+      NewOutputPushDown,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -81,6 +83,35 @@ object SamplePushDown extends Rule[LogicalPlan] {
     case Project(projectList, s @ Sample(lb, up, replace, seed, child)) =>
       Sample(lb, up, replace, seed,
         Project(projectList, child))
+  }
+}
+
+object NewOutputPushDown extends Rule[LogicalPlan] {
+
+  private def rewriteAttributes(e: Expression, n: NewOutput) = {
+    val outputMap = AttributeMap(n.output.zip(n.child.output))
+    e transform {
+      case a: AttributeReference => outputMap(a)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Push down filter into NewOutput
+    case Filter(condition, n @ NewOutput(output, child)) =>
+      val newCondition = rewriteAttributes(condition, n)
+      NewOutput(output, Filter(newCondition, child))
+    // Push down projection into NewOutput
+    case p @ Project(_, n @ NewOutput(output, child)) =>
+      val references = p.references
+      if (references == n.outputSet) {
+        p
+      } else {
+        val newOutput = output.filter(references.contains)
+        val newProjectList = newOutput.map(rewriteAttributes(_, n)).asInstanceOf[Seq[Attribute]]
+        p.copy(child = NewOutput(newOutput, Project(newProjectList, child)))
+      }
+    // Combine adjacent NewOutput operators
+    case n @ NewOutput(_, NewOutput(_, child)) => n.copy(child = child)
   }
 }
 

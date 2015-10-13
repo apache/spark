@@ -33,8 +33,8 @@ case class NewOutput(output: Seq[Attribute], child: SparkPlan) extends UnaryNode
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-  override def canProcessUnsafeRows: Boolean = child.canProcessUnsafeRows
-  override def canProcessSafeRows: Boolean = child.canProcessSafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
 
   override protected def doExecute(): RDD[InternalRow] = child.execute()
 }
