@@ -205,13 +205,23 @@ class HadoopRDD[K, V](
     array
   }
 
+  protected def registMetricsReadCallback(split: HadoopPartition) = {
+    // Find a function that will return the FileSystem bytes read by this thread. Do this before
+    // creating RecordReader, because RecordReader's constructor might read some bytes
+    val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
+      case _: FileSplit | _: CombineFileSplit =>
+        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+      case _ => None
+    }
+    getBytesReadCallback
+  }
+
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
 
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
-
       // TODO: there is a lot of duplicate code between this and NewHadoopRDD and SqlNewHadoopRDD
 
       val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
@@ -223,13 +233,7 @@ class HadoopRDD[K, V](
         case _ => SqlNewHadoopRDDState.unsetInputFileName()
       }
 
-      // Find a function that will return the FileSystem bytes read by this thread. Do this before
-      // creating RecordReader, because RecordReader's constructor might read some bytes
-      val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
-        case _: FileSplit | _: CombineFileSplit =>
-          SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
-        case _ => None
-      }
+      val getBytesReadCallback = registMetricsReadCallback(split)
 
       // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
       // If we do a coalesce, however, we are likely to compute multiple partitions in the same
@@ -240,7 +244,6 @@ class HadoopRDD[K, V](
           inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
         }
       }
-
       var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
