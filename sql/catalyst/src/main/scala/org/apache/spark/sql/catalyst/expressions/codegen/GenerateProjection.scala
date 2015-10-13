@@ -59,7 +59,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           ${eval.code}
           nullBits[$i] = ${eval.isNull};
           if (!${eval.isNull}) {
-            c$i = ${eval.primitive};
+            c$i = ${eval.value};
           }
         }
         """
@@ -180,7 +180,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
         $columns
 
-        public SpecificRow(InternalRow i) {
+        public SpecificRow(InternalRow ${ctx.INPUT_ROW}) {
           $initColumns
         }
 

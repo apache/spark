@@ -148,19 +148,19 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
     val listGen = list.map(_.gen(ctx))
     val listCode = listGen.map(x =>
       s"""
-        if (!${ev.primitive}) {
+        if (!${ev.value}) {
           ${x.code}
           if (${x.isNull}) {
             ${ev.isNull} = true;
-          } else if (${ctx.genEqual(value.dataType, valueGen.primitive, x.primitive)}) {
+          } else if (${ctx.genEqual(value.dataType, valueGen.value, x.value)}) {
             ${ev.isNull} = false;
-            ${ev.primitive} = true;
+            ${ev.value} = true;
           }
         }
        """).mkString("\n")
     s"""
       ${valueGen.code}
-      boolean ${ev.primitive} = false;
+      boolean ${ev.value} = false;
       boolean ${ev.isNull} = ${valueGen.isNull};
       if (!${ev.isNull}) {
         $listCode
@@ -208,10 +208,10 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     s"""
       ${childGen.code}
       boolean ${ev.isNull} = ${childGen.isNull};
-      boolean ${ev.primitive} = false;
+      boolean ${ev.value} = false;
       if (!${ev.isNull}) {
-        ${ev.primitive} = $hsetTerm.contains(${childGen.primitive});
-        if (!${ev.primitive} && $hasNullTerm) {
+        ${ev.value} = $hsetTerm.contains(${childGen.value});
+        if (!${ev.value} && $hasNullTerm) {
           ${ev.isNull} = true;
         }
       }
@@ -251,14 +251,14 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} = false;
+      boolean ${ev.value} = false;
 
-      if (!${eval1.isNull} && !${eval1.primitive}) {
+      if (!${eval1.isNull} && !${eval1.value}) {
       } else {
         ${eval2.code}
-        if (!${eval2.isNull} && !${eval2.primitive}) {
+        if (!${eval2.isNull} && !${eval2.value}) {
         } else if (!${eval1.isNull} && !${eval2.isNull}) {
-          ${ev.primitive} = true;
+          ${ev.value} = true;
         } else {
           ${ev.isNull} = true;
         }
@@ -300,14 +300,14 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} = true;
+      boolean ${ev.value} = true;
 
-      if (!${eval1.isNull} && ${eval1.primitive}) {
+      if (!${eval1.isNull} && ${eval1.value}) {
       } else {
         ${eval2.code}
-        if (!${eval2.isNull} && ${eval2.primitive}) {
+        if (!${eval2.isNull} && ${eval2.value}) {
         } else if (!${eval1.isNull} && !${eval2.isNull}) {
-          ${ev.primitive} = false;
+          ${ev.value} = false;
         } else {
           ${ev.isNull} = true;
         }
@@ -403,10 +403,10 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val equalCode = ctx.genEqual(left.dataType, eval1.primitive, eval2.primitive)
+    val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
     ev.isNull = "false"
     eval1.code + eval2.code + s"""
-        boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||
+        boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
            (!${eval1.isNull} && $equalCode);
       """
   }

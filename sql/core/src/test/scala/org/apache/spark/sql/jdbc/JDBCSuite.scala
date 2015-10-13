@@ -409,18 +409,22 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
     assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
+    assert(JdbcDialects.get("jdbc:derby:db") == DerbyDialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
   test("quote column names by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val Derby = JdbcDialects.get("jdbc:derby:db")
 
     val columns = Seq("abc", "key")
     val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
     val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
+    val DerbyColumns = columns.map(Derby.quoteIdentifier(_))
     assert(MySQLColumns === Seq("`abc`", "`key`"))
     assert(PostgresColumns === Seq(""""abc"""", """"key""""))
+    assert(DerbyColumns === Seq(""""abc"""", """"key""""))
   }
 
   test("Dialect unregister") {
@@ -452,11 +456,25 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 
+  test("PostgresDialect type mapping") {
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+  }
+
+  test("DerbyDialect jdbc type mapping") {
+    val derbyDialect = JdbcDialects.get("jdbc:derby:db")
+    assert(derbyDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(derbyDialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    assert(derbyDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
   test("table exists query by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
     val table = "weblogs"
     val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
     val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
@@ -464,5 +482,6 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(Postgres.getTableExistsQuery(table) == limitQuery)
     assert(db2.getTableExistsQuery(table) == defaultQuery)
     assert(h2.getTableExistsQuery(table) == defaultQuery)
+    assert(derby.getTableExistsQuery(table) == defaultQuery)
   }
 }

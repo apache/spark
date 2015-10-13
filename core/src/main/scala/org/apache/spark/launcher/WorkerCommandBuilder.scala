@@ -40,7 +40,7 @@ private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, comm
     cmd.add(s"-Xms${memoryMb}M")
     cmd.add(s"-Xmx${memoryMb}M")
     command.javaOpts.foreach(cmd.add)
-    addPermGenSizeOpt(cmd)
+    CommandBuilderUtils.addPermGenSizeOpt(cmd)
     addOptionString(cmd, getenv("SPARK_JAVA_OPTS"))
     cmd
   }

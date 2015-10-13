@@ -56,9 +56,9 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         }
 
         @Override
-        public boolean eval(InternalRow i) {
+        public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
-          return !${eval.isNull} && ${eval.primitive};
+          return !${eval.isNull} && ${eval.value};
         }
       }"""
 
