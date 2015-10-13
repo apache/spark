@@ -383,8 +383,8 @@ class Analyzer(
                           attr,
                           applyRewrites(referencedRelation),
                           attributeRewrites.get(referencedAttr).getOrElse(referencedAttr))
-                      case other => other
                     }
+                    // Keep the old keys as well to accommodate future self-joins
                     KeyHint((keys ++ newKeys).distinct, child)
                 }
               } else {
