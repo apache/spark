@@ -38,7 +38,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   sealed trait RegisterExecutorResponse
 
-  case object RegisteredExecutor extends CoarseGrainedClusterMessage
+  case class RegisteredExecutor(hostname: String) extends CoarseGrainedClusterMessage
     with RegisterExecutorResponse
 
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
@@ -51,9 +51,7 @@ private[spark] object CoarseGrainedClusterMessages {
       hostPort: String,
       cores: Int,
       logUrls: Map[String, String])
-    extends CoarseGrainedClusterMessage {
-    Utils.checkHostPort(hostPort, "Expected host port")
-  }
+    extends CoarseGrainedClusterMessage
 
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
     data: SerializableBuffer) extends CoarseGrainedClusterMessage
@@ -106,9 +104,5 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // Used internally by executors to shut themselves down.
   case object Shutdown extends CoarseGrainedClusterMessage
-
-  // SPARK-10987: workaround for netty RPC issue; forces a connection from the driver back
-  // to the AM.
-  case object DriverHello extends CoarseGrainedClusterMessage
 
 }

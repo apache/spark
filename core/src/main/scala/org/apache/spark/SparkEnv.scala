@@ -254,7 +254,8 @@ object SparkEnv extends Logging {
 
     // Create the ActorSystem for Akka and get the port it binds to.
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-    val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager)
+    val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager,
+      clientMode = !isDriver)
     val actorSystem: ActorSystem =
       if (rpcEnv.isInstanceOf[AkkaRpcEnv]) {
         rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
@@ -266,7 +267,7 @@ object SparkEnv extends Logging {
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
     if (isDriver) {
       conf.set("spark.driver.port", rpcEnv.address.port.toString)
-    } else {
+    } else if (rpcEnv.address != null) {
       conf.set("spark.executor.port", rpcEnv.address.port.toString)
     }
 
