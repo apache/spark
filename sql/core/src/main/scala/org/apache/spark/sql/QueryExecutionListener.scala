@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.mutable.ListBuffer
 
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.Logging
 import org.apache.spark.sql.execution.QueryExecution
 
@@ -30,12 +31,35 @@ import org.apache.spark.sql.execution.QueryExecution
  * Note that implementations should guarantee thread-safety as they will be used in a non
  * thread-safe way.
  */
+@Experimental
 trait QueryExecutionListener {
+
+  /**
+   * A callback function that will be called when a query executed successfully.
+   * Implementations should guarantee thread-safe.
+   *
+   * @param funcName the name of the action that triggered this query.
+   * @param qe the QueryExecution object that carries detail information like logical plan,
+   *           physical plan, etc.
+   * @param duration the execution time for this query in nanoseconds.
+   */
+  @DeveloperApi
   def onSuccess(funcName: String, qe: QueryExecution, duration: Long)
 
+  /**
+   * A callback function that will be called when a query execution failed.
+   * Implementations should guarantee thread-safe.
+   *
+   * @param funcName the name of the action that triggered this query.
+   * @param qe the QueryExecution object that carries detail information like logical plan,
+   *           physical plan, etc.
+   * @param exception the exception that failed this query.
+   */
+  @DeveloperApi
   def onFailure(funcName: String, qe: QueryExecution, exception: Exception)
 }
 
+@Experimental
 class ExecutionListenerManager extends Logging {
   private[this] val listeners = ListBuffer.empty[QueryExecutionListener]
   private[this] val lock = new ReentrantReadWriteLock()
@@ -58,14 +82,26 @@ class ExecutionListenerManager extends Logging {
     }
   }
 
+  /**
+   * Registers the specified QueryExecutionListener.
+   */
+  @DeveloperApi
   def register(listener: QueryExecutionListener): Unit = writeLock {
     listeners += listener
   }
 
+  /**
+   * Unregisters the specified QueryExecutionListener.
+   */
+  @DeveloperApi
   def unregister(listener: QueryExecutionListener): Unit = writeLock {
     listeners -= listener
   }
 
+  /**
+   * clears out all registered QueryExecutionListeners.
+   */
+  @DeveloperApi
   def clear(): Unit = writeLock {
     listeners.clear()
   }
