@@ -1,90 +1,45 @@
 require 'octopress-code-highlighter'
 require 'liquid'
-require 'colorator'
 
 module Octopress
-  module RenderCode
+  module IncludeExample
     class Tag < Liquid::Tag
 
-      FileOnly = /^(\S+)$/
-      FileTitle = /(\S+)\s+(\S.*?)$/i
-      TitleFile = /(\S.*?)\s+(\S+)$/i
-
-      def initialize(tag_name, markup, tokens)
-        @markup = markup
+      def initialize(tag_name, fname, tokens)
         super
+        @fname = fname
       end
 
       def render(context)
-        if page = context.environments.first['page']
-          @page_path = page['path']
-        end
         site = context.registers[:site]
-        config_dir = (site.config['code_dir'] || 'downloads/code').sub(/^\//,'')
-        @code_dir = File.join(site.source, config_dir)
+        config_dir = (site.config['code_dir'] || '../examples/src/main').sub(/^\//,'')
+        code_dir = File.join(site.source, config_dir)
+        complete_fname = File.join(code_dir, @fname)
+
+        raw_code = File.open("/Users/panda/git-store/spark/docs/../examples/src/main/scala/org/apache/spark/examples/SparkALS.scala").read.encode("UTF-8")
+        # raw_code = File.open(complete_fname).read.encode("UTF-8")
+        
+        code = select_lines(raw_code)
+        puts code
+        CodeHighlighter.highlight(code)
 
         begin
-          options = get_options
-          code = File.open(@file).read.encode("UTF-8")
-          code = CodeHighlighter.select_lines(code, options)
-
-          highlight(code, options)
         rescue => e
-          failure(e)
+          $stderr.puts "highlight code failed"
         end
       end
 
-      def get_path(file)
-        path = File.join(@code_dir, file)
+      def select_lines(code)
+        lines = code.each_line.to_a
+        start = lines.each_with_index.select { |l, i| l.include? "begin code" }.last.last
+        endline = lines.each_with_index.select { |l, i| l.include? "end code" }.last.last
+        length = lines.count
 
-        if File.symlink?(path)
-          raise "Code directory '#{@code_path}' cannot be a symlink"
-        end
-
-        path if File.exists?(path)
-      end
-
-      def get_options
-        # wrap with {% raw %} tags to prevent addititional processing
-        defaults = { }
-
-        clean_markup = CodeHighlighter.clean_markup(@markup).strip
-
-        if clean_markup =~ FileOnly
-          @file = get_path($1)
-        elsif clean_markup =~ FileTitle
-          if @file = get_path($1)
-            defaults[:title] = $2
-          
-          # Allow for deprecated title first syntax
-          #
-          elsif clean_markup =~ TitleFile
-            defaults[:title] = $1
-            @file = get_path($2)
-            if @page_path
-              puts "\nRenderCode Warning:".red
-              puts "  Passing title before path has been deprecated and will be removed in RenderCode 2.0".red
-              puts "  Update #{@page_path} with {% render_code #{$2} #{$1} ... %}.".yellow
-            end
-          end
-        end
-
-        options = CodeHighlighter.parse_markup(@markup, defaults)
-        options[:lang] ||= File.extname(@file).delete('.')
-        options[:link_text] ||= "Raw code"
-        options
-      end
-
-      def failure(message)
-        CodeHighlighter.highlight_failed(message, "{% include_code path/to/file [title] [lang:language] [start:#] [end:#] [range:#-#] [mark:#,#-#] [linenos:false] %}", @markup, '')
-      end
-
-
-      def highlight(code, options)
-        options[:aliases] = @aliases || {}
-        code = CodeHighlighter.highlight(code, options)
-        if @page_path
-          code = "<notextile>#{code}</notextile>" if File.extname(@page_path).match(/textile/)
+        if start > 0 or endline < length - 1
+          raise "Code is #{length} lines long, cannot begin at line #{start}." if start > length
+          raise "Code lines starting line #{start} cannot be after ending line #{endline}." if start > endline
+          range = Range.new(start, endline)
+          code = lines.to_a[range].join
         end
         code
       end
@@ -92,4 +47,4 @@ module Octopress
   end
 end
 
-Liquid::Template.register_tag('render_code', Octopress::RenderCode::Tag)
+Liquid::Template.register_tag('include_example', Octopress::IncludeExample::Tag)
