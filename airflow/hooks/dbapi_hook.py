@@ -94,6 +94,7 @@ class DbApiHook(BaseHook):
 
         cur = conn.cursor()
         for s in sql:
+            logging.info(s)
             cur.execute(s, parameters)
         cur.close()
         conn.commit()
@@ -151,3 +152,10 @@ class DbApiHook(BaseHook):
         conn.close()
         logging.info(
             "Done loading. Loaded a total of {i} rows".format(**locals()))
+
+
+    def bulk_load(self, table, tmp_file):
+        """
+        Loads a tab-delimited file into a database table
+        """
+        raise NotImplemented()

@@ -178,6 +178,25 @@ class HivePrestoTest(unittest.TestCase):
         t.clear(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_hive_to_mysql_bulk(self):
+        t = operators.HiveToMySqlTransfer(
+            mysql_conn_id='airflow_db',
+            task_id='hive_to_mysql_bulk_check',
+            create=True,
+            sql="""
+            SELECT name
+            FROM airflow.static_babynames
+            LIMIT 100
+            """,
+            mysql_table='test_static_babynames',
+            mysql_preoperator=[
+                'DROP TABLE IF EXISTS test_static_babynames;',
+                'CREATE TABLE test_static_babynames (name VARCHAR(500))',
+            ],
+            bulk_load=True,
+            dag=self.dag)
+        t.clear(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
 class CoreTest(unittest.TestCase):
 

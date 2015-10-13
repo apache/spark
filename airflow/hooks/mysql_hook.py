@@ -3,7 +3,6 @@ import MySQLdb.cursors
 
 from airflow.hooks.dbapi_hook import DbApiHook
 
-
 class MySqlHook(DbApiHook):
     '''
     Interact with MySQL.
@@ -46,6 +45,20 @@ class MySqlHook(DbApiHook):
                 conn_config["cursorclass"] = MySQLdb.cursors.DictCursor
             elif (conn.extra_dejson["cursor"]).lower() == 'ssdictcursor':
                 conn_config["cursorclass"] = MySQLdb.cursors.SSDictCursor
-
+        local_infile = conn.extra_dejson.get('local_infile',False)
+        if local_infile:
+            conn_config["local_infile"] = 1
         conn = MySQLdb.connect(**conn_config)
         return conn
+
+    def bulk_load(self, table, tmp_file):
+        """
+        Loads a tab-delimited file into a database table
+        """
+        conn = self.get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            LOAD DATA LOCAL INFILE '{tmp_file}'
+            INTO TABLE {table}
+            """.format(**locals()))
+        conn.commit()
