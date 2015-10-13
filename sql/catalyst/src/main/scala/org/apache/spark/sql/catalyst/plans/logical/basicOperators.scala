@@ -485,14 +485,16 @@ case class KeyHint(newKeys: Seq[Key], child: LogicalPlan) extends UnaryNode {
   /** Overridden here to apply `rule` to the keys as well as the child plan. */
   override def transformExpressionsDown(
       rule: PartialFunction[Expression, Expression]): this.type = {
-    KeyHint(newKeys.map(_.transformAttribute(rule.andThen(_.asInstanceOf[Attribute]))), child)
-      .asInstanceOf[this.type]
+    KeyHint(
+      newKeys.map(_.transformAttribute(rule.andThen(_.asInstanceOf[Attribute]))),
+      child.transformExpressionsDown(rule)).asInstanceOf[this.type]
   }
 
   /** Overridden here to apply `rule` to the keys as well as the child plan. */
   override def transformExpressionsUp(
       rule: PartialFunction[Expression, Expression]): this.type = {
-    KeyHint(newKeys.map(_.transformAttribute(rule.andThen(_.asInstanceOf[Attribute]))), child)
-    .asInstanceOf[this.type]
+    KeyHint(
+      newKeys.map(_.transformAttribute(rule.andThen(_.asInstanceOf[Attribute]))),
+      child.transformExpressionsUp(rule)).asInstanceOf[this.type]
   }
 }
