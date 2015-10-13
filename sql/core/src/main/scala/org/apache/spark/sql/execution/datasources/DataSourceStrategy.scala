@@ -198,7 +198,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[InternalRow]) => {
         val projection = UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
-        iterator.map(dataRow => projection(new JoinedRow(dataRow, partitionValues)))
+        val mutableJoinedRow = new JoinedRow()
+        iterator.map(dataRow => projection(mutableJoinedRow(dataRow, partitionValues)))
       }
 
       // This is an internal RDD whose call site the user should not be concerned with
