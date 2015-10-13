@@ -19,6 +19,7 @@ package org.apache.spark.unsafe.types;
 
 import javax.annotation.Nonnull;
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
@@ -135,6 +136,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable 
    */
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(base, offset, target, targetOffset, numBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert(buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + numBytes);
   }
 
   /**
