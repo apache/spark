@@ -124,15 +124,17 @@ class VectorTests(PySparkTestCase):
         self.assertTrue(dv.array.dtype == 'float64')
 
     def test_sparse_vector_indexing(self):
-        sv = SparseVector(4, {1: 1, 3: 2})
-        self.assertEquals(sv[0], 0.)
-        self.assertEquals(sv[3], 2.)
-        self.assertEquals(sv[1], 1.)
-        self.assertEquals(sv[2], 0.)
-        self.assertEquals(sv[-1], 2)
-        self.assertEquals(sv[-2], 0)
-        self.assertEquals(sv[-4], 0)
-        for ind in [4, -5, 7.8]:
+        sv = SparseVector(5, {1: 1, 3: 2})
+        self.assertEqual(sv[0], 0.)
+        self.assertEqual(sv[3], 2.)
+        self.assertEqual(sv[1], 1.)
+        self.assertEqual(sv[2], 0.)
+        self.assertEqual(sv[4], 0.)
+        self.assertEqual(sv[-1], 0.)
+        self.assertEqual(sv[-2], 2.)
+        self.assertEqual(sv[-3], 0.)
+        self.assertEqual(sv[-5], 0.)
+        for ind in [5, -6, 7.8]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
 
 
