@@ -88,24 +88,17 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
  */
 class HiveContext private[hive](
     sc: SparkContext,
-    listenerManager: ExecutionListenerManager,
     cacheManager: CacheManager,
     @transient listener: SQLListener,
     @transient execHive: ClientWrapper,
     @transient metaHive: ClientInterface,
     isRootContext: Boolean)
-  extends SQLContext(sc, listenerManager, cacheManager, listener, isRootContext) with Logging {
+  extends SQLContext(sc, cacheManager, listener, isRootContext) with Logging {
   self =>
 
-  def this(sc: SparkContext) = this(
-    sc = sc,
-    listenerManager = new ExecutionListenerManager,
-    cacheManager = new CacheManager,
-    listener = SQLContext.createListenerAndUI(sc),
-    execHive = null,
-    metaHive = null,
-    isRootContext = true
-  )
+  def this(sc: SparkContext) = {
+    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), null, null, true)
+  }
   def this(sc: JavaSparkContext) = this(sc.sc)
 
   import org.apache.spark.sql.hive.HiveContext._
@@ -120,7 +113,6 @@ class HiveContext private[hive](
   override def newSession(): HiveContext = {
     new HiveContext(
       sc = sc,
-      listenerManager = listenerManager,
       cacheManager = cacheManager,
       listener = listener,
       execHive = executionHive.newSession(),

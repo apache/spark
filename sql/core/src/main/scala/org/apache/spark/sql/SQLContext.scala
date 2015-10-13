@@ -64,20 +64,16 @@ import org.apache.spark.util.Utils
  */
 class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
-    @transient val listenerManager: ExecutionListenerManager,
     @transient protected[sql] val cacheManager: CacheManager,
     @transient private[sql] val listener: SQLListener,
     val isRootContext: Boolean)
   extends org.apache.spark.Logging with Serializable {
+
   self =>
 
-  def this(sparkContext: SparkContext) = this(
-    sparkContext = sparkContext,
-    listenerManager = new ExecutionListenerManager,
-    cacheManager = new CacheManager,
-    listener = SQLContext.createListenerAndUI(sparkContext),
-    isRootContext = true
-  )
+  def this(sparkContext: SparkContext) = {
+    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
+  }
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
@@ -111,7 +107,6 @@ class SQLContext private[sql](
   def newSession(): SQLContext = {
     new SQLContext(
       sparkContext = sparkContext,
-      listenerManager = listenerManager,
       cacheManager = cacheManager,
       listener = listener,
       isRootContext = false)
@@ -181,6 +176,9 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
+
+  @transient
+  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
