@@ -208,6 +208,20 @@ private[spark] class Client(
       case None => logDebug("spark.yarn.maxAppAttempts is not set. " +
           "Cluster's default value will be used.")
     }
+
+    if (sparkConf.contains("spark.yarn.am.attemptFailuresValidityInterval")) {
+      try {
+        val interval = sparkConf.getTimeAsMs("spark.yarn.am.attemptFailuresValidityInterval")
+        val method = appContext.getClass().getMethod(
+          "setAttemptFailuresValidityInterval", classOf[Long])
+        method.invoke(appContext, interval: java.lang.Long)
+      } catch {
+        case e: NoSuchMethodException =>
+          logWarning("Ignoring spark.yarn.am.attemptFailuresValidityInterval because the version " +
+            "of YARN does not support it")
+      }
+    }
+
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(args.amMemory + amMemoryOverhead)
     capability.setVirtualCores(args.amCores)
