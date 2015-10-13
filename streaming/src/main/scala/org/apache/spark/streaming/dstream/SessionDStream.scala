@@ -234,12 +234,13 @@ private[streaming] object HashMapBasedSessionStore {
 
 
 private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
-    parentSessionStore: SessionStore[K, S], initialCapacity: Int) extends SessionStore[K, S] {
+    parentSessionStore: SessionStore[K, S],
+    initialCapacity: Int = 64
+  ) extends SessionStore[K, S] {
 
   def this(initialCapacity: Int) = this(new EmptySessionStore[K, S], initialCapacity)
 
-  def this() = this(64)
-
+  def this() = this(new EmptySessionStore[K, S])
 
   import OpenHashMapBasedSessionStore._
 
@@ -247,6 +248,8 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
     case map: OpenHashMapBasedSessionStore[_, _] => map.generation + 1
     case _ => 1
   }
+
+  println("Generation " + generation)
 
   private val internalMap = new OpenHashMap[K, SessionInfo[S]]()
 
@@ -299,18 +302,18 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
    * should not mutate `this` map.
    */
   override def copy(): SessionStore[K, S] = {
-    doCopy(generation >= HashMapBasedSessionStore.GENERATION_THRESHOLD_FOR_CONSOLIDATION)
+    doCopy(generation >= GENERATION_THRESHOLD_FOR_CONSOLIDATION)
   }
 
   private[streaming] def doCopy(consolidate: Boolean): SessionStore[K, S] = {
     if (consolidate) {
-      val newParentMap = new OpenHashMapBasedSessionStore[K, S](sizeHint)
+      val newParentMap = new OpenHashMapBasedSessionStore[K, S](initialCapacity = sizeHint)
       iterator(updatedSessionsOnly = false).filter { _.isActive }.foreach { case session =>
         newParentMap.internalMap.update(session.getKey(), SessionInfo(session.getData(), deleted = false))
       }
-      new HashMapBasedSessionStore[K, S](newParentMap)
+      new OpenHashMapBasedSessionStore[K, S](newParentMap)
     } else {
-      new HashMapBasedSessionStore[K, S](this)
+      new OpenHashMapBasedSessionStore[K, S](this)
     }
   }
 
@@ -429,7 +432,7 @@ private[streaming] class SessionDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   extends DStream[SessionStore[K, S]](parent.context) {
 
   sessionSpec.validate()
-  persist(StorageLevel.DISK_ONLY)
+  persist(StorageLevel.MEMORY_ONLY)
 
   private val partitioner = sessionSpec.getPartitioner().getOrElse(
     new HashPartitioner(ssc.sc.defaultParallelism))

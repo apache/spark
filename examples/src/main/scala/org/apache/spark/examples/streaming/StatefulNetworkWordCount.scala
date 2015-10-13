@@ -60,7 +60,7 @@ object StatefulNetworkWordCount {
 
     val sparkConf = new SparkConf().setAppName("StatefulNetworkWordCount")
     // Create the context with a 1 second batch size
-    val ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    val ssc = new StreamingContext(sparkConf, Milliseconds(2000))
     ssc.checkpoint(".")
 
     // Initial RDD input to updateStateByKey
