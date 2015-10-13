@@ -420,16 +420,17 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private class FileStatusCache {
     @transient
-    var sourcePath = Seq.empty[Path]  // just  advisory information
+    var sourcePath = Seq.empty[Path]  // just an advisory information
     var leafFiles = mutable.Map.empty[Path, FileStatus]
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    private def listLeafFiles(paths: Seq[Path]): Set[FileStatus] = {
+    private def listLeafFiles(paths: Array[String]): Set[FileStatus] = {
       if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
         HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
       } else {
-        val statuses = paths.flatMap { hdfsPath =>
+        val statuses = paths.flatMap { path =>
+          val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
@@ -445,14 +446,14 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         if (dirs.isEmpty) {
           files.toSet
         } else {
-          files.toSet ++ listLeafFiles(dirs.map(_.getPath))
+          files.toSet ++ listLeafFiles(dirs.map(_.getPath.toString))
         }
       }
     }
 
     def refresh(): Unit = {
       val sources = paths.map(new Path(_))
-      val files = listLeafFiles(sources)
+      val files = listLeafFiles(paths)
 
       leafFiles.clear()
       leafDirToChildrenFiles.clear()
@@ -771,16 +772,17 @@ private[sql] object HadoopFsRelation extends Logging {
       accessTime: Long)
 
   def listLeafFilesInParallel(
-      paths: Seq[Path],
+      paths: Array[String],
       hadoopConf: Configuration,
       sparkContext: SparkContext): Set[FileStatus] = {
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-    val fakeStatuses = sparkContext.parallelize(paths).flatMap { hdfsPath =>
+    val fakeStatuses = sparkContext.parallelize(paths).flatMap { path =>
+      val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(serializableConfiguration.value)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty[FileStatus])
+      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty)
     }.map { status =>
       FakeFileStatus(
         status.getPath.toString,
