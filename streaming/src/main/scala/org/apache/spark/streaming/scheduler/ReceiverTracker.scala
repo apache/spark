@@ -474,7 +474,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Remote messages
       case RegisterReceiver(streamId, typ, hostPort, receiverEndpoint) =>
         val successful =
-          registerReceiver(streamId, typ, hostPort, receiverEndpoint, context.sender.address)
+          registerReceiver(streamId, typ, hostPort, receiverEndpoint, context.senderAddress)
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
         context.reply(addBlock(receivedBlockInfo))

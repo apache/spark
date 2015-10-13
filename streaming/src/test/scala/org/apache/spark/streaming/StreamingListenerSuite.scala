@@ -140,6 +140,27 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     }
   }
 
+  test("output operation reporting") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count())
+    inputStream.foreachRDD(_.collect())
+    inputStream.foreachRDD(_.count())
+
+    val collector = new OutputOperationInfoCollector
+    ssc.addStreamingListener(collector)
+
+    ssc.start()
+    try {
+      eventually(timeout(30 seconds), interval(20 millis)) {
+        collector.startedOutputOperationIds.take(3) should be (Seq(0, 1, 2))
+        collector.completedOutputOperationIds.take(3) should be (Seq(0, 1, 2))
+      }
+    } finally {
+      ssc.stop()
+    }
+  }
+
   test("onBatchCompleted with successful batch") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
@@ -251,6 +272,22 @@ class ReceiverInfoCollector extends StreamingListener {
   override def onReceiverError(receiverError: StreamingListenerReceiverError) {
     receiverErrors += ((receiverError.receiverInfo.streamId,
       receiverError.receiverInfo.lastErrorMessage, receiverError.receiverInfo.lastError))
+  }
+}
+
+/** Listener that collects information on processed output operations */
+class OutputOperationInfoCollector extends StreamingListener {
+  val startedOutputOperationIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
+  val completedOutputOperationIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
+
+  override def onOutputOperationStarted(
+      outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = {
+    startedOutputOperationIds += outputOperationStarted.outputOperationInfo.id
+  }
+
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
+    completedOutputOperationIds += outputOperationCompleted.outputOperationInfo.id
   }
 }
 

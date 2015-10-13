@@ -81,6 +81,7 @@ case class JobSet(
       if (processingEndTime >= 0) Some(processingEndTime) else None
     )
     binfo.setFailureReason(failureReasons)
+    binfo.setNumOutputOp(jobs.size)
     binfo
   }
 }

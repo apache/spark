@@ -385,20 +385,13 @@ class SparkHadoopUtil extends Logging {
 
 object SparkHadoopUtil {
 
-  private val hadoop = {
-    val yarnMode = java.lang.Boolean.valueOf(
-        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
-    if (yarnMode) {
-      try {
-        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
-          .newInstance()
-          .asInstanceOf[SparkHadoopUtil]
-      } catch {
-       case e: Exception => throw new SparkException("Unable to load YARN support", e)
-      }
-    } else {
-      new SparkHadoopUtil
-    }
+  private lazy val hadoop = new SparkHadoopUtil
+  private lazy val yarn = try {
+    Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+      .newInstance()
+      .asInstanceOf[SparkHadoopUtil]
+  } catch {
+    case e: Exception => throw new SparkException("Unable to load YARN support", e)
   }
 
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
@@ -406,6 +399,13 @@ object SparkHadoopUtil {
   val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
 
   def get: SparkHadoopUtil = {
-    hadoop
+    // Check each time to support changing to/from YARN
+    val yarnMode = java.lang.Boolean.valueOf(
+        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+    if (yarnMode) {
+      yarn
+    } else {
+      hadoop
+    }
   }
 }

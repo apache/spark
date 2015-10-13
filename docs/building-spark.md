@@ -144,6 +144,17 @@ The ScalaTest plugin also supports running only a specific test suite as follows
 
     mvn -Dhadoop.version=... -DwildcardSuites=org.apache.spark.repl.ReplSuite test
 
+# Building submodules individually
+
+It's possible to build Spark sub-modules using the `mvn -pl` option.
+
+For instance, you can build the Spark Streaming module using:
+
+{% highlight bash %}
+mvn -pl :spark-streaming_2.10 clean install
+{% endhighlight %}
+
+where `spark-streaming_2.10` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 # Continuous Compilation
 
@@ -204,6 +215,11 @@ The SBT build is derived from the Maven POM files, and so the same Maven profile
 can be set to control the SBT build. For example:
 
     build/sbt -Pyarn -Phadoop-2.3 assembly
+
+To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
+in interactive mode by running `build/sbt`, and then run all build commands at the command
+prompt. For more recommendations on reducing build time, refer to the
+[wiki page](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-ReducingBuildTimes).
 
 # Testing with SBT
 

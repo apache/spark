@@ -1415,7 +1415,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def collect(): Array[Row] = withNewExecutionId {
-    queryExecution.executedPlan.executeCollect()
+    queryExecution.executedPlan.executeCollectPublic()
   }
 
   /**
