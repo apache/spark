@@ -1881,3 +1881,33 @@ setMethod("as.data.frame",
             }
             collect(x)
           })
+
+#' The specified DataFrame is attached to the R search path. This means that
+#' the DataFrame is searched by R when evaluating a variable, so columns in
+#' the DataFrame can be accessed by simply giving their names.
+#'
+#' @rdname attach
+#' @title Attach DataFrame to R search path
+#' @param what (DataFrame) The DataFrame to attach
+#' @param pos (integer) Specify position in search() where to attach.
+#' @param name (character) Name to use for the attached DataFrame. Names
+#'   starting with package: are reserved for library.
+#' @param warn.conflicts (logical) If TRUE, warnings are printed about conflicts
+#' from attaching the database, unless that DataFrame contains an object
+#' @examples
+#' \dontrun{
+#' attach(irisDf)
+#' summary(Sepal_Width)
+#' }
+#' @seealso \link{detach}
+setMethod("attach",
+          signature(what = "DataFrame"),
+          function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
+            cols <- columns(what)
+            stopifnot(length(cols) > 0)
+            newEnv <- new.env()
+            for (i in 1:length(cols)) {
+              assign(x = cols[i], value = what[, cols[i]], envir = newEnv)
+            }
+            attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
+          })

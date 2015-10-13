@@ -1405,6 +1405,26 @@ test_that("Method as.data.frame as a synonym for collect()", {
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
 })
 
+test_that("attach() on a DataFrame", {
+  df <- jsonFile(sqlContext, jsonPath)
+  expect_error(age)
+  attach(df)
+  expect_is(age, "DataFrame")
+  expected_age <- data.frame(age = c(NA, 30, 19))
+  expect_equal(head(age), expected_age)
+  stat <- summary(age)
+  expect_equal(collect(stat)[5, "age"], "30")
+  age <- age$age + 1
+  expect_is(age, "Column")
+  rm(age)
+  stat2 <- summary(age)
+  expect_equal(collect(stat2)[5, "age"], "30")
+  detach("df")
+  stat3 <- summary(df[, "age"])
+  expect_equal(collect(stat3)[5, "age"], "30")
+  expect_error(age)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
