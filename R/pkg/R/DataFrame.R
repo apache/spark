@@ -1416,8 +1416,8 @@ setMethod("where",
 #' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
 #' Column expression. If joinExpr is omitted, join() will perform a Cartesian join
 #' @param joinType The type of join to perform. The following join types are available:
-#' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left',
-#' 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
+#' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
+#' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
 #' @return A DataFrame containing the result of the join operation.
 #' @rdname join
 #' @name join
@@ -1443,12 +1443,13 @@ setMethod("join",
                 sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
               } else {
                 if (joinType %in% c("inner", "outer", "full", "fullouter",
-                    "leftouter", "left", "rightouter", "right", "leftsemi")) {
+                    "leftouter", "left_outer", "left", "rightouter", "right_outer", "right", "leftsemi")) {
+			joinType <- gsub("_", "", joinType)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                      "'inner', 'outer', 'full', 'fullouter', 'leftouter', 'left',
-                      'rightouter', 'right', 'leftsemi'")
+                      "'inner', 'outer', 'full', 'fullouter', 'leftouter', 'left_outer', 'left',
+                      'rightouter', 'right_outer', 'right', 'leftsemi'")
                 }
               }
             }
