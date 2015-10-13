@@ -75,7 +75,7 @@ class BranchPythonOperator(PythonOperator):
     It derives the PythonOperator and expects a Python function that returns
     the task_id to follow. The task_id returned should point to a task
     directely downstream from {self}. All other "branches" or
-    directly downstream tasks are marked wit a state of "skipped" so that
+    directly downstream tasks are marked with a state of "skipped" so that
     these paths can't move forward.
     """
     def execute(self, context):
