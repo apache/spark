@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.UUID
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -24,16 +26,23 @@ import org.apache.spark.sql.types._
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
-  def newExprId: ExprId = ExprId(curId.getAndIncrement())
+  private[expressions] val jvmId = UUID.randomUUID()
+  def newExprId: ExprId = ExprId(curId.getAndIncrement(), jvmId)
   def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
 }
 
 /**
- * A globally unique (within this JVM) id for a given named expression.
+ * A globally unique id for a given named expression.
  * Used to identify which attribute output by a relation is being
  * referenced in a subsequent computation.
+ *
+ * The `id` field is unique within a given JVM, while the `uuid` is used to uniquely identify JVMs.
  */
-case class ExprId(id: Long)
+case class ExprId(id: Long, jvmId: UUID)
+
+object ExprId {
+  def apply(id: Long): ExprId = ExprId(id, NamedExpression.jvmId)
+}
 
 /**
  * An [[Expression]] that is named.
