@@ -64,26 +64,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         if t.partitionSpec.partitionColumns.nonEmpty =>
       // We divide the filter expressions into 3 parts
       val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
-      val filterMap = filters.groupBy { f =>
-        // TODO this is case-senstive
-        val referencedColumnNames = f.references.map(_.name).toSet
-        if (referencedColumnNames.subsetOf(partitionColumnNames)) {
-          // Only reference the partition key
-          0
-        } else if (referencedColumnNames.intersect(partitionColumnNames).isEmpty) {
-          // Not reference any partition key at all. can be push down
-          1
-        } else {
-          // Reference both partition key and attributes
-          2
-        }
-      }
+
+      // TODO this is case-sensitive
       // Only prunning the partition keys
-      val partitionFilters = filterMap.getOrElse(0, Nil)
+      val partitionFilters =
+        filters.filter(_.references.map(_.name).toSet.subsetOf(partitionColumnNames))
+
       // Only pushes down predicates that do not reference partition keys.
-      val pushedFilters = filterMap.getOrElse(1, Nil)
+      val pushedFilters =
+        filters.filter(_.references.map(_.name).toSet.intersect(partitionColumnNames).isEmpty)
+
       // Predicates with both partition keys and attributes
-      val combineFilters = filterMap.getOrElse(2, Nil)
+      val combineFilters = filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
 
       val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
