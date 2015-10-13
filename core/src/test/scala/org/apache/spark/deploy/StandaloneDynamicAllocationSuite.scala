@@ -384,11 +384,14 @@ class StandaloneDynamicAllocationSuite
     syncExecutors(sc)
     val executors = getExecutorIds(sc)
     assert(executors.size === 2)
-
     // kill executor 1, and replace it
     assert(sc.killAndReplaceExecutor(executors.head))
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.head.executors.size === 2)
+    }
+
     var apps = getApplications()
-    assert(apps.head.executors.size === 2)
     // kill executor 1
     assert(sc.killExecutor(executors.head))
     apps = getApplications()
