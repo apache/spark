@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -240,6 +241,10 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
+      if (Option(TaskContext.get()).isDefined) {
+        throw new IllegalStateException("AttributeReference should not be assigned with " +
+          "new expression id inside of tasks")
+      }
       AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifiers)
     }
   }
