@@ -59,14 +59,14 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 
   /**
    * Param for quantile probabilities array.
-   * Values of the quantile probabilities array should be in the range [0, 1]
+   * Values of the quantile probabilities array should be in the range (0, 1)
    * and the array should be non-empty.
    * @group param
    */
   @Since("1.6.0")
   final val quantileProbabilities: DoubleArrayParam = new DoubleArrayParam(this,
     "quantileProbabilities", "quantile probabilities array",
-    (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1)) && t.length > 0)
+    (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1, false, false)) && t.length > 0)
 
   /** @group getParam */
   @Since("1.6.0")
