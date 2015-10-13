@@ -30,6 +30,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.sql.{SQLContext, QueryTest}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.sql.types.DecimalType
@@ -101,6 +102,16 @@ class HiveSparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
+      "--name", "SparkSQLConfTest",
+      "--master", "local-cluster[2,1,1024]",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-11009 fix wrong result of Window function in cluster mode") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SPARK_11009.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,1024]",
       unusedJar.toString)
@@ -316,6 +327,36 @@ object SPARK_9757 extends QueryTest {
     } finally {
       dir.delete()
       hiveContext.sql("DROP TABLE t")
+      sparkContext.stop()
+    }
+  }
+}
+
+object SPARK_11009 extends QueryTest {
+  import org.apache.spark.sql.functions._
+
+  protected var sqlContext: SQLContext = _
+
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+
+    val sparkContext = new SparkContext(
+      new SparkConf()
+        .set("spark.ui.enabled", "false")
+        .set("spark.sql.shuffle.partitions", "100"))
+
+    val hiveContext = new TestHiveContext(sparkContext)
+    sqlContext = hiveContext
+
+    try {
+      val df = sqlContext.range(1 << 20)
+      val df2 = df.select((df("id") % 1000).alias("A"), (df("id") / 1000).alias("B"))
+      val ws = Window.partitionBy(df2("A")).orderBy(df2("B"))
+      val df3 = df2.select(df2("A"), df2("B"), rowNumber().over(ws).alias("rn")).filter("rn < 0")
+      if (df3.rdd.count() != 0) {
+        throw new Exception("df3 should have 0 output row.")
+      }
+    } finally {
       sparkContext.stop()
     }
   }
