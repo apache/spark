@@ -242,6 +242,14 @@ test_that("create DataFrame from list or data.frame", {
   expect_equal(count(df), 3)
   ldf2 <- collect(df)
   expect_equal(ldf$a, ldf2$a)
+
+  irisdf <- createDataFrame(sqlContext, iris)
+  iris_collected <- collect(irisdf)
+  expect_equivalent(iris_collected[,-5], iris[,-5])
+  expect_equal(iris_collected$Species, as.character(iris$Species))
+
+  mtcarsdf <- createDataFrame(sqlContext, mtcars)
+  expect_equivalent(collect(mtcarsdf), mtcars)
 })
 
 test_that("create DataFrame with different data types", {

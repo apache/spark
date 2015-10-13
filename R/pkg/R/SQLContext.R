@@ -90,8 +90,6 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
       if (is.null(schema)) {
         schema <- names(data)
       }
-      n <- nrow(data)
-      m <- ncol(data)
       # get rid of factor type
       dropFactor <- function(x) {
         if (is.factor(x)) {
@@ -100,9 +98,8 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
           x
         }
       }
-      data <- lapply(1:n, function(i) {
-        lapply(1:m, function(j) { dropFactor(data[i,j]) })
-      })
+      args <- list(FUN=list, SIMPLIFY=FALSE, USE.NAMES=FALSE)
+      data <- do.call(mapply, append(args, setNames(lapply(data, dropFactor), NULL)))
   }
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlContext)
