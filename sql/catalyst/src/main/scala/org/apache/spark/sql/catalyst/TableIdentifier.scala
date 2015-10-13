@@ -23,13 +23,7 @@ package org.apache.spark.sql.catalyst
 private[sql] case class TableIdentifier(table: String, database: Option[String]) {
   def this(table: String) = this(table, None)
 
-  override def toString: String = {
-    if (table.contains('.') || database.exists(_.contains('.'))) {
-      quotedString
-    } else {
-      unquotedString
-    }
-  }
+  override def toString: String = quotedString
 
   def quotedString: String = database.map(db => s"`$db`.`$table`").getOrElse(s"`$table`")
 

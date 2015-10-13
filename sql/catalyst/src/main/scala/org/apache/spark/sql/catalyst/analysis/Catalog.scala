@@ -133,7 +133,6 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
  * lost when the JVM exits.
  */
 trait OverrideCatalog extends Catalog {
-  // TODO: This doesn't work when the database changes...
   private[this] val overrides = new ConcurrentHashMap[String, LogicalPlan]
 
   private def getOverriddenTable(tableIdentifier: TableIdentifier): Option[LogicalPlan] = {

@@ -40,7 +40,7 @@ case class UnresolvedRelation(
     alias: Option[String] = None) extends LeafNode {
 
   /** Returns a `.` separated name for this relation. */
-  def tableName: String = tableIdentifier.toString
+  def tableName: String = tableIdentifier.unquotedString
 
   override def output: Seq[Attribute] = Nil
 
