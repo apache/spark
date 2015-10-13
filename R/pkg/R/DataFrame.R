@@ -1452,6 +1452,147 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#'
+#' @name merge
+#' @aliases join
+#' @title Merges two data frames
+#' @param x the first data frame to be joined
+#' @param y the second data frame to be joined
+#' @param by a character vector specifying the join columns. If by is not 
+#'   specified, the common column names in \code{x} and \code{y} will be used.
+#' @param by.x a character vector specifying the joining columns for x.
+#' @param by.y a character vector specifying the joining columns for y.
+#' @param all.x a boolean value indicating whether all the rows in x should
+#'              be including in the join
+#' @param all.y a boolean value indicating whether all the rows in y should 
+#'              be including in the join
+#' @param sort a logical argument indicating whether the resulting columns should be sorted              
+#' @details  If all.x and all.y are set to FALSE, a natural join will be returned. If
+#'   all.x is set to TRUE and all.y is set to FALSE, a left outer join will 
+#'   be returned. If all.x is set to FALSE and all.y is set to TRUE, a right 
+#'   outer join will be returned. If all.x and all.y are set to TRUE, a full 
+#'   outer join will be returned. 
+#' @rdname merge
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlContext, path)
+#' df2 <- jsonFile(sqlContext, path2)
+#' merge(df1, df2) # Performs a Cartesian
+#' merge(df1, df2, by = "col1") # Performs an inner join based on expression
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.y = TRUE)
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE)
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE, all.y = TRUE)
+#' }
+setMethod("merge",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y, by.x = NULL, by.y = NULL, by = intersect(names(x), names(y)),
+                   all.x = FALSE, all.y = FALSE, all = FALSE,
+                   suffixes = c("_x","_y"), sort = FALSE, ... ) {
+            
+            if (missing(x) | missing(y)) {
+              stop("x and y has to be specified")
+            }
+            
+            if (length(suffixes) != 2) {
+              stop("suffixes must have length 2")
+            }
+            
+            # join type is identified based on the values of all, all.x and all.y
+            # default join type is inner, according to R it should be natural but since it
+            # is not supported in spark inner join is used
+            joinType <- "inner"
+            if (all | (all.x & all.y)) {
+              joinType <- "outer"
+            } else if (all.x) {
+              joinType <- "left_outer"
+            } else if (all.y) {
+              joinType <- "right_outer"
+            }
+            
+            # join expression is based on by.x, by.y if both by.x and by.y are not missing
+            # and by if by.x or by.y are missing or have different lengths
+            if (length(by.x) > 0 & length(by.x) == length(by.y)) {
+              joinX <- by.x
+              joinY <- by.y
+            } else if (length(by) > 0) {
+              joinX <- by
+              joinY <- by
+            } else {
+              stop("The intersection of dataframes is empty")
+            }
+            
+            # sets alias for making colnames unique in dataframe 'x'
+            namesX <- names(x)
+            colsX <- lapply(seq_len(length(namesX)), function(i){
+              colNameX <- namesX[[i]]
+              colX <- getColumn(x, colNameX)
+              if (namesX[i] %in% by) {
+                newJoinX <- paste(colNameX, suffixes[1], sep = "")
+                colX <- alias(colX, newJoinX)
+              }
+              colX
+            })
+            
+            # sets alias for making colnames unique in dataframe 'y'
+            namesY <- names(y)
+            colsY <- lapply(seq_len(length(namesY)), function(i){
+              colNameY <- namesY[[i]]
+              colY <- getColumn(y, colNameY)
+              if (namesY[i] %in% by) {
+                newJoinY <- paste(colNameY, suffixes[2], sep = "")
+                colY <- alias(colY, newJoinY)
+              }
+              colY
+            })
+            
+            # selects columns with their aliases from dataframes
+            # in case same column names are present in both data frames
+            xsel <- select(x, colsX)
+            ysel <- select(y, colsY)
+            
+            joinColumns <- lapply(seq_len(length(joinX)), function(i) {
+              colX <- joinX[[i]]
+              colY <- joinY[[i]]
+              
+              if (colX %in% by) {
+                colX <- paste(colX, suffixes[1], sep = "")
+              }
+              if (colY %in% by) {
+                colY <- paste(colY, suffixes[2], sep = "")
+              }
+              
+              colX <- getColumn(xsel, colX)
+              colY <- getColumn(ysel, colY)
+              
+              colX == colY
+            })
+            
+            # concatanates join columns together with '&'
+            for (i in 1:length(joinColumns)) {
+              if (i == 1) {
+                joinExpr <- joinColumns[[i]]
+              } else {
+                joinExpr <- joinExpr & joinColumns[[i]]
+              }
+            }
+            
+            joinRes <- join(xsel, ysel, joinExpr, joinType)
+            
+            # sorts the results by 'by' columns if sort = TRUE
+            if (sort & length(by) > 0) {
+              columns <- lapply(seq_len(length(joinRes)), function(i) {
+                colNameWithSuffix <- paste(by[[i]], suffixes[2], sep = "")
+                asc(getColumn(joinRes, colNameWithSuffix))
+              })
+              joinRes <- do.call("arrange",c(joinRes,columns))
+            }
+            
+            joinRes
+          })
+
 #' UnionAll
 #'
 #' Return a new DataFrame containing the union of rows in this DataFrame
