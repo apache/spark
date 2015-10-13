@@ -169,6 +169,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData.filter("key > 90"),
       testData.collect().filter(_.getInt(0) > 90).toSeq)
+
+    checkAnswer(
+      testData.filter("key > 9.0e1"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
+
+    checkAnswer(
+      testData.filter("key > 9.e+1"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
+
+    checkAnswer(
+      testData.filter("key > 900e-1"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
+
+    checkAnswer(
+      testData.filter("key > 900.0E-1"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
   }
 
   test("filterExpr using where") {
