@@ -230,7 +230,7 @@ class DagBag(object):
             dag_folder=None,
             only_if_updated=True):
         """
-        Given a file path or a folder, this file looks for python modules,
+        Given a file path or a folder, this method looks for python modules,
         imports them and adds them to the dagbag collection.
 
         Note that if a .airflowignore file is found while processing,
