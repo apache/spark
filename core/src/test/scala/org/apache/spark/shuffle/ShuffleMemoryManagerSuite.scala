@@ -24,7 +24,8 @@ import org.mockito.Mockito._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkFunSuite, TaskContext}
+import org.apache.spark.executor.TaskMetrics
 
 class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
 
@@ -37,7 +38,9 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
         try {
           val taskAttemptId = nextTaskAttemptId.getAndIncrement
           val mockTaskContext = mock(classOf[TaskContext], RETURNS_SMART_NULLS)
+          val taskMetrics = new TaskMetrics
           when(mockTaskContext.taskAttemptId()).thenReturn(taskAttemptId)
+          when(mockTaskContext.taskMetrics()).thenReturn(taskMetrics)
           TaskContext.setTaskContext(mockTaskContext)
           body
         } finally {

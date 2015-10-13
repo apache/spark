@@ -18,11 +18,13 @@
 package org.apache.spark.shuffle
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.annotations.VisibleForTesting
 
 import org.apache.spark._
 import org.apache.spark.memory.{StaticMemoryManager, MemoryManager}
+import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
@@ -36,8 +38,8 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
  * If there are N tasks, it ensures that each tasks can acquire at least 1 / 2N of the memory
  * before it has to spill, and at most 1 / N. Because N varies dynamically, we keep track of the
  * set of active tasks and redo the calculations of 1 / 2N and 1 / N in waiting tasks whenever
- * this set changes. This is all done by synchronizing access on "this" to mutate state and using
- * wait() and notifyAll() to signal changes.
+ * this set changes. This is all done by synchronizing access to `memoryManager` to mutate state
+ * and using wait() and notifyAll() to signal changes.
  *
  * Use `ShuffleMemoryManager.create()` factory method to create a new instance.
  *
@@ -51,7 +53,6 @@ class ShuffleMemoryManager protected (
   extends Logging {
 
   private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
-  private val maxMemory = memoryManager.maxExecutionMemory
 
   private def currentTaskAttemptId(): Long = {
     // In case this is called on the driver, return an invalid task attempt id.
@@ -65,7 +66,7 @@ class ShuffleMemoryManager protected (
    * total memory pool (where N is the # of active tasks) before it is forced to spill. This can
    * happen if the number of tasks increases but an older task had a lot of memory already.
    */
-  def tryToAcquire(numBytes: Long): Long = synchronized {
+  def tryToAcquire(numBytes: Long): Long = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
 
@@ -73,15 +74,18 @@ class ShuffleMemoryManager protected (
     // of active tasks, to let other tasks ramp down their memory in calls to tryToAcquire
     if (!taskMemory.contains(taskAttemptId)) {
       taskMemory(taskAttemptId) = 0L
-      notifyAll()  // Will later cause waiting tasks to wake up and check numTasks again
+      // This will later cause waiting tasks to wake up and check numTasks again
+      memoryManager.notifyAll()
     }
 
     // Keep looping until we're either sure that we don't want to grant this request (because this
     // task would have more than 1 / numActiveTasks of the memory) or we have enough free
     // memory to give it (we always let each task get at least 1 / (2 * numActiveTasks)).
+    // TODO: simplify this to limit each task to its own slot
     while (true) {
       val numActiveTasks = taskMemory.keys.size
       val curMem = taskMemory(taskAttemptId)
+      val maxMemory = memoryManager.maxExecutionMemory
       val freeMemory = maxMemory - taskMemory.values.sum
 
       // How much we can grant this task; don't let it grow to more than 1 / numActiveTasks;
@@ -99,7 +103,7 @@ class ShuffleMemoryManager protected (
         } else {
           logInfo(
             s"TID $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
-          wait()
+          memoryManager.wait()
         }
       } else {
         return acquire(toGrant)
@@ -112,15 +116,23 @@ class ShuffleMemoryManager protected (
    * Acquire N bytes of execution memory from the memory manager for the current task.
    * @return number of bytes actually acquired (<= N).
    */
-  private def acquire(numBytes: Long): Long = synchronized {
+  private def acquire(numBytes: Long): Long = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
-    val acquired = memoryManager.acquireExecutionMemory(numBytes)
+    val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+    val acquired = memoryManager.acquireExecutionMemory(numBytes, evictedBlocks)
+    // Register evicted blocks, if any, with the active task metrics
+    // TODO: just do this in `acquireExecutionMemory` (SPARK-10985)
+    Option(TaskContext.get()).foreach { tc =>
+      val metrics = tc.taskMetrics()
+      val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+      metrics.updatedBlocks = Some(lastUpdatedBlocks ++ evictedBlocks.toSeq)
+    }
     taskMemory(taskAttemptId) += acquired
     acquired
   }
 
   /** Release numBytes bytes for the current task. */
-  def release(numBytes: Long): Unit = synchronized {
+  def release(numBytes: Long): Unit = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     val curMem = taskMemory.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
@@ -129,20 +141,20 @@ class ShuffleMemoryManager protected (
     }
     taskMemory(taskAttemptId) -= numBytes
     memoryManager.releaseExecutionMemory(numBytes)
-    notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
+    memoryManager.notifyAll() // Notify waiters in tryToAcquire that memory has been freed
   }
 
   /** Release all memory for the current task and mark it as inactive (e.g. when a task ends). */
-  def releaseMemoryForThisTask(): Unit = synchronized {
+  def releaseMemoryForThisTask(): Unit = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     taskMemory.remove(taskAttemptId).foreach { numBytes =>
       memoryManager.releaseExecutionMemory(numBytes)
     }
-    notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
+    memoryManager.notifyAll() // Notify waiters in tryToAcquire that memory has been freed
   }
 
   /** Returns the memory consumption, in bytes, for the current task */
-  def getMemoryConsumptionForThisTask(): Long = synchronized {
+  def getMemoryConsumptionForThisTask(): Long = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     taskMemory.getOrElse(taskAttemptId, 0L)
   }
