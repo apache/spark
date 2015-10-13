@@ -65,12 +65,15 @@ import org.apache.spark.util.Utils
 class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
     @transient protected[sql] val cacheManager: CacheManager,
+    @transient private[sql] val listener: SQLListener,
     val isRootContext: Boolean)
   extends org.apache.spark.Logging with Serializable {
 
   self =>
 
-  def this(sparkContext: SparkContext) = this(sparkContext, new CacheManager, true)
+  def this(sparkContext: SparkContext) = {
+    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
+  }
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
@@ -97,7 +100,7 @@ class SQLContext private[sql](
 
   /**
    * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
-   * registered functions, but sharing the same SparkContext and CacheManager.
+   * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
    *
    * @since 1.6.0
    */
@@ -105,6 +108,7 @@ class SQLContext private[sql](
     new SQLContext(
       sparkContext = sparkContext,
       cacheManager = cacheManager,
+      listener = listener,
       isRootContext = false)
   }
 
@@ -112,11 +116,6 @@ class SQLContext private[sql](
    * @return Spark SQL configuration
    */
   protected[sql] lazy val conf = new SQLConf
-
-  // `listener` should be only used in the driver
-  @transient private[sql] val listener = new SQLListener(this)
-  sparkContext.addSparkListener(listener)
-  sparkContext.ui.foreach(new SQLTab(this, _))
 
   /**
    * Set Spark SQL configuration properties.
@@ -1311,5 +1310,15 @@ object SQLContext {
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
       ): InternalRow
     }
+  }
+
+  /**
+   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
+   */
+  private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
+    val listener = new SQLListener(sc.conf)
+    sc.addSparkListener(listener)
+    sc.ui.foreach(new SQLTab(listener, _))
+    listener
   }
 }
