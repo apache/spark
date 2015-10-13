@@ -3,8 +3,6 @@ import MySQLdb.cursors
 
 from airflow.hooks.dbapi_hook import DbApiHook
 
-import logging
-
 class MySqlHook(DbApiHook):
     '''
     Interact with MySQL.
