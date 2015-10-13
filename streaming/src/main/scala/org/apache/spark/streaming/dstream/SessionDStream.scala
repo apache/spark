@@ -1,6 +1,6 @@
 package org.apache.spark.streaming.dstream
 
-import java.io.{IOException, ObjectOutputStream}
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -160,8 +160,6 @@ private[streaming] class HashMapBasedSessionStore[K: ClassTag, S: ClassTag](
 
   def this() = this(new EmptySessionStore[K, S])
 
-  import HashMapBasedSessionStore._
-
   private val deltaChainLength: Int = parentSessionStore match {
     case map: HashMapBasedSessionStore[_, _] => map.deltaChainLength + 1
     case _ => 0
@@ -230,16 +228,13 @@ private[streaming] class HashMapBasedSessionStore[K: ClassTag, S: ClassTag](
 }
 
 private[streaming] object HashMapBasedSessionStore {
-
-  private case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
-
   val DELTA_CHAIN_LENGTH_THRESHOLD = 10
 }
 
 
 private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
-    parentSessionStore: SessionStore[K, S],
-    deltaChainThreshold: Int,
+    @volatile private var parentSessionStore: SessionStore[K, S],
+    @volatile private var deltaChainThreshold: Int,
     initialCapacity: Int = 64
   ) extends SessionStore[K, S] {
 
@@ -250,27 +245,20 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
 
   def this() = this(OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
 
-  import OpenHashMapBasedSessionStore._
-
-  private val deltaChainLength: Int = parentSessionStore match {
-    case map: OpenHashMapBasedSessionStore[_, _] => map.deltaChainLength + 1
-    case _ => 0
-  }
-
-  private val internalMap = new OpenHashMap[K, SessionInfo[S]](initialCapacity)
+  private var deltaMap = new OpenHashMap[K, SessionInfo[S]](initialCapacity)
 
   override def put(key: K, session: S): Unit = {
-    val sessionInfo = internalMap(key)
+    val sessionInfo = deltaMap(key)
     if (sessionInfo != null) {
       sessionInfo.data = session
     } else {
-      internalMap.update(key, new SessionInfo(session))
+      deltaMap.update(key, new SessionInfo(session))
     }
   }
 
   /** Get the session data if it exists */
   override def get(key: K): Option[S] = {
-    val sessionInfo = internalMap(key)
+    val sessionInfo = deltaMap(key)
     if (sessionInfo != null && sessionInfo.deleted == false) {
       Some(sessionInfo.data)
     } else {
@@ -280,7 +268,7 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
 
   /** Remove a key */
   override def remove(key: K): Unit = {
-    internalMap.update(key, new SessionInfo(get(key).getOrElse(null.asInstanceOf[S]), deleted = true))
+    deltaMap.update(key, new SessionInfo(get(key).getOrElse(null.asInstanceOf[S]), deleted = true))
   }
 
   /**
@@ -288,12 +276,12 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
    * return only the session that were updated since the creation of this map.
    */
   override def iterator(updatedSessionsOnly: Boolean): Iterator[Session[K, S]] = {
-    val updatedSessions = internalMap.iterator.map { case (key, sessionInfo) =>
+    val updatedSessions = deltaMap.iterator.map { case (key, sessionInfo) =>
       Session(key, sessionInfo.data, !sessionInfo.deleted)
     }
 
     def previousSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter { session =>
-      !internalMap.contains(session.getKey())
+      !deltaMap.contains(session.getKey())
     }
 
     if (updatedSessionsOnly) {
@@ -308,9 +296,9 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
    * should not mutate `this` map.
    */
   override def copy(): SessionStore[K, S] = {
-    doCopy(deltaChainLength >= DELTA_CHAIN_LENGTH_THRESHOLD)
+    new OpenHashMapBasedSessionStore[K, S](this, deltaChainThreshold = deltaChainThreshold)
   }
-
+/*
   private[streaming] def doCopy(consolidate: Boolean): SessionStore[K, S] = {
     if (consolidate) {
       val newParentMap = new OpenHashMapBasedSessionStore[K, S](
@@ -323,20 +311,81 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
       new OpenHashMapBasedSessionStore[K, S](this, deltaChainThreshold = deltaChainThreshold)
     }
   }
+*/
+  private def deltaChainLength: Int = parentSessionStore match {
+    case map: OpenHashMapBasedSessionStore[_, _] => map.deltaChainLength + 1
+    case _ => 0
+  }
 
-  private def sizeHint(): Int = internalMap.size + {
+  private def sizeHint(): Int = deltaMap.size + {
     parentSessionStore match {
       case s: OpenHashMapBasedSessionStore[_, _] => s.sizeHint()
       case _ => 0
     }
   }
+
+  private def writeObject(outputStream: ObjectOutputStream): Unit = {
+    if (deltaChainLength > deltaChainThreshold) {
+      val newParentSessionStore =
+        new OpenHashMapBasedSessionStore[K, S](initialCapacity = sizeHint, deltaChainThreshold)
+      val iterOfActiveSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter {
+        _.isActive
+      }
+
+      while (iterOfActiveSessions.hasNext) {
+        val session = iterOfActiveSessions.next()
+        newParentSessionStore.deltaMap.update(
+          session.getKey(), SessionInfo(session.getData(), deleted = false))
+      }
+      parentSessionStore = newParentSessionStore
+    }
+    outputStream.defaultWriteObject()
+
+    /*
+    outputStream.writeInt(deltaChainThreshold)
+    outputStream.writeInt(deltaMap.size)
+    val deltaMapIterator = deltaMap.iterator
+    var deltaMapCount = 0
+    while (deltaMapIterator.hasNext) {
+      deltaMapCount += 1
+      val keyedSessionInfo = deltaMapIterator.next()
+      outputStream.writeObject(keyedSessionInfo._1)
+      outputStream.writeObject(keyedSessionInfo._2)
+    }
+    assert(deltaMapCount == deltaMap.size)
+    */
+  }
+
+  private def readObject(inputStream: ObjectInputStream): Unit = {
+    inputStream.defaultReadObject()
+
+    /*
+    deltaChainThreshold = inputStream.readInt()
+    val deltaMapSize = inputStream.readInt()
+    println(deltaMapSize)
+    deltaMap = new OpenHashMap[K, SessionInfo[S]]()
+    var deltaMapCount = 0
+    while (deltaMapCount < deltaMapSize) {
+      val key = inputStream.readObject().asInstanceOf[K]
+      val sessionInfo = inputStream.readObject().asInstanceOf[SessionInfo[S]]
+      deltaMap.update(key, sessionInfo)
+      deltaMapCount += 1
+    }
+    parentSessionStore = inputStream.readObject().asInstanceOf[SessionStore[K, S]]
+    */
+
+  }
+
+
 }
+
+class Limiter(val num: Int) extends Serializable
+
+case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
 
 private[streaming] object OpenHashMapBasedSessionStore {
 
-  private case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
-
-  val DELTA_CHAIN_LENGTH_THRESHOLD = 10
+  val DELTA_CHAIN_LENGTH_THRESHOLD = 20
 }
 
 

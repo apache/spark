@@ -3,7 +3,8 @@ package org.apache.spark.streaming
 import scala.reflect._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.streaming.dstream.{OpenHashMapBasedSessionStore, HashMapBasedSessionStore, Session, SessionStore}
+import org.apache.spark.streaming.dstream.{HashMapBasedSessionStore, OpenHashMapBasedSessionStore, Session, SessionStore}
+import org.apache.spark.util.Utils
 
 class SessionStoreSuite extends SparkFunSuite {
 
@@ -75,7 +76,7 @@ class SessionStoreSuite extends SparkFunSuite {
           Set(Session(1, 1000, true), Session(2, 2000, true),
             Session(3, 300, true), Session(4, 400, false)))
       }
-
+      /*
       test(className + " - copying with consolidation") {
         val map1 = newStore()
         map1.put(1, 100)
@@ -92,6 +93,24 @@ class SessionStoreSuite extends SparkFunSuite {
         assert(map3.iterator(false).toSet ===
           map3.asInstanceOf[HashMapBasedSessionStore[Int, Int]].doCopy(true).iterator(false).toSet)
 
+      }*/
+
+      test(className + " - serializing and deserializing") {
+        val map1 = newStore()
+        map1.put(1, 100)
+        map1.put(2, 200)
+
+        val map2 = map1.copy()
+        map2.put(3, 300)
+        map2.put(4, 400)
+
+        val map3 = map2.copy()
+        map3.put(3, 600)
+        map3.remove(2)
+
+        val map3_ = Utils.deserialize[SessionStore[Int, Int]](Utils.serialize(map3), Thread.currentThread().getContextClassLoader)
+        assert(map3_.iterator(true).toSet === map3.iterator(true).toSet)
+        assert(map3_.iterator(false).toSet === map3.iterator(false).toSet)
       }
     }
   }
