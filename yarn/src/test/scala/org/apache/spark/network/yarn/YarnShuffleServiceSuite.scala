@@ -37,6 +37,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
+    yarnConfig.setInt("spark.shuffle.service.port", 0)
 
     yarnConfig.get("yarn.nodemanager.local-dirs").split(",").foreach { dir =>
       val d = new File(dir)

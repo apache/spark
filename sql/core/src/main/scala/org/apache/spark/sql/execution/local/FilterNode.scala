@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.local
 
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 
 
-case class FilterNode(condition: Expression, child: LocalNode) extends UnaryLocalNode {
+case class FilterNode(conf: SQLConf, condition: Expression, child: LocalNode)
+  extends UnaryLocalNode(conf) {
 
   private[this] var predicate: (InternalRow) => Boolean = _
 
@@ -35,13 +37,13 @@ case class FilterNode(condition: Expression, child: LocalNode) extends UnaryLoca
 
   override def next(): Boolean = {
     var found = false
-    while (child.next() && !found) {
-      found = predicate.apply(child.get())
+    while (!found && child.next()) {
+      found = predicate.apply(child.fetch())
     }
     found
   }
 
-  override def get(): InternalRow = child.get()
+  override def fetch(): InternalRow = child.fetch()
 
   override def close(): Unit = child.close()
 }

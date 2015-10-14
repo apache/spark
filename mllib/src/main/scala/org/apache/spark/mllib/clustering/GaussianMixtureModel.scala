@@ -168,10 +168,9 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
-      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
-
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
+      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
 
       val (weights, gaussians) = dataArray.map {
         case Row(weight: Double, mu: Vector, sigma: Matrix) =>

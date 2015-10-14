@@ -171,6 +171,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val reader = new ConsoleReader()
     reader.setBellEnabled(false)
+    reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
     CliDriver.getCommandCompleter.foreach((e) => reader.addCompleter(e))
 

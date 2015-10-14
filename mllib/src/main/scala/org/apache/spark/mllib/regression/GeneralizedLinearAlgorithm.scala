@@ -359,6 +359,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
         + " parent RDDs are also uncached.")
     }
 
+    // Unpersist cached data
+    if (data.getStorageLevel != StorageLevel.NONE) {
+      data.unpersist(false)
+    }
+
     createModel(weights, intercept)
   }
 }

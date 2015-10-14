@@ -52,15 +52,14 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(ns === 0)
     assert(fromJulianDay(d, ns) == 0L)
 
-    val t = Timestamp.valueOf("2015-06-11 10:10:10.100")
-    val (d1, ns1) = toJulianDay(fromJavaTimestamp(t))
-    val t1 = toJavaTimestamp(fromJulianDay(d1, ns1))
-    assert(t.equals(t1))
-
-    val t2 = Timestamp.valueOf("2015-06-11 20:10:10.100")
-    val (d2, ns2) = toJulianDay(fromJavaTimestamp(t2))
-    val t22 = toJavaTimestamp(fromJulianDay(d2, ns2))
-    assert(t2.equals(t22))
+    Seq(Timestamp.valueOf("2015-06-11 10:10:10.100"),
+      Timestamp.valueOf("2015-06-11 20:10:10.100"),
+      Timestamp.valueOf("1900-06-11 20:10:10.100")).foreach { t =>
+      val (d, ns) = toJulianDay(fromJavaTimestamp(t))
+      assert(ns > 0)
+      val t1 = toJavaTimestamp(fromJulianDay(d, ns))
+      assert(t.equals(t1))
+    }
   }
 
   test("SPARK-6785: java date conversion before and after epoch") {
@@ -135,6 +134,38 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("2015.03.18")).isEmpty)
     assert(stringToDate(UTF8String.fromString("20150318")).isEmpty)
     assert(stringToDate(UTF8String.fromString("2015-031-8")).isEmpty)
+  }
+
+  test("string to time") {
+    // Tests with UTC.
+    var c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00GMT-00:00") === c.getTime())
+
+    c.set(2000, 11, 30, 10, 0, 0)
+    assert(stringToTime("2000-12-30T10:00:00Z") === c.getTime())
+
+    // Tests with set time zone.
+    c.setTimeZone(TimeZone.getTimeZone("GMT-04:00"))
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00-04:00") === c.getTime())
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00GMT-04:00") === c.getTime())
+
+    // Tests with local time zone.
+    c.setTimeZone(TimeZone.getDefault())
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(2000, 11, 30, 0, 0, 0)
+    assert(stringToTime("2000-12-30") === new Date(c.getTimeInMillis()))
+
+    c.set(2000, 11, 30, 10, 0, 0)
+    assert(stringToTime("2000-12-30 10:00:00") === new Timestamp(c.getTimeInMillis()))
   }
 
   test("string to timestamp") {

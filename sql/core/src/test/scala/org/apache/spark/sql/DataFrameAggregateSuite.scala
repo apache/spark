@@ -66,12 +66,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
       Seq(Row(3), Row(3), Row(3))
     )
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
   }
 
   test("agg without groups") {
@@ -173,6 +173,39 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       emptyTableData.agg(count('a), sumDistinct('a)), // non-partial
       Row(0, null))
+  }
+
+  test("stddev") {
+    val testData2ADev = math.sqrt(4/5.0)
+
+    checkAnswer(
+      testData2.agg(stddev('a)),
+      Row(testData2ADev))
+
+    checkAnswer(
+      testData2.agg(stddev_pop('a)),
+      Row(math.sqrt(4/6.0)))
+
+    checkAnswer(
+      testData2.agg(stddev_samp('a)),
+      Row(testData2ADev))
+  }
+
+  test("zero stddev") {
+    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+    assert(emptyTableData.count() == 0)
+
+    checkAnswer(
+    emptyTableData.agg(stddev('a)),
+    Row(null))
+
+    checkAnswer(
+    emptyTableData.agg(stddev_pop('a)),
+    Row(null))
+
+    checkAnswer(
+    emptyTableData.agg(stddev_samp('a)),
+    Row(null))
   }
 
   test("zero sum") {

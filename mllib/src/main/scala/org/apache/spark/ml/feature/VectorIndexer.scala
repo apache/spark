@@ -43,6 +43,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
    * Must be >= 2.
    *
    * (default = 20)
+   * @group param
    */
   val maxCategories = new IntParam(this, "maxCategories",
     "Threshold for the number of values a categorical feature can take (>= 2)." +

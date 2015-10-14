@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.param.{Param, Params, IntParam, ParamMap}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
@@ -39,9 +39,11 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * Set the number of clusters to create (k). Must be > 1. Default: 2.
    * @group param
    */
+  @Since("1.5.0")
   final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getK: Int = $(k)
 
   /**
@@ -50,10 +52,12 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    * @group expertParam
    */
+  @Since("1.5.0")
   final val initMode = new Param[String](this, "initMode", "initialization algorithm",
     (value: String) => MLlibKMeans.validateInitMode(value))
 
   /** @group expertGetParam */
+  @Since("1.5.0")
   def getInitMode: String = $(initMode)
 
   /**
@@ -61,10 +65,12 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * setting -- the default of 5 is almost always enough. Must be > 0. Default: 5.
    * @group expertParam
    */
+  @Since("1.5.0")
   final val initSteps = new IntParam(this, "initSteps", "number of steps for k-means||",
     (value: Int) => value > 0)
 
   /** @group expertGetParam */
+  @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
 
   /**
@@ -84,27 +90,32 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
  *
  * @param parentModel a model trained by spark.mllib.clustering.KMeans.
  */
+@Since("1.5.0")
 @Experimental
 class KMeansModel private[ml] (
-    override val uid: String,
+    @Since("1.5.0") override val uid: String,
     private val parentModel: MLlibKMeansModel) extends Model[KMeansModel] with KMeansParams {
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = new KMeansModel(uid, parentModel)
     copyValues(copied, extra)
   }
 
+  @Since("1.5.0")
   override def transform(dataset: DataFrame): DataFrame = {
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
+  @Since("1.5.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters
 }
 
@@ -114,8 +125,11 @@ class KMeansModel private[ml] (
  *
  * @see [[http://dx.doi.org/10.14778/2180912.2180915 Bahmani et al., Scalable k-means++.]]
  */
+@Since("1.5.0")
 @Experimental
-class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMeansParams {
+class KMeans @Since("1.5.0") (
+    @Since("1.5.0") override val uid: String)
+  extends Estimator[KMeansModel] with KMeansParams {
 
   setDefault(
     k -> 2,
@@ -124,34 +138,45 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
     initSteps -> 5,
     tol -> 1e-4)
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("kmeans"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setK(value: Int): this.type = set(k, value)
 
   /** @group expertSetParam */
+  @Since("1.5.0")
   def setInitMode(value: String): this.type = set(initMode, value)
 
   /** @group expertSetParam */
+  @Since("1.5.0")
   def setInitSteps(value: Int): this.type = set(initSteps, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setTol(value: Double): this.type = set(tol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  @Since("1.5.0")
   override def fit(dataset: DataFrame): KMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
 
@@ -167,6 +192,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
     copyValues(model)
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }

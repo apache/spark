@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter}
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql._
@@ -38,7 +39,7 @@ import org.apache.spark.util.SerializableConfiguration
 
 private[sql] abstract class BaseWriterContainer(
     @transient val relation: HadoopFsRelation,
-    @transient job: Job,
+    @transient private val job: Job,
     isAppend: Boolean)
   extends SparkHadoopMapReduceUtil
   with Logging
@@ -46,7 +47,8 @@ private[sql] abstract class BaseWriterContainer(
 
   protected val dataSchema = relation.dataSchema
 
-  protected val serializableConf = new SerializableConfiguration(job.getConfiguration)
+  protected val serializableConf =
+    new SerializableConfiguration(SparkHadoopUtil.get.getConfigurationFromJobContext(job))
 
   // This UUID is used to avoid output file name collision between different appending write jobs.
   // These jobs may belong to different SparkContext instances. Concrete data source implementations
@@ -88,7 +90,8 @@ private[sql] abstract class BaseWriterContainer(
     // This UUID is sent to executor side together with the serialized `Configuration` object within
     // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
     // unique task output files.
-    job.getConfiguration.set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
+    SparkHadoopUtil.get.getConfigurationFromJobContext(job).
+      set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
 
     // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
     // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
@@ -145,7 +148,8 @@ private[sql] abstract class BaseWriterContainer(
           "because spark.speculation is configured to be true.")
       defaultOutputCommitter
     } else {
-      val committerClass = context.getConfiguration.getClass(
+      val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+      val committerClass = configuration.getClass(
         SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
 
       Option(committerClass).map { clazz =>
@@ -180,7 +184,9 @@ private[sql] abstract class BaseWriterContainer(
   private def setupIDs(jobId: Int, splitId: Int, attemptId: Int): Unit = {
     this.jobId = SparkHadoopWriter.createJobID(new Date, jobId)
     this.taskId = new TaskID(this.jobId, true, splitId)
+    // scalastyle:off jobcontext
     this.taskAttemptId = new TaskAttemptID(taskId, attemptId)
+    // scalastyle:on jobcontext
   }
 
   private def setupConf(): Unit = {
@@ -192,8 +198,7 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def commitTask(): Unit = {
-    SparkHadoopMapRedUtil.commitTask(
-      outputCommitter, taskAttemptContext, jobId.getId, taskId.getId, taskAttemptId.getId)
+    SparkHadoopMapRedUtil.commitTask(outputCommitter, taskAttemptContext, jobId.getId, taskId.getId)
   }
 
   def abortTask(): Unit = {
@@ -220,14 +225,15 @@ private[sql] abstract class BaseWriterContainer(
  * A writer that writes all of the rows in a partition to a single file.
  */
 private[sql] class DefaultWriterContainer(
-    @transient relation: HadoopFsRelation,
-    @transient job: Job,
+    relation: HadoopFsRelation,
+    job: Job,
     isAppend: Boolean)
   extends BaseWriterContainer(relation, job, isAppend) {
 
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     executorSideSetup(taskContext)
-    taskAttemptContext.getConfiguration.set("spark.sql.sources.output.path", outputPath)
+    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
+    configuration.set("spark.sql.sources.output.path", outputPath)
     val writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
     writer.initConverter(dataSchema)
 
@@ -283,8 +289,8 @@ private[sql] class DefaultWriterContainer(
  * writer externally sorts the remaining rows and then writes out them out one file at a time.
  */
 private[sql] class DynamicPartitionWriterContainer(
-    @transient relation: HadoopFsRelation,
-    @transient job: Job,
+    relation: HadoopFsRelation,
+    job: Job,
     partitionColumns: Seq[Attribute],
     dataColumns: Seq[Attribute],
     inputSchema: Seq[Attribute],
@@ -395,7 +401,8 @@ private[sql] class DynamicPartitionWriterContainer(
     def newOutputWriter(key: InternalRow): OutputWriter = {
       val partitionPath = getPartitionString(key).getString(0)
       val path = new Path(getWorkPath, partitionPath)
-      taskAttemptContext.getConfiguration.set(
+      val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
+      configuration.set(
         "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
       val newWriter = outputWriterFactory.newInstance(path.toString, dataSchema, taskAttemptContext)
       newWriter.initConverter(dataSchema)

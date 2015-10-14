@@ -17,8 +17,7 @@
 
 import sys
 
-from pyspark import SparkContext
-from pyspark.sql import since
+from pyspark import since, SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
 
 __all__ = ["Window", "WindowSpec"]

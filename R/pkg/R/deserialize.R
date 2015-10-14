@@ -50,6 +50,8 @@ readTypedObject <- function(con, type) {
     "t" = readTime(con),
     "a" = readArray(con),
     "l" = readList(con),
+    "e" = readEnv(con),
+    "s" = readStruct(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
     stop(paste("Unsupported type for deserialization", type)))
@@ -57,8 +59,10 @@ readTypedObject <- function(con, type) {
 
 readString <- function(con) {
   stringLen <- readInt(con)
-  string <- readBin(con, raw(), stringLen, endian = "big")
-  rawToChar(string)
+  raw <- readBin(con, raw(), stringLen, endian = "big")
+  string <- rawToChar(raw)
+  Encoding(string) <- "UTF-8"
+  string
 }
 
 readInt <- function(con) {
@@ -117,6 +121,28 @@ readList <- function(con) {
   } else {
     list()
   }
+}
+
+readEnv <- function(con) {
+  env <- new.env()
+  len <- readInt(con)
+  if (len > 0) {
+    for (i in 1:len) {
+      key <- readString(con)
+      value <- readObject(con)
+      env[[key]] <- value
+    }
+  }
+  env
+}
+
+# Read a field of StructType from DataFrame
+# into a named list in R whose class is "struct"
+readStruct <- function(con) {
+  names <- readObject(con)
+  fields <- readObject(con)
+  names(fields) <- names
+  listToStruct(fields)
 }
 
 readRaw <- function(con) {

@@ -24,13 +24,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
-
-import com.google.common.base.Preconditions;
+import org.apache.spark.network.client.TransportClient;
 
 /**
  * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are individually
@@ -44,6 +44,7 @@ public class OneForOneStreamManager extends StreamManager {
 
   /** State of a single stream. */
   private static class StreamState {
+    final String appId;
     final Iterator<ManagedBuffer> buffers;
 
     // The channel associated to the stream
@@ -53,7 +54,8 @@ public class OneForOneStreamManager extends StreamManager {
     // that the caller only requests each chunk one at a time, in order.
     int curChunk = 0;
 
-    StreamState(Iterator<ManagedBuffer> buffers) {
+    StreamState(String appId, Iterator<ManagedBuffer> buffers) {
+      this.appId = appId;
       this.buffers = Preconditions.checkNotNull(buffers);
     }
   }
@@ -109,15 +111,34 @@ public class OneForOneStreamManager extends StreamManager {
     }
   }
 
+  @Override
+  public void checkAuthorization(TransportClient client, long streamId) {
+    if (client.getClientId() != null) {
+      StreamState state = streams.get(streamId);
+      Preconditions.checkArgument(state != null, "Unknown stream ID.");
+      if (!client.getClientId().equals(state.appId)) {
+        throw new SecurityException(String.format(
+          "Client %s not authorized to read stream %d (app %s).",
+          client.getClientId(),
+          streamId,
+          state.appId));
+      }
+    }
+  }
+
   /**
    * Registers a stream of ManagedBuffers which are served as individual chunks one at a time to
    * callers. Each ManagedBuffer will be release()'d after it is transferred on the wire. If a
    * client connection is closed before the iterator is fully drained, then the remaining buffers
    * will all be release()'d.
+   *
+   * If an app ID is provided, only callers who've authenticated with the given app ID will be
+   * allowed to fetch from this stream.
    */
-  public long registerStream(Iterator<ManagedBuffer> buffers) {
+  public long registerStream(String appId, Iterator<ManagedBuffer> buffers) {
     long myStreamId = nextStreamId.getAndIncrement();
-    streams.put(myStreamId, new StreamState(buffers));
+    streams.put(myStreamId, new StreamState(appId, buffers));
     return myStreamId;
   }
+
 }
