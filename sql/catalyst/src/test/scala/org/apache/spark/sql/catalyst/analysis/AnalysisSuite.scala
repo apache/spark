@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -53,32 +54,39 @@ class AnalysisSuite extends AnalysisTest {
       Project(testRelation.output, testRelation))
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(Seq("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("TbL.a")),
+        UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
       Project(testRelation.output, testRelation))
 
     assertAnalysisError(
-      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(Seq("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
+        TableIdentifier("TaBlE"), Some("TbL"))),
       Seq("cannot resolve"))
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(Seq("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(
+        TableIdentifier("TaBlE"), Some("TbL"))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(Seq("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
+        TableIdentifier("TaBlE"), Some("TbL"))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
 
   test("resolve relations") {
-    assertAnalysisError(UnresolvedRelation(Seq("tAbLe"), None), Seq("Table Not Found: tAbLe"))
+    assertAnalysisError(
+      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table Not Found: tAbLe"))
 
-    checkAnalysis(UnresolvedRelation(Seq("TaBlE"), None), testRelation)
+    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
 
-    checkAnalysis(UnresolvedRelation(Seq("tAbLe"), None), testRelation, caseSensitive = false)
+    checkAnalysis(
+      UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
 
-    checkAnalysis(UnresolvedRelation(Seq("TaBlE"), None), testRelation, caseSensitive = false)
+    checkAnalysis(
+      UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {
