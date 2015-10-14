@@ -347,7 +347,7 @@ private[spark] class Client(
     // from --files instead of $SPARK_CONF_DIR/log4j.properties.
     val log4jConfUrl = getClass.getResource("/log4j.properties")
     val log4jConf =
-      oldLog4jConf.orElse(Option(if (log4jConfUrl == null) null else log4jConfUrl.toString())
+      oldLog4jConf.orElse(Option(if (log4jConfUrl == null) null else log4jConfUrl.toString()))
 
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
