@@ -236,6 +236,19 @@ abstract class BaseRelation {
   @deprecated("Use !outputsInternalRows", "1.6.0")
   def needConversion: Boolean = true
 
+  /**
+   * Whether does it produce [[InternalRow]]s, which use internal representation for row fields, for
+   * example:
+   *  java.lang.String -> UTF8String
+   *  java.lang.Decimal -> Decimal
+   *
+   * If `outputsInternalRows` is `true`, `buildScan()` should return an [[RDD]] of [[InternalRow]]
+   *
+   * Note: The internal representation is not stable across releases and thus data sources outside
+   * of Spark SQL should leave this as true.
+   *
+   * @since 1.6.0
+   */
   def outputsInternalRows: Boolean = !needConversion
 
   private[sql] def outputsUnsafeRows: Boolean = false
