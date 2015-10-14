@@ -132,19 +132,6 @@ private[streaming] class ReceivedBlockTracker(
     addBlock0(receivedBlockInfo, writeToLogAsync)
   }
 
-  def writeToLogAsync(event: ReceivedBlockTrackerLogEvent): Boolean = {
-    if (!isWriteAheadLogEnabled) return true // return early if WAL is not enabled
-    walWriteStatusMap.put(event, Pending)
-    walWriteQueue.offer(event)
-    var timedOut = false
-    val start = clock.getTimeMillis()
-    while (walWriteStatusMap.get(event) == Pending) {
-      Thread.sleep(WAL_WRITE_STATUS_CHECK_BACKOFF)
-      if (clock.getTimeMillis() - WAL_WRITE_STATUS_TIMEOUT > start) timedOut = true
-    }
-    walWriteStatusMap.remove(event) == Success
-  }
-
   /**
    * Allocate all unallocated blocks to the given batch.
    * This event will get written to the write ahead log (if enabled).
@@ -326,12 +313,24 @@ private[streaming] class ReceivedBlockTracker(
   /** Write an update to the tracker to the write ahead log */
   private def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
     if (isWriteAheadLogEnabled) {
-      logDebug(s"Writing to log $record")
       writeAheadLogOption.foreach { logManager =>
         logManager.write(ByteBuffer.wrap(Utils.serialize(record)), clock.getTimeMillis())
       }
     }
     true
+  }
+
+  private def writeToLogAsync(event: ReceivedBlockTrackerLogEvent): Boolean = {
+    if (!isWriteAheadLogEnabled) return true // return early if WAL is not enabled
+    walWriteStatusMap.put(event, Pending)
+    walWriteQueue.offer(event)
+    var timedOut = false
+    val start = clock.getTimeMillis()
+    while (walWriteStatusMap.get(event) == Pending) {
+      Thread.sleep(WAL_WRITE_STATUS_CHECK_BACKOFF)
+      if (clock.getTimeMillis() - WAL_WRITE_STATUS_TIMEOUT > start) timedOut = true
+    }
+    walWriteStatusMap.remove(event) == Success
   }
 
   /** Get the queue of received blocks belonging to a particular stream */
@@ -369,7 +368,7 @@ private[streaming] class ReceivedBlockTracker(
     private def writeRecords(records: List[ReceivedBlockTrackerLogEvent]): Unit = {
       writeAheadLogOption.foreach { logManager =>
         if (records.nonEmpty) {
-          logDebug(s"Writing to log $records")
+          logDebug(s"Batched ${records.length} records for WAL write")
           logManager.write(ByteBuffer.wrap(Utils.serialize(records)), clock.getTimeMillis())
         }
       }

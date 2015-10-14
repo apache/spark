@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.{TimeUnit, CountDownLatch}
 
 import scala.collection.mutable.HashMap
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Future, ExecutionContext}
 import scala.language.existentials
 import scala.util.{Failure, Success}
 
@@ -318,11 +318,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Add new blocks for the given stream */
   private def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
-    if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
-      receivedBlockTracker.addBlockAsync(receivedBlockInfo)
-    } else {
-      receivedBlockTracker.addBlock(receivedBlockInfo)
-    }
+    receivedBlockTracker.addBlock(receivedBlockInfo)
+  }
+
+  /** Add new blocks for the given stream */
+  private def addBlockAsync(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
+    receivedBlockTracker.addBlockAsync(receivedBlockInfo)
   }
 
   /** Report error sent by a receiver */
@@ -440,6 +441,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     private val submitJobThreadPool = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("submit-job-thead-pool"))
 
+    private val walBatchingThreadPool = ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonCachedThreadPool("wal-batching-thead-pool"))
+
     override def receive: PartialFunction[Any, Unit] = {
       // Local messages
       case StartAllReceivers(receivers) =>
@@ -489,7 +493,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           registerReceiver(streamId, typ, hostPort, receiverEndpoint, context.senderAddress)
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
-        context.reply(addBlock(receivedBlockInfo))
+        if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
+          val f = Future(addBlockAsync(receivedBlockInfo))(walBatchingThreadPool)
+          f.onComplete(result => context.reply(result.get))(walBatchingThreadPool)
+        } else {
+          context.reply(addBlock(receivedBlockInfo))
+        }
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
         context.reply(true)
