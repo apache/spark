@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{execution => sparkexecution}
+import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
 
 /**
@@ -176,6 +177,9 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
+
+  @transient
+  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
