@@ -206,7 +206,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *
    * @return true if successful, false if overflow would occur
    */
-  def changePrecision(precision: Int, scale: Int,
+  private[sql] def changePrecision(precision: Int, scale: Int,
                       roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     // fast path for UnsafeProjection
     if (precision == this.precision && scale == this.scale) {

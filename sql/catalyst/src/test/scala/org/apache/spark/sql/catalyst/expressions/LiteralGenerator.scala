@@ -78,15 +78,16 @@ object LiteralGenerator {
         Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity)
     } yield Literal.create(f, DoubleType)
 
-
-  // TODO cache the generated data, and boarder the value range
-  // Since scalacheck doesn't support the decimal yet in `Choose`.
+  // TODO cache the generated data
   def decimalLiteralGen(precision: Int, scale: Int): Gen[Literal] = {
-    Gen.chooseNum(Double.MinValue, Double.MaxValue,
-      Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity) map { bd =>
-      val d = Decimal(bd)
-      d.changePrecision(precision, scale)
-      Literal.create(d, DecimalType(precision, scale))
+    assert(scale >= 0)
+    assert(precision >= scale)
+    Arbitrary.arbBigInt.arbitrary.map { s =>
+      val a = (s % BigInt(10).pow(precision - scale)).toString()
+      val b = (s % BigInt(10).pow(scale)).abs.toString()
+      Literal.create(
+        Decimal(BigDecimal(s"$a.$b"), precision, scale),
+        DecimalType(precision, scale))
     }
   }
 

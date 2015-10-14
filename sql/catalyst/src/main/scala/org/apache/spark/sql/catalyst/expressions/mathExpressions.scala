@@ -154,7 +154,9 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
 
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
   override def dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(precision, scale) => DecimalType(precision, 0)
+    case dt @ DecimalType.Fixed(_, 0) => dt
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType.bounded(precision - scale + 1, 0)
     case _ => LongType
   }
 
@@ -169,6 +171,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     child.dataType match {
+      case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
       case DecimalType.Fixed(precision, scale) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
@@ -219,7 +222,9 @@ case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXP
 
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(precision, scale) => DecimalType(precision, 0)
+    case dt @ DecimalType.Fixed(_, 0) => dt
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType.bounded(precision - scale + 1, 0)
     case _ => LongType
   }
 
@@ -234,6 +239,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     child.dataType match {
+      case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
       case DecimalType.Fixed(precision, scale) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
