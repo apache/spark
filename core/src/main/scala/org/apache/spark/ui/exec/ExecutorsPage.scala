@@ -62,7 +62,7 @@ private[ui] class ExecutorsPage(
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
     val execTable =
-      <table class={UIUtils.TABLE_CLASS_STRIPED}>
+      <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
         <thead>
           <th>Executor ID</th>
           <th>Address</th>

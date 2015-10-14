@@ -31,6 +31,7 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
+  val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
