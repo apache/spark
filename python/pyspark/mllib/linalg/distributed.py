@@ -788,14 +788,21 @@ class BlockMatrix(DistributedMatrix):
         :param other: A BlockMatrix
         :return: A BlockMatrix
 
-        >>> blocks1 = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
-        ...                           ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
-        >>> blocks2 = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
-        ...                           ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
+        >>> dm1 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
+        >>> dm2 = Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12])
+        >>> sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 1, 2], [7, 11, 12])
+        >>> blocks1 = sc.parallelize([((0, 0), dm1), ((1, 0), dm2)])
+        >>> blocks2 = sc.parallelize([((0, 0), dm1), ((1, 0), dm2)])
+        >>> blocks3 = sc.parallelize([((0, 0), sm), ((1, 0), dm2)])
         >>> mat1 = BlockMatrix(blocks1, 3, 2)
         >>> mat2 = BlockMatrix(blocks2, 3, 2)
+        >>> mat3 = BlockMatrix(blocks3, 3, 2)
+
         >>> mat1.add(mat2).toLocalMatrix()
         DenseMatrix(6, 2, [2.0, 4.0, 6.0, 14.0, 16.0, 18.0, 8.0, 10.0, 12.0, 20.0, 22.0, 24.0], 0)
+
+        >>> mat1.add(mat3).toLocalMatrix()
+        DenseMatrix(6, 2, [8.0, 2.0, 3.0, 14.0, 16.0, 18.0, 4.0, 16.0, 18.0, 20.0, 22.0, 24.0], 0)
         """
         if not isinstance(other, BlockMatrix):
             raise TypeError("Other should be a BlockMatrix, got %s" % type(other))
@@ -817,14 +824,23 @@ class BlockMatrix(DistributedMatrix):
         :param other: A BlockMatrix
         :return: A BlockMatrix
 
-        >>> blocks1 = sc.parallelize([((0, 0), Matrices.dense(2, 3, [1, 2, 3, 4, 5, 6])),
-        ...                           ((0, 1), Matrices.dense(2, 3, [7, 8, 9, 10, 11, 12]))])
-        >>> blocks2 = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
-        ...                           ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
+        >>> dm1 = Matrices.dense(2, 3, [1, 2, 3, 4, 5, 6])
+        >>> dm2 = Matrices.dense(2, 3, [7, 8, 9, 10, 11, 12])
+        >>> dm3 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
+        >>> dm4 = Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12])
+        >>> sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 1, 2], [7, 11, 12])
+        >>> blocks1 = sc.parallelize([((0, 0), dm1), ((0, 1), dm2)])
+        >>> blocks2 = sc.parallelize([((0, 0), dm3), ((1, 0), dm4)])
+        >>> blocks3 = sc.parallelize([((0, 0), sm), ((1, 0), dm4)])
         >>> mat1 = BlockMatrix(blocks1, 2, 3)
         >>> mat2 = BlockMatrix(blocks2, 3, 2)
+        >>> mat3 = BlockMatrix(blocks3, 3, 2)
+
         >>> mat1.multiply(mat2).toLocalMatrix()
         DenseMatrix(2, 2, [242.0, 272.0, 350.0, 398.0], 0)
+
+        >>> mat1.multiply(mat3).toLocalMatrix()
+        DenseMatrix(2, 2, [227.0, 258.0, 394.0, 450.0], 0)
         """
         if not isinstance(other, BlockMatrix):
             raise TypeError("Other should be a BlockMatrix, got %s" % type(other))
