@@ -62,5 +62,12 @@ private[spark] object TaskLocation {
    * These strings have the form [hostname] or hdfs_cache_[hostname], depending on whether the
    * location is cached.
    */
-  def apply(str: String): TaskLocation = new HostTaskLocation(str.stripPrefix(inMemoryLocationTag))
+  def apply(str: String): TaskLocation = {
+    val hstr = str.stripPrefix(inMemoryLocationTag)
+    if (hstr.equals(str)) { // not a in memory location
+      new HostTaskLocation(str)
+    } else {
+      new HDFSCacheTaskLocation(hstr)
+    }
+  }
 }
