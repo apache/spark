@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
+
 import scala.language.existentials
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{ScalaReflection, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
 
@@ -48,7 +51,7 @@ case class StaticInvoke(
     case other => other.getClass.getName.stripSuffix("$")
   }
   override def nullable: Boolean = true
-  override def children: Seq[Expression] = Nil
+  override def children: Seq[Expression] = arguments
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
@@ -69,7 +72,7 @@ case class StaticInvoke(
       s"""
         ${argGen.map(_.code).mkString("\n")}
 
-        boolean ${ev.isNull} = true;
+        boolean ${ev.isNull} = !$argsNonNull;
         $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
 
         if ($argsNonNull) {
@@ -81,8 +84,8 @@ case class StaticInvoke(
       s"""
         ${argGen.map(_.code).mkString("\n")}
 
-        final boolean ${ev.isNull} = ${ev.value} == null;
         $javaType ${ev.value} = $objectName.$functionName($argString);
+        final boolean ${ev.isNull} = ${ev.value} == null;
       """
     }
   }
@@ -91,6 +94,10 @@ case class StaticInvoke(
 /**
  * Calls the specified function on an object, optionally passing arguments.  If the `targetObject`
  * expression evaluates to null then null will be returned.
+ *
+ * In some cases, due to erasure, the schema may expect a primitive type when in fact the method
+ * is returning java.lang.Object.  In this case, we will generate code that attempts to unbox the
+ * value automatically.
  *
  * @param targetObject An expression that will return the object to call the method on.
  * @param functionName The name of the method to call.
@@ -109,6 +116,35 @@ case class Invoke(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
+  lazy val method = targetObject.dataType match {
+    case ObjectType(cls) =>
+      cls
+        .getMethods
+        .find(_.getName == functionName)
+        .getOrElse(sys.error(s"Couldn't find $functionName on $cls"))
+        .getReturnType
+        .getName
+    case _ => ""
+  }
+
+  lazy val unboxer = (dataType, method) match {
+    case (IntegerType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Integer)$s).intValue()"
+    case (LongType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Long)$s).longValue()"
+    case (FloatType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Float)$s).floatValue()"
+    case (ShortType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Short)$s).shortValue()"
+    case (ByteType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Byte)$s).byteValue()"
+    case (DoubleType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Double)$s).doubleValue()"
+    case (BooleanType, "java.lang.Object") => (s: String) =>
+      s"((java.lang.Boolean)$s).booleanValue()"
+    case _ => identity[String] _
+  }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val javaType = ctx.javaType(dataType)
     val obj = targetObject.gen(ctx)
@@ -123,6 +159,8 @@ case class Invoke(
       ""
     }
 
+    val value = unboxer(s"${obj.value}.$functionName($argString)")
+
     s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
@@ -130,7 +168,7 @@ case class Invoke(
       boolean ${ev.isNull} = ${obj.value} == null;
       $javaType ${ev.value} =
         ${ev.isNull} ?
-        ${ctx.defaultValue(dataType)} : ($javaType) ${obj.value}.$functionName($argString);
+        ${ctx.defaultValue(dataType)} : ($javaType) $value;
       $objNullCheck
     """
   }
@@ -190,8 +228,8 @@ case class NewInstance(
       s"""
         ${argGen.map(_.code).mkString("\n")}
 
-        final boolean ${ev.isNull} = ${ev.value} == null;
         $javaType ${ev.value} = new $className($argString);
+        final boolean ${ev.isNull} = ${ev.value} == null;
       """
     }
   }
@@ -209,8 +247,6 @@ case class UnwrapOption(
     child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def nullable: Boolean = true
-
-  override def children: Seq[Expression] = Nil
 
   override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
 
@@ -231,6 +267,43 @@ case class UnwrapOption(
   }
 }
 
+/**
+ * Converts the result of evaluating `child` into an option, checking both the isNull bit and
+ * (in the case of reference types) equality with null.
+ * @param optionType The datatype to be held inside of the Option.
+ * @param child The expression to evaluate and wrap.
+ */
+case class WrapOption(optionType: DataType, child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def dataType: DataType = ObjectType(classOf[Option[_]])
+
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val javaType = ctx.javaType(optionType)
+    val inputObject = child.gen(ctx)
+
+    s"""
+      ${inputObject.code}
+
+      boolean ${ev.isNull} = false;
+      scala.Option<$javaType> ${ev.value} =
+        ${inputObject.isNull} ?
+        scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
+    """
+  }
+}
+
+/**
+ * A place holder for the loop variable used in [[MapObjects]].  This should never be constructed
+ * manually, but will instead be passed into the provided lambda function.
+ */
 case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
@@ -251,7 +324,7 @@ case class LambdaVariable(value: String, isNull: String, dataType: DataType) ext
  * as an ArrayType.  This is similar to a typical map operation, but where the lambda function
  * is expressed using catalyst expressions.
  *
- * The following collection ObjectTypes are currently supported: Seq, Array
+ * The following collection ObjectTypes are currently supported: Seq, Array, ArrayData
  *
  * @param function A function that returns an expression, given an attribute that can be used
  *                 to access the current value.  This is does as a lambda function so that
@@ -265,14 +338,32 @@ case class MapObjects(
     inputData: Expression,
     elementType: DataType) extends Expression {
 
-  private val loopAttribute = AttributeReference("loopVar", elementType)()
-  private val completeFunction = function(loopAttribute)
+  private lazy val loopAttribute = AttributeReference("loopVar", elementType)()
+  private lazy val completeFunction = function(loopAttribute)
 
-  private val (lengthFunction, itemAccessor) = inputData.dataType match {
-    case ObjectType(cls) if cls.isAssignableFrom(classOf[Seq[_]]) =>
-      (".size()", (i: String) => s".apply($i)")
+  private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
+    case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+      (".size()", (i: String) => s".apply($i)", false)
     case ObjectType(cls) if cls.isArray =>
-      (".length", (i: String) => s"[$i]")
+      (".length", (i: String) => s"[$i]", false)
+    case ArrayType(s: StructType, _) =>
+      (".numElements()", (i: String) => s".getStruct($i, ${s.size})", false)
+    case ArrayType(a: ArrayType, _) =>
+      (".numElements()", (i: String) => s".getArray($i)", true)
+    case ArrayType(IntegerType, _) =>
+      (".numElements()", (i: String) => s".getInt($i)", true)
+    case ArrayType(LongType, _) =>
+      (".numElements()", (i: String) => s".getLong($i)", true)
+    case ArrayType(FloatType, _) =>
+      (".numElements()", (i: String) => s".getFloat($i)", true)
+    case ArrayType(DoubleType, _) =>
+      (".numElements()", (i: String) => s".getDouble($i)", true)
+    case ArrayType(ByteType, _) =>
+      (".numElements()", (i: String) => s".getByte($i)", true)
+    case ArrayType(ShortType, _) =>
+      (".numElements()", (i: String) => s".getShort($i)", true)
+    case ArrayType(BooleanType, _) =>
+      (".numElements()", (i: String) => s".getBoolean($i)", true)
   }
 
   override def nullable: Boolean = true
@@ -294,14 +385,37 @@ case class MapObjects(
     val loopIsNull = ctx.freshName("loopIsNull")
 
     val loopVariable = LambdaVariable(loopValue, loopIsNull, elementType)
-    val boundFunction = completeFunction transform {
+    val substitutedFunction = completeFunction transform {
       case a: AttributeReference if a == loopAttribute => loopVariable
     }
+    // A hack to run this through the analyzer (to bind extractions).
+    val boundFunction =
+      SimpleAnalyzer.execute(Project(Alias(substitutedFunction, "")() :: Nil, LocalRelation(Nil)))
+        .expressions.head.children.head
 
     val genFunction = boundFunction.gen(ctx)
     val dataLength = ctx.freshName("dataLength")
     val convertedArray = ctx.freshName("convertedArray")
     val loopIndex = ctx.freshName("loopIndex")
+
+    val convertedType = ctx.javaType(boundFunction.dataType)
+
+    // Because of the way Java defines nested arrays, we have to handle the syntax specially.
+    // Specifically, we have to insert the [$dataLength] in between the type and any extra nested
+    // array declarations (i.e. new String[1][]).
+    val arrayConstructor = if (convertedType contains "[]") {
+      val rawType = convertedType.takeWhile(_ != '[')
+      val arrayPart = convertedType.reverse.takeWhile(c => c == '[' || c == ']').reverse
+      s"new $rawType[$dataLength]$arrayPart"
+    } else {
+      s"new $convertedType[$dataLength]"
+    }
+
+    val loopNullCheck = if (primitiveElement) {
+      s"boolean $loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
+    } else {
+      s"boolean $loopIsNull = ${genInputData.isNull} || $loopValue == null;"
+    }
 
     s"""
       ${genInputData.code}
@@ -310,19 +424,19 @@ case class MapObjects(
       $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
 
       if (!${ev.isNull}) {
-        Object[] $convertedArray = null;
+        $convertedType[] $convertedArray = null;
         int $dataLength = ${genInputData.value}$lengthFunction;
-        $convertedArray = new Object[$dataLength];
+        $convertedArray = $arrayConstructor;
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
           $elementJavaType $loopValue =
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
-          boolean $loopIsNull = $loopValue == null;
+          $loopNullCheck
 
           ${genFunction.code}
 
-          $convertedArray[$loopIndex] = ${genFunction.value};
+          $convertedArray[$loopIndex] = ($convertedType)${genFunction.value};
           $loopIndex += 1;
         }
 

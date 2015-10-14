@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+
 import scala.reflect.ClassTag
 
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
@@ -41,4 +43,16 @@ trait Encoder[T] {
    * copy the result before making another call if required.
    */
   def toRow(t: T): InternalRow
+
+  /**
+   * Returns an object of type `T`, extracting the required values from the provided row.  Note that
+   * you must bind` and encoder to a specific schema before you can call this function.
+   */
+  def fromRow(row: InternalRow): T
+
+  /**
+   * Returns a new copy of this encoder, where the expressions used by `fromRow` are bound to the
+   * given schema
+   */
+  def bind(schema: Seq[Attribute]): Encoder[T]
 }
