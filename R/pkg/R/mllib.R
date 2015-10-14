@@ -49,8 +49,8 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
             solver = "auto") {
             family <- match.arg(family)
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                               "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
-                               alpha, solver)
+                                 "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
+                                 alpha, solver)
             return(new("PipelineModel", model = model))
           })
 

@@ -168,9 +168,10 @@ class LinearRegression(override val uid: String)
       val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
       // WeightedLeastSquares does not run through iterations. So it does not generate
       // an objective history.
+      val (summaryModel, predictionColName) = lrModel.findSummaryModelAndPredictionCol()
       val trainingSummary = new LinearRegressionTrainingSummary(
-        lrModel.transform(dataset),
-        $(predictionCol),
+        summaryModel.transform(dataset),
+        predictionColName,
         $(labelCol),
         $(featuresCol),
         Array(0D))

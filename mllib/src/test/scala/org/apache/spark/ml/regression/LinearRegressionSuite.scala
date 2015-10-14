@@ -478,7 +478,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression model training summary") {
-    Seq("l-bfgs").foreach { solver =>
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer = new LinearRegression().setSolver(solver)
       val model = trainer.fit(dataset)
       val trainerNoPredictionCol = trainer.setPredictionCol("")
