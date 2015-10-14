@@ -100,4 +100,11 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 
+  // Used internally by executors to shut themselves down.
+  case object Shutdown extends CoarseGrainedClusterMessage
+
+  // SPARK-10987: workaround for netty RPC issue; forces a connection from the driver back
+  // to the AM.
+  case object DriverHello extends CoarseGrainedClusterMessage
+
 }

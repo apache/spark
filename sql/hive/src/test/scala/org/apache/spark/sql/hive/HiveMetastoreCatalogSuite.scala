@@ -20,11 +20,11 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
+import org.apache.spark.sql.{SQLConf, QueryTest, Row, SaveMode}
 
 class HiveMetastoreCatalogSuite extends SparkFunSuite with TestHiveSingleton {
   import hiveContext.implicits._
@@ -74,11 +74,13 @@ class DataSourceWithHiveMetastoreCatalogSuite
   ).foreach { case (provider, (inputFormat, outputFormat, serde)) =>
     test(s"Persist non-partitioned $provider relation into metastore as managed table") {
       withTable("t") {
-        testDF
-          .write
-          .mode(SaveMode.Overwrite)
-          .format(provider)
-          .saveAsTable("t")
+        withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
+          testDF
+            .write
+            .mode(SaveMode.Overwrite)
+            .format(provider)
+            .saveAsTable("t")
+        }
 
         val hiveTable = catalog.client.getTable("default", "t")
         assert(hiveTable.inputFormat === Some(inputFormat))
@@ -102,12 +104,14 @@ class DataSourceWithHiveMetastoreCatalogSuite
         withTable("t") {
           val path = dir.getCanonicalFile
 
-          testDF
-            .write
-            .mode(SaveMode.Overwrite)
-            .format(provider)
-            .option("path", path.toString)
-            .saveAsTable("t")
+          withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
+            testDF
+              .write
+              .mode(SaveMode.Overwrite)
+              .format(provider)
+              .option("path", path.toString)
+              .saveAsTable("t")
+          }
 
           val hiveTable = catalog.client.getTable("default", "t")
           assert(hiveTable.inputFormat === Some(inputFormat))

@@ -18,24 +18,17 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.Serializable
-import java.nio.ByteBuffer
 
-import com.google.common.io.BaseEncoding
-import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.OriginalType
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
 private[sql] object ParquetFilters {
-  val PARQUET_FILTER_DATA = "org.apache.spark.sql.parquet.row.filter"
-
   case class SetInFilter[T <: Comparable[T]](
     valueSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
 
@@ -281,34 +274,5 @@ private[sql] object ParquetFilters {
     val addMethod = classOf[ValidTypeMap].getDeclaredMethods.find(_.getName == "add").get
     addMethod.setAccessible(true)
     addMethod.invoke(null, classOf[Binary], enumTypeDescriptor)
-  }
-
-  /**
-   * Note: Inside the Hadoop API we only have access to `Configuration`, not to
-   * [[org.apache.spark.SparkContext]], so we cannot use broadcasts to convey
-   * the actual filter predicate.
-   */
-  def serializeFilterExpressions(filters: Seq[Expression], conf: Configuration): Unit = {
-    if (filters.nonEmpty) {
-      val serialized: Array[Byte] =
-        SparkEnv.get.closureSerializer.newInstance().serialize(filters).array()
-      val encoded: String = BaseEncoding.base64().encode(serialized)
-      conf.set(PARQUET_FILTER_DATA, encoded)
-    }
-  }
-
-  /**
-   * Note: Inside the Hadoop API we only have access to `Configuration`, not to
-   * [[org.apache.spark.SparkContext]], so we cannot use broadcasts to convey
-   * the actual filter predicate.
-   */
-  def deserializeFilterExpressions(conf: Configuration): Seq[Expression] = {
-    val data = conf.get(PARQUET_FILTER_DATA)
-    if (data != null) {
-      val decoded: Array[Byte] = BaseEncoding.base64().decode(data)
-      SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(decoded))
-    } else {
-      Seq()
-    }
   }
 }

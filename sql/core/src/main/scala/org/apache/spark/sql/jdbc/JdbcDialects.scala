@@ -138,6 +138,7 @@ object JdbcDialects {
   registerDialect(PostgresDialect)
   registerDialect(DB2Dialect)
   registerDialect(MsSqlServerDialect)
+  registerDialect(DerbyDialect)
 
 
   /**
@@ -201,6 +202,10 @@ case object PostgresDialect extends JdbcDialect {
     } else if (sqlType == Types.OTHER && typeName.equals("cidr")) {
       Some(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
+      Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("json")) {
+      Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
       Some(StringType)
     } else None
   }
@@ -277,4 +282,36 @@ case object MsSqlServerDialect extends JdbcDialect {
       Some(StringType)
     } else None
   }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case _ => None
+  }
 }
+
+/**
+ * :: DeveloperApi ::
+ * Default Apache Derby dialect, mapping real on read
+ * and string/byte/short/boolean/decimal on write.
+ */
+@DeveloperApi
+case object DerbyDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:derby")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (sqlType == Types.REAL) Option(FloatType) else None
+  }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
+    case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
+    // 31 is the maximum precision and 5 is the default scale for a Derby DECIMAL
+    case (t: DecimalType) if (t.precision > 31) =>
+      Some(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
+    case _ => None
+  }
+
+}
+
