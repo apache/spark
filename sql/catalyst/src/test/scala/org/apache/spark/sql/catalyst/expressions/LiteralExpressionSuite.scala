@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -34,6 +37,9 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, StringType), null)
     checkEvaluation(Literal.create(null, BinaryType), null)
     checkEvaluation(Literal.create(null, DecimalType.USER_DEFAULT), null)
+    checkEvaluation(Literal.create(null, DateType), null)
+    checkEvaluation(Literal.create(null, TimestampType), null)
+    checkEvaluation(Literal.create(null, CalendarIntervalType), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
     checkEvaluation(Literal.create(null, MapType(StringType, IntegerType)), null)
     checkEvaluation(Literal.create(null, StructType(Seq.empty)), null)
@@ -50,7 +56,13 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.default(StringType), "")
     checkEvaluation(Literal.default(BinaryType), "".getBytes)
     checkEvaluation(Literal.default(DecimalType.USER_DEFAULT), Decimal(0))
-    checkEvaluation(Literal.default(DecimalType.USER_DEFAULT), Decimal(0))
+    checkEvaluation(Literal.default(DecimalType.SYSTEM_DEFAULT), Decimal(0))
+    checkEvaluation(Literal.default(DateType), DateTimeUtils.toJavaDate(0))
+    checkEvaluation(Literal.default(TimestampType), DateTimeUtils.toJavaTimestamp(0L))
+    checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0L))
+    checkEvaluation(Literal.default(ArrayType(StringType)), Array())
+    checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
+    checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
   }
 
   test("boolean literals") {

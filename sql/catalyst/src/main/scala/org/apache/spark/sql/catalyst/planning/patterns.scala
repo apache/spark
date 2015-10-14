@@ -18,11 +18,10 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.AtomicType
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -173,17 +172,18 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
-      val joinKeys = predicates.map {
-        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
-        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
-        case EqualNullSafe(l @ AtomicType(), r @ AtomicType())
-          if canEvaluate(l, left) && canEvaluate(r, right) =>
-          (Coalesce(Seq(l, Literal.default(l.dataType))),
-            Coalesce(Seq(r, Literal.default(r.dataType))))
-        case EqualNullSafe(l @ AtomicType(), r @ AtomicType())
-          if canEvaluate(l, right) && canEvaluate(r, left) =>
-          (Coalesce(Seq(r, Literal.default(r.dataType))),
-            Coalesce(Seq(l, Literal.default(l.dataType))))
+      val joinKeys = predicates.flatMap {
+        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
+        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
+        // Replace null with default value for joining key, then those rows with null in it could
+        // be joined together
+        case EqualNullSafe(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
+          Some((Coalesce(Seq(l, Literal.default(l.dataType))),
+            Coalesce(Seq(r, Literal.default(r.dataType)))))
+        case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
+          Some((Coalesce(Seq(r, Literal.default(r.dataType))),
+            Coalesce(Seq(l, Literal.default(l.dataType)))))
+        case other => None
       }
       val otherPredicates = predicates.filterNot {
         case EqualTo(l, r) =>

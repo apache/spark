@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -71,6 +70,10 @@ object Literal {
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes)
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
+    case arr: ArrayType => create(Array(), arr)
+    case map: MapType => create(Map(), map)
+    case struct: StructType =>
+      create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
     case other =>
       throw new RuntimeException(s"no default for type $dataType")
   }
