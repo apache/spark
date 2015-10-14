@@ -432,7 +432,7 @@ class HiveServer2Hook(BaseHook):
                     writer.writerow([c['columnName'] for c in cur.getSchema()])
                     i = 0
                     while cur.hasMoreRows:
-                        rows = [row for row in cur.fetchmany(size=10000) if row]
+                        rows = [row for row in cur.fetchmany() if row]
                         writer.writerows(rows)
                         i += len(rows)
                         logging.info("Written {0} rows so far.".format(i))
