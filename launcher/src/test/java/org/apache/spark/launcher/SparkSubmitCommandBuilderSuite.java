@@ -48,12 +48,14 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testDriverCmdBuilder() throws Exception {
-    testCmdBuilder(true);
+    testCmdBuilder(true, true);
+    testCmdBuilder(true, false);
   }
 
   @Test
   public void testClusterCmdBuilder() throws Exception {
-    testCmdBuilder(false);
+    testCmdBuilder(false, true);
+    testCmdBuilder(false, false);
   }
 
   @Test
@@ -80,7 +82,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertTrue("Driver -Xms should be configured.", cmd.contains("-Xms42g"));
     assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx42g"));
     assertTrue("Command should contain user-defined conf.",
-      Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
+        Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
   }
 
   @Test
@@ -149,7 +151,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertEquals("arg1", cmd.get(cmd.size() - 1));
   }
 
-  private void testCmdBuilder(boolean isDriver) throws Exception {
+  private void testCmdBuilder(boolean isDriver, boolean usePropertyFile) throws Exception {
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
@@ -164,11 +166,16 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
     launcher.appArgs.add("foo");
     launcher.appArgs.add("bar");
-    launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
-    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
-    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
-    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
     launcher.conf.put("spark.foo", "foo");
+    // either set the property through "--conf" or through property file
+    if (!usePropertyFile) {
+      launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
+    } else {
+      launcher.childEnv.put("SPARK_CONF_DIR", "test/resources");
+    }
 
     Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = launcher.buildCommand(env);
