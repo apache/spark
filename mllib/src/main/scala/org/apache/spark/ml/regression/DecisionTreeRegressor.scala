@@ -130,7 +130,8 @@ final class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
-  def predictVariance(features: Vector): Double = {
+  /** We need to update this function if we ever add other impurity measures. */
+  protected def predictVariance(features: Vector): Double = {
     rootNode.predictImpl(features).impurityStats.calculate()
   }
 
