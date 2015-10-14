@@ -17,11 +17,15 @@
 
 package org.apache.spark.memory
 
+import java.lang.ref.WeakReference
+import java.util
+import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
-
+import org.apache.spark.unsafe.memory.{MemoryAllocator, MemoryBlock}
 
 /**
  * An abstract memory manager that enforces how memory is shared between execution and storage.
@@ -30,7 +34,89 @@ import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
  * sorts and aggregations, while storage memory refers to that used for caching and propagating
  * internal data across the cluster. There exists one of these per JVM.
  */
-private[spark] abstract class MemoryManager extends Logging {
+private[spark] abstract class MemoryManager(conf: SparkConf) extends Logging {
+
+  // -- Methods related to Tungsten managed memory -------------------------------------------------
+
+  /**
+   * Tracks whether Tungsten memory will be allocated on the JVM heap or off-heap using
+   * sun.misc.Unsafe.
+   */
+  final val tungstenMemoryIsAllocatedInHeap: Boolean =
+    !conf.getBoolean("spark.unsafe.offHeap", false)
+
+  /**
+   * Allocates memory for use by Unsafe/Tungsten code. Exposed to enable untracked allocations of
+   * temporary data structures.
+   */
+  final val tungstenMemoryAllocator: MemoryAllocator =
+    if (tungstenMemoryIsAllocatedInHeap) MemoryAllocator.HEAP else MemoryAllocator.UNSAFE
+
+  private val POOLING_THRESHOLD_BYTES: Int = 1024 * 1024
+
+  /**
+   * Returns true if allocations of the given size should go through the pooling mechanism and
+   * false otherwise.
+   */
+  private def shouldPool(size: Long): Boolean = {
+    // Very small allocations are less likely to benefit from pooling.
+    // At some point, we should explore supporting pooling for off-heap memory, but for now we'll
+    // ignore that case in the interest of simplicity.
+    size >= POOLING_THRESHOLD_BYTES && tungstenMemoryIsAllocatedInHeap
+  }
+
+  @GuardedBy("this")
+  private val bufferPoolsBySize: util.Map[Long, util.LinkedList[WeakReference[MemoryBlock]]] =
+    new util.HashMap[Long, util.LinkedList[WeakReference[MemoryBlock]]]
+
+  /**
+   * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed
+   * to be zeroed out (call `zero()` on the result if this is necessary).
+   */
+  @throws(classOf[OutOfMemoryError])
+  final def allocateMemoryBlock(size: Long): MemoryBlock = {
+    // TODO(josh): Integrate with execution memory management
+    if (shouldPool(size)) {
+      this synchronized {
+        val pool: util.LinkedList[WeakReference[MemoryBlock]] = bufferPoolsBySize.get(size)
+        if (pool != null) {
+          while (!pool.isEmpty) {
+            val blockReference: WeakReference[MemoryBlock] = pool.pop
+            val memory: MemoryBlock = blockReference.get
+            if (memory != null) {
+              assert(memory.size == size)
+              return memory
+            }
+          }
+          bufferPoolsBySize.remove(size)
+        }
+      }
+      tungstenMemoryAllocator.allocate(size)
+    }
+    else {
+      tungstenMemoryAllocator.allocate(size)
+    }
+  }
+
+  final def freeMemoryBlock(memory: MemoryBlock) {
+    // TODO(josh): Integrate with execution memory management
+    val size: Long = memory.size
+    if (shouldPool(size)) {
+      this synchronized {
+        var pool: util.LinkedList[WeakReference[MemoryBlock]] = bufferPoolsBySize.get(size)
+        if (pool == null) {
+          pool = new util.LinkedList[WeakReference[MemoryBlock]]
+          bufferPoolsBySize.put(size, pool)
+        }
+        pool.add(new WeakReference[MemoryBlock](memory))
+      }
+    }
+    else {
+      tungstenMemoryAllocator.free(memory)
+    }
+  }
+
+  // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
   // The memory store used to evict cached blocks
   private var _memoryStore: MemoryStore = _
@@ -42,8 +128,8 @@ private[spark] abstract class MemoryManager extends Logging {
   }
 
   // Amount of execution/storage memory in use, accesses must be synchronized on `this`
-  protected var _executionMemoryUsed: Long = 0
-  protected var _storageMemoryUsed: Long = 0
+  @GuardedBy("this") protected var _executionMemoryUsed: Long = 0
+  @GuardedBy("this") protected var _storageMemoryUsed: Long = 0
 
   /**
    * Set the [[MemoryStore]] used by this manager to evict cached blocks.

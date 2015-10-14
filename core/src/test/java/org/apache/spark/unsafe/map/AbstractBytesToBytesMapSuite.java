@@ -29,6 +29,8 @@ import static org.junit.Assert.*;
 import static org.mockito.AdditionalMatchers.geq;
 import static org.mockito.Mockito.*;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.memory.*;
@@ -47,7 +49,8 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Before
   public void setup() {
     shuffleMemoryManager = ShuffleMemoryManager.create(Long.MAX_VALUE, PAGE_SIZE_BYTES);
-    taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(getMemoryAllocator()));
+    taskMemoryManager = new TaskMemoryManager(
+      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")));
     // Mocked memory manager for tests that check the maximum array size, since actually allocating
     // such large arrays will cause us to run out of memory in our tests.
     sizeLimitedTaskMemoryManager = mock(TaskMemoryManager.class);
@@ -74,7 +77,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
-  protected abstract MemoryAllocator getMemoryAllocator();
+  protected abstract boolean useOffHeapMemoryAllocator();
 
   private static byte[] getByteArray(MemoryLocation loc, int size) {
     final byte[] arr = new byte[size];

@@ -23,13 +23,14 @@ import scala.util.{Try, Random}
 
 import org.scalatest.Matchers
 
-import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, TaskContextImpl, TaskContext, SparkFunSuite}
+import org.apache.spark.memory.{GrantEverythingMemoryManager, TestShuffleMemoryManager}
 import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
+import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -64,8 +65,9 @@ class UnsafeFixedWidthAggregationMapSuite
     }
 
     test(name) {
-      taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-      shuffleMemoryManager = new TestShuffleMemoryManager
+      val conf = new SparkConf().set("spark.unsafe.offHeap", "false")
+      taskMemoryManager = new TaskMemoryManager(new GrantEverythingMemoryManager(conf))
+      shuffleMemoryManager = new TestShuffleMemoryManager(conf)
 
       TaskContext.setTaskContext(new TaskContextImpl(
         stageId = 0,

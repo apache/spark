@@ -15,20 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.memory
 
 import scala.collection.mutable
 
-import org.apache.spark.memory.MemoryManager
+import org.apache.spark.SparkConf
 import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.storage.{BlockId, BlockStatus}
-
 
 /**
  * A [[ShuffleMemoryManager]] that can be controlled to run out of memory.
  */
-class TestShuffleMemoryManager
-  extends ShuffleMemoryManager(new GrantEverythingMemoryManager, 4 * 1024 * 1024) {
+class TestShuffleMemoryManager(conf: SparkConf)
+    extends ShuffleMemoryManager(new GrantEverythingMemoryManager(conf), 4 * 1024 * 1024) {
+
   private var oom = false
 
   override def tryToAcquire(numBytes: Long): Long = {
@@ -56,7 +56,7 @@ class TestShuffleMemoryManager
   }
 }
 
-private class GrantEverythingMemoryManager extends MemoryManager {
+class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf) {
   override def acquireExecutionMemory(
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes

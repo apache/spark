@@ -34,7 +34,7 @@ private[spark] class StaticMemoryManager(
     conf: SparkConf,
     override val maxExecutionMemory: Long,
     override val maxStorageMemory: Long)
-  extends MemoryManager {
+  extends MemoryManager(conf) {
 
   def this(conf: SparkConf) {
     this(

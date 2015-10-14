@@ -42,7 +42,10 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * up most of the storage space, in which case the new blocks will be evicted immediately
  * according to their respective storage levels.
  */
-private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) extends MemoryManager {
+private[spark] class UnifiedMemoryManager(
+    conf: SparkConf,
+    maxMemory: Long)
+  extends MemoryManager(conf) {
 
   def this(conf: SparkConf) {
     this(conf, UnifiedMemoryManager.getMaxMemory(conf))

@@ -179,7 +179,7 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
-      val taskMemoryManager = new TaskMemoryManager(env.executorMemoryManager)
+      val taskMemoryManager = new TaskMemoryManager(env.memoryManager)
       val deserializeStartTime = System.currentTimeMillis()
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()

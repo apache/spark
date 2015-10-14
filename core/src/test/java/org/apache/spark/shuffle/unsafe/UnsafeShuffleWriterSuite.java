@@ -23,7 +23,6 @@ import java.util.*;
 
 import scala.*;
 import scala.collection.Iterator;
-import scala.reflect.ClassTag;
 import scala.runtime.AbstractFunction1;
 
 import com.google.common.collect.Iterators;
@@ -57,16 +56,15 @@ import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
-import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
+import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
 
 public class UnsafeShuffleWriterSuite {
 
   static final int NUM_PARTITITONS = 4;
-  final TaskMemoryManager taskMemoryManager =
-    new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
+  final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(
+    new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")));
   final HashPartitioner hashPartitioner = new HashPartitioner(NUM_PARTITITONS);
   File mergedOutputFile;
   File tempDir;
