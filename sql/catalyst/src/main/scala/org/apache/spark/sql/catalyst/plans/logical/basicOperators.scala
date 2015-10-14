@@ -23,6 +23,15 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
+/**
+ * An operator that can be put on top of another query operator to produce different output
+ * attributes(with different expression ids) which are globally unique.
+ *
+ * It is invalid to have multiple copies of the same attribute produced by distinct operators
+ * in a query tree(for example, self-join) as this breaks the guarantee that expression
+ * ids, which are used to differentiate attributes, are unique.  This operator is created to
+ * solve this problem.
+ */
 case class NewOutput(output: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
   assert(output.length == child.output.length)
   assert(output.zip(child.output).forall {
