@@ -345,9 +345,8 @@ private[spark] class Client(
     // required when user changes log4j.properties directly to set the log configurations. If
     // configuration file is provided through --files then executors will be taking configurations
     // from --files instead of $SPARK_CONF_DIR/log4j.properties.
-    val log4jConfUrl = getClass.getResource("/log4j.properties")
-    val log4jConf =
-      oldLog4jConf.orElse(Option(if (log4jConfUrl == null) null else log4jConfUrl.toString()))
+    val log4jConf = oldLog4jConf.orElse(
+      Option(Utils.getContextOrSparkClassLoader.getResource("/log4j.properties")).map(_.toString))
 
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
