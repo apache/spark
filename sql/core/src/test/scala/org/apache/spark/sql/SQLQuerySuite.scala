@@ -1765,4 +1765,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       assert(sampled.count() == sampledOdd.count() + sampledEven.count())
     }
   }
+
+  test("SPARK-11032: resolve having correctly") {
+    withTempTable("src") {
+      Seq(1 -> "a").toDF("i", "j").registerTempTable("src")
+      checkAnswer(
+        sql("SELECT MIN(t.i) FROM (SELECT * FROM src WHERE i > 0) t HAVING(COUNT(1) > 0)"),
+        Row(1))
+    }
+  }
 }
