@@ -184,14 +184,18 @@ class HivePrestoTest(unittest.TestCase):
             task_id='hive_to_mysql_bulk_check',
             create=True,
             sql="""
-            SELECT name
+            SELECT name, gender
             FROM airflow.static_babynames
             LIMIT 100
             """,
             mysql_table='test_static_babynames',
             mysql_preoperator=[
                 'DROP TABLE IF EXISTS test_static_babynames;',
-                'CREATE TABLE test_static_babynames (name VARCHAR(500))',
+                """
+                CREATE TABLE test_static_babynames (
+                    name VARCHAR(500),
+                    gender VARCHAR(500)
+                )""",
             ],
             bulk_load=True,
             dag=self.dag)

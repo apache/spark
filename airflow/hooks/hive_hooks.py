@@ -420,7 +420,14 @@ class HiveServer2Hook(BaseHook):
                         }
             return results
 
-    def to_csv(self, hql, csv_filepath, schema='default'):
+    def to_csv(
+            self,
+            hql,
+            csv_filepath,
+            schema='default',
+            delimiter=',',
+            lineterminator='\r\n',
+            output_header=True):
         schema = schema or 'default'
         with self.get_conn() as conn:
             with conn.cursor() as cur:
@@ -428,8 +435,11 @@ class HiveServer2Hook(BaseHook):
                 cur.execute(hql)
                 schema = cur.getSchema()
                 with open(csv_filepath, 'w') as f:
-                    writer = csv.writer(f)
-                    writer.writerow([c['columnName'] for c in cur.getSchema()])
+                    writer = csv.writer(f, delimiter=delimiter,
+                        lineterminator=lineterminator)
+                    if output_header:
+                        writer.writerow([c['columnName']
+                            for c in cur.getSchema()])
                     i = 0
                     while cur.hasMoreRows:
                         rows = [row for row in cur.fetchmany() if row]
