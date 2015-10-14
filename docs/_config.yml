@@ -13,8 +13,6 @@ include:
   - _static
   - _modules
 
-code_dir: ../examples/src/main
-
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala, and Mesos.
 SPARK_VERSION: 1.6.0-SNAPSHOT
