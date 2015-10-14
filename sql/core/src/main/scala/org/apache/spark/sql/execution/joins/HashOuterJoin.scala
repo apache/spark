@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.{HashMap => JavaHashMap}
-
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -27,7 +24,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.util.collection.CompactBuffer
 
-@DeveloperApi
+
 trait HashOuterJoin {
   self: SparkPlan =>
 
@@ -230,8 +227,8 @@ trait HashOuterJoin {
   protected[this] def buildHashTable(
       iter: Iterator[InternalRow],
       numIterRows: LongSQLMetric,
-      keyGenerator: Projection): JavaHashMap[InternalRow, CompactBuffer[InternalRow]] = {
-    val hashTable = new JavaHashMap[InternalRow, CompactBuffer[InternalRow]]()
+      keyGenerator: Projection): java.util.HashMap[InternalRow, CompactBuffer[InternalRow]] = {
+    val hashTable = new java.util.HashMap[InternalRow, CompactBuffer[InternalRow]]()
     while (iter.hasNext) {
       val currentRow = iter.next()
       numIterRows += 1
