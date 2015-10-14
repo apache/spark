@@ -135,6 +135,16 @@ protected[sql] abstract class AtomicType extends DataType {
   }
 }
 
+private[sql] object AtomicType {
+  /**
+   * Enables matching against AtomicType for expressions:
+   * {{{
+   *   case Equal(l @ AtomicType(), r @ AtomicType()) =>
+   *     ...
+   * }}}
+   */
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[AtomicType]
+}
 
 /**
  * :: DeveloperApi ::

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.AtomicType
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -171,17 +172,24 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
-      val (joinPredicates, otherPredicates) =
-        condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
-          case EqualTo(l, r) =>
-            (canEvaluate(l, left) && canEvaluate(r, right)) ||
-            (canEvaluate(l, right) && canEvaluate(r, left))
-          case _ => false
-        }
-
-      val joinKeys = joinPredicates.map {
+      val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
+      val joinKeys = predicates.map {
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
+        case EqualNullSafe(l @ AtomicType(), r @ AtomicType())
+          if canEvaluate(l, left) && canEvaluate(r, right) =>
+          (Coalesce(Seq(l, Literal.default(l.dataType))),
+            Coalesce(Seq(r, Literal.default(r.dataType))))
+        case EqualNullSafe(l @ AtomicType(), r @ AtomicType())
+          if canEvaluate(l, right) && canEvaluate(r, left) =>
+          (Coalesce(Seq(r, Literal.default(r.dataType))),
+            Coalesce(Seq(l, Literal.default(l.dataType))))
+      }
+      val otherPredicates = predicates.filterNot {
+        case EqualTo(l, r) =>
+          canEvaluate(l, left) && canEvaluate(r, right) ||
+            canEvaluate(l, right) && canEvaluate(r, left)
+        case other => false
       }
 
       if (joinKeys.nonEmpty) {

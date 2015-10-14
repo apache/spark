@@ -52,6 +52,28 @@ object Literal {
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
+
+  /**
+   * Create a literal with default value for given DataType
+   */
+  def default(dataType: DataType): Literal = dataType match {
+    case NullType => create(null, NullType)
+    case BooleanType => Literal(false)
+    case ByteType => Literal(0.toByte)
+    case ShortType => Literal(0.toShort)
+    case IntegerType => Literal(0)
+    case LongType => Literal(0L)
+    case FloatType => Literal(0.0f)
+    case DoubleType => Literal(0.0)
+    case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
+    case DateType => create(0, DateType)
+    case TimestampType => create(0L, TimestampType)
+    case StringType => Literal("")
+    case BinaryType => Literal("".getBytes)
+    case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
+    case other =>
+      throw new RuntimeException(s"no default for type $dataType")
+  }
 }
 
 /**

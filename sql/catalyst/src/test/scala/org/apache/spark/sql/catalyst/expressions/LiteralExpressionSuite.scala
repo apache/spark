@@ -30,13 +30,27 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, IntegerType), null)
     checkEvaluation(Literal.create(null, LongType), null)
     checkEvaluation(Literal.create(null, FloatType), null)
-    checkEvaluation(Literal.create(null, LongType), null)
+    checkEvaluation(Literal.create(null, DoubleType), null)
     checkEvaluation(Literal.create(null, StringType), null)
     checkEvaluation(Literal.create(null, BinaryType), null)
     checkEvaluation(Literal.create(null, DecimalType.USER_DEFAULT), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
     checkEvaluation(Literal.create(null, MapType(StringType, IntegerType)), null)
     checkEvaluation(Literal.create(null, StructType(Seq.empty)), null)
+  }
+
+  test("default") {
+    checkEvaluation(Literal.default(BooleanType), false)
+    checkEvaluation(Literal.default(ByteType), 0.toByte)
+    checkEvaluation(Literal.default(ShortType), 0.toShort)
+    checkEvaluation(Literal.default(IntegerType), 0)
+    checkEvaluation(Literal.default(LongType), 0L)
+    checkEvaluation(Literal.default(FloatType), 0.0f)
+    checkEvaluation(Literal.default(DoubleType), 0.0)
+    checkEvaluation(Literal.default(StringType), "")
+    checkEvaluation(Literal.default(BinaryType), "".getBytes)
+    checkEvaluation(Literal.default(DecimalType.USER_DEFAULT), Decimal(0))
+    checkEvaluation(Literal.default(DecimalType.USER_DEFAULT), Decimal(0))
   }
 
   test("boolean literals") {
