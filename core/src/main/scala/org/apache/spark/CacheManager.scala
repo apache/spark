@@ -181,8 +181,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
             logWarning(s"Persisting partition $key to disk instead.")
             val diskOnlyLevel = StorageLevel(useDisk = true, useMemory = false,
               useOffHeap = false, deserialized = false, putLevel.replication)
-            putInBlockManager[T](key, returnValues, level, updatedBlocks, Some(diskOnlyLevel))
+            val results =
+              putInBlockManager[T](key, returnValues, level, updatedBlocks, Some(diskOnlyLevel))
+            // After putting this block on disk, we no longer need the array that stored the
+            // partial values, so we should release the unroll memory occupied
+            // in the process (SPARK-6157).
+            blockManager.memoryStore.releasePendingUnrollMemoryForThisTask()
+            results
           } else {
+            blockManager.memoryStore.reservePendingUnrollMemoryForThisTask()
             returnValues
           }
       }
