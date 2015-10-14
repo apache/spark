@@ -26,6 +26,8 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
 
   def copy(): ArrayData
 
+  def array: Array[Any]
+
   def toBooleanArray(): Array[Boolean] = {
     val size = numElements()
     val values = new Array[Boolean](size)
@@ -102,6 +104,9 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
     }
     values
   }
+
+  def toObjectArray(elementType: DataType): Array[AnyRef] =
+    toArray[AnyRef](elementType: DataType)
 
   def toArray[T: ClassTag](elementType: DataType): Array[T] = {
     val size = numElements()
