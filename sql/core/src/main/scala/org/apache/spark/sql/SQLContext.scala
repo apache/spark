@@ -178,6 +178,9 @@ class SQLContext private[sql](
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
   @transient
+  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
+
+  @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   @transient
