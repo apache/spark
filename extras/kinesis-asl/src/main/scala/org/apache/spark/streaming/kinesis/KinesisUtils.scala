@@ -309,7 +309,7 @@ object KinesisUtils {
     implicit val recordCmt: ClassTag[T] = ClassTag(recordClass)
     val cleanedHandler = jssc.sparkContext.clean(messageHandler.call(_))
     createStream[T](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
-      initialPositionInStream, checkpointInterval, storageLevel, messageHandler.call(_))
+      initialPositionInStream, checkpointInterval, storageLevel, cleanedHandler)
   }
 
   /**
@@ -360,9 +360,9 @@ object KinesisUtils {
       awsSecretKey: String): JavaReceiverInputDStream[T] = {
     // scalastyle:on
     implicit val recordCmt: ClassTag[T] = ClassTag(recordClass)
-    // val cleanedHandler = jssc.sparkContext.clean(messageHandler.call(_))
+    val cleanedHandler = jssc.sparkContext.clean(messageHandler.call(_))
     createStream[T](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
-      initialPositionInStream, checkpointInterval, storageLevel, messageHandler.call(_),
+      initialPositionInStream, checkpointInterval, storageLevel, cleanedHandler,
       awsAccessKeyId, awsSecretKey)
   }
 

@@ -44,15 +44,16 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
     ssc.stop();
   }
 
+
+  private static Function<Record, String> handler = new Function<Record, String>() {
+    @Override
+    public String call(Record record) {
+      return record.getPartitionKey() + "-" + record.getSequenceNumber();
+    }
+  };
+
   @Test
   public void testCustomHandler() {
-    Function<Record, String> handler = new Function<Record, String>() {
-      @Override
-      public String call(Record record) {
-        return record.getPartitionKey() + "-" + record.getSequenceNumber();
-      }
-    };
-
     // Tests the API, does not actually test data receiving
     JavaDStream<String> kinesisStream = KinesisUtils.createStream(ssc, "testApp", "mySparkStream",
         "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
