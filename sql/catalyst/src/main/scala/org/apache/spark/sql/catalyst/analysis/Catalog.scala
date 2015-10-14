@@ -171,7 +171,7 @@ trait OverrideCatalog extends Catalog {
   }
 
   override def unregisterTable(tableIdent: TableIdentifier): Unit = {
-    if (tableIdent.database.isDefined) {
+    if (tableIdent.database.isEmpty) {
       overrides.remove(getTableName(tableIdent))
     }
   }
