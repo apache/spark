@@ -106,10 +106,10 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
 
-  private def getQualifiedTableName(tableIdentifier: TableIdentifier) = {
+  private def getQualifiedTableName(tableIdent: TableIdentifier) = {
     QualifiedTableName(
-      tableIdentifier.database.getOrElse(client.currentDatabase).toLowerCase,
-      tableIdentifier.table.toLowerCase)
+      tableIdent.database.getOrElse(client.currentDatabase).toLowerCase,
+      tableIdent.table.toLowerCase)
   }
 
   private def getQualifiedTableName(hiveTable: HiveTable) = {
@@ -360,15 +360,15 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     new Path(new Path(client.getDatabase(dbName).location), tblName).toString
   }
 
-  override def tableExists(tableIdentifier: TableIdentifier): Boolean = {
-    val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdentifier)
+  override def tableExists(tableIdent: TableIdentifier): Boolean = {
+    val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
     client.getTableOption(dbName, tblName).isDefined
   }
 
   override def lookupRelation(
-      tableIdentifier: TableIdentifier,
+      tableIdent: TableIdentifier,
       alias: Option[String]): LogicalPlan = {
-    val qualifiedTableName = getQualifiedTableName(tableIdentifier)
+    val qualifiedTableName = getQualifiedTableName(tableIdent)
     val table = client.getTable(qualifiedTableName.database, qualifiedTableName.name)
 
     if (table.properties.get("spark.sql.sources.provider").isDefined) {
@@ -650,7 +650,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def registerTable(tableIdentifier: TableIdentifier, plan: LogicalPlan): Unit = {
+  override def registerTable(tableIdent: TableIdentifier, plan: LogicalPlan): Unit = {
     throw new UnsupportedOperationException
   }
 
@@ -658,7 +658,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def unregisterTable(tableIdentifier: TableIdentifier): Unit = {
+  override def unregisterTable(tableIdent: TableIdentifier): Unit = {
     throw new UnsupportedOperationException
   }
 
