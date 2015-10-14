@@ -42,9 +42,6 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
     nettyRpcHandler.receive(client, null, null)
 
-    when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40001))
-    nettyRpcHandler.receive(client, null, null)
-
     verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 12345)))
   }
 

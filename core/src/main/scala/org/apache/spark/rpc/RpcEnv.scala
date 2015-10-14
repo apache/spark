@@ -94,15 +94,6 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   }
 
   /**
-   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`
-   * asynchronously.
-   */
-  def asyncSetupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): Future[RpcEndpointRef] = {
-    asyncSetupEndpointRefByURI(uriOf(systemName, address, endpointName))
-  }
-
-  /**
    * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`.
    * This is a blocking action.
    */
