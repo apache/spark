@@ -97,7 +97,8 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    extraInformation: String) extends LeafNode {
+    extraInformation: String,
+    override val outputsUnsafeRows: Boolean = false) extends LeafNode {
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
@@ -109,7 +110,7 @@ private[sql] object PhysicalRDD {
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation): PhysicalRDD = {
-    PhysicalRDD(output, rdd, relation.toString)
+    PhysicalRDD(output, rdd, relation.toString, outputsUnsafeRows = relation.outputsUnsafeRows)
   }
 }
 

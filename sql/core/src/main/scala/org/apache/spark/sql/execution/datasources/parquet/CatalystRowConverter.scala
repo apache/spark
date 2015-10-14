@@ -163,10 +163,14 @@ private[parquet] class CatalystRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
+  private val currentRow = new SpecificMutableRow(catalystType.map(_.dataType))
+
+  private val unsafeProjection = UnsafeProjection.create(catalystType)
+
   /**
-   * Represents the converted row object once an entire Parquet record is converted.
+   * The [[UnsafeRow]] converted from an entire Parquet record.
    */
-  val currentRow = new SpecificMutableRow(catalystType.map(_.dataType))
+  def currentRecord: UnsafeRow = unsafeProjection(currentRow)
 
   // Converters for each field.
   private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
