@@ -340,6 +340,14 @@ private[spark] class Client(
           "for alternatives.")
     }
 
+    // Uploading $SPARK_CONF_DIR/log4j.properties file to the distributed cache to make sure that
+    // the executor's will use the latest configurations instead of the default values. This is
+    // required when user changes log4j.properties directly or use's UI (e.g., Cloudera Manager) to
+    // set the log configurations. If configuration file is provided through --files then executors
+    // will be taking configurations from --files instead of $SPARK_CONF_DIR/log4j.properties.
+    val log4jConf =
+      oldLog4jConf.orElse(Option(getClass.getResource("/log4j.properties").toString()))
+
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
       if (distributedUris.contains(uriStr)) {
@@ -415,7 +423,7 @@ private[spark] class Client(
     List(
       (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR),
       (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
-      ("log4j.properties", oldLog4jConf.orNull, null)
+      ("log4j.properties", log4jConf.orNull, null)
     ).foreach { case (destName, path, confKey) =>
       if (path != null && !path.trim().isEmpty()) {
         val (isLocal, localizedPath) = distribute(path, destName = Some(destName))
