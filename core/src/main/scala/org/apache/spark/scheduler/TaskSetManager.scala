@@ -781,23 +781,6 @@ private[spark] class TaskSetManager(
     sortedTaskSetQueue
   }
 
-  /**
-   * Called by TaskScheduler when an executor is lost, but the reason is not yet known. This method
-   * does not fail any tasks related to the executor. Instead, tasks are left as is, but the
-   * executor is removed from the list of live executors, so no new tasks are scheduled. Pending
-   * tasks for the executor are re-queued.
-   */
-  override def disableExecutor(execId: String, host: String): Unit = {
-    for (index <- getPendingTasksForExecutor(execId)) {
-      addPendingTask(index, readding = true)
-    }
-    for (index <- getPendingTasksForHost(host)) {
-      addPendingTask(index, readding = true)
-    }
-    // recalculate valid locality levels and waits when executor is disabled.
-    recomputeLocality()
-  }
-
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
   override def executorLost(execId: String, host: String, reason: ExecutorLossReason) {
     logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
@@ -812,31 +795,38 @@ private[spark] class TaskSetManager(
       addPendingTask(index, readding = true)
     }
 
-    // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
-    // and we are not using an external shuffle server which could serve the shuffle outputs.
-    // The reason is the next stage wouldn't be able to fetch the data from this dead executor
-    // so we would need to rerun these tasks on other executors.
-    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {
-      for ((tid, info) <- taskInfos if info.executorId == execId) {
-        val index = taskInfos(tid).index
-        if (successful(index)) {
-          successful(index) = false
-          copiesRunning(index) -= 1
-          tasksSuccessful -= 1
-          addPendingTask(index)
-          // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
-          // stage finishes when a total of tasks.size tasks finish.
-          sched.dagScheduler.taskEnded(tasks(index), Resubmitted, null, null, info, null)
+    reason match {
+      case LossReasonPending =>
+        // Nothing else to do until the actual loss reason is known.
+
+      case _ =>
+        // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
+        // and we are not using an external shuffle server which could serve the shuffle outputs.
+        // The reason is the next stage wouldn't be able to fetch the data from this dead executor
+        // so we would need to rerun these tasks on other executors.
+        if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {
+          for ((tid, info) <- taskInfos if info.executorId == execId) {
+            val index = taskInfos(tid).index
+            if (successful(index)) {
+              successful(index) = false
+              copiesRunning(index) -= 1
+              tasksSuccessful -= 1
+              addPendingTask(index)
+              // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
+              // stage finishes when a total of tasks.size tasks finish.
+              sched.dagScheduler.taskEnded(tasks(index), Resubmitted, null, null, info, null)
+            }
+          }
         }
-      }
+        for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
+          val isNormalExit: Boolean = reason match {
+            case exited: ExecutorExited => exited.isNormalExit
+            case _ => false
+          }
+          handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
+        }
     }
-    for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      val isNormalExit: Boolean = reason match {
-        case exited: ExecutorExited => exited.isNormalExit
-        case _ => false
-      }
-      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
-    }
+
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()
   }

@@ -276,7 +276,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       if (shouldDisable) {
         logInfo(s"Disabling executor $executorId.")
-        scheduler.disableExecutor(executorId)
+        scheduler.executorLost(executorId, LossReasonPending)
       }
 
       shouldDisable

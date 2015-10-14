@@ -37,6 +37,8 @@ private[spark] object ExecutorExited {
   }
 }
 
+private [spark] object LossReasonPending extends ExecutorLossReason("Pending loss reason.")
+
 private[spark]
 case class SlaveLost(_message: String = "Slave lost")
   extends ExecutorLossReason(_message)

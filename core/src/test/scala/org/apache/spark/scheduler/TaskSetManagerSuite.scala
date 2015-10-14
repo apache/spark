@@ -791,7 +791,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.executorAdded()
 
     // Disable the first executor, make sure task still won't be reassigned.
-    manager.disableExecutor("exec1", "host1")
+    manager.executorLost("exec1", "host1", LossReasonPending)
     assert(manager.resourceOffer("exec2", "host2", ANY) === None)
 
     // Now remove the first executor, and make sure the task is reassigned.

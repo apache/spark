@@ -324,40 +324,6 @@ private[spark] class TaskSchedulerImpl(
     return tasks
   }
 
-  /**
-   * Disable an executor. "Disabled" is an intermediary state between "being alive" and "lost",
-   * where tasks that had been assigned to the executor are not yet marked as failed, but the
-   * executor is otherwise removed from the application. For example, blocks served by the executor
-   * will be marked as unavailable.
-   */
-  def disableExecutor(executorId: String): Unit = {
-    val wasActive = synchronized {
-      if (activeExecutorIds.remove(executorId)) {
-        val host = executorIdToHost(executorId)
-        executorsByHost.get(host).foreach { execs =>
-          execs -= executorId
-          if (execs.isEmpty) {
-            executorsByHost -= host
-            for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
-              hosts -= host
-              if (hosts.isEmpty) {
-                hostsByRack -= rack
-              }
-            }
-          }
-        }
-        rootPool.disableExecutor(executorId, host)
-        true
-      } else {
-        false
-      }
-    }
-    if (wasActive) {
-      dagScheduler.executorLost(executorId)
-      backend.reviveOffers()
-    }
-  }
-
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     var failedExecutor: Option[(String, ExecutorLossReason)] = None
     synchronized {
@@ -497,23 +463,57 @@ private[spark] class TaskSchedulerImpl(
 
   /** Remove all information related to the executor. */
   private def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    disableExecutor(executorId)
-    synchronized {
-      executorIdToHost.remove(executorId) match {
-        case Some(host) =>
-          val msg = s"Lost executor $executorId on $host: $reason"
-          reason match {
-            case ExecutorExited(_, isNormalExit, _) if isNormalExit => logInfo(msg)
-            case _ => logError(msg)
+    val wasActive = synchronized {
+      if (activeExecutorIds.remove(executorId)) {
+        val host = executorIdToHost(executorId)
+        executorsByHost.get(host).foreach { execs =>
+          execs -= executorId
+          if (execs.isEmpty) {
+            executorsByHost -= host
+            for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
+              hosts -= host
+              if (hosts.isEmpty) {
+                hostsByRack -= rack
+              }
+            }
           }
-          rootPool.executorLost(executorId, host, reason)
+        }
+        true
+      } else {
+        false
+      }
+    }
+    if (wasActive) {
+      dagScheduler.executorLost(executorId)
+      backend.reviveOffers()
+    }
+    synchronized {
+      val host = executorIdToHost.get(executorId)
+      host.foreach { h =>
+        rootPool.executorLost(executorId, h, reason)
+      }
 
-        case None =>
-         // We may get multiple executorLost() calls with different loss reasons. For example, one
-         // may be triggered by a dropped connection from the slave while another may be a report
-         // of executor termination from Mesos. We produce log messages for both so we eventually
-         // report the termination reason.
-         logInfo("Lost an executor " + executorId + " (already removed): " + reason)
+      reason match {
+        case LossReasonPending =>
+          // Do nothing else until the loss reason is known.
+
+        case _ =>
+          host match {
+            case Some(host) =>
+              val msg = s"Lost executor $executorId on $host: $reason"
+              reason match {
+                case ExecutorExited(_, isNormalExit, _) if isNormalExit => logInfo(msg)
+                case _ => logError(msg)
+              }
+              executorIdToHost -= executorId
+
+            case None =>
+             // We may get multiple executorLost() calls with different loss reasons. For example, one
+             // may be triggered by a dropped connection from the slave while another may be a report
+             // of executor termination from Mesos. We produce log messages for both so we eventually
+             // report the termination reason.
+             logInfo(s"Lost an executor $executorId (already removed): $reason")
+          }
       }
     }
   }
