@@ -166,7 +166,7 @@ object Utils {
     // It is safe to call head at here since functionsWithDistinct has at least one
     // AggregateExpression2.
     val distinctColumnExpressions =
-      functionsWithDistinct.head.aggregateFunction.children
+      functionsWithDistinct.flatMap(_.aggregateFunction.children)
     val namedDistinctColumnExpressions = distinctColumnExpressions.map {
       case ne: NamedExpression => ne -> ne
       case other =>

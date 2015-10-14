@@ -508,7 +508,7 @@ class Analyzer(
                 // So, we wrap it in AggregateExpression2.
                 case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
                 // Currently, our old aggregate function interface supports SUM(DISTINCT ...)
-                // and COUTN(DISTINCT ...).
+                // and COUNT(DISTINCT ...).
                 case sumDistinct: SumDistinct => sumDistinct
                 case countDistinct: CountDistinct => countDistinct
                 // DISTINCT is not meaningful with Max and Min.
