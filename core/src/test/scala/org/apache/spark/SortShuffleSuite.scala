@@ -44,7 +44,7 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
       val myConf = conf.clone()
         .set("spark.local.dir", tmpDir.getAbsolutePath)
       sc = new SparkContext("local", "test", myConf)
-      // Create a shuffled RDD and verify that it will actually use the new UnsafeShuffle path
+      // Create a shuffled RDD and verify that it actually uses the new serialized map output path
       val rdd = sc.parallelize(1 to 10, 1).map(x => (x, x))
       val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
         .setSerializer(new KryoSerializer(myConf))
@@ -75,7 +75,7 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
       val myConf = conf.clone()
         .set("spark.local.dir", tmpDir.getAbsolutePath)
       sc = new SparkContext("local", "test", myConf)
-      // Create a shuffled RDD and verify that it will actually use the old SortShuffle path
+      // Create a shuffled RDD and verify that it actually uses the old deserialized map output path
       val rdd = sc.parallelize(1 to 10, 1).map(x => (x, x))
       val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
         .setSerializer(new JavaSerializer(myConf))
