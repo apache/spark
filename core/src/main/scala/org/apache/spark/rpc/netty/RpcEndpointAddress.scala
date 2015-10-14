@@ -17,40 +17,44 @@
 
 package org.apache.spark.rpc.netty
 
-import java.net.URI
-
 import org.apache.spark.SparkException
 import org.apache.spark.rpc.RpcAddress
 
-private[netty] case class NettyRpcAddress(host: String, port: Int, name: String) {
+/**
+ * An address identifier for an RPC endpoint.
+ *
+ * @param host host name of the remote process.
+ * @param port the port the remote RPC environment binds to.
+ * @param name name of the remote endpoint.
+ */
+private[netty] case class RpcEndpointAddress(host: String, port: Int, name: String) {
 
   def toRpcAddress: RpcAddress = RpcAddress(host, port)
 
   override val toString = s"spark://$name@$host:$port"
 }
 
-private[netty] object NettyRpcAddress {
+private[netty] object RpcEndpointAddress {
 
-  def apply(sparkUrl: String): NettyRpcAddress = {
+  def apply(sparkUrl: String): RpcEndpointAddress = {
     try {
-      val uri = new URI(sparkUrl)
+      val uri = new java.net.URI(sparkUrl)
       val host = uri.getHost
       val port = uri.getPort
       val name = uri.getUserInfo
       if (uri.getScheme != "spark" ||
-        host == null ||
-        port < 0 ||
-        name == null ||
-        (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
-        uri.getFragment != null ||
-        uri.getQuery != null) {
+          host == null ||
+          port < 0 ||
+          name == null ||
+          (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
+          uri.getFragment != null ||
+          uri.getQuery != null) {
         throw new SparkException("Invalid Spark URL: " + sparkUrl)
       }
-      NettyRpcAddress(host, port, name)
+      RpcEndpointAddress(host, port, name)
     } catch {
       case e: java.net.URISyntaxException =>
         throw new SparkException("Invalid Spark URL: " + sparkUrl, e)
     }
   }
-
 }
