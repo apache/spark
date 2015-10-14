@@ -591,7 +591,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       case p: LogicalPlan if p.resolved => p
 
       case CreateViewAsSelect(table, child, allowExisting, replace, sql) =>
-        if (conf.canonicalizeView) {
+        if (conf.nativeView) {
           if (allowExisting && replace) {
             throw new AnalysisException(
               "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")

@@ -1282,7 +1282,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("correctly parse CREATE VIEW statement") {
-    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("jt") {
         val df = (1 until 10).map(i => i -> i).toDF("i", "j")
         df.write.format("json").saveAsTable("jt")
@@ -1299,7 +1299,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("correctly handle CREATE VIEW IF NOT EXISTS") {
-    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("jt", "jt2") {
         sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
         sql("CREATE VIEW testView AS SELECT id FROM jt")
@@ -1316,7 +1316,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("correctly handle CREATE OR REPLACE VIEW") {
-    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("jt", "jt2") {
         sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
         sql("CREATE OR REPLACE VIEW testView AS SELECT id FROM jt")
@@ -1339,7 +1339,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("correctly handle ALTER VIEW") {
-    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("jt", "jt2") {
         sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
         sql("CREATE VIEW testView AS SELECT id FROM jt")
@@ -1357,7 +1357,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("create hive view for json table") {
     // json table is not hive-compatible, make sure the new flag fix it.
-    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("jt") {
         sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
         sql("CREATE VIEW testView AS SELECT id FROM jt")
@@ -1369,7 +1369,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("create hive view for partitioned parquet table") {
     // partitioned parquet table is not hive-compatible, make sure the new flag fix it.
-    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("parTable") {
         val df = Seq(1 -> "a").toDF("i", "j")
         df.write.format("parquet").partitionBy("i").saveAsTable("parTable")
@@ -1382,7 +1382,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("create hive view for joined tables") {
     // make sure the new flag can handle some complex cases like join and schema change.
-    withSQLConf(SQLConf.CANONICALIZE_VIEW.key -> "true") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("jt1", "jt2") {
         sqlContext.range(1, 10).toDF("id1").write.format("json").saveAsTable("jt1")
         sqlContext.range(1, 10).toDF("id2").write.format("json").saveAsTable("jt2")

@@ -537,7 +537,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       serde = None,
       viewText = Some(originalText))
 
-    // We need to keep the original SQL string so that if `spark.sql.canonicalizeView` is
+    // We need to keep the original SQL string so that if `spark.sql.nativeView` is
     // false, we can fall back to use hive native command later.
     // We can remove this when parser is configurable(can access SQLConf) in the future.
     val sql = context.getTokenRewriteStream
