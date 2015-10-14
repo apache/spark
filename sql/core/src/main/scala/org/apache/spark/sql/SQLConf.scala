@@ -186,6 +186,16 @@ private[spark] object SQLConf {
 
   import SQLConfEntry._
 
+  val ALLOW_MULTIPLE_CONTEXTS = booleanConf("spark.sql.allowMultipleContexts",
+    defaultValue = Some(true),
+    doc = "When set to true, creating multiple SQLContexts/HiveContexts is allowed." +
+      "When set to false, only one SQLContext/HiveContext is allowed to be created " +
+      "through the constructor (new SQLContexts/HiveContexts created through newSession " +
+      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once" +
+      "a SQLContext/HiveContext has been created, changing the value of this conf will not" +
+      "have effect.",
+    isPublic = true)
+
   val COMPRESS_CACHED = booleanConf("spark.sql.inMemoryColumnarStorage.compressed",
     defaultValue = Some(true),
     doc = "When set to true Spark SQL will automatically select a compression codec for each " +
@@ -318,7 +328,7 @@ private[spark] object SQLConf {
     doc = "When true, some predicates will be pushed down into the Hive metastore so that " +
           "unmatching partitions can be eliminated earlier.")
 
-  val CANONICALIZE_VIEW = booleanConf("spark.sql.canonicalizeView",
+  val NATIVE_VIEW = booleanConf("spark.sql.nativeView",
     defaultValue = Some(false),
     doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
           "Note that this function is experimental and should ony be used when you are using " +
@@ -479,7 +489,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  private[spark] def canonicalizeView: Boolean = getConf(CANONICALIZE_VIEW)
+  private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 

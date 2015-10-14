@@ -57,7 +57,9 @@ class TestShuffleMemoryManager
 }
 
 private class GrantEverythingMemoryManager extends MemoryManager {
-  override def acquireExecutionMemory(numBytes: Long): Long = numBytes
+  override def acquireExecutionMemory(
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
@@ -66,12 +68,6 @@ private class GrantEverythingMemoryManager extends MemoryManager {
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def releaseExecutionMemory(numBytes: Long): Unit = { }
-  override def releaseStorageMemory(numBytes: Long): Unit = { }
-  override def releaseStorageMemory(): Unit = { }
-  override def releaseUnrollMemory(numBytes: Long): Unit = { }
   override def maxExecutionMemory: Long = Long.MaxValue
   override def maxStorageMemory: Long = Long.MaxValue
-  override def executionMemoryUsed: Long = Long.MaxValue
-  override def storageMemoryUsed: Long = Long.MaxValue
 }
