@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
@@ -31,7 +33,7 @@ import org.apache.spark.sql.types.{ObjectType, StructType}
  * internal binary representation.
  */
 object ProductEncoder {
-  def apply[T <: Product : TypeTag]: Encoder[T] = {
+  def apply[T <: Product : TypeTag]: ClassEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val schema = ScalaReflection.schemaFor[T].dataType.asInstanceOf[StructType]
     val mirror = typeTag[T].mirror
@@ -39,7 +41,8 @@ object ProductEncoder {
 
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val extractExpressions = ScalaReflection.extractorsFor[T](inputObject)
-    new ClassEncoder[T](schema, extractExpressions, ClassTag[T](cls))
+    val constructExpression = ScalaReflection.constructorFor[T]
+    new ClassEncoder[T](schema, extractExpressions, constructExpression, ClassTag[T](cls))
   }
 }
 
@@ -54,14 +57,31 @@ object ProductEncoder {
 case class ClassEncoder[T](
     schema: StructType,
     extractExpressions: Seq[Expression],
+    constructExpression: Expression,
     clsTag: ClassTag[T])
   extends Encoder[T] {
 
   private val extractProjection = GenerateUnsafeProjection.generate(extractExpressions)
   private val inputRow = new GenericMutableRow(1)
 
+  private lazy val constructProjection = GenerateSafeProjection.generate(constructExpression :: Nil)
+  private val dataType = ObjectType(clsTag.runtimeClass)
+
   override def toRow(t: T): InternalRow = {
     inputRow(0) = t
     extractProjection(inputRow)
+  }
+
+  override def fromRow(row: InternalRow): T = {
+    constructProjection(row).get(0, dataType).asInstanceOf[T]
+  }
+
+  override def bind(schema: Seq[Attribute]): ClassEncoder[T] = {
+    val plan = Project(Alias(constructExpression, "object")() :: Nil, LocalRelation(schema))
+    val analyzedPlan = SimpleAnalyzer.execute(plan)
+    val resolvedExpression = analyzedPlan.expressions.head.children.head
+    val boundExpression = BindReferences.bindReference(resolvedExpression, schema)
+
+    copy(constructExpression = boundExpression)
   }
 }

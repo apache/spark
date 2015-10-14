@@ -42,10 +42,7 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
     nettyRpcHandler.receive(client, null, null)
 
-    when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40001))
-    nettyRpcHandler.receive(client, null, null)
-
-    verify(dispatcher, times(1)).broadcastMessage(Associated(RpcAddress("localhost", 12345)))
+    verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 12345)))
   }
 
   test("connectionTerminated") {
@@ -60,8 +57,9 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
     nettyRpcHandler.connectionTerminated(client)
 
-    verify(dispatcher, times(1)).broadcastMessage(Associated(RpcAddress("localhost", 12345)))
-    verify(dispatcher, times(1)).broadcastMessage(Disassociated(RpcAddress("localhost", 12345)))
+    verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 12345)))
+    verify(dispatcher, times(1)).postToAll(
+      RemoteProcessDisconnected(RpcAddress("localhost", 12345)))
   }
 
 }
