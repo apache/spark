@@ -107,14 +107,10 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         //
         // Exchange never configures its ShuffledRDDs with aggregators or key orderings, so we only
         // need to check whether the optimization is enabled and supported by our serializer.
-        //
-        // This optimization also applies to UnsafeShuffleManager (added in SPARK-7081).
         false
       } else {
-        // Spark's SortShuffleManager uses `ExternalSorter` to buffer records in memory. This code
-        // path is used both when SortShuffleManager is used and when UnsafeShuffleManager falls
-        // back to SortShuffleManager to perform a shuffle that the new fast path can't handle. In
-        // both cases, we must copy.
+        // Spark's SortShuffleManager uses `ExternalSorter` to buffer records in memory, so we must
+        // copy.
         true
       }
     } else if (shuffleManager.isInstanceOf[HashShuffleManager]) {
