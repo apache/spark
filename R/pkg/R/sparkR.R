@@ -163,18 +163,12 @@ sparkR.init <- function(
     sparkHome <- suppressWarnings(normalizePath(sparkHome))
   }
 
-  sparkEnvirMap <- new.env()
-  for (varname in names(sparkEnvir)) {
-    sparkEnvirMap[[varname]] <- sparkEnvir[[varname]]
-  }
+  sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
 
-  sparkExecutorEnvMap <- new.env()
-  if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
+  sparkExecutorEnvMap <- convertNamedListToEnv(sparkExecutorEnv)
+  if(is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
     sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <-
       paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
-  }
-  for (varname in names(sparkExecutorEnv)) {
-    sparkExecutorEnvMap[[varname]] <- sparkExecutorEnv[[varname]]
   }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
