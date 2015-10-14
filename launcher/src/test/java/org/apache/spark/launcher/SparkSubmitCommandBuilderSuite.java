@@ -174,7 +174,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
     } else {
-      launcher.childEnv.put("SPARK_CONF_DIR", "test/resources");
+      launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
+          + "/test/resources");
     }
 
     Map<String, String> env = new HashMap<String, String>();
