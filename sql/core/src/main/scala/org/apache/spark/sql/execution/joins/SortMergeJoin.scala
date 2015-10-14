@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.joins
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -28,10 +27,8 @@ import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 
 /**
- * :: DeveloperApi ::
  * Performs an sort merge join of two child relations.
  */
-@DeveloperApi
 case class SortMergeJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],

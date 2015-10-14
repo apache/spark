@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +31,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
@@ -40,9 +39,8 @@ object SparkPlan {
 }
 
 /**
- * :: DeveloperApi ::
+ * The base class for physical operators.
  */
-@DeveloperApi
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
   /**

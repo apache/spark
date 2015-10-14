@@ -24,12 +24,11 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonRunner, PythonBroadcast, PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -320,10 +319,8 @@ object EvaluatePython {
 }
 
 /**
- * :: DeveloperApi ::
  * Evaluates a [[PythonUDF]], appending the result to the end of the input tuple.
  */
-@DeveloperApi
 case class EvaluatePython(
     udf: PythonUDF,
     child: LogicalPlan,
@@ -337,7 +334,6 @@ case class EvaluatePython(
 }
 
 /**
- * :: DeveloperApi ::
  * Uses PythonRDD to evaluate a [[PythonUDF]], one partition of tuples at a time.
  *
  * Python evaluation works by sending the necessary (projected) input data via a socket to an
@@ -347,7 +343,6 @@ case class EvaluatePython(
  * we drain the queue to find the original input row. Note that if the Python process is way too
  * slow, this could lead to the queue growing unbounded and eventually run out of memory.
  */
-@DeveloperApi
 case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: SparkPlan)
   extends SparkPlan {
 

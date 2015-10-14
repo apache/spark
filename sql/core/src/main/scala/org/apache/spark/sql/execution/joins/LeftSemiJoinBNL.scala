@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -26,11 +25,9 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * :: DeveloperApi ::
  * Using BroadcastNestedLoopJoin to calculate left semi join result when there's no join keys
  * for hash join.
  */
-@DeveloperApi
 case class LeftSemiJoinBNL(
     streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
   extends BinaryNode {

@@ -17,18 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{InternalRow, optimizer}
-import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * :: DeveloperApi ::
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
  * access to the intermediate phases of query execution for developers.
  */
-@DeveloperApi
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
   val analyzer = sqlContext.analyzer
   val optimizer = sqlContext.optimizer

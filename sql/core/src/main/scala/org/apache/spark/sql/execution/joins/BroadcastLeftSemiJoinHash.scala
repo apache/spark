@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.{InternalAccumulator, TaskContext}
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -26,11 +25,9 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * :: DeveloperApi ::
  * Build the right table's join keys into a HashSet, and iteratively go through the left
  * table, to find the if join keys are in the Hash set.
  */
-@DeveloperApi
 case class BroadcastLeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Random
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -33,13 +33,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
-import org.apache.spark._
 
 /**
- * :: DeveloperApi ::
  * Performs a shuffle that will result in the desired `newPartitioning`.
  */
-@DeveloperApi
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
   override def nodeName: String = if (tungstenMode) "TungstenExchange" else "Exchange"

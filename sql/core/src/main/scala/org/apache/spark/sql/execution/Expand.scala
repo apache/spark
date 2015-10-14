@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -32,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartit
  * @param output      The output Schema
  * @param child       Child operator
  */
-@DeveloperApi
 case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],

@@ -21,7 +21,6 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.DataType
 
 private class ShuffledRowRDDPartition(val idx: Int) extends Partition {
   override val index: Int = idx
