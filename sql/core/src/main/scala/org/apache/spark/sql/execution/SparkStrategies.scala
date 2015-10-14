@@ -215,7 +215,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
             val (functionsWithDistinct, functionsWithoutDistinct) =
               aggregateExpressions.partition(_.isDistinct)
-            if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
+
+            val distinctColumnCount = functionsWithDistinct.map(_.aggregateFunction.children.collect {
+                case Cast(c, dt) => c
+                case other => other
+            }).distinct.length
+
+            if (distinctColumnCount > 1) {
               // This is a sanity check. We should not reach here when we have multiple distinct
               // column sets (aggregate.NewAggregation will not match).
               sys.error(

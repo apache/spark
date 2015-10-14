@@ -138,8 +138,12 @@ object Utils {
         }
       }.toSet.toSeq
       val functionsWithDistinct = aggregateExpressions.filter(_.isDistinct)
+      val distinctColumnCount = functionsWithDistinct.map(_.aggregateFunction.children.collect {
+          case Cast(c, dt) => c
+          case other => other
+      }).distinct.length
       val hasMultipleDistinctColumnSets =
-        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
+        if (distinctColumnCount > 1) {
           true
         } else {
           false
