@@ -1082,10 +1082,20 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(count(joined4), 4)
   expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
 
-  merged <- merge(df, df2, by.x="name", by.y="name", all.x=TRUE, all.y=TRUE)
+  merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
   expect_equal(count(merged), 4)
   expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
   expect_equal(collect(orderBy(merged, merged$name_x))$age[3], 19)
+
+  merged <- merge(df, df2, suffixes = c("-X","-Y"))
+  expect_equal(count(merged), 3)
+  expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name-X"))$age[1], 30)
+
+  merged <- merge(df, df2, by = "name", suffixes = c("-X","-Y"), sort = FALSE)
+  expect_equal(count(merged), 3)
+  expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name-Y"))$"name-X"[3], "Michael")
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
