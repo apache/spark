@@ -28,7 +28,10 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
+case class CartesianProduct(
+    left: SparkPlan,
+    right: SparkPlan,
+    buildSide: BuildSide) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override private[sql] lazy val metrics = Map(
@@ -50,11 +53,25 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
       row.copy()
     }
 
-    leftResults.cartesian(rightResults).mapPartitions { iter =>
+    val (smallResults, bigResults) = buildSide match {
+      case BuildRight => (rightResults, leftResults)
+      case BuildLeft => (leftResults, rightResults)
+    }
+
+    // Use the small size rdd as cartesian left rdd.
+    smallResults.cartesian(bigResults).mapPartitions { iter =>
       val joinedRow = new JoinedRow
-      iter.map { r =>
-        numOutputRows += 1
-        joinedRow(r._1, r._2)
+      buildSide match {
+        case BuildLeft =>
+          iter.map { r =>
+            numOutputRows += 1
+            joinedRow(r._1, r._2)
+          }
+        case BuildRight =>
+          iter.map { r =>
+            numOutputRows += 1
+            joinedRow(r._2, r._1)
+          }
       }
     }
   }
