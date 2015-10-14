@@ -135,4 +135,21 @@ class AnalysisSuite extends AnalysisTest {
     plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
     checkAnalysis(plan, plan)
   }
+
+  test("SPARK-10534: resolve attribute references in order by clause") {
+
+    val a = testRelation2.output.head
+    val c = testRelation2.output.toArray.apply(2)
+
+    val sortProjected = Floor(Cast(Floor(c), DoubleType))
+    val projected = Alias(a, "a")()
+    val plan = testRelation2.select(a).orderBy(SortOrder(Floor(Floor(c)), Ascending))
+
+    val expected =
+      Project(Seq(a),
+        Sort(Seq(SortOrder(sortProjected, Ascending)), true,
+          Project(Seq(a, c), testRelation2)))
+    checkAnalysis(plan, expected)
+
+  }
 }
