@@ -89,17 +89,28 @@ test_that("structType and structField", {
 test_that("create DataFrame from RDD", {
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
   df <- createDataFrame(sqlContext, rdd, list("a", "b"))
+  dfAsDF <- as.DataFrame(sqlContext, rdd, list("a", "b"))
   expect_is(df, "DataFrame")
+  expect_is(dfAsDF, "DataFrame")
   expect_equal(count(df), 10)
+  expect_equal(count(dfAsDF), 10)
   expect_equal(nrow(df), 10)
+  expect_equal(nrow(dfAsDF), 10)
   expect_equal(ncol(df), 2)
+  expect_equal(ncol(dfAsDF), 2)
   expect_equal(dim(df), c(10, 2))
+  expect_equal(dim(dfAsDF), c(10, 2))
   expect_equal(columns(df), c("a", "b"))
+  expect_equal(columns(dfAsDF), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
+  expect_equal(dtypes(dfAsDF), list(c("a", "int"), c("b", "string")))
 
   df <- createDataFrame(sqlContext, rdd)
+  dfAsDF <- as.DataFrame(sqlContext, rdd)
   expect_is(df, "DataFrame")
+  expect_is(dfAsDF, "DataFrame")
   expect_equal(columns(df), c("_1", "_2"))
+  expect_equal(columns(dfAsDF), c("_1", "_2"))
 
   schema <- structType(structField(x = "a", type = "integer", nullable = TRUE),
                         structField(x = "b", type = "string", nullable = TRUE))
@@ -130,9 +141,13 @@ test_that("create DataFrame from RDD", {
   schema <- structType(structField("name", "string"), structField("age", "integer"),
                        structField("height", "float"))
   df2 <- createDataFrame(sqlContext, df.toRDD, schema)
+  df2AsDF <- as.DataFrame(sqlContext, df.toRDD, schema)
   expect_equal(columns(df2), c("name", "age", "height"))
+  expect_equal(columns(df2AsDF), c("name", "age", "height"))
   expect_equal(dtypes(df2), list(c("name", "string"), c("age", "int"), c("height", "float")))
+  expect_equal(dtypes(df2AsDF), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(collect(where(df2, df2$name == "Bob")), c("Bob", 16, 176.5))
+  expect_equal(collect(where(df2AsDF, df2$name == "Bob")), c("Bob", 16, 176.5))
 
   localDF <- data.frame(name=c("John", "Smith", "Sarah"),
                         age=c(19, 23, 18),
@@ -1056,7 +1071,7 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(names(joined2), c("age", "name", "name", "test"))
   expect_equal(count(joined2), 3)
 
-  joined3 <- join(df, df2, df$name == df2$name, "right_outer")
+  joined3 <- join(df, df2, df$name == df2$name, "rightouter")
   expect_equal(names(joined3), c("age", "name", "name", "test"))
   expect_equal(count(joined3), 4)
   expect_true(is.na(collect(orderBy(joined3, joined3$age))$age[2]))
@@ -1067,11 +1082,34 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(count(joined4), 4)
   expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
 
+  joined5 <- join(df, df2, df$name == df2$name, "leftouter")
+  expect_equal(names(joined5), c("age", "name", "name", "test"))
+  expect_equal(count(joined5), 3)
+  expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[1]))
+
+  joined6 <- join(df, df2, df$name == df2$name, "inner")
+  expect_equal(names(joined6), c("age", "name", "name", "test"))
+  expect_equal(count(joined6), 3)
+
+  joined7 <- join(df, df2, df$name == df2$name, "leftsemi")
+  expect_equal(names(joined7), c("age", "name"))
+  expect_equal(count(joined7), 3)
+
+  joined8 <- join(df, df2, df$name == df2$name, "left_outer")
+  expect_equal(names(joined8), c("age", "name", "name", "test"))
+  expect_equal(count(joined8), 3)
+  expect_true(is.na(collect(orderBy(joined8, joined8$age))$age[1]))
+
+  joined9 <- join(df, df2, df$name == df2$name, "right_outer")
+  expect_equal(names(joined9), c("age", "name", "name", "test"))
+  expect_equal(count(joined9), 4)
+  expect_true(is.na(collect(orderBy(joined9, joined9$age))$age[2]))
+
   merged <- select(merge(df, df2, df$name == df2$name, "outer"),
                    alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(merged), c("newAge", "name", "test"))
   expect_equal(count(merged), 4)
-  expect_equal(collect(orderBy(merged, joined4$name))$newAge[3], 24)
+  expect_equal(collect(orderBy(merged, merged$name))$newAge[3], 24)
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
@@ -1378,6 +1416,16 @@ test_that("freqItems() on a DataFrame", {
   expect_identical(result[[2]], list(list(-1, -99)))
 })
 
+test_that("sampleBy() on a DataFrame", {
+  l <- lapply(c(0:99), function(i) { as.character(i %% 3) })
+  df <- createDataFrame(sqlContext, l, "key")
+  fractions <- list("0" = 0.1, "1" = 0.2)
+  sample <- sampleBy(df, "key", fractions, 0)
+  result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
+  expect_identical(as.list(result[1, ]), list(key = "0", count = 2))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 10))
+})
+
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
   expect_equal(grepl("Table Not Found: blah", retError), TRUE)
@@ -1388,6 +1436,26 @@ test_that("Method as.data.frame as a synonym for collect()", {
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
+})
+
+test_that("attach() on a DataFrame", {
+  df <- jsonFile(sqlContext, jsonPath)
+  expect_error(age)
+  attach(df)
+  expect_is(age, "DataFrame")
+  expected_age <- data.frame(age = c(NA, 30, 19))
+  expect_equal(head(age), expected_age)
+  stat <- summary(age)
+  expect_equal(collect(stat)[5, "age"], "30")
+  age <- age$age + 1
+  expect_is(age, "Column")
+  rm(age)
+  stat2 <- summary(age)
+  expect_equal(collect(stat2)[5, "age"], "30")
+  detach("df")
+  stat3 <- summary(df[, "age"])
+  expect_equal(collect(stat3)[5, "age"], "30")
+  expect_error(age)
 })
 
 unlink(parquetPath)

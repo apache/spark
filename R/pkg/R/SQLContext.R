@@ -64,21 +64,23 @@ infer_type <- function(x) {
   }
 }
 
-#' Create a DataFrame from an RDD
+#' Create a DataFrame
 #'
-#' Converts an RDD to a DataFrame by infer the types.
+#' Converts R data.frame or list into DataFrame.
 #'
 #' @param sqlContext A SQLContext
 #' @param data An RDD or list or data.frame
 #' @param schema a list of column names or named list (StructType), optional
 #' @return an DataFrame
+#' @rdname createDataFrame
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-#' df <- createDataFrame(sqlContext, rdd)
+#' df1 <- as.DataFrame(sqlContext, iris)
+#' df2 <- as.DataFrame(sqlContext, list(3,4,5,6))
+#' df3 <- createDataFrame(sqlContext, iris)
 #' }
 
 # TODO(davies): support sampling and infer type from NA
@@ -149,6 +151,13 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
   sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
                      srdd, schema$jobj, sqlContext)
   dataFrame(sdf)
+}
+
+#' @rdname createDataFrame
+#' @aliases createDataFrame
+#' @export
+as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
+  createDataFrame(sqlContext, data, schema, samplingRatio)
 }
 
 # toDF

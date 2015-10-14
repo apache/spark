@@ -74,6 +74,10 @@ public class UnsafeArrayData extends ArrayData {
     assert ordinal < numElements : "ordinal (" + ordinal + ") should < " + numElements;
   }
 
+  public Object[] array() {
+    throw new UnsupportedOperationException("Only supported on GenericArrayData.");
+  }
+
   /**
    * Construct a new UnsafeArrayData. The resulting UnsafeArrayData won't be usable until
    * `pointTo()` has been called, since the value returned by this constructor is equivalent
