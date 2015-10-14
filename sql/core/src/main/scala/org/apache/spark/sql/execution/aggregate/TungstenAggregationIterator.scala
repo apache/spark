@@ -610,8 +610,25 @@ class TungstenAggregationIterator(
       // When needsProcess is false, the format of input rows is groupingKey + aggregation buffer.
       // We need to project the aggregation buffer part from an input row.
       val buffer = createNewAggregationBuffer()
-      // The originalInputAttributes are using inputAggBufferAttributes. So, we need to use
-      // allAggregateFunctions.flatMap(_.inputAggBufferAttributes).
+      // In principle, we could use `allAggregateFunctions.flatMap(_.inputAggBufferAttributes)` to
+      // extract the aggregation buffer. In practice, however, we extract it positionally by relying
+      // on it being present at the end of the row. The reason for this relates to how the different
+      // aggregates handle input binding.
+      //
+      // ImperativeAggregate uses field numbers and field number offsets to manipulate its buffers,
+      // so its correctness does not rely on attribute bindings. When we fall back to sort-based
+      // aggregation, these field number offsets (mutableAggBufferOffset and inputAggBufferOffset)
+      // need to be updated and any internal state in the aggregate functions themselves must be
+      // reset, so we call withNewMutableAggBufferOffset and withNewInputAggBufferOffset to reset
+      // this state and update the offsets.
+      //
+      // The updated ImperativeAggregate will have different attribute ids for its
+      // aggBufferAttributes and inputAggBufferAttributes. This isn't a problem for the actual
+      // ImperativeAggregate evaluation, but it means that
+      // `allAggregateFunctions.flatMap(_.inputAggBufferAttributes)` will no longer match the
+      // attributes in `originalInputAttributes`, which is why we can't use those attributes here.
+      //
+      // For more details, see the discussion on PR #9038.
       val bufferExtractor = newMutableProjection(
         originalInputAttributes.drop(initialInputBufferOffset),
         originalInputAttributes)()

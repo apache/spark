@@ -150,6 +150,10 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
  * We need to perform similar field number arithmetic when merging multiple intermediate
  * aggregate buffers together in `merge()` (in this case, use `inputAggBufferOffset` when accessing
  * the input buffer).
+ *
+ * Correct ImperativeAggregate evaluation depends on the correctness of `mutableAggBufferOffset` and
+ * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
+ * and `inputAggBufferAttributes`.
  */
 abstract class ImperativeAggregate extends AggregateFunction2 {
 
@@ -176,6 +180,7 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
 
   /**
    * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   * This new copy's attributes may have different ids than the original.
    */
   def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate
 
@@ -208,6 +213,7 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
 
   /**
    * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   * This new copy's attributes may have different ids than the original.
    */
   def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate
 
