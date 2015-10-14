@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.util
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.{functions, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.test.SharedSQLContext
