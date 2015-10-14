@@ -231,8 +231,9 @@ abstract class BaseRelation {
    * of Spark SQL should leave this as true.
    *
    * @since 1.4.0
+   * @deprecated As of 1.6.0, replaced by `!outputsInternalRows`.
    */
-  @deprecated("Use outputsInternalRows() instead", "1.6.0")
+  @deprecated("Use !outputsInternalRows", "1.6.0")
   def needConversion: Boolean = true
 
   def outputsInternalRows: Boolean = !needConversion
