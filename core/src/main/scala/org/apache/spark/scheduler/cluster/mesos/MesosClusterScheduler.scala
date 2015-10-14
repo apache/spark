@@ -357,9 +357,10 @@ private[spark] class MesosClusterScheduler(
     val appJar = CommandInfo.URI.newBuilder()
       .setValue(desc.jarUrl.stripPrefix("file:").stripPrefix("local:")).build()
     val builder = CommandInfo.newBuilder().addUris(appJar)
-    val entries =
-      (conf.getOption("spark.executor.extraLibraryPath").toList ++
-        desc.command.libraryPathEntries)
+    val entries = conf.getOption("spark.executor.extraLibraryPath")
+      .map(path => Seq(path) ++ desc.command.libraryPathEntries)
+      .getOrElse(desc.command.libraryPathEntries)
+
     val prefixEnv = if (!entries.isEmpty) {
       Utils.libraryPathEnvPrefix(entries)
     } else {
@@ -445,8 +446,7 @@ private[spark] class MesosClusterScheduler(
   private class ResourceOffer(
       val offerId: OfferID,
       val slaveId: SlaveID,
-      var resources: JList[Resource],
-      var used: Boolean) {
+      var resources: JList[Resource]) {
     override def toString(): String = {
       s"Offer id: ${offerId}, resources: ${resources}"
     }
@@ -460,13 +460,13 @@ private[spark] class MesosClusterScheduler(
   private def scheduleTasks(
       candidates: Seq[MesosDriverDescription],
       afterLaunchCallback: (String) => Boolean,
-      currentOffers: JList[ResourceOffer],
-      tasks: mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]): JList[ResourceOffer] = {
+      currentOffers: List[ResourceOffer],
+      tasks: mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]): Unit = {
     for (submission <- candidates) {
       val driverCpu = submission.cores
       val driverMem = submission.mem
       logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem")
-      val offerOption = currentOffers.asScala.find { o =>
+      val offerOption = currentOffers.find { o =>
         getResource(o.resources, "cpus") >= driverCpu &&
         getResource(o.resources, "mem") >= driverMem
       }
@@ -475,12 +475,11 @@ private[spark] class MesosClusterScheduler(
           s"cpu: $driverCpu, mem: $driverMem")
       } else {
         val offer = offerOption.get
-        offer.used = true
         val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
         val (remainingResources, cpuResourcesToUse) =
           partitionResources(offer.resources, "cpus", driverCpu)
         val (finalResources, memResourcesToUse) =
-          partitionResources(remainingResources, "mem", driverMem)
+          partitionResources(remainingResources.asJava, "mem", driverMem)
         val commandInfo = buildDriverCommand(submission)
         val appName = submission.schedulerProperties("spark.app.name")
         val taskInfo = TaskInfo.newBuilder()
@@ -488,9 +487,9 @@ private[spark] class MesosClusterScheduler(
           .setName(s"Driver for $appName")
           .setSlaveId(offer.slaveId)
           .setCommand(commandInfo)
-          .addAllResources(cpuResourcesToUse)
-          .addAllResources(memResourcesToUse)
-        offer.resources = finalResources
+          .addAllResources(cpuResourcesToUse.asJava)
+          .addAllResources(memResourcesToUse.asJava)
+        offer.resources = finalResources.asJava
         submission.schedulerProperties.get("spark.mesos.executor.docker.image").foreach { image =>
           val container = taskInfo.getContainerBuilder()
           val volumes = submission.schedulerProperties
@@ -514,7 +513,6 @@ private[spark] class MesosClusterScheduler(
         afterLaunchCallback(submission.submissionId)
       }
     }
-    currentOffers
   }
 
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
@@ -522,9 +520,10 @@ private[spark] class MesosClusterScheduler(
     val tasks = new mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]()
     val currentTime = new Date()
 
-    var currentOffers = offers.asScala.map {
-      o => new ResourceOffer(o.getId, o.getSlaveId, o.getResourcesList, false)
-    }.toList.asJava
+    val currentOffers = offers.asScala.map {
+      o => new ResourceOffer(o.getId, o.getSlaveId, o.getResourcesList)
+    }.toList
+
     stateLock.synchronized {
       // We first schedule all the supervised drivers that are ready to retry.
       // This list will be empty if none of the drivers are marked as supervise.
@@ -532,14 +531,14 @@ private[spark] class MesosClusterScheduler(
         d.retryState.get.nextRetry.before(currentTime)
       }
 
-      currentOffers = scheduleTasks(
+      scheduleTasks(
         copyBuffer(driversToRetry),
         removeFromPendingRetryDrivers,
         currentOffers,
         tasks)
 
       // Then we walk through the queued drivers and try to schedule them.
-      currentOffers = scheduleTasks(
+      scheduleTasks(
         copyBuffer(queuedDrivers),
         removeFromQueuedDrivers,
         currentOffers,
@@ -548,7 +547,10 @@ private[spark] class MesosClusterScheduler(
     tasks.foreach { case (offerId, taskInfos) =>
       driver.launchTasks(Collections.singleton(offerId), taskInfos.asJava)
     }
-    currentOffers.asScala.filter(!_.used).foreach(o => driver.declineOffer(o.offerId))
+
+    for (o <- currentOffers if !tasks.contains(o.offerId)) {
+      driver.declineOffer(o.offerId)
+    }
   }
 
   private def copyBuffer(
