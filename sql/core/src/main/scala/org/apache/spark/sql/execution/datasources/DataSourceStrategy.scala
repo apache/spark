@@ -62,7 +62,22 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _))
         if t.partitionSpec.partitionColumns.nonEmpty =>
-      val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
+      // We divide the filter expressions into 3 parts
+      val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
+
+      // TODO this is case-sensitive
+      // Only prunning the partition keys
+      val partitionFilters =
+        filters.filter(_.references.map(_.name).toSet.subsetOf(partitionColumnNames))
+
+      // Only pushes down predicates that do not reference partition keys.
+      val pushedFilters =
+        filters.filter(_.references.map(_.name).toSet.intersect(partitionColumnNames).isEmpty)
+
+      // Predicates with both partition keys and attributes
+      val combineFilters = filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
+
+      val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
       logInfo {
         val total = t.partitionSpec.partitions.length
@@ -71,21 +86,16 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
       }
 
-      // Only pushes down predicates that do not reference partition columns.
-      val pushedFilters = {
-        val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
-        filters.filter { f =>
-          val referencedColumnNames = f.references.map(_.name).toSet
-          referencedColumnNames.intersect(partitionColumnNames).isEmpty
-        }
-      }
-
-      buildPartitionedTableScan(
+      val scan = buildPartitionedTableScan(
         l,
         projects,
         pushedFilters,
         t.partitionSpec.partitionColumns,
-        selectedPartitions) :: Nil
+        selectedPartitions)
+
+      combineFilters
+        .reduceLeftOption(expressions.And)
+        .map(execution.Filter(_, scan)).getOrElse(scan) :: Nil
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _)) =>
