@@ -23,6 +23,7 @@ export("setJobGroup",
 exportClasses("DataFrame")
 
 exportMethods("arrange",
+              "attach",
               "cache",
               "collect",
               "columns",
@@ -228,7 +229,8 @@ exportMethods("agg")
 export("sparkRSQL.init",
        "sparkRHive.init")
 
-export("cacheTable",
+export("as.DataFrame",
+       "cacheTable",
        "clearCache",
        "createDataFrame",
        "createExternalTable",
