@@ -428,7 +428,8 @@ class HiveServer2Hook(BaseHook):
                 cur.execute(hql)
                 schema = cur.getSchema()
                 with open(csv_filepath, 'w') as f:
-                    writer = csv.writer(f, delimiter=delimiter)
+                    writer = csv.writer(f, delimiter=delimiter,
+                        lineterminator='\n')
                     writer.writerow([c['columnName'] for c in cur.getSchema()])
                     i = 0
                     while cur.hasMoreRows:
