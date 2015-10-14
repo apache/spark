@@ -28,6 +28,7 @@ _operators = {
     'mysql_to_hive': ['MySqlToHiveTransfer'],
     'postgres_operator': ['PostgresOperator'],
     'sensors': [
+        'BaseSensorOperator',
         'SqlSensor',
         'ExternalTaskSensor',
         'HivePartitionSensor',
