@@ -68,7 +68,7 @@ class HiveToMySqlTransfer(BaseOperator):
 
         if self.bulk_load:
             tmpfile = NamedTemporaryFile()
-            hive.to_csv(self.sql, tmpfile.name)
+            hive.to_csv(self.sql, tmpfile.name, delimiter='\\t')
         else:
             results = hive.get_records(self.sql)
 
