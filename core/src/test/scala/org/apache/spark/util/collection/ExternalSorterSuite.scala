@@ -17,17 +17,15 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler._
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 
 
 class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
+  import TestUtils.{assertNotSpilled, assertSpilled}
 
   testWithMultipleSer("empty data stream")(emptyDataStream)
 
@@ -252,16 +250,6 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
-   * Run some code involving jobs submitted to the given context and assert that the jobs spilled.
-   */
-  private def assertSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
-    val spillListener = new SpillListener
-    sc.addSparkListener(spillListener)
-    body
-    assert(spillListener.numSpilledStages > 0, s"expected $identifier to spill, but did not")
-  }
-
-  /**
    * Run a test multiple times, each time with a different serializer.
    */
   private def testWithMultipleSer(
@@ -280,7 +268,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
    * =========================================== */
 
   private def emptyDataStream(conf: SparkConf) {
-    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    conf.set("spark.shuffle.manager", "sort")
     sc = new SparkContext("local", "test", conf)
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
@@ -312,7 +300,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   private def fewElementsPerPartition(conf: SparkConf) {
-    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    conf.set("spark.shuffle.manager", "sort")
     sc = new SparkContext("local", "test", conf)
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
@@ -377,7 +365,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   private def testSpillingInLocalCluster(conf: SparkConf, numReduceTasks: Int) {
     val size = 5000
-    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    conf.set("spark.shuffle.manager", "sort")
     conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 4).toString)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 
@@ -516,6 +504,8 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sorter.insertAll((0 until size).iterator.map { i => (i / 4, i) })
     if (withSpilling) {
       assert(sorter.numSpills > 0, "sorter did not spill")
+    } else {
+      assert(sorter.numSpills === 0, "sorter spilled")
     }
     val results = sorter.partitionedIterator.map { case (p, vs) => (p, vs.toSet) }.toSet
     val expected = (0 until 3).map { p =>
@@ -586,37 +576,23 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("sorting updates peak execution memory") {
+    val spillThreshold = 1000
     val conf = createSparkConf(loadDefaults = false, kryo = false)
       .set("spark.shuffle.manager", "sort")
+      .set("spark.shuffle.spill.numElementsForceSpillThreshold", spillThreshold.toString)
     sc = new SparkContext("local", "test", conf)
     // Avoid aggregating here to make sure we're not also using ExternalAppendOnlyMap
-    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sorter") {
-      sc.parallelize(1 to 1000, 2).repartition(100).count()
+    // No spilling
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sorter without spilling") {
+      assertNotSpilled(sc, "verify peak memory") {
+        sc.parallelize(1 to spillThreshold / 2, 2).repartition(100).count()
+      }
     }
-  }
-}
-
-
-/**
- * A [[SparkListener]] that detects whether spills have occured in Spark jobs.
- */
-private class SpillListener extends SparkListener {
-  private val stageIdToTaskMetrics = new mutable.HashMap[Int, ArrayBuffer[TaskMetrics]]
-  private val spilledStageIds = new mutable.HashSet[Int]
-
-  def numSpilledStages: Int = spilledStageIds.size
-
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-    stageIdToTaskMetrics.getOrElseUpdate(
-      taskEnd.stageId, new ArrayBuffer[TaskMetrics]) += taskEnd.taskMetrics
-  }
-
-  override def onStageCompleted(stageComplete: SparkListenerStageCompleted): Unit = {
-    val stageId = stageComplete.stageInfo.stageId
-    val metrics = stageIdToTaskMetrics.remove(stageId).toSeq.flatten
-    val spilled = metrics.map(_.memoryBytesSpilled).sum > 0
-    if (spilled) {
-      spilledStageIds += stageId
+    // With spilling
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sorter with spilling") {
+      assertSpilled(sc, "verify peak memory") {
+        sc.parallelize(1 to spillThreshold * 3, 2).repartition(100).count()
+      }
     }
   }
 }
