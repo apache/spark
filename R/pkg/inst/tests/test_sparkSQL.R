@@ -1416,6 +1416,16 @@ test_that("freqItems() on a DataFrame", {
   expect_identical(result[[2]], list(list(-1, -99)))
 })
 
+test_that("sampleBy() on a DataFrame", {
+  l <- lapply(c(0:99), function(i) { as.character(i %% 3) })
+  df <- createDataFrame(sqlContext, l, "key")
+  fractions <- list("0" = 0.1, "1" = 0.2)
+  sample <- sampleBy(df, "key", fractions, 0)
+  result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
+  expect_identical(as.list(result[1, ]), list(key = "0", count = 2))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 10))
+})
+
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
   expect_equal(grepl("Table Not Found: blah", retError), TRUE)

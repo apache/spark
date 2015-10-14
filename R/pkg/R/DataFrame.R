@@ -1831,17 +1831,15 @@ setMethod("fillna",
               if (length(colNames) == 0 || !all(colNames != "")) {
                 stop("value should be an a named list with each name being a column name.")
               }
-
-              # Convert to the named list to an environment to be passed to JVM
-              valueMap <- new.env()
-              for (col in colNames) {
-                # Check each item in the named list is of valid type
-                v <- value[[col]]
+              # Check each item in the named list is of valid type
+              lapply(value, function(v) {
                 if (!(class(v) %in% c("integer", "numeric", "character"))) {
                   stop("Each item in value should be an integer, numeric or charactor.")
                 }
-                valueMap[[col]] <- v
-              }
+              })
+
+              # Convert to the named list to an environment to be passed to JVM
+              valueMap <- convertNamedListToEnv(value)
 
               # When value is a named list, caller is expected not to pass in cols
               if (!is.null(cols)) {
