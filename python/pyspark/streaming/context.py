@@ -403,10 +403,9 @@ class StreamingContext(object):
         jrest = [d._jdstream for d in dstreams[1:]]
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
 
-    def addStreamingListener(self):
+    def addStreamingListener(self, streamingListener):
         """
-
-        :return:
+        Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+        receiving system events related to streaming.
         """
-        self._jssc.addStreamingListener(StreamingListener())
-        #pass
+        self._jssc.addStreamingListener(streamingListener)
