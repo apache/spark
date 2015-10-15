@@ -140,7 +140,7 @@ class AnalysisSuite extends AnalysisTest {
     val a = testRelation2.output(0)
     val c = testRelation2.output(2)
 
-    val plan = testRelation2.select(c).orderBy(Floor(a).asc)
+    val plan = testRelation2.select('c).orderBy(Floor('a).asc)
     val expected = testRelation2.select(c, a).orderBy(Floor(a.cast(DoubleType)).asc).select(c)
 
     checkAnalysis(plan, expected)
