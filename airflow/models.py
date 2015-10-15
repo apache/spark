@@ -1513,14 +1513,14 @@ class BaseOperator(object):
         nested set of collections, it will traverse the structure and render
         all strings in it.
         '''
-        rt = self.render_template_from_field
+        rt = self.render_template
         if isinstance(content, basestring):
             result = jinja_env.from_string(content).render(**context)
         elif isinstance(content, (list, tuple)):
-            result = [rt(e, context, jinja_env) for e in content]
+            result = [rt(e, context) for e in content]
         elif isinstance(content, dict):
             result = {
-                k: rt(v, context, jinja_env)
+                k: rt(v, context)
                 for k, v in list(content.items())}
         else:
             param_type = type(content)
