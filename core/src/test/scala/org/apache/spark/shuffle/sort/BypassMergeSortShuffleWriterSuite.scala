@@ -111,9 +111,10 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockManager,
       new HashPartitioner(7),
       shuffleWriteMetrics,
-      serializer
+      serializer,
+      false
     )
-    writer.insertAll(Iterator.empty)
+    writer.insertAll(Iterator.empty, false)
     val partitionLengths = writer.writePartitionedFile(shuffleBlockId, taskContext, outputFile)
     assert(partitionLengths.sum === 0)
     assert(outputFile.exists())
@@ -133,9 +134,10 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockManager,
       new HashPartitioner(7),
       shuffleWriteMetrics,
-      serializer
+      serializer,
+      false
     )
-    writer.insertAll(records)
+    writer.insertAll(records, false)
     assert(temporaryFilesCreated.nonEmpty)
     val partitionLengths = writer.writePartitionedFile(shuffleBlockId, taskContext, outputFile)
     assert(partitionLengths.sum === outputFile.length())
@@ -152,7 +154,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockManager,
       new HashPartitioner(7),
       shuffleWriteMetrics,
-      serializer
+      serializer,
+      false
     )
     intercept[SparkException] {
       writer.insertAll((0 until 100000).iterator.map(i => {
@@ -160,7 +163,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
           throw new SparkException("Intentional failure")
         }
         (i, i)
-      }))
+      }), false)
     }
     assert(temporaryFilesCreated.nonEmpty)
     writer.stop()

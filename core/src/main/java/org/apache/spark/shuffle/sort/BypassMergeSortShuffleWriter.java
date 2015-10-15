@@ -17,27 +17,28 @@
 
 package org.apache.spark.shuffle.sort;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-
-import scala.Product2;
-import scala.Tuple2;
-import scala.collection.Iterator;
-
 import com.google.common.io.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
-import org.apache.spark.storage.*;
+import org.apache.spark.storage.BlockId;
+import org.apache.spark.storage.BlockManager;
+import org.apache.spark.storage.DiskBlockObjectWriter;
+import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import scala.Product2;
+import scala.Tuple2;
+import scala.collection.Iterator;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 
 /**
  * This class implements sort-based shuffle's hash-style shuffle fallback path. This write path
@@ -73,6 +74,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
   private final Partitioner partitioner;
   private final ShuffleWriteMetrics writeMetrics;
   private final Serializer serializer;
+  private final boolean dropKeys;
 
   /** Array of file writers, one for each partition */
   private DiskBlockObjectWriter[] partitionWriters;
@@ -82,7 +84,8 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
       BlockManager blockManager,
       Partitioner partitioner,
       ShuffleWriteMetrics writeMetrics,
-      Serializer serializer) {
+      Serializer serializer,
+      boolean dropKeys) {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
@@ -91,10 +94,11 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
     this.partitioner = partitioner;
     this.writeMetrics = writeMetrics;
     this.serializer = serializer;
+    this.dropKeys = dropKeys;
   }
 
   @Override
-  public void insertAll(Iterator<Product2<K, V>> records) throws IOException {
+  public void insertAll(Iterator<Product2<K, V>> records, boolean dropKeys) throws IOException {
     assert (partitionWriters == null);
     if (!records.hasNext()) {
       return;
@@ -118,7 +122,12 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
     while (records.hasNext()) {
       final Product2<K, V> record = records.next();
       final K key = record._1();
-      partitionWriters[partitioner.getPartition(key)].write(key, record._2());
+
+      if(dropKeys) {
+        partitionWriters[partitioner.getPartition(key)].write(record._2());
+      } else {
+        partitionWriters[partitioner.getPartition(key)].write(key, record._2());
+      }
     }
 
     for (DiskBlockObjectWriter writer : partitionWriters) {

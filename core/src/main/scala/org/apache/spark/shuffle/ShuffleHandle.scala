@@ -25,4 +25,15 @@ import org.apache.spark.annotation.DeveloperApi
  * @param shuffleId ID of the shuffle
  */
 @DeveloperApi
-abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}
+abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
+  private var _dropKeys: Boolean = false
+
+  def setDropKeys(dropKeys: Boolean): ShuffleHandle = {
+    this._dropKeys = dropKeys
+    this
+  }
+
+  def dropKeys: Boolean = {
+    _dropKeys
+  }
+}

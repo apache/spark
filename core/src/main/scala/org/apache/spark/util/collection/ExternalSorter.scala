@@ -91,7 +91,8 @@ private[spark] class ExternalSorter[K, V, C](
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
-    serializer: Option[Serializer] = None)
+    serializer: Option[Serializer] = None,
+    dropKeys: Boolean = false)
   extends Logging
   with Spillable[WritablePartitionedPairCollection[K, C]]
   with SortShuffleFileWriter[K, V] {
@@ -192,7 +193,7 @@ private[spark] class ExternalSorter[K, V, C](
    */
   private[spark] def numSpills: Int = spills.size
 
-  override def insertAll(records: Iterator[Product2[K, V]]): Unit = {
+  override def insertAll(records: Iterator[Product2[K, V]], dropKeys: Boolean): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high
     val shouldCombine = aggregator.isDefined
 
@@ -670,7 +671,7 @@ private[spark] class ExternalSorter[K, V, C](
     if (spills.isEmpty) {
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer
-      val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
+      val it = collection.destructiveSortedWritablePartitionedIterator(comparator, dropKeys)
       while (it.hasNext) {
         val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
           context.taskMetrics.shuffleWriteMetrics.get)
@@ -689,7 +690,11 @@ private[spark] class ExternalSorter[K, V, C](
           val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
             context.taskMetrics.shuffleWriteMetrics.get)
           for (elem <- elements) {
-            writer.write(elem._1, elem._2)
+            if (dropKeys) {
+              writer.write(elem._2)
+            } else {
+              writer.write(elem._1, elem._2)
+            }
           }
           writer.commitAndClose()
           val segment = writer.fileSegment()
