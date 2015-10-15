@@ -658,8 +658,10 @@ object SparkSubmit {
       case e: NoClassDefFoundError =>
         e.printStackTrace(printStream)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
+          // scalastyle:off println
           printStream.println(s"Failed to load hive class.")
           printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
+          // scalastyle:on println
         }
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
     }
