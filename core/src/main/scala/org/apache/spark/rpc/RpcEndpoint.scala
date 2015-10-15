@@ -145,5 +145,4 @@ private[spark] trait RpcEndpoint {
  * However, there is no guarantee that the same thread will be executing the same
  * [[ThreadSafeRpcEndpoint]] for different messages.
  */
-private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint {
-}
+private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint

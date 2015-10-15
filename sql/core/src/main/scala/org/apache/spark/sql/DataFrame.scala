@@ -1344,7 +1344,9 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def head(n: Int): Array[Row] = limit(n).collect()
+  def head(n: Int): Array[Row] = withCallback("head", limit(n)) { df =>
+    df.collect(needCallback = false)
+  }
 
   /**
    * Returns the first row.
@@ -1414,8 +1416,18 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collect(): Array[Row] = withNewExecutionId {
-    queryExecution.executedPlan.executeCollectPublic()
+  def collect(): Array[Row] = collect(needCallback = true)
+
+  private def collect(needCallback: Boolean): Array[Row] = {
+    def execute(): Array[Row] = withNewExecutionId {
+      queryExecution.executedPlan.executeCollectPublic()
+    }
+
+    if (needCallback) {
+      withCallback("collect", this)(_ => execute())
+    } else {
+      execute()
+    }
   }
 
   /**
@@ -1423,8 +1435,10 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collectAsList(): java.util.List[Row] = withNewExecutionId {
-    java.util.Arrays.asList(rdd.collect() : _*)
+  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
+    withNewExecutionId {
+      java.util.Arrays.asList(rdd.collect() : _*)
+    }
   }
 
   /**
@@ -1432,7 +1446,9 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def count(): Long = groupBy().count().collect().head.getLong(0)
+  def count(): Long = withCallback("count", groupBy().count()) { df =>
+    df.collect(needCallback = false).head.getLong(0)
+  }
 
   /**
    * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
@@ -1658,7 +1674,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.jdbc()", "1.4.0")
   def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
-    val w = if (overwrite) write.mode(SaveMode.Overwrite) else write
+    val w = if (overwrite) write.mode(SaveMode.Overwrite) else write.mode(SaveMode.Append)
     w.jdbc(url, table, new Properties)
   }
 
@@ -1934,6 +1950,24 @@ class DataFrame private[sql](
    */
   private[sql] def withNewExecutionId[T](body: => T): T = {
     SQLExecution.withNewExecutionId(sqlContext, queryExecution)(body)
+  }
+
+  /**
+   * Wrap a DataFrame action to track the QueryExecution and time cost, then report to the
+   * user-registered callback functions.
+   */
+  private def withCallback[T](name: String, df: DataFrame)(action: DataFrame => T) = {
+    try {
+      val start = System.nanoTime()
+      val result = action(df)
+      val end = System.nanoTime()
+      sqlContext.listenerManager.onSuccess(name, df.queryExecution, end - start)
+      result
+    } catch {
+      case e: Exception =>
+        sqlContext.listenerManager.onFailure(name, df.queryExecution, e)
+        throw e
+    }
   }
 
   ////////////////////////////////////////////////////////////////////////////

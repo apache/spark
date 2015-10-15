@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -71,6 +72,10 @@ public class UnsafeArrayData extends ArrayData {
   private void assertIndexIsValid(int ordinal) {
     assert ordinal >= 0 : "ordinal (" + ordinal + ") should >= 0";
     assert ordinal < numElements : "ordinal (" + ordinal + ") should < " + numElements;
+  }
+
+  public Object[] array() {
+    throw new UnsupportedOperationException("Only supported on GenericArrayData.");
   }
 
   /**
@@ -145,6 +150,8 @@ public class UnsafeArrayData extends ArrayData {
       return getArray(ordinal);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof UserDefinedType) {
+      return get(ordinal, ((UserDefinedType)dataType).sqlType());
     } else {
       throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
@@ -304,6 +311,15 @@ public class UnsafeArrayData extends ArrayData {
 
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert(buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + sizeInBytes);
   }
 
   @Override

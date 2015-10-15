@@ -446,17 +446,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.2</td>
-  <td>
-    Fraction of Java heap to use for aggregation and cogroups during shuffles.
-    At any given time, the collective size of
-    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
-    begin to spill to disk. If spills are often, consider increasing this value at the expense of
-    <code>spark.storage.memoryFraction</code>.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
@@ -712,6 +701,76 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### Memory Management
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.memory.fraction</code></td>
+  <td>0.75</td>
+  <td>
+    Fraction of the heap space used for execution and storage. The lower this is, the more
+    frequently spills and cached data eviction occur. The purpose of this config is to set
+    aside memory for internal metadata, user data structures, and imprecise size estimation
+    in the case of sparse, unusually large records.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.storageFraction</code></td>
+  <td>0.5</td>
+  <td>
+    T​he size of the storage region within the space set aside by
+    <code>s​park.memory.fraction</code>. This region is not statically reserved, but dynamically
+    allocated as cache requests come in. ​Cached data may be evicted only if total storage exceeds
+    this region.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.useLegacyMode</code></td>
+  <td>false</td>
+  <td>
+    ​Whether to enable the legacy memory management mode used in Spark 1.5 and before.
+    The legacy mode rigidly partitions the heap space into fixed-size regions,
+    potentially leading to excessive spilling if the application was not tuned.
+    The following deprecated memory fraction configurations are not read unless this is enabled:
+    <code>spark.shuffle.memoryFraction</code><br>
+    <code>spark.storage.memoryFraction</code><br>
+    <code>spark.storage.unrollFraction</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.memoryFraction</code></td>
+  <td>0.2</td>
+  <td>
+    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
+    Fraction of Java heap to use for aggregation and cogroups during shuffles.
+    At any given time, the collective size of
+    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
+    begin to spill to disk. If spills are often, consider increasing this value at the expense of
+    <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.memoryFraction</code></td>
+  <td>0.6</td>
+  <td>
+    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
+    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
+    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
+    increase it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.unrollFraction</code></td>
+  <td>0.2</td>
+  <td>
+    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
+    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
+    This is dynamically allocated by dropping existing blocks when there is not enough free
+    storage space to unroll the new block in its entirety.
+  </td>
+</tr>
+</table>
+
 #### Execution Behavior
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -825,30 +884,12 @@ Apart from these, the following properties are also available, and may be useful
     data may need to be rewritten to pre-existing output directories during checkpoint recovery.</td>
 </tr>
 <tr>
-  <td><code>spark.storage.memoryFraction</code></td>
-  <td>0.6</td>
-  <td>
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
-    increase it if you configure your own old generation size.
-  </td>
-</tr>
-<tr>
   <td><code>spark.storage.memoryMapThreshold</code></td>
   <td>2m</td>
   <td>
     Size of a block above which Spark memory maps when reading a block from disk.
     This prevents Spark from memory mapping very small blocks. In general, memory
     mapping has high overhead for blocks close to or below the page size of the operating system.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.storage.unrollFraction</code></td>
-  <td>0.2</td>
-  <td>
-    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
-    This is dynamically allocated by dropping existing blocks when there is not enough free
-    storage space to unroll the new block in its entirety.
   </td>
 </tr>
 <tr>

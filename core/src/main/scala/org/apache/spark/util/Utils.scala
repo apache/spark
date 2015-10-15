@@ -1895,6 +1895,7 @@ private[spark] object Utils extends Logging {
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
    * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
    */
   def startServiceOnPort[T](
       startPort: Int,
