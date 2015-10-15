@@ -23,6 +23,8 @@ import java.math.MathContext
 
 import scala.util.Random
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -84,6 +86,7 @@ object RandomDataGenerator {
    * random data generator is defined for that data type. The generated values will use an external
    * representation of the data type; for example, the random generator for [[DateType]] will return
    * instances of [[java.sql.Date]] and the generator for [[StructType]] will return a [[Row]].
+   * For a [[UserDefinedType]] for a class X, an instance of class X is returned.
    *
    * @param dataType the type to generate values for
    * @param nullable whether null values should be generated
@@ -105,8 +108,37 @@ object RandomDataGenerator {
         arr
       })
       case BooleanType => Some(() => rand.nextBoolean())
-      case DateType => Some(() => new java.sql.Date(rand.nextInt()))
-      case TimestampType => Some(() => new java.sql.Timestamp(rand.nextLong()))
+      case DateType =>
+        val generator =
+          () => {
+            var milliseconds = rand.nextLong() % 253402329599999L
+            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+            // for "0001-01-01 00:00:00.000000". We need to find a
+            // number that is greater or equals to this number as a valid timestamp value.
+            while (milliseconds < -62135740800000L) {
+              // 253402329599999L is the the number of milliseconds since
+              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+              milliseconds = rand.nextLong() % 253402329599999L
+            }
+            DateTimeUtils.toJavaDate((milliseconds / DateTimeUtils.MILLIS_PER_DAY).toInt)
+          }
+        Some(generator)
+      case TimestampType =>
+        val generator =
+          () => {
+            var milliseconds = rand.nextLong() % 253402329599999L
+            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+            // for "0001-01-01 00:00:00.000000". We need to find a
+            // number that is greater or equals to this number as a valid timestamp value.
+            while (milliseconds < -62135740800000L) {
+              // 253402329599999L is the the number of milliseconds since
+              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+              milliseconds = rand.nextLong() % 253402329599999L
+            }
+            // DateTimeUtils.toJavaTimestamp takes microsecond.
+            DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
+          }
+        Some(generator)
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
         val ns = rand.nextLong()
@@ -155,6 +187,27 @@ object RandomDataGenerator {
         if (maybeFieldGenerators.forall(_.isDefined)) {
           val fieldGenerators: Seq[() => Any] = maybeFieldGenerators.map(_.get)
           Some(() => Row.fromSeq(fieldGenerators.map(_.apply())))
+        } else {
+          None
+        }
+      }
+      case udt: UserDefinedType[_] => {
+        val maybeSqlTypeGenerator = forType(udt.sqlType, nullable, seed)
+        // Because random data generator at here returns scala value, we need to
+        // convert it to catalyst value to call udt's deserialize.
+        val toCatalystType = CatalystTypeConverters.createToCatalystConverter(udt.sqlType)
+
+        if (maybeSqlTypeGenerator.isDefined) {
+          val sqlTypeGenerator = maybeSqlTypeGenerator.get
+          val generator = () => {
+            val generatedScalaValue = sqlTypeGenerator.apply()
+            if (generatedScalaValue == null) {
+              null
+            } else {
+              udt.deserialize(toCatalystType(generatedScalaValue))
+            }
+          }
+          Some(generator)
         } else {
           None
         }

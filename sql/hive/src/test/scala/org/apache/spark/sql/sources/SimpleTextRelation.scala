@@ -68,7 +68,9 @@ class SimpleTextOutputWriter(path: String, context: TaskAttemptContext) extends 
     new AppendingTextOutputFormat(new Path(path)).getRecordWriter(context)
 
   override def write(row: Row): Unit = {
-    val serialized = row.toSeq.map(_.toString).mkString(",")
+    val serialized = row.toSeq.map { v =>
+      if (v == null) "" else v.toString
+    }.mkString(",")
     recordWriter.write(null, new Text(serialized))
   }
 
@@ -112,7 +114,8 @@ class SimpleTextRelation(
     val fields = dataSchema.map(_.dataType)
 
     sparkContext.textFile(inputStatuses.map(_.getPath).mkString(",")).map { record =>
-      Row(record.split(",").zip(fields).map { case (value, dataType) =>
+      Row(record.split(",", -1).zip(fields).map { case (v, dataType) =>
+        val value = if (v == "") null else v
         // `Cast`ed values are always of Catalyst types (i.e. UTF8String instead of String, etc.)
         val catalystValue = Cast(Literal(value), dataType).eval()
         // Here we're converting Catalyst values to Scala values to test `needsConversion`

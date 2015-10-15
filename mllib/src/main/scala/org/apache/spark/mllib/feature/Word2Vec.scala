@@ -590,12 +590,10 @@ object Word2VecModel extends Loader[Word2VecModel] {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
-
-      val dataArray = dataFrame.select("word", "vector").collect()
-
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
 
+      val dataArray = dataFrame.select("word", "vector").collect()
       val word2VecMap = dataArray.map(i => (i.getString(0), i.getSeq[Float](1).toArray)).toMap
       new Word2VecModel(word2VecMap)
     }

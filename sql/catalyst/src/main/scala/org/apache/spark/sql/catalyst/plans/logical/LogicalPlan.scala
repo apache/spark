@@ -135,16 +135,25 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     val input = children.flatMap(_.output)
+    def cleanExpression(e: Expression) = e match {
+      case a: Alias =>
+        // As the root of the expression, Alias will always take an arbitrary exprId, we need
+        // to erase that for equality testing.
+        val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
+        BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
+      case other => BindReferences.bindReference(other, input, allowFailures = true)
+    }
+
     productIterator.map {
       // Children are checked using sameResult above.
       case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+      case e: Expression => cleanExpression(e)
       case s: Option[_] => s.map {
-        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+        case e: Expression => cleanExpression(e)
         case other => other
       }
       case s: Seq[_] => s.map {
-        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+        case e: Expression => cleanExpression(e)
         case other => other
       }
       case other => other

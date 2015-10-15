@@ -1,0 +1,65 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.rpc.netty
+
+import java.net.InetSocketAddress
+
+import io.netty.channel.Channel
+import org.mockito.Mockito._
+import org.mockito.Matchers._
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.client.{TransportResponseHandler, TransportClient}
+import org.apache.spark.rpc._
+
+class NettyRpcHandlerSuite extends SparkFunSuite {
+
+  val env = mock(classOf[NettyRpcEnv])
+  when(env.deserialize(any(classOf[Array[Byte]]))(any())).
+    thenReturn(RequestMessage(RpcAddress("localhost", 12345), null, null, false))
+
+  test("receive") {
+    val dispatcher = mock(classOf[Dispatcher])
+    val nettyRpcHandler = new NettyRpcHandler(dispatcher, env)
+
+    val channel = mock(classOf[Channel])
+    val client = new TransportClient(channel, mock(classOf[TransportResponseHandler]))
+    when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
+    nettyRpcHandler.receive(client, null, null)
+
+    verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 12345)))
+  }
+
+  test("connectionTerminated") {
+    val dispatcher = mock(classOf[Dispatcher])
+    val nettyRpcHandler = new NettyRpcHandler(dispatcher, env)
+
+    val channel = mock(classOf[Channel])
+    val client = new TransportClient(channel, mock(classOf[TransportResponseHandler]))
+    when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
+    nettyRpcHandler.receive(client, null, null)
+
+    when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
+    nettyRpcHandler.connectionTerminated(client)
+
+    verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 12345)))
+    verify(dispatcher, times(1)).postToAll(
+      RemoteProcessDisconnected(RpcAddress("localhost", 12345)))
+  }
+
+}

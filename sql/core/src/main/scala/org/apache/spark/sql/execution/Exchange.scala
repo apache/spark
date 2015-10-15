@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
+import java.util.Random
+
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -31,13 +33,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
-import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 
 /**
- * :: DeveloperApi ::
  * Performs a shuffle that will result in the desired `newPartitioning`.
  */
-@DeveloperApi
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
   override def nodeName: String = if (tungstenMode) "TungstenExchange" else "Exchange"
@@ -130,7 +129,6 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
 
   private val serializer: Serializer = {
-    val rowDataTypes = child.output.map(_.dataType).toArray
     if (tungstenMode) {
       new UnsafeRowSerializer(child.output.size)
     } else {
@@ -141,6 +139,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
+      case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
@@ -162,7 +161,15 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
-    def getPartitionKeyExtractor(): InternalRow => InternalRow = newPartitioning match {
+    def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
+      case RoundRobinPartitioning(numPartitions) =>
+        // Distributes elements evenly across output partitions, starting from a random partition.
+        var position = new Random(TaskContext.get().partitionId()).nextInt(numPartitions)
+        (row: InternalRow) => {
+          // The HashPartitioner will handle the `mod` by the number of partitions
+          position += 1
+          position
+        }
       case HashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
