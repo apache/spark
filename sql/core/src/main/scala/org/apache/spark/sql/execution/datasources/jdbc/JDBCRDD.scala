@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -324,12 +325,13 @@ private[sql] class JDBCRDD(
   case object StringConversion extends JDBCConversion
   case object TimestampConversion extends JDBCConversion
   case object BinaryConversion extends JDBCConversion
+  case class ArrayConversion(elementConversion: JDBCConversion) extends JDBCConversion
 
   /**
-   * Maps a StructType to a type tag list.
+   * Maps a StructField and its associated DataType to a type tag.
    */
-  def getConversions(schema: StructType): Array[JDBCConversion] = {
-    schema.fields.map(sf => sf.dataType match {
+  def getConversion(sf: StructField, dataType: DataType): JDBCConversion = {
+    dataType match {
       case BooleanType => BooleanConversion
       case DateType => DateConversion
       case DecimalType.Fixed(p, s) => DecimalConversion(p, s)
@@ -341,8 +343,16 @@ private[sql] class JDBCRDD(
       case StringType => StringConversion
       case TimestampType => TimestampConversion
       case BinaryType => BinaryConversion
+      case ArrayType(d, x) => ArrayConversion(getConversion(sf, d))
       case _ => throw new IllegalArgumentException(s"Unsupported field $sf")
-    }).toArray
+    }
+  }
+
+  /**
+   * Maps a StructType to a type tag list.
+   */
+  def getConversions(schema: StructType): Array[JDBCConversion] = {
+    schema.fields.map(sf => getConversion(sf, sf.dataType))
   }
 
   /**
@@ -375,6 +385,10 @@ private[sql] class JDBCRDD(
     val conversions = getConversions(schema)
     val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
 
+    def convert_date(dateVal: java.sql.Date): Int = DateTimeUtils.fromJavaDate(dateVal)
+    def convert_decimal(decimal: java.math.BigDecimal, p: Int, s: Int): Decimal = Decimal(decimal, p, s)
+    def convert_timestamp(ts: java.sql.Timestamp): SQLTimestamp = DateTimeUtils.fromJavaTimestamp(ts)
+
     def getNext(): InternalRow = {
       if (rs.next()) {
         var i = 0
@@ -386,7 +400,7 @@ private[sql] class JDBCRDD(
               // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
               val dateVal = rs.getDate(pos)
               if (dateVal != null) {
-                mutableRow.setInt(i, DateTimeUtils.fromJavaDate(dateVal))
+                mutableRow.setInt(i, convert_date(dateVal))
               } else {
                 mutableRow.update(i, null)
               }
@@ -403,7 +417,7 @@ private[sql] class JDBCRDD(
               if (decimalVal == null) {
                 mutableRow.update(i, null)
               } else {
-                mutableRow.update(i, Decimal(decimalVal, p, s))
+                mutableRow.update(i, convert_decimal(decimalVal, p, s))
               }
             case DoubleConversion => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion => mutableRow.setFloat(i, rs.getFloat(pos))
@@ -414,21 +428,42 @@ private[sql] class JDBCRDD(
             case TimestampConversion =>
               val t = rs.getTimestamp(pos)
               if (t != null) {
-                mutableRow.setLong(i, DateTimeUtils.fromJavaTimestamp(t))
+                mutableRow.setLong(i, convert_timestamp(t))
               } else {
                 mutableRow.update(i, null)
               }
             case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
-            case BinaryLongConversion => {
+            case BinaryLongConversion =>
               val bytes = rs.getBytes(pos)
               var ans = 0L
               var j = 0
               while (j < bytes.size) {
                 ans = 256 * ans + (255 & bytes(j))
-                j = j + 1;
+                j = j + 1
               }
               mutableRow.setLong(i, ans)
-            }
+
+            case ArrayConversion(BinaryLongConversion) => throw new IllegalArgumentException(s"Unsupported array element conversion $i")
+            case ArrayConversion(subConvert) =>
+              val a = rs.getArray(pos)
+              if (a != null) {
+                val genericArrayData = a.getArray match {
+                  case x: Array[java.math.BigDecimal] =>
+                    subConvert match {
+                      case DecimalConversion(p, s) => new GenericArrayData(x.map(convert_decimal(_, p, s)))
+                      case _ => throw new IllegalArgumentException("Incompatible decimal conversions")
+                    }
+                  case x: Array[java.sql.Timestamp] => new GenericArrayData(x.map(convert_timestamp))
+                  case x: Array[java.lang.String] => new GenericArrayData(x.map(UTF8String.fromString))
+                  case x: Array[java.sql.Date] => new GenericArrayData(x.map(convert_date))
+                  case x: Array[Any] => new GenericArrayData(x)
+                  case _ => throw new IllegalArgumentException(s"Unsupported arraytype $a")
+                }
+                mutableRow.update(i, genericArrayData)
+              } else {
+                mutableRow.update(i, null)
+              }
+
           }
           if (rs.wasNull) mutableRow.setNullAt(i)
           i = i + 1

@@ -81,6 +81,24 @@ abstract class JdbcDialect {
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
+  def getCommonJDBCType(dataType: DataType): Option[JdbcType] = {
+    dataType match {
+      case IntegerType => Some(JdbcType("INTEGER", java.sql.Types.INTEGER))
+      case LongType => Some(JdbcType("BIGINT", java.sql.Types.BIGINT))
+      case DoubleType => Some(JdbcType("DOUBLE PRECISION", java.sql.Types.DOUBLE))
+      case FloatType => Some(JdbcType("REAL", java.sql.Types.FLOAT))
+      case ShortType => Some(JdbcType("INTEGER", java.sql.Types.SMALLINT))
+      case ByteType => Some(JdbcType("BYTE", java.sql.Types.TINYINT))
+      case BooleanType => Some(JdbcType("BIT(1)", java.sql.Types.BIT))
+      case StringType => Some(JdbcType("TEXT", java.sql.Types.CLOB))
+      case BinaryType => Some(JdbcType("BLOB", java.sql.Types.BLOB))
+      case TimestampType => Some(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
+      case DateType => Some(JdbcType("DATE", java.sql.Types.DATE))
+      case DecimalType(p, s) => Some(JdbcType(s"DECIMAL($p,$s)", java.sql.Types.DECIMAL))
+      case _ => None
+    }
+  }
+
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
@@ -207,6 +225,20 @@ case object PostgresDialect extends JdbcDialect {
       Some(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
       Some(StringType)
+    } else if (sqlType == Types.ARRAY) {
+      typeName match {
+        case "_bit" => Some(ArrayType(BinaryType))
+        case "_int1" => Some(ArrayType(ByteType))
+        case "_int2" => Some(ArrayType(ShortType))
+        case "_int4" => Some(ArrayType(IntegerType))
+        case "_int8" => Some(ArrayType(LongType))
+        case "_float4" => Some(ArrayType(FloatType))
+        case "_float8" => Some(ArrayType(DoubleType))
+        case "_text" | "_char" | "_varchar" => Some(ArrayType(StringType))
+        case "_timestamp" | "timestamptz" => Some(ArrayType(TimestampType))
+        case "_date" => Some(ArrayType(DateType))
+        case _ => throw new IllegalArgumentException(s"Unhandled postgres array type $typeName")
+      }
     } else None
   }
 
@@ -214,6 +246,13 @@ case object PostgresDialect extends JdbcDialect {
     case StringType => Some(JdbcType("TEXT", java.sql.Types.CHAR))
     case BinaryType => Some(JdbcType("BYTEA", java.sql.Types.BINARY))
     case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
+    case ArrayType(t) =>
+      val subtype = getJDBCType(t).map(_.databaseTypeDefinition).getOrElse(
+        getCommonJDBCType(t).map(_.databaseTypeDefinition).getOrElse(
+          throw new IllegalArgumentException(s"Unexpected JDBC array subtype $t")
+        )
+      )
+      Some(JdbcType(s"$subtype[]", java.sql.Types.ARRAY))
     case _ => None
   }
 
