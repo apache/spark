@@ -272,15 +272,11 @@ abstract class AbstractCommandBuilder {
 
   Map<String, String> getEffectiveConfig() throws IOException {
     if (effectiveConfig == null) {
-      if (propertiesFile == null) {
-        effectiveConfig = conf;
-      } else {
-        effectiveConfig = new HashMap<>(conf);
-        Properties p = loadPropertiesFile();
-        for (String key : p.stringPropertyNames()) {
-          if (!effectiveConfig.containsKey(key)) {
-            effectiveConfig.put(key, p.getProperty(key));
-          }
+      effectiveConfig = new HashMap<>(conf);
+      Properties p = loadPropertiesFile();
+      for (String key : p.stringPropertyNames()) {
+        if (!effectiveConfig.containsKey(key)) {
+          effectiveConfig.put(key, p.getProperty(key));
         }
       }
     }
