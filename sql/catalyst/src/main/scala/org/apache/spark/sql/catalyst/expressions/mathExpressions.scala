@@ -55,7 +55,7 @@ abstract class LeafMathExpression(c: Double, name: String)
 abstract class UnaryMathExpression(val f: Double => Double, name: String)
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(DoubleType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
@@ -153,13 +153,28 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
 case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
-  override def dataType: DataType = LongType
-  protected override def nullSafeEval(input: Any): Any = {
-    f(input.asInstanceOf[Double]).toLong
+  override def dataType: DataType = child.dataType match {
+    case dt @ DecimalType.Fixed(_, 0) => dt
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType.bounded(precision - scale + 1, 0)
+    case _ => LongType
+  }
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, DecimalType))
+
+  protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case DoubleType => f(input.asInstanceOf[Double]).toLong
+    case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+    child.dataType match {
+      case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
+      case DecimalType.Fixed(precision, scale) =>
+        defineCodeGen(ctx, ev, c => s"$c.ceil()")
+      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+    }
   }
 }
 
@@ -205,13 +220,28 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
-  override def dataType: DataType = LongType
-  protected override def nullSafeEval(input: Any): Any = {
-    f(input.asInstanceOf[Double]).toLong
+  override def dataType: DataType = child.dataType match {
+    case dt @ DecimalType.Fixed(_, 0) => dt
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType.bounded(precision - scale + 1, 0)
+    case _ => LongType
+  }
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, DecimalType))
+
+  protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case DoubleType => f(input.asInstanceOf[Double]).toLong
+    case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+    child.dataType match {
+      case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
+      case DecimalType.Fixed(precision, scale) =>
+        defineCodeGen(ctx, ev, c => s"$c.floor()")
+      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+    }
   }
 }
 
