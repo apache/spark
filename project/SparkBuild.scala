@@ -33,13 +33,17 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
-    sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingAkka, streamingFlume, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags) =
+  val nonStreamingProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
+    sql, networkCommon, networkShuffle, launcher, unsafe, testTags) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
-      "streaming-akka", "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
+      "sql", "network-common", "network-shuffle", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
+
+  val streamingProjects@Seq(streaming, streamingFlumeSink, streamingAkka, streamingFlume, streamingKafka,
+    streamingMqtt, streamingTwitter, streamingZeromq) =
+    Seq("streaming", "streaming-flume-sink", "streaming-akka", "streaming-flume", "streaming-kafka",
+      "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
+
+  val allProjects = nonStreamingProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(yarn, yarnStable, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
