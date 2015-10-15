@@ -43,9 +43,14 @@ private[spark] trait Spillable[C] extends Logging {
   private[this] val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
 
   // Initial threshold for the size of a collection before we start tracking its memory usage
-  // Exposed for testing
+  // For testing only
   private[this] val initialMemoryThreshold: Long =
     SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
+
+  // Force this collection to spill when there are this many elements in memory
+  // For testing only
+  private[this] val numElementsForceSpillThreshold: Long =
+    SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MaxValue)
 
   // Threshold for this collection's size in bytes before we start tracking its memory usage
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
@@ -69,27 +74,27 @@ private[spark] trait Spillable[C] extends Logging {
    * @return true if `collection` was spilled to disk; false otherwise
    */
   protected def maybeSpill(collection: C, currentMemory: Long): Boolean = {
+    var shouldSpill = false
     if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
       val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
       myMemoryThreshold += granted
-      if (myMemoryThreshold <= currentMemory) {
-        // We were granted too little memory to grow further (either tryToAcquire returned 0,
-        // or we already had more memory than myMemoryThreshold); spill the current collection
-        _spillCount += 1
-        logSpillage(currentMemory)
-
-        spill(collection)
-
-        _elementsRead = 0
-        // Keep track of spills, and release memory
-        _memoryBytesSpilled += currentMemory
-        releaseMemoryForThisThread()
-        return true
-      }
+      // If we were granted too little memory to grow further (either tryToAcquire returned 0,
+      // or we already had more memory than myMemoryThreshold), spill the current collection
+      shouldSpill = currentMemory >= myMemoryThreshold
     }
-    false
+    shouldSpill = shouldSpill || _elementsRead > numElementsForceSpillThreshold
+    // Actually spill
+    if (shouldSpill) {
+      _spillCount += 1
+      logSpillage(currentMemory)
+      spill(collection)
+      _elementsRead = 0
+      _memoryBytesSpilled += currentMemory
+      releaseMemoryForThisThread()
+    }
+    shouldSpill
   }
 
   /**
