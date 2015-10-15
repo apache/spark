@@ -121,12 +121,12 @@ public class LauncherServerSuite extends BaseSuite {
 
   @Test
   public void testTimeout() throws Exception {
-    final long TEST_TIMEOUT = 10L;
-
     ChildProcAppHandle handle = null;
     TestClient client = null;
     try {
-      SparkLauncher.setConfig(SparkLauncher.CHILD_CONNECTION_TIMEOUT, String.valueOf(TEST_TIMEOUT));
+      // LauncherServer will immediately close the server-side socket when the timeout is set
+      // to 0.
+      SparkLauncher.setConfig(SparkLauncher.CHILD_CONNECTION_TIMEOUT, "0");
 
       handle = LauncherServer.newAppHandle();
 
@@ -134,12 +134,29 @@ public class LauncherServerSuite extends BaseSuite {
         LauncherServer.getServerInstance().getPort());
       client = new TestClient(s);
 
-      Thread.sleep(TEST_TIMEOUT * 10);
-      try {
-        client.send(new Hello(handle.getSecret(), "1.4.0"));
-        fail("Expected exception caused by connection timeout.");
-      } catch (IllegalStateException e) {
-        // Expected.
+      // Try a few times since the client-side socket may not reflect the server-side close
+      // immediately.
+      boolean helloSent = false;
+      int maxTries = 10;
+      for (int i = 0; i < maxTries; i++) {
+        try {
+          if (!helloSent) {
+            client.send(new Hello(handle.getSecret(), "1.4.0"));
+            helloSent = true;
+          } else {
+            client.send(new SetAppId("appId"));
+          }
+          fail("Expected exception caused by connection timeout.");
+        } catch (IllegalStateException | IOException e) {
+          // Expected.
+          break;
+        } catch (AssertionError e) {
+          if (i < maxTries - 1) {
+            Thread.sleep(100);
+          } else {
+            throw new AssertionError("Test failed after " + maxTries + " attempts.", e);
+          }
+        }
       }
     } finally {
       SparkLauncher.launcherConfig.remove(SparkLauncher.CHILD_CONNECTION_TIMEOUT);
