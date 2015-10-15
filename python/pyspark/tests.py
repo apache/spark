@@ -1884,8 +1884,8 @@ class ContextTests(unittest.TestCase):
         self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
 
     def test_get_or_create(self):
-        sc = SparkContext.getOrCreate()
-        self.assertTrue(SparkContext.getOrCreate() is sc)
+        with SparkContext.getOrCreate() as sc:
+            self.assertTrue(SparkContext.getOrCreate() is sc)
 
     def test_stop(self):
         sc = SparkContext()
