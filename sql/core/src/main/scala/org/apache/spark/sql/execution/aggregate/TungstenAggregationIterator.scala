@@ -89,7 +89,7 @@ class TungstenAggregationIterator(
     numInputRows: LongSQLMetric,
     numOutputRows: LongSQLMetric,
     dataSize: LongSQLMetric,
-    spilledSize: LongSQLMetric)
+    spillSize: LongSQLMetric)
   extends Iterator[UnsafeRow] with Logging {
 
   // The parent partition iterator, to be initialized later in `start`
@@ -112,9 +112,9 @@ class TungstenAggregationIterator(
       s"$allAggregateExpressions should have no more than 2 kinds of modes.")
   }
 
-  // Remember spilled data size of this task before execute this operator so that we can
+  // Remember spill data size of this task before execute this operator so that we can
   // figure out how many bytes we spilled for this operator.
-  private val spilledSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
+  private val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
 
   //
   // The modes of AggregateExpressions. Right now, we can handle the following mode:
@@ -849,7 +849,7 @@ class TungstenAggregationIterator(
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
         val peakMemory = Math.max(mapMemory, sorterMemory)
         dataSize += peakMemory
-        spilledSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spilledSizeBefore
+        spillSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore
         TaskContext.get().internalMetricsToAccumulators(
           InternalAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemory)
       }

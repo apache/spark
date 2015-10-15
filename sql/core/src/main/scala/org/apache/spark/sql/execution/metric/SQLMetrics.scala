@@ -101,11 +101,11 @@ private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialVa
 
 private[sql] object SQLMetrics {
 
-  def createLongMetric(
-     sc: SparkContext,
-     name: String,
-     stringValue: Seq[Long] => String,
-     initialValue: Long): LongSQLMetric = {
+  private def createLongMetric(
+      sc: SparkContext,
+      name: String,
+      stringValue: Seq[Long] => String,
+      initialValue: Long): LongSQLMetric = {
     val param = new LongSQLMetricParam(stringValue, initialValue)
     val acc = new LongSQLMetric(name, param)
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(acc))
@@ -117,12 +117,12 @@ private[sql] object SQLMetrics {
   }
 
   /**
-   * Create a metric to report the size information(including total, min, med, max) like data size,
-   * spilled size, etc.
+   * Create a metric to report the size information (including total, min, med, max) like data size,
+   * spill size, etc.
    */
   def createSizeMetric(sc: SparkContext, name: String): LongSQLMetric = {
     val stringValue = (values: Seq[Long]) => {
-      // This is a work around for https://issues.apache.org/jira/browse/SPARK-11013
+      // This is a workaround for SPARK-11013.
       // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
       // it at the end of task and the value will be at least 0.
       val validValues = values.filter(_ >= 0)
@@ -137,6 +137,9 @@ private[sql] object SQLMetrics {
       }
       s"\n$sum ($min, $med, $max)"
     }
+    // The final result of this metric in physical operator UI may looks like:
+    // data size total (min, med, max):
+    // 100GB (100MB, 1GB, 10GB)
     createLongMetric(sc, s"$name total (min, med, max)", stringValue, -1L)
   }
 

@@ -96,14 +96,14 @@ case class TungstenSort(
 
   override private[sql] lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "spilledSize" -> SQLMetrics.createSizeMetric(sparkContext, "spilled size"))
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val schema = child.schema
     val childOutput = child.output
 
     val dataSize = longMetric("dataSize")
-    val spilledSize = longMetric("spilledSize")
+    val spillSize = longMetric("spillSize")
 
     /**
      * Set up the sorter in each partition before computing the parent partition.
@@ -139,14 +139,14 @@ case class TungstenSort(
         partitionIndex: Int,
         sorter: UnsafeExternalRowSorter,
         parentIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
-      // Remember spilled data size of this task before execute this operator so that we can
+      // Remember spill data size of this task before execute this operator so that we can
       // figure out how many bytes we spilled for this operator.
-      val spilledSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
+      val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
 
       val sortedIterator = sorter.sort(parentIterator.asInstanceOf[Iterator[UnsafeRow]])
 
       dataSize += sorter.getPeakMemoryUsage
-      spilledSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spilledSizeBefore
+      spillSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore
 
       taskContext.internalMetricsToAccumulators(
         InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
