@@ -322,13 +322,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def floor: Decimal = if (scale == 0) this else {
     val value = this.clone()
-    value.changePrecision(precision, 0, ROUND_FLOOR)
+    value.changePrecision(
+      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_FLOOR)
     value
   }
 
   def ceil: Decimal = if (scale == 0) this else {
     val value = this.clone()
-    value.changePrecision(precision, 0, ROUND_CEILING)
+    value.changePrecision(
+      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_CEILING)
     value
   }
 }
