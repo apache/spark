@@ -46,6 +46,15 @@ class AccumulableInfo private[spark] (
 }
 
 object AccumulableInfo {
+  def apply(
+      id: Long,
+      name: String,
+      update: Option[String],
+      value: String,
+      internal: Boolean): AccumulableInfo = {
+    new AccumulableInfo(id, name, update, value, internal)
+  }
+
   def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
     new AccumulableInfo(id, name, update, value, internal = false)
   }
