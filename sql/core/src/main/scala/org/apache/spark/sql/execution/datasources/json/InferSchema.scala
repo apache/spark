@@ -23,6 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 private[sql] object InferSchema {
   /**
@@ -48,8 +49,10 @@ private[sql] object InferSchema {
       iter.map { row =>
         try {
           val parser = factory.createParser(row)
-          parser.nextToken()
-          inferField(parser)
+          Utils.withResource(parser, () => {
+            parser.nextToken()
+            inferField(parser)
+          })
         } catch {
           case _: JsonParseException =>
             StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))

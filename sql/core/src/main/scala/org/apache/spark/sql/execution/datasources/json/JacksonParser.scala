@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 private[sql] object JacksonParser {
   def apply(
@@ -87,8 +88,7 @@ private[sql] object JacksonParser {
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()
         val generator = factory.createGenerator(writer, JsonEncoding.UTF8)
-        generator.copyCurrentStructure(parser)
-        generator.close()
+        Utils.withResource(generator, () => generator.copyCurrentStructure(parser))
         UTF8String.fromBytes(writer.toByteArray)
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, FloatType) =>
@@ -246,22 +246,25 @@ private[sql] object JacksonParser {
       iter.flatMap { record =>
         try {
           val parser = factory.createParser(record)
-          parser.nextToken()
+          Utils.withResource(parser, () => {
+            parser.nextToken()
 
-          convertField(factory, parser, schema) match {
-            case null => failedRecord(record)
-            case row: InternalRow => row :: Nil
-            case array: ArrayData =>
-              if (array.numElements() == 0) {
-                Nil
-              } else {
-                array.toArray[InternalRow](schema)
-              }
-            case _ =>
-              sys.error(
-                s"Failed to parse record $record. Please make sure that each line of the file " +
-                  "(or each string in the RDD) is a valid JSON object or an array of JSON objects.")
-          }
+            convertField(factory, parser, schema) match {
+              case null => failedRecord(record)
+              case row: InternalRow => row :: Nil
+              case array: ArrayData =>
+                if (array.numElements() == 0) {
+                  Nil
+                } else {
+                  array.toArray[InternalRow](schema)
+                }
+              case _ =>
+                sys.error(
+                  s"Failed to parse record $record. Please make sure that each line of the file " +
+                    "(or each string in the RDD) is a valid JSON object or " +
+                    "an array of JSON objects.")
+            }
+          })
         } catch {
           case _: JsonProcessingException =>
             failedRecord(record)
