@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.joins
 import scala.concurrent._
 import scala.concurrent.duration._
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,13 +30,11 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.{InternalAccumulator, TaskContext}
 
 /**
- * :: DeveloperApi ::
  * Performs a outer hash join for two child relations.  When the output RDD of this operator is
  * being constructed, a Spark job is asynchronously started to calculate the values for the
  * broadcasted relation.  This data is then placed in a Spark broadcast variable.  The streamed
  * relation is not shuffled.
  */
-@DeveloperApi
 case class BroadcastHashOuterJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],

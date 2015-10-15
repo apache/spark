@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,7 +27,6 @@ import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
-@DeveloperApi
 case class NewOutput(output: Seq[Attribute], child: SparkPlan) extends UnaryNode {
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -39,10 +37,6 @@ case class NewOutput(output: Seq[Attribute], child: SparkPlan) extends UnaryNode
   override protected def doExecute(): RDD[InternalRow] = child.execute()
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -101,10 +95,6 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 }
 
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
@@ -136,8 +126,8 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
 }
 
 /**
- * :: DeveloperApi ::
  * Sample the dataset.
+ *
  * @param lowerBound Lower-bound of the sampling probability (usually 0.0)
  * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
  *                   will be ub - lb.
@@ -145,7 +135,6 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
  * @param seed the random seed
  * @param child the SparkPlan
  */
-@DeveloperApi
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
@@ -176,9 +165,8 @@ case class Sample(
 }
 
 /**
- * :: DeveloperApi ::
+ * Union two plans, without a distinct. This is UNION ALL in SQL.
  */
-@DeveloperApi
 case class Union(children: Seq[SparkPlan]) extends SparkPlan {
   // TODO: attributes output by union should be distinct for nullability purposes
   override def output: Seq[Attribute] = children.head.output
@@ -190,14 +178,12 @@ case class Union(children: Seq[SparkPlan]) extends SparkPlan {
 }
 
 /**
- * :: DeveloperApi ::
  * Take the first limit elements. Note that the implementation is different depending on whether
  * this is a terminal operator or not. If it is terminal and is invoked using executeCollect,
  * this operator uses something similar to Spark's take method on the Spark driver. If it is not
  * terminal or is invoked using execute, we first take the limit on each partition, and then
  * repartition all the data to a single partition to compute the global limit.
  */
-@DeveloperApi
 case class Limit(limit: Int, child: SparkPlan)
   extends UnaryNode {
   // TODO: Implement a partition local limit, and use a strategy to generate the proper limit plan:
@@ -230,14 +216,12 @@ case class Limit(limit: Int, child: SparkPlan)
 }
 
 /**
- * :: DeveloperApi ::
  * Take the first limit elements as defined by the sortOrder, and do projection if needed.
  * This is logically equivalent to having a [[Limit]] operator after a [[Sort]] operator,
  * or having a [[Project]] operator between them.
  * This could have been named TopK, but Spark's top operator does the opposite in ordering
  * so we name it TakeOrdered to avoid confusion.
  */
-@DeveloperApi
 case class TakeOrderedAndProject(
     limit: Int,
     sortOrder: Seq[SortOrder],
@@ -282,13 +266,11 @@ case class TakeOrderedAndProject(
 }
 
 /**
- * :: DeveloperApi ::
  * Return a new RDD that has exactly `numPartitions` partitions.
  * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
  * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
  * the 100 new partitions will claim 10 of the current partitions.
  */
-@DeveloperApi
 case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
@@ -305,11 +287,9 @@ case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
 }
 
 /**
- * :: DeveloperApi ::
  * Returns a table with the elements from left that are not in right using
  * the built-in spark subtract function.
  */
-@DeveloperApi
 case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
 
@@ -319,11 +299,9 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
 }
 
 /**
- * :: DeveloperApi ::
  * Returns the rows in left that also appear in right using the built in spark
  * intersection function.
  */
-@DeveloperApi
 case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   override def output: Seq[Attribute] = children.head.output
 
@@ -333,12 +311,10 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
 }
 
 /**
- * :: DeveloperApi ::
  * A plan node that does nothing but lie about the output of its child.  Used to spice a
  * (hopefully structurally equivalent) tree from a different optimization sequence into an already
  * resolved tree.
  */
-@DeveloperApi
 case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
   def children: Seq[SparkPlan] = child :: Nil
 
