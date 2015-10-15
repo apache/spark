@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.{LeftSemiJoin, LeftSemi, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -51,6 +53,12 @@ trait CheckAnalysis {
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
+          case u: UnresolvedAlias =>
+            failAnalysis(s"Couldn't resolve the UnresolvedAlias ${u.prettyString}")
+
+          case s: SubQueryExpression =>
+            failAnalysis(s"Couldn't resolve the subquery expression ${s.prettyString}")
+
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")

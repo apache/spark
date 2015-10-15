@@ -265,6 +265,32 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // the answer is sensitive for jdk version
     "udf_java_method",
 
+    // TODO Hive window function cannot be serialized in generating the golden file
+    "subquery_in",
+    // As we don't support the outer UDAF function used in the correlated query, combined with
+    // outer having clause: e.g.:
+    //    select b.key, min(b.value)
+    //    from src b
+    //    group by b.key
+    //    having exists ( select a.key
+    //    from src a
+    //      where a.value > 'val_9' and a.value = min(b.value)
+    //    )
+    // It throws exception like
+    // "cannot resolve 'b.value' given input columns key, _c1, key, value;"
+    // As the outer aggregation doesn't output the field 'value, we need rule
+    // for further resovling the having expressions.
+    "subquery_notin_having",
+    "subquery_exists_having",
+
+    // select key, value, count(*)
+    // from src b
+    // group by key, value
+    // having count(*) in
+    //   (select count(*) from src s1 where s1.key > '9'  and s1.value = b.value group by s1.key )
+    // b.value is the correlated field, we don't support that right now.
+    "subquery_in_having",
+
     // Spark SQL use Long for TimestampType, lose the precision under 1us
     "timestamp_1",
     "timestamp_2",
@@ -845,6 +871,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_empty_partition",
     "stats_publisher_error_1",
     "subq2",
+    "subquery_exists",
+    "subquery_notexists",
+    "subquery_notexists_having",
     "tablename_with_select",
     "timestamp_3",
     "timestamp_comparison",

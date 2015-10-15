@@ -21,9 +21,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.{TableIdentifier, errors}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
@@ -263,3 +263,50 @@ case class UnresolvedAlias(child: Expression)
 
   override lazy val resolved = false
 }
+
+trait SubQueryExpression extends Unevaluable {
+  def subquery: LogicalPlan
+
+  override def dataType: DataType = BooleanType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+
+  def withNewSubQuery(newSubquery: LogicalPlan): this.type
+}
+
+/**
+ * Exist subquery expression, only used in filter only
+ */
+case class Exists(subquery: LogicalPlan, positive: Boolean)
+  extends LeafExpression with SubQueryExpression {
+  override def withNewSubQuery(newSubquery: LogicalPlan): this.type = {
+    this.copy(subquery = newSubquery).asInstanceOf[this.type]
+  }
+
+  override lazy val resolved = true
+
+  override def toString: String = if (positive) {
+    s"Exists(${subquery.asCode})"
+  } else {
+    s"NotExists(${subquery.asCode})"
+  }
+}
+
+/**
+ * In subquery expression, only used in filter only
+ */
+case class InSubquery(child: Expression, subquery: LogicalPlan, positive: Boolean)
+  extends UnaryExpression with SubQueryExpression {
+  override def withNewSubQuery(newSubquery: LogicalPlan): this.type = {
+    this.copy(subquery = newSubquery).asInstanceOf[this.type]
+  }
+
+  override lazy val resolved = child.resolved
+
+  override def toString: String = if (positive) {
+    s"InSubQuery($child, ${subquery.asCode})"
+  } else {
+    s"NotInSubQuery($child, ${subquery.asCode})"
+  }
+}
+

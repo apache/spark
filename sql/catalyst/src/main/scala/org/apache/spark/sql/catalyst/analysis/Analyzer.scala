@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
+
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2, AggregateFunction2}
+import org.apache.spark.sql.catalyst.plans.{LeftSemi, LeftAnti}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -69,6 +71,7 @@ class Analyzer(
       WindowsSubstitution ::
       Nil : _*),
     Batch("Resolution", fixedPoint,
+      RewriteFilterSubQuery ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
@@ -270,6 +273,146 @@ class Analyzer(
   }
 
   /**
+   * Rewrite the [[Exists]] [[In]] with left semi join or anti join.
+   */
+  object RewriteFilterSubQuery extends Rule[LogicalPlan] with PredicateHelper {
+    def unapply(condition: Expression): Option[(Expression, Seq[Expression])] = {
+      if (condition.resolved == false) {
+        return None
+      }
+
+      val conjuctions = splitConjunctivePredicates(condition).map(_ transformDown {
+          // Remove the Cast expression for SubQueryExpression.
+          case Cast(f: SubQueryExpression, BooleanType) => f
+        }
+      )
+
+      val (subqueries, others) = conjuctions.partition(c => c.isInstanceOf[SubQueryExpression])
+      if (subqueries.isEmpty) {
+        None
+      } else if (subqueries.length > 1) {
+        throw new AnalysisException(
+          s"Only 1 SubQuery expression is supported, but we got $subqueries")
+      } else {
+        val subQueryExpr = subqueries(0).asInstanceOf[SubQueryExpression]
+        // try to resolve the subquery
+
+        val subquery = Analyzer.this.execute(subQueryExpr.subquery) match {
+          case Distinct(child) => child // Distinct is useless for semi join, ignore it.
+          case other => other
+        }
+        Some((subQueryExpr.withNewSubQuery(subquery), others))
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case f if f.childrenResolved == false => f
+
+      case f @ Filter(RewriteFilterSubQuery(subquery, others), left) =>
+        subquery match {
+          case Exists(Project(_, Filter(condition, right)), positive) =>
+            checkAnalysis(right)
+            if (condition.resolved) {
+              // Apparently, it should be not resolved here, since EXIST should be correlated.
+              throw new AnalysisException(
+                s"Exist clause should be correlated, but we got $condition")
+            }
+            Join(others.reduceOption(And).map(Filter(_, left)).getOrElse(left), right,
+              if (positive) LeftSemi else LeftAnti,
+              Some(ResolveReferences.tryResolveAttributes(condition, right)))
+
+          case Exists(right, positive) =>
+            throw new AnalysisException(s"Exist clause should be correlated, but we got $right")
+
+          case InSubquery(key, Project(projectList, Filter(condition, right)), positive) =>
+            checkAnalysis(right)
+            if (projectList.length != 1) {
+              throw new AnalysisException(
+                s"Expect only 1 projection in In Subquery Expression, but we got $projectList")
+            } else {
+              val rightKey = ResolveReferences.tryResolveAttributes(projectList(0), right)
+
+              if (!rightKey.resolved) {
+                throw new AnalysisException(
+                  s"Outer query expression should be only presented at the filter clause, " +
+                    s"but we got $rightKey")
+              }
+              Join(others.reduceOption(And).map(Filter(_, left)).getOrElse(left), right,
+                if (positive) LeftSemi else LeftAnti,
+                Some(
+                  And(
+                    ResolveReferences.tryResolveAttributes(condition, right),
+                    EqualTo(rightKey, key))))
+            }
+
+          case InSubquery(key, Project(projectList, right), positive) =>
+            checkAnalysis(right)
+            if (projectList.length != 1) {
+              throw new AnalysisException(
+                s"Expect only 1 projection in In Subquery Expression, but we got $projectList")
+            } else {
+              if (!projectList(0).resolved) {
+                throw new AnalysisException(
+                  s"Outer query expression should be only presented at the filter clause, " +
+                    s"but we got ${projectList(0)}")
+              }
+              Join(others.reduceOption(And).map(Filter(_, left)).getOrElse(left), right,
+                if (positive) LeftSemi else LeftAnti,
+                Some(EqualTo(projectList(0), key)))
+            }
+
+          case InSubquery(key, right @ Aggregate(grouping, aggregations, child), positive) =>
+            if (aggregations.length != 1) {
+              throw new AnalysisException(
+                s"Expect only 1 projection in In Subquery Expression, but we got $aggregations")
+            } else {
+              checkAnalysis(child)
+              val rightKey = ResolveReferences.tryResolveAttributes(aggregations(0), child) match {
+                case e if e.resolved == false =>
+                  throw new AnalysisException(
+                    s"Outer query expression should be only presented at the filter clause" +
+                      s", but we got $e")
+                case e: NamedExpression => e
+                case other => Alias(other, " in_subquery_key")()
+              }
+
+              Join(
+                others.reduceOption(And).map(Filter(_, left)).getOrElse(left),
+                Aggregate(grouping, rightKey :: Nil, child),
+                if (positive) LeftSemi else LeftAnti,
+                Some(EqualTo(rightKey.toAttribute, key)))
+            }
+
+          case InSubquery(key,
+            f @ Filter(condition, right @ Aggregate(grouping, aggregations, child)), positive) =>
+            if (aggregations.length != 1) {
+              throw new AnalysisException(
+                s"Expect only 1 projection in In Subquery Expression, but we got $aggregations")
+            } else {
+              checkAnalysis(child)
+              val rightKey = ResolveReferences.tryResolveAttributes(aggregations(0), child) match {
+                case e if e.resolved == false =>
+                  throw new AnalysisException(
+                    s"Outer query expression should be only presented at the filter clause" +
+                      s", but we got $e")
+                case e: NamedExpression => e
+                case other => Alias(other, " in_subquery_key")()
+              }
+
+              Join(
+                Filter(
+                  others.foldLeft(
+                    ResolveReferences.tryResolveAttributes(condition(0), child))(And(_, _)),
+                  left),
+                Aggregate(grouping, rightKey :: Nil, child),
+                if (positive) LeftSemi else LeftAnti,
+                Some(EqualTo(rightKey.toAttribute, key)))
+            }
+        }
+    }
+  }
+
+  /**
    * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from
    * a logical plan node's children.
    */
@@ -397,6 +540,7 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp  {
+          case u @ UnresolvedAlias(expr: NamedExpression) if expr.resolved => expr
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
@@ -406,6 +550,25 @@ class Analyzer(
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
         }
+    }
+
+    // Try to resolve the attributes from the given logical plan
+    def tryResolveAttributes(expr: Expression, q: LogicalPlan): Expression = {
+      checkAnalysis(q)
+      val projection = Project(q.output, q)
+
+      logTrace(s"Attempting to resolve ${expr.simpleString}")
+      expr transformUp  {
+        case u @ UnresolvedAlias(expr) => expr
+        case u @ UnresolvedAttribute(nameParts) =>
+          // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
+          val result =
+            withPosition(u) { projection.resolveChildren(nameParts, resolver).getOrElse(u) }
+          logDebug(s"Resolving $u to $result")
+          result
+        case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+          ExtractValue(child, fieldExpr, resolver)
+      }
     }
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {

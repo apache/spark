@@ -116,4 +116,38 @@ trait HashSemiJoin {
       r
     }
   }
+
+  protected def hashAntiJoin(
+      streamIter: Iterator[InternalRow],
+      numStreamRows: LongSQLMetric,
+      hashSet: java.util.Set[InternalRow],
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val joinKeys = leftKeyGenerator
+    streamIter.filter(current => {
+      numStreamRows += 1
+      val key = joinKeys(current)
+      val r = !key.anyNull && !hashSet.contains(key)
+      if (r) numOutputRows += 1
+      r
+    })
+  }
+
+  protected def hashAntiJoin(
+      streamIter: Iterator[InternalRow],
+      numStreamRows: LongSQLMetric,
+      hashedRelation: HashedRelation,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val joinKeys = leftKeyGenerator
+    val joinedRow = new JoinedRow
+    streamIter.filter { current =>
+      numStreamRows += 1
+      val key = joinKeys(current)
+      lazy val rowBuffer = hashedRelation.get(key)
+      val r = !key.anyNull && (rowBuffer == null || rowBuffer.forall {
+        (row: InternalRow) => !boundCondition(joinedRow(current, row))
+      })
+      if (r) numOutputRows += 1
+      r
+    }
+  }
 }

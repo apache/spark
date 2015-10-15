@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{LeftSemiJoin, LeftSemi, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, Distribution, ClusteredDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -33,7 +34,8 @@ case class LeftSemiJoinHash(
     rightKeys: Seq[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
+    condition: Option[Expression],
+    jt: LeftSemiJoin) extends BinaryNode with HashSemiJoin {
 
   override private[sql] lazy val metrics = Map(
     "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
@@ -53,10 +55,16 @@ case class LeftSemiJoinHash(
     right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
       if (condition.isEmpty) {
         val hashSet = buildKeyHashSet(buildIter, numRightRows)
-        hashSemiJoin(streamIter, numLeftRows, hashSet, numOutputRows)
+        jt match {
+          case LeftSemi => hashSemiJoin(streamIter, numLeftRows, hashSet, numOutputRows)
+          case LeftAnti => hashAntiJoin(streamIter, numLeftRows, hashSet, numOutputRows)
+        }
       } else {
         val hashRelation = HashedRelation(buildIter, numRightRows, rightKeyGenerator)
-        hashSemiJoin(streamIter, numLeftRows, hashRelation, numOutputRows)
+        jt match {
+          case LeftSemi => hashSemiJoin(streamIter, numLeftRows, hashRelation, numOutputRows)
+          case LeftAnti => hashAntiJoin(streamIter, numLeftRows, hashRelation, numOutputRows)
+        }
       }
     }
   }
