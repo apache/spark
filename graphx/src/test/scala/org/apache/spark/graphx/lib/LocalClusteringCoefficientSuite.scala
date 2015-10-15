@@ -16,10 +16,10 @@
  */
 package org.apache.spark.graphx.lib
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx._
-import org.scalatest.FunSuite
 
-class LocalClusteringCoefficientSuite extends FunSuite with LocalSparkContext {
+class LocalClusteringCoefficientSuite extends SparkFunSuite with LocalSparkContext {
 
   def approEqual(a: Double, b: Double): Boolean = {
     (a - b).abs < 1e-20
