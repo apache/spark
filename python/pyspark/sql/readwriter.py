@@ -117,7 +117,8 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
-        >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json', 'python/test_support/sql/people1.json'])
+        >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
+        ...     'python/test_support/sql/people1.json'])
         >>> df.dtypes
         [('age', 'bigint'), ('aka', 'string'), ('name', 'string')]
         """
