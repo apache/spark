@@ -630,6 +630,39 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
+  test("Loading a JSON dataset primativesAsString returns schema with primative types as strings") {
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    val jsonDF = sqlContext.read.option("primativesAsString", "true").json(path)
+
+    val expectedSchema = StructType(
+      StructField("bigInteger", DecimalType(20, 0), true) ::
+      StructField("boolean", BooleanType, true) ::
+      StructField("double", DoubleType, true) ::
+      StructField("integer", LongType, true) ::
+      StructField("long", LongType, true) ::
+      StructField("null", StringType, true) ::
+      StructField("string", StringType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+
+    jsonDF.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql("select * from jsonTable"),
+      Row("92233720368547758070",
+      "true",
+      "1.7976931348623157E308",
+      "10",
+      "21474836470",
+      "null",
+      "this is a simple string.")
+    )
+  }
+
+
   test("Loading a JSON dataset from a text file with SQL") {
     val dir = Utils.createTempDir()
     dir.delete()
@@ -1037,24 +1070,28 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val relation0 = new JSONRelation(
       Some(empty),
       1.0,
+      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation0 = LogicalRelation(relation0)
     val relation1 = new JSONRelation(
       Some(singleRow),
       1.0,
+      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation1 = LogicalRelation(relation1)
     val relation2 = new JSONRelation(
       Some(singleRow),
       0.5,
+      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation2 = LogicalRelation(relation2)
     val relation3 = new JSONRelation(
       Some(singleRow),
       1.0,
+      false,
       Some(StructType(StructField("b", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation3 = LogicalRelation(relation3)

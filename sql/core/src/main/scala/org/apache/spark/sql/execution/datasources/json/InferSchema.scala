@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 
 private[sql] object InferSchema {
+
   /**
    * Infer the type of a collection of json records in three stages:
    *   1. Infer the type of each record
@@ -34,7 +35,8 @@ private[sql] object InferSchema {
   def apply(
       json: RDD[String],
       samplingRatio: Double = 1.0,
-      columnNameOfCorruptRecords: String): StructType = {
+      columnNameOfCorruptRecords: String,
+      primativesAsString: Boolean = false): StructType = {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
     val schemaData = if (samplingRatio > 0.99) {
       json
@@ -49,7 +51,7 @@ private[sql] object InferSchema {
         try {
           val parser = factory.createParser(row)
           parser.nextToken()
-          inferField(parser)
+          inferField(parser, primativesAsString)
         } catch {
           case _: JsonParseException =>
             StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))
@@ -68,14 +70,14 @@ private[sql] object InferSchema {
   /**
    * Infer the type of a json document from the parser's token stream
    */
-  private def inferField(parser: JsonParser): DataType = {
+  private def inferField(parser: JsonParser, primativesAsString: Boolean): DataType = {
     import com.fasterxml.jackson.core.JsonToken._
     parser.getCurrentToken match {
       case null | VALUE_NULL => NullType
 
       case FIELD_NAME =>
         parser.nextToken()
-        inferField(parser)
+        inferField(parser, primativesAsString)
 
       case VALUE_STRING if parser.getTextLength < 1 =>
         // Zero length strings and nulls have special handling to deal
@@ -90,7 +92,10 @@ private[sql] object InferSchema {
       case START_OBJECT =>
         val builder = Seq.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
-          builder += StructField(parser.getCurrentName, inferField(parser), nullable = true)
+          builder += StructField(
+            parser.getCurrentName,
+            inferField(parser, primativesAsString),
+            nullable = true)
         }
 
         StructType(builder.result().sortBy(_.name))
@@ -101,10 +106,13 @@ private[sql] object InferSchema {
         // the type as we pass through all JSON objects.
         var elementType: DataType = NullType
         while (nextUntil(parser, END_ARRAY)) {
-          elementType = compatibleType(elementType, inferField(parser))
+          elementType = compatibleType(elementType, inferField(parser, primativesAsString))
         }
 
         ArrayType(elementType)
+
+      case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) if primativesAsString => StringType
+      case (VALUE_TRUE | VALUE_FALSE) if primativesAsString => StringType
 
       case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
         import JsonParser.NumberType._
