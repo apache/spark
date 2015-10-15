@@ -93,7 +93,16 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         }.toMap
         (node.id, node.name -> nodeMetrics)
       }.toMap
-      assert(expectedMetrics === actualMetrics)
+
+      assert(expectedMetrics.keySet === actualMetrics.keySet)
+      for (nodeId <- expectedMetrics.keySet) {
+        val (expectedNodeName, expectedMetricsMap) = expectedMetrics(nodeId)
+        val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
+        assert(expectedNodeName === actualNodeName)
+        for (metricName <- expectedMetricsMap.keySet) {
+          assert(expectedMetricsMap(metricName).toString === actualMetricsMap(metricName))
+        }
+      }
     } else {
       // TODO Remove this "else" once we fix the race condition that missing the JobStarted event.
       // Since we cannot track all jobs, the metric values could be wrong and we should not check
@@ -489,7 +498,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
-      assert(metricValues.values.toSeq === Seq(2L))
+      assert(metricValues.values.toSeq === Seq("2"))
     }
   }
 

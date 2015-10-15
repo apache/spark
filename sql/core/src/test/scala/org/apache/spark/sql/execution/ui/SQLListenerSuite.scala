@@ -74,6 +74,10 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("basic") {
+    def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {
+      assert(actual === expected.mapValues(_.toString))
+    }
+
     val listener = new SQLListener(sqlContext.sparkContext.conf)
     val executionId = 0
     val df = createTestDataFrame
@@ -114,7 +118,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       (1L, 0, 0, createTaskMetrics(accumulatorUpdates))
     )))
 
-    assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 2))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, metrics)
@@ -122,7 +126,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       (1L, 0, 0, createTaskMetrics(accumulatorUpdates.mapValues(_ * 2)))
     )))
 
-    assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 3))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 3))
 
     // Retrying a stage should reset the metrics
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
@@ -133,7 +137,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       (1L, 0, 1, createTaskMetrics(accumulatorUpdates))
     )))
 
-    assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 2))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
     // Ignore the task end for the first attempt
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -144,7 +148,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       createTaskInfo(0, 0),
       createTaskMetrics(accumulatorUpdates.mapValues(_ * 100))))
 
-    assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 2))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
     // Finish two tasks
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -162,7 +166,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       createTaskInfo(1, 0),
       createTaskMetrics(accumulatorUpdates.mapValues(_ * 3))))
 
-    assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 5))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 5))
 
     // Summit a new stage
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
@@ -173,7 +177,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       (1L, 1, 0, createTaskMetrics(accumulatorUpdates))
     )))
 
-    assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 7))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 7))
 
     // Finish two tasks
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -191,7 +195,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       createTaskInfo(1, 0),
       createTaskMetrics(accumulatorUpdates.mapValues(_ * 3))))
 
-    assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 11))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 11))
 
     assert(executionUIData.runningJobs === Seq(0))
     assert(executionUIData.succeededJobs.isEmpty)
@@ -208,7 +212,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     assert(executionUIData.succeededJobs === Seq(0))
     assert(executionUIData.failedJobs.isEmpty)
 
-    assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 11))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 11))
   }
 
   test("onExecutionEnd happens before onJobEnd(JobSucceeded)") {
