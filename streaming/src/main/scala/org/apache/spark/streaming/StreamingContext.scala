@@ -696,44 +696,37 @@ class StreamingContext private[streaming] (
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
     var shutdownHookRefToRemove: AnyRef = null
-    try {
-      synchronized {
-        try {
-          state match {
-            case INITIALIZED =>
-              logWarning("StreamingContext has not been started yet")
-            case STOPPED =>
-              logWarning("StreamingContext has already been stopped")
-            case ACTIVE =>
-              try {
-                scheduler.stop(stopGracefully)
-                // Removing the streamingSource to de-register the metrics on stop()
-                env.metricsSystem.removeSource(streamingSource)
-                uiTab.foreach(_.detach())
-                StreamingContext.setActiveContext(null)
-                waiter.notifyStop()
-                logInfo("StreamingContext stopped successfully")
-              } finally {
-                if (shutdownHookRef != null) {
-                  shutdownHookRefToRemove = shutdownHookRef
-                  shutdownHookRef = null
-                }
-              }
-          }
-          // Even if we have already stopped, we still need to attempt to stop the SparkContext
-          // because a user might stop(stopSparkContext = false) and then call
-          // stop(stopSparkContext = true).
-          if (stopSparkContext) sc.stop()
-        } finally {
-          // The state should always be Stopped after calling `stop()`, even if we haven't started
-          // yet
-          state = STOPPED
+    synchronized {
+      try {
+        state match {
+          case INITIALIZED =>
+            logWarning("StreamingContext has not been started yet")
+          case STOPPED =>
+            logWarning("StreamingContext has already been stopped")
+          case ACTIVE =>
+            scheduler.stop(stopGracefully)
+            // Removing the streamingSource to de-register the metrics on stop()
+            env.metricsSystem.removeSource(streamingSource)
+            uiTab.foreach(_.detach())
+            StreamingContext.setActiveContext(null)
+            waiter.notifyStop()
+            if (shutdownHookRef != null) {
+              shutdownHookRefToRemove = shutdownHookRef
+              shutdownHookRef = null
+            }
+            logInfo("StreamingContext stopped successfully")
         }
+        // Even if we have already stopped, we still need to attempt to stop the SparkContext
+        // because a user might stop(stopSparkContext = false) and then call
+        // stop(stopSparkContext = true).
+        if (stopSparkContext) sc.stop()
+      } finally {
+        // The state should always be Stopped after calling `stop()`, even if we haven't started yet
+        state = STOPPED
       }
-    } finally {
-      if (shutdownHookRefToRemove != null) {
-        ShutdownHookManager.removeShutdownHook(shutdownHookRefToRemove)
-      }
+    }
+    if (shutdownHookRefToRemove != null) {
+      ShutdownHookManager.removeShutdownHook(shutdownHookRefToRemove)
     }
   }
 
