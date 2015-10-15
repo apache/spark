@@ -109,7 +109,7 @@ object ResolvedDataSource extends Logging {
               throw new AnalysisException(s"Both path and paths options are present.")
             }
             caseInsensitiveOptions.get("paths")
-              .map(_.split(",").map(StringUtils.unEscapeString(_, '\\', ',')))
+              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
               .getOrElse(Array(caseInsensitiveOptions("path")))
               .flatMap{ pathString =>
                 val hdfsPath = new Path(pathString)
@@ -149,7 +149,7 @@ object ResolvedDataSource extends Logging {
               throw new AnalysisException(s"Both path and paths options are present.")
             }
             caseInsensitiveOptions.get("paths")
-              .map(_.split(",").map(StringUtils.unEscapeString(_, '\\', ',')))
+              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
               .getOrElse(Array(caseInsensitiveOptions("path")))
               .flatMap{ pathString =>
                 val hdfsPath = new Path(pathString)

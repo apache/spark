@@ -124,6 +124,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
+   * Loads input in as a [[DataFrame]], for data sources that support multiple paths.
+   * Only works if the source is a HadoopFsRelationProvider.
+   *
+   * @since 1.6.0
+   */
+  def load(paths: Seq[String]): DataFrame = {
+    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
+  }
+
+  /**
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
    * url named table and connection properties.
    *
@@ -289,17 +299,6 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def table(tableName: String): DataFrame = {
     DataFrame(sqlContext, sqlContext.catalog.lookupRelation(Seq(tableName)))
-  }
-
-  /**
-   * Sets paths for a data source.
-   * Only used if the source is a HadoopFsRelationProvider.
-   *
-   * @since 1.6.0
-   */
-  def paths(path: String*): DataFrameReader = {
-    this.extraOptions += ("paths" -> path.map(StringUtils.escapeString(_, '\\', ',')).mkString(","))
-    this
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////
