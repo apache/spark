@@ -364,6 +364,15 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
   }
 
+  test("AccumulableInfo backward compatibility") {
+    // "Internal" property of AccumulableInfo were added after 1.5.1.
+    val accumulableInfo = makeAccumulableInfo(1)
+    val oldJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
+      .removeField({ _._1 == "Internal" })
+    val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
+    assert(false === oldInfo.internal)
+  }
+
   /** -------------------------- *
    | Helper test running methods |
    * --------------------------- */
@@ -721,15 +730,15 @@ class JsonProtocolSuite extends SparkFunSuite {
     val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
       speculative)
     val (acc1, acc2, acc3) =
-      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3))
+      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true))
     taskInfo.accumulables += acc1
     taskInfo.accumulables += acc2
     taskInfo.accumulables += acc3
     taskInfo
   }
 
-  private def makeAccumulableInfo(id: Int): AccumulableInfo =
-    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id)
+  private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
+    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id, internal)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -810,13 +819,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      }
       |    ]
       |  },
@@ -864,13 +875,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      }
       |    ]
       |  }
@@ -900,19 +913,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  }
@@ -940,19 +956,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  }
@@ -986,19 +1005,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1072,19 +1094,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1155,19 +1180,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1249,13 +1277,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1307,13 +1337,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1382,13 +1414,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1474,13 +1508,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    }
