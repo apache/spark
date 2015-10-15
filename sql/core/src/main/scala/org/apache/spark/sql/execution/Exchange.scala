@@ -219,6 +219,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
     val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
     var children: Seq[SparkPlan] = operator.children
+    assert(requiredChildDistributions.length == children.length)
+    assert(requiredChildOrderings.length == children.length)
 
     // Ensure that the operator's children satisfy their output distribution requirements:
     children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
