@@ -432,6 +432,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     if (!replace) {
       doRequestTotalExecutors(
         numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)
+    } else {
+      numPendingExecutors += knownExecutors.size
     }
 
     doKillExecutors(executorsToKill)
