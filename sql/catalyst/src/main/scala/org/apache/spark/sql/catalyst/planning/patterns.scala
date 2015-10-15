@@ -65,6 +65,18 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
 
+      case NewOutput(output, child) =>
+        val outputMap = AttributeMap(child.output.zip(output))
+        val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
+        val substitutedFields = fields.map(_.map(_ transform {
+          case a: AttributeReference => outputMap.getOrElse(a, a)
+        }).asInstanceOf[Seq[NamedExpression]])
+        val substitutedFilters = filters.map(_ transform {
+          case a: AttributeReference => outputMap.getOrElse(a, a)
+        })
+        val newOutput = other.output.map(a => outputMap.getOrElse(a, a))
+        (substitutedFields, substitutedFilters, NewOutput(newOutput, other), aliases)
+
       case other =>
         (None, Nil, other, Map.empty)
     }
