@@ -354,6 +354,55 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("EnsureRequirements adds sort when there is no existing ordering") {
+    val orderingA = SortOrder(Literal(1), Ascending)
+    val orderingB = SortOrder(Literal(2), Ascending)
+    assert(orderingA != orderingB)
+    val inputPlan = DummySparkPlan(
+      children = DummySparkPlan(outputOrdering = Seq.empty) :: Nil,
+      requiredChildOrdering = Seq(Seq(orderingB)),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.isEmpty) {
+      fail(s"Sort should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements skips sort when required ordering is prefix of existing ordering") {
+    val orderingA = SortOrder(Literal(1), Ascending)
+    val orderingB = SortOrder(Literal(2), Ascending)
+    assert(orderingA != orderingB)
+    val inputPlan = DummySparkPlan(
+      children = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB)) :: Nil,
+      requiredChildOrdering = Seq(Seq(orderingA)),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.nonEmpty) {
+      fail(s"No sorts should have been added:\n$outputPlan")
+    }
+  }
+
+  // This is a regression test for SPARK-11135
+  test("EnsureRequirements adds sort when required ordering isn't a prefix of existing ordering") {
+    val orderingA = SortOrder(Literal(1), Ascending)
+    val orderingB = SortOrder(Literal(2), Ascending)
+    assert(orderingA != orderingB)
+    val inputPlan = DummySparkPlan(
+      children = DummySparkPlan(outputOrdering = Seq(orderingA)) :: Nil,
+      requiredChildOrdering = Seq(Seq(orderingA, orderingB)),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.isEmpty) {
+      fail(s"Sort should have been added:\n$outputPlan")
+    }
+  }
+
   // ---------------------------------------------------------------------------------------------
 }
 
