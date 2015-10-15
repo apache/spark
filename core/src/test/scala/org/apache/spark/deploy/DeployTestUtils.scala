@@ -17,11 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.io.File
+import java.io.{IOException, File}
 import java.util.Date
 
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
-import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.deploy.worker._
 import org.apache.spark.{SecurityManager, SparkConf}
 
 private[deploy] object DeployTestUtils {
@@ -55,35 +55,37 @@ private[deploy] object DeployTestUtils {
   }
 
   def createExecutorRunner(execId: Int): ExecutorRunner = {
-    new ExecutorRunner(
-      "appId",
-      execId,
-      createAppDesc(),
-      4,
-      1234,
-      null,
-      "workerId",
-      "host",
-      123,
-      "publicAddress",
-      new File("sparkHome"),
-      new File("workDir"),
-      "akka://worker",
-      new SparkConf,
-      Seq("localDir"),
-      ExecutorState.RUNNING)
+    val appDesc = createAppDesc()
+    val processSetup = new ChildProcessCommonSetup(
+      execId.toString, 4, 1234, "host", "publicAddress", 123, new File("workDir"), appDesc)
+    val conf = new SparkConf
+    val workerSetup = new WorkerSetup(
+      "akka://worker", new File("sparkHome"), conf, new SecurityManager(conf))
+    ExecutorRunnerFactoryImpl.createRunner(
+      Some("appId"),
+      processSetup,
+      workerSetup,
+      (x, y, z) => {},
+      Seq("localDir"))
   }
 
   def createDriverRunner(driverId: String): DriverRunner = {
     val conf = new SparkConf()
-    new DriverRunner(
-      conf,
-      driverId,
-      new File("workDir"),
-      new File("sparkHome"),
-      createDriverDesc(),
-      null,
-      "akka://worker",
-      new SecurityManager(conf))
+    val driverDir = new File("workDir", driverId)
+    if (!driverDir.exists() && !driverDir.mkdirs()) {
+      throw new IOException("Failed to create directory " + driverDir)
+    }
+    val driverDesc = createDriverDesc()
+    val processSetup = new ChildProcessCommonSetup(
+      driverId, driverDesc.cores, driverDesc.mem, "host", "publicAddress", 123,
+      new File("workDir"), driverDesc)
+    val workerSetup = new WorkerSetup(
+      "akka://worker", new File("sparkHome"), conf, new SecurityManager(conf))
+    DriverRunnerFactoryImpl.createRunner(
+      None,
+      processSetup,
+      workerSetup,
+      (x, y, z) => {},
+      Nil)
   }
 }

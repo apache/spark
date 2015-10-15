@@ -20,12 +20,12 @@ package org.apache.spark.deploy
 import java.util.Date
 
 import com.fasterxml.jackson.core.JsonParseException
+import org.apache.spark.deploy.worker.ExecutorRunnerInfo
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, RecoveryState}
-import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.{JsonTestUtils, SparkFunSuite}
 
 class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
@@ -51,7 +51,7 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
   }
 
   test("writeExecutorRunner") {
-    val output = JsonProtocol.writeExecutorRunner(createExecutorRunner(123))
+    val output = JsonProtocol.writeExecutorRunner(createExecutorRunner(123).info)
     assertValidJson(output)
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.executorRunnerJsonStr))
   }
@@ -77,11 +77,12 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
   }
 
   test("writeWorkerState") {
-    val executors = List[ExecutorRunner]()
-    val finishedExecutors = List[ExecutorRunner](createExecutorRunner(123),
-      createExecutorRunner(123))
-    val drivers = List(createDriverRunner("driverId"))
-    val finishedDrivers = List(createDriverRunner("driverId"), createDriverRunner("driverId"))
+    val executors = List[ExecutorRunnerInfo]()
+    val finishedExecutors = List[ExecutorRunnerInfo](createExecutorRunner(123).info,
+      createExecutorRunner(123).info)
+    val drivers = List(createDriverRunner("driverId").info)
+    val finishedDrivers = List(createDriverRunner("driverId").info,
+      createDriverRunner("driverId").info)
     val stateResponse = new WorkerStateResponse("host", 8080, "workerId", executors,
       finishedExecutors, drivers, finishedDrivers, "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl")
     val output = JsonProtocol.writeWorkerState(stateResponse)

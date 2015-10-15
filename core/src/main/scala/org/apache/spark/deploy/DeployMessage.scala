@@ -23,7 +23,7 @@ import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.RecoveryState.MasterState
-import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.deploy.worker.{DriverRunnerInfo, ExecutorRunnerInfo}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -188,8 +188,8 @@ private[deploy] object DeployMessages {
   // Worker to WorkerWebUI
 
   case class WorkerStateResponse(host: String, port: Int, workerId: String,
-    executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner],
-    drivers: List[DriverRunner], finishedDrivers: List[DriverRunner], masterUrl: String,
+    executors: List[ExecutorRunnerInfo], finishedExecutors: List[ExecutorRunnerInfo],
+    drivers: List[DriverRunnerInfo], finishedDrivers: List[DriverRunnerInfo], masterUrl: String,
     cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String) {
 
     Utils.checkHost(host, "Required hostname")

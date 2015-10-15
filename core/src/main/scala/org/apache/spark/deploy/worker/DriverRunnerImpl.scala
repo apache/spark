@@ -24,29 +24,28 @@ import scala.collection.JavaConverters._
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
+import org.apache.spark.Logging
 
-import org.apache.spark.{Logging, SparkConf, SecurityManager}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
-import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.util.{Utils, Clock, SystemClock}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
  * This is currently only used in standalone cluster deploy mode.
  */
-private[deploy] class DriverRunner(
-    conf: SparkConf,
-    val driverId: String,
-    val workDir: File,
-    val sparkHome: File,
-    val driverDesc: DriverDescription,
-    val worker: RpcEndpointRef,
-    val workerUrl: String,
-    val securityManager: SecurityManager)
-  extends Logging {
+private[deploy] class DriverRunnerImpl(
+    processSetup: ChildProcessCommonSetup[DriverDescription],
+    workerSetup: WorkerSetup,
+    stateChangeListener: StateChangeListener[DriverDescription, DriverRunnerInfo])
+  extends ChildProcessRunner[DriverDescription, DriverRunnerInfo]
+  with DriverRunnerInfo with Logging { self =>
+
+  override def state: DriverState = finalState.getOrElse(DriverState.RUNNING)
+  override def info: DriverRunnerImpl = this
+  override def exception: Option[Exception] = finalException
+  override def setup: ChildProcessCommonSetup[DriverDescription] = processSetup
 
   @volatile private var process: Option[Process] = None
   @volatile private var killed = false
@@ -71,23 +70,26 @@ private[deploy] class DriverRunner(
   }
 
   /** Starts a thread to run and manage the driver. */
-  private[worker] def start() = {
-    new Thread("DriverRunner for " + driverId) {
+  def start(): Unit = {
+    new Thread("DriverRunner for " + processSetup.id) {
       override def run() {
         try {
-          val driverDir = createWorkingDirectory()
-          val localJarFilename = downloadUserJar(driverDir)
+          val localJarFilename = downloadUserJar(processSetup.workDir)
 
           def substituteVariables(argument: String): String = argument match {
-            case "{{WORKER_URL}}" => workerUrl
+            case "{{WORKER_URL}}" => workerSetup.workerUri
             case "{{USER_JAR}}" => localJarFilename
             case other => other
           }
 
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
-            driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
-          launchDriver(builder, driverDir, driverDesc.supervise)
+          val builder = CommandUtils.buildProcessBuilder(
+            processSetup.description.command,
+            workerSetup.securityManager,
+            processSetup.memory,
+            workerSetup.sparkHome.getAbsolutePath,
+            substituteVariables)
+          launchDriver(builder, processSetup.workDir, processSetup.description.supervise)
         }
         catch {
           case e: Exception => finalException = Some(e)
@@ -107,13 +109,14 @@ private[deploy] class DriverRunner(
 
         finalState = Some(state)
 
-        worker.send(DriverStateChanged(driverId, state, finalException))
+        stateChangeListener(self, None,
+          finalException orElse finalExitCode.filter(_ != 0).map(new NonZeroExitCodeException(_)))
       }
     }.start()
   }
 
   /** Terminate this driver (or prevent it from ever starting if not yet started) */
-  private[worker] def kill() {
+  def kill(): Unit = {
     synchronized {
       process.foreach(p => p.destroy())
       killed = true
@@ -121,25 +124,13 @@ private[deploy] class DriverRunner(
   }
 
   /**
-   * Creates the working directory for this driver.
-   * Will throw an exception if there are errors preparing the directory.
-   */
-  private def createWorkingDirectory(): File = {
-    val driverDir = new File(workDir, driverId)
-    if (!driverDir.exists() && !driverDir.mkdirs()) {
-      throw new IOException("Failed to create directory " + driverDir)
-    }
-    driverDir
-  }
-
-  /**
    * Download the user jar into the supplied directory and return its local path.
    * Will throw an exception if there are errors downloading the jar.
    */
   private def downloadUserJar(driverDir: File): String = {
-    val jarPath = new Path(driverDesc.jarUrl)
+    val jarPath = new Path(processSetup.description.jarUrl)
 
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(workerSetup.conf)
     val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
     val localJarFile = new File(driverDir, jarFileName)
@@ -148,10 +139,10 @@ private[deploy] class DriverRunner(
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
       Utils.fetchFile(
-        driverDesc.jarUrl,
+        processSetup.description.jarUrl,
         driverDir,
-        conf,
-        securityManager,
+        workerSetup.conf,
+        workerSetup.securityManager,
         hadoopConf,
         System.currentTimeMillis(),
         useCache = false)
@@ -180,7 +171,7 @@ private[deploy] class DriverRunner(
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
   }
 
-  def runCommandWithRetry(
+  private[spark] def runCommandWithRetry(
       command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Unit = {
     // Time to wait between submission retries.
     var waitSeconds = 1
@@ -231,4 +222,8 @@ private[deploy] object ProcessBuilderLike {
     override def start(): Process = processBuilder.start()
     override def command: Seq[String] = processBuilder.command().asScala
   }
+}
+
+private[deploy] trait DriverRunnerInfo extends ChildRunnerInfo[DriverDescription] {
+  def state: DriverState
 }

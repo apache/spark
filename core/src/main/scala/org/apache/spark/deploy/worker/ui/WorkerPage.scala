@@ -20,12 +20,11 @@ package org.apache.spark.deploy.worker.ui
 import scala.xml.Node
 
 import javax.servlet.http.HttpServletRequest
+import org.apache.spark.deploy.worker.{DriverRunnerInfo, ExecutorRunnerInfo}
 import org.json4s.JValue
 
-import org.apache.spark.deploy.JsonProtocol
+import org.apache.spark.deploy.{ApplicationDescription, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
-import org.apache.spark.deploy.master.DriverState
-import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -49,9 +48,9 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       UIUtils.listingTable(executorHeaders, executorRow, finishedExecutors)
 
     val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Logs", "Notes")
-    val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
+    val runningDrivers = workerState.drivers.sortBy(_.setup.id).reverse
     val runningDriverTable = UIUtils.listingTable(driverHeaders, driverRow, runningDrivers)
-    val finishedDrivers = workerState.finishedDrivers.sortBy(_.driverId).reverse
+    val finishedDrivers = workerState.finishedDrivers.sortBy(_.setup.id).reverse
     val finishedDriverTable = UIUtils.listingTable(driverHeaders, driverRow, finishedDrivers)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
@@ -100,48 +99,48 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       workerState.host, workerState.port))
   }
 
-  def executorRow(executor: ExecutorRunner): Seq[Node] = {
+  def executorRow(executor: ExecutorRunnerInfo): Seq[Node] = {
     <tr>
-      <td>{executor.execId}</td>
-      <td>{executor.cores}</td>
+      <td>{executor.setup.id}</td>
+      <td>{executor.setup.cores}</td>
       <td>{executor.state}</td>
-      <td sorttable_customkey={executor.memory.toString}>
-        {Utils.megabytesToString(executor.memory)}
+      <td sorttable_customkey={executor.setup.memory.toString}>
+        {Utils.megabytesToString(executor.setup.memory)}
       </td>
       <td>
         <ul class="unstyled">
           <li><strong>ID:</strong> {executor.appId}</li>
-          <li><strong>Name:</strong> {executor.appDesc.name}</li>
-          <li><strong>User:</strong> {executor.appDesc.user}</li>
+          <li><strong>Name:</strong> {executor.setup.description.name}</li>
+          <li><strong>User:</strong> {executor.setup.description.user}</li>
         </ul>
       </td>
       <td>
      <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
-        .format(executor.appId, executor.execId)}>stdout</a>
+        .format(executor.appId, executor.setup.id)}>stdout</a>
      <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
-        .format(executor.appId, executor.execId)}>stderr</a>
+        .format(executor.appId, executor.setup.id)}>stderr</a>
       </td>
     </tr>
 
   }
 
-  def driverRow(driver: DriverRunner): Seq[Node] = {
+  def driverRow(driver: DriverRunnerInfo): Seq[Node] = {
     <tr>
-      <td>{driver.driverId}</td>
-      <td>{driver.driverDesc.command.arguments(2)}</td>
-      <td>{driver.finalState.getOrElse(DriverState.RUNNING)}</td>
-      <td sorttable_customkey={driver.driverDesc.cores.toString}>
-        {driver.driverDesc.cores.toString}
+      <td>{driver.setup.id}</td>
+      <td>{driver.setup.description.command.mainClass}</td>
+      <td>{driver.state}</td>
+      <td sorttable_customkey={driver.setup.cores.toString}>
+        {driver.setup.cores.toString}
       </td>
-      <td sorttable_customkey={driver.driverDesc.mem.toString}>
-        {Utils.megabytesToString(driver.driverDesc.mem)}
-      </td>
-      <td>
-        <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
-        <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
+      <td sorttable_customkey={driver.setup.memory.toString}>
+        {Utils.megabytesToString(driver.setup.memory)}
       </td>
       <td>
-        {driver.finalException.getOrElse("")}
+        <a href={s"logPage?driverId=${driver.setup.id}&logType=stdout"}>stdout</a>
+        <a href={s"logPage?driverId=${driver.setup.id}&logType=stderr"}>stderr</a>
+      </td>
+      <td>
+        {driver.exception.getOrElse("")}
       </td>
     </tr>
   }

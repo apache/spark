@@ -24,47 +24,43 @@ import scala.collection.JavaConverters._
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
-import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
-import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.Logging
+import org.apache.spark.deploy.ExecutorState._
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorDescription, ExecutorState}
+import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.logging.FileAppender
 
 /**
  * Manages the execution of one executor process.
  * This is currently only used in standalone mode.
  */
-private[deploy] class ExecutorRunner(
-    val appId: String,
-    val execId: Int,
-    val appDesc: ApplicationDescription,
-    val cores: Int,
-    val memory: Int,
-    val worker: RpcEndpointRef,
-    val workerId: String,
-    val host: String,
-    val webUiPort: Int,
-    val publicAddress: String,
-    val sparkHome: File,
-    val executorDir: File,
-    val workerUrl: String,
-    conf: SparkConf,
-    val appLocalDirs: Seq[String],
+private[deploy] class ExecutorRunnerImpl(
+    processSetup: ChildProcessCommonSetup[ApplicationDescription],
+    workerSetup: WorkerSetup,
+    stateChangedListener: StateChangeListener[ApplicationDescription, ExecutorRunnerInfo],
+    override val appId: String,
+    appLocalDirs: Seq[String],
     @volatile var state: ExecutorState.Value)
-  extends Logging {
+  extends ChildProcessRunner[ApplicationDescription, ExecutorRunnerInfo]
+  with ExecutorRunnerInfo with Logging { self =>
 
-  private val fullId = appId + "/" + execId
+  override def info: ExecutorRunnerImpl = this
+  override def setup: ChildProcessCommonSetup[ApplicationDescription] = processSetup
+
+  private val fullId = appId + "/" + processSetup.id
   private var workerThread: Thread = null
   private var process: Process = null
   private var stdoutAppender: FileAppender = null
   private var stderrAppender: FileAppender = null
 
+  @volatile var exception: Option[Exception] = None
+
   // NOTE: This is now redundant with the automated shut-down enforced by the Executor. It might
   // make sense to remove this in the future.
   private var shutdownHook: AnyRef = null
 
-  private[worker] def start() {
+  override def start() {
+    exception = None
     workerThread = new Thread("ExecutorRunner for " + fullId) {
       override def run() { fetchAndRunExecutor() }
     }
@@ -92,11 +88,12 @@ private[deploy] class ExecutorRunner(
       process.destroy()
       exitCode = Some(process.waitFor())
     }
-    worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+    stateChangedListener(this, message,
+      exitCode.filter(_ != 0).map(new NonZeroExitCodeException(_)))
   }
 
   /** Stop this executor runner, including killing the process it launched */
-  private[worker] def kill() {
+  override def kill() {
     if (workerThread != null) {
       // the workerThread will kill the child process when interrupted
       workerThread.interrupt()
@@ -112,10 +109,10 @@ private[deploy] class ExecutorRunner(
 
   /** Replace variables such as {{EXECUTOR_ID}} and {{CORES}} in a command argument passed to us */
   private[worker] def substituteVariables(argument: String): String = argument match {
-    case "{{WORKER_URL}}" => workerUrl
-    case "{{EXECUTOR_ID}}" => execId.toString
-    case "{{HOSTNAME}}" => host
-    case "{{CORES}}" => cores.toString
+    case "{{WORKER_URL}}" => workerSetup.workerUri
+    case "{{EXECUTOR_ID}}" => processSetup.id
+    case "{{HOSTNAME}}" => processSetup.host
+    case "{{CORES}}" => processSetup.cores.toString
     case "{{APP_ID}}" => appId
     case other => other
   }
@@ -126,13 +123,17 @@ private[deploy] class ExecutorRunner(
   private def fetchAndRunExecutor() {
     try {
       // Launch the process
-      val builder = CommandUtils.buildProcessBuilder(appDesc.command, new SecurityManager(conf),
-        memory, sparkHome.getAbsolutePath, substituteVariables)
+      val builder = CommandUtils.buildProcessBuilder(
+        processSetup.description.command,
+        workerSetup.securityManager,
+        processSetup.memory,
+        workerSetup.sparkHome.getAbsolutePath,
+        substituteVariables)
       val command = builder.command()
       val formattedCommand = command.asScala.mkString("\"", "\" \"", "\"")
       logInfo(s"Launch command: $formattedCommand")
 
-      builder.directory(executorDir)
+      builder.directory(processSetup.workDir)
       builder.environment.put("SPARK_EXECUTOR_DIRS", appLocalDirs.mkString(File.pathSeparator))
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
@@ -140,7 +141,8 @@ private[deploy] class ExecutorRunner(
 
       // Add webUI log urls
       val baseUrl =
-        s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
+        s"http://${processSetup.publicAddress}:${processSetup.webUIPort}" +
+          s"/logPage/?appId=$appId&executorId=${processSetup.id}&logType="
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
 
@@ -149,19 +151,20 @@ private[deploy] class ExecutorRunner(
         formattedCommand, "=" * 40)
 
       // Redirect its stdout and stderr to files
-      val stdout = new File(executorDir, "stdout")
-      stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
+      val stdout = new File(processSetup.workDir, "stdout")
+      stdoutAppender = FileAppender(process.getInputStream, stdout, workerSetup.conf)
 
-      val stderr = new File(executorDir, "stderr")
+      val stderr = new File(processSetup.workDir, "stderr")
       Files.write(header, stderr, UTF_8)
-      stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
+      stderrAppender = FileAppender(process.getErrorStream, stderr, workerSetup.conf)
 
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
       // or with nonzero exit code
       val exitCode = process.waitFor()
       state = ExecutorState.EXITED
       val message = "Command exited with code " + exitCode
-      worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
+      stateChangedListener(self, Some(message),
+        Some(exitCode).filter(_ != 0).map(new NonZeroExitCodeException(_)))
     } catch {
       case interrupted: InterruptedException => {
         logInfo("Runner thread for executor " + fullId + " interrupted")
@@ -171,8 +174,18 @@ private[deploy] class ExecutorRunner(
       case e: Exception => {
         logError("Error running executor", e)
         state = ExecutorState.FAILED
+        exception = Some(e)
         killProcess(Some(e.toString))
       }
     }
+  }
+}
+
+private[deploy] trait ExecutorRunnerInfo extends ChildRunnerInfo[ApplicationDescription] {
+  def appId: String
+  def state: ExecutorState
+
+  def createExecutorDescription(): ExecutorDescription = {
+    new ExecutorDescription(appId, setup.id.toInt, setup.cores, state)
   }
 }

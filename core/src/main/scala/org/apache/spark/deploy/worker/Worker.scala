@@ -24,15 +24,14 @@ import java.util.{UUID, Date}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
-import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
+import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
@@ -110,16 +109,17 @@ private[deploy] class Worker(
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
       new File(sys.props("spark.test.home"))
     } else {
-      new File(sys.env.get("SPARK_HOME").getOrElse("."))
+      new File(sys.env.getOrElse("SPARK_HOME", "."))
     }
 
   var workDir: File = null
-  val finishedExecutors = new LinkedHashMap[String, ExecutorRunner]
-  val drivers = new HashMap[String, DriverRunner]
-  val executors = new HashMap[String, ExecutorRunner]
-  val finishedDrivers = new LinkedHashMap[String, DriverRunner]
-  val appDirectories = new HashMap[String, Seq[String]]
-  val finishedApps = new HashSet[String]
+  val finishedExecutors = new mutable.LinkedHashMap[String, ExecutorRunner]
+  val drivers = new mutable.HashMap[String, DriverRunner]
+  val executors = new mutable.HashMap[String, ExecutorRunner]
+  val finishedDrivers = new mutable.LinkedHashMap[String, DriverRunner]
+  val appDirectories = new mutable.HashMap[String, Seq[String]]
+  val apps = new mutable.HashMap[String, ApplicationDescription]
+  val finishedApps = new mutable.HashSet[String]
 
   val retainedExecutors = conf.getInt("spark.worker.ui.retainedExecutors",
     WorkerWebUI.DEFAULT_RETAINED_EXECUTORS)
@@ -155,6 +155,36 @@ private[deploy] class Worker(
 
   var coresUsed = 0
   var memoryUsed = 0
+
+  val workerSetup = new WorkerSetup(
+    workerUri,
+    sparkHome,
+    conf,
+    securityMgr
+  )
+
+  val executorRunnerFactory = childProcessFactory[ApplicationDescription, ExecutorRunnerInfo](
+    "spark.worker.executorRunnerFactory").getOrElse(ExecutorRunnerFactoryImpl)
+
+  val driverRunnerFactory = childProcessFactory[DriverDescription, DriverRunnerInfo](
+    "spark.worker.driverRunnerFactory").getOrElse(DriverRunnerFactoryImpl)
+
+  private def childProcessFactory[D <: Description, T <: ChildRunnerInfo[D]](
+    classNameProperty: String): Option[ChildRunnerFactory[D, T]] = {
+
+    for (className <- conf.getOption(classNameProperty);
+         instance <- try {
+           val cls = Utils.classForName(className)
+           val instance = Some(cls.newInstance().asInstanceOf[ChildRunnerFactory[D, T]])
+           logInfo(s"Using custom child process factory implementation $className")
+           instance
+         } catch {
+           case ex: Exception =>
+             logError(s"Failed to create a custom child process factory $className. " +
+               s"Falling back to default implementation.")
+             None
+         }) yield instance
+  }
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
@@ -394,7 +424,7 @@ private[deploy] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
       // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
-      val appIds = executors.values.map(_.appId).toSet
+      val appIds = executors.values.map(_.info.appId).toSet
       val cleanupFuture = concurrent.future {
         val appDirs = workDir.listFiles()
         if (appDirs == null) {
@@ -422,8 +452,7 @@ private[deploy] class Worker(
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
       changeMaster(masterRef, masterWebUiUrl)
 
-      val execs = executors.values.
-        map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
+      val execs = executors.values.map(e => e.info.createExecutorDescription())
       masterRef.send(WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq))
 
     case ReconnectWorker(masterUrl) =>
@@ -454,27 +483,26 @@ private[deploy] class Worker(
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs
-          val manager = new ExecutorRunner(
-            appId,
-            execId,
-            appDesc.copy(command = Worker.maybeUpdateSSLSettings(appDesc.command, conf)),
+          val processSetup = ChildProcessCommonSetup(
+            execId.toString,
             cores_,
             memory_,
-            self,
-            workerId,
             host,
-            webUi.boundPort,
             publicAddress,
-            sparkHome,
+            webUi.boundPort,
             executorDir,
-            workerUri,
-            conf,
-            appLocalDirs, ExecutorState.LOADING)
-          executors(appId + "/" + execId) = manager
-          manager.start()
-          coresUsed += cores_
-          memoryUsed += memory_
-          sendToMaster(ExecutorStateChanged(appId, execId, manager.state, None, None))
+            appDesc.copy(command = Worker.maybeUpdateSSLSettings(appDesc.command, conf)))
+
+          val manager = executorRunnerFactory.createRunner(
+            Some(appId),
+            processSetup,
+            workerSetup,
+            onExecutorStateChange,
+            appLocalDirs)
+
+          startRunner(appId + "/" + execId, manager, executors)
+          apps += appId -> appDesc
+          sendToMaster(ExecutorStateChanged(appId, execId, manager.info.state, None, None))
         } catch {
           case e: Exception => {
             logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
@@ -505,25 +533,34 @@ private[deploy] class Worker(
         }
       }
 
-    case LaunchDriver(driverId, driverDesc) => {
+    case LaunchDriver(driverId, driverDesc) =>
       logInfo(s"Asked to launch driver $driverId")
-      val driver = new DriverRunner(
-        conf,
+
+      val driverDir = new File(workDir, driverId)
+      if (!driverDir.exists() && !driverDir.mkdirs()) {
+        throw new IOException("Failed to create directory " + driverDir)
+      }
+
+      val processSetup = new ChildProcessCommonSetup(
         driverId,
-        workDir,
-        sparkHome,
-        driverDesc.copy(command = Worker.maybeUpdateSSLSettings(driverDesc.command, conf)),
-        self,
-        workerUri,
-        securityMgr)
-      drivers(driverId) = driver
-      driver.start()
+        cores,
+        memory,
+        host,
+        publicAddress,
+        webUi.boundPort,
+        driverDir,
+        driverDesc.copy(command = Worker.maybeUpdateSSLSettings(driverDesc.command, conf)))
 
-      coresUsed += driverDesc.cores
-      memoryUsed += driverDesc.mem
-    }
+      val driver = driverRunnerFactory.createRunner(
+        None,
+        processSetup,
+        workerSetup,
+        onDriverStateChange,
+        Nil)
 
-    case KillDriver(driverId) => {
+      startRunner(driverId, driver, drivers)
+
+    case KillDriver(driverId) =>
       logInfo(s"Asked to kill driver $driverId")
       drivers.get(driverId) match {
         case Some(runner) =>
@@ -531,11 +568,9 @@ private[deploy] class Worker(
         case None =>
           logError(s"Asked to kill unknown driver $driverId")
       }
-    }
 
-    case driverStateChanged @ DriverStateChanged(driverId, state, exception) => {
+    case driverStateChanged @ DriverStateChanged(driverId, state, exception) =>
       handleDriverStateChanged(driverStateChanged)
-    }
 
     case ReregisterWithMaster =>
       reregisterWithMaster()
@@ -545,12 +580,46 @@ private[deploy] class Worker(
       maybeCleanupApplication(id)
   }
 
+  private def onExecutorStateChange(
+    runner: ExecutorRunner,
+    message: Option[String],
+    exception: Option[Exception]) {
+
+    val exitCode = if (ExecutorState.isFinished(runner.info.state)) {
+      exception.collectFirst {
+        case ex: NonZeroExitCodeException => Some(ex.exitCode)
+      }.getOrElse(Some(0))
+    } else None
+
+    self.send(ExecutorStateChanged(
+      runner.info.appId, runner.info.setup.id.toInt, runner.info.state, message, exitCode))
+  }
+
+  private def onDriverStateChange(
+    runner: DriverRunner,
+    message: Option[String],
+    exception: Option[Exception]): Unit = {
+
+    self.send(DriverStateChanged(
+      runner.info.setup.id, runner.info.state, exception))
+  }
+
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RequestWorkerState =>
-      context.reply(WorkerStateResponse(host, port, workerId, executors.values.toList,
-        finishedExecutors.values.toList, drivers.values.toList,
-        finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-        coresUsed, memoryUsed, activeMasterWebUiUrl))
+      context.reply(WorkerStateResponse(
+        host,
+        port,
+        workerId,
+        executors.values.map(_.info).toList,
+        finishedExecutors.values.map(_.info).toList,
+        drivers.values.map(_.info).toList,
+        finishedDrivers.values.map(_.info).toList,
+        activeMasterUrl,
+        cores,
+        memory,
+        coresUsed,
+        memoryUsed,
+        activeMasterWebUiUrl))
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -567,7 +636,7 @@ private[deploy] class Worker(
   }
 
   private def maybeCleanupApplication(id: String): Unit = {
-    val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.appId == id)
+    val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.info.appId == id)
     if (shouldCleanup) {
       finishedApps -= id
       appDirectories.remove(id).foreach { dirList =>
@@ -610,22 +679,15 @@ private[deploy] class Worker(
     metricsSystem.stop()
   }
 
-  private def trimFinishedExecutorsIfNecessary(): Unit = {
-    // do not need to protect with locks since both WorkerPage and Restful server get data through
-    // thread-safe RpcEndPoint
-    if (finishedExecutors.size > retainedExecutors) {
-      finishedExecutors.take(math.max(finishedExecutors.size / 10, 1)).foreach {
-        case (executorId, _) => finishedExecutors.remove(executorId)
-      }
-    }
-  }
+  private def trimFinishedRunnersIfNecessary[D <: Description, T <: ChildRunnerInfo[D]](
+    finishedRunners: mutable.Map[String, ChildProcessRunner[D, T]],
+    retainedRunners: Int): Unit = {
 
-  private def trimFinishedDriversIfNecessary(): Unit = {
     // do not need to protect with locks since both WorkerPage and Restful server get data through
     // thread-safe RpcEndPoint
-    if (finishedDrivers.size > retainedDrivers) {
-      finishedDrivers.take(math.max(finishedDrivers.size / 10, 1)).foreach {
-        case (driverId, _) => finishedDrivers.remove(driverId)
+    if (finishedRunners.size > retainedRunners) {
+      finishedRunners.take(math.max(finishedRunners.size / 10, 1)).foreach {
+        case (id, _) => finishedRunners.remove(id)
       }
     }
   }
@@ -647,11 +709,7 @@ private[deploy] class Worker(
         logDebug(s"Driver $driverId changed state to $state")
     }
     sendToMaster(driverStateChanged)
-    val driver = drivers.remove(driverId).get
-    finishedDrivers(driverId) = driver
-    trimFinishedDriversIfNecessary()
-    memoryUsed -= driver.driverDesc.mem
-    coresUsed -= driver.driverDesc.cores
+    finishRunner(driverId, drivers, finishedDrivers, retainedDrivers)
   }
 
   private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
@@ -668,11 +726,7 @@ private[deploy] class Worker(
           logInfo("Executor " + fullId + " finished with state " + state +
             message.map(" message " + _).getOrElse("") +
             exitStatus.map(" exitStatus " + _).getOrElse(""))
-          executors -= fullId
-          finishedExecutors(fullId) = executor
-          trimFinishedExecutorsIfNecessary()
-          coresUsed -= executor.cores
-          memoryUsed -= executor.memory
+          finishRunner(fullId, executors, finishedExecutors, retainedExecutors)
         case None =>
           logInfo("Unknown Executor " + fullId + " finished with state " + state +
             message.map(" message " + _).getOrElse("") +
@@ -680,6 +734,30 @@ private[deploy] class Worker(
       }
       maybeCleanupApplication(appId)
     }
+  }
+
+  private def startRunner[D <: Description, T <: ChildRunnerInfo[D]](
+    runnerId: String,
+    runner: ChildProcessRunner[D, T],
+    runners: mutable.Map[String, ChildProcessRunner[D, T]]): Unit = {
+
+    runners(runnerId) = runner
+    runner.start()
+    coresUsed += runner.info.setup.cores
+    memoryUsed += runner.info.setup.memory
+  }
+
+  private def finishRunner[D <: Description, T <: ChildRunnerInfo[D]](
+    runnerId: String,
+    runners: mutable.Map[String, ChildProcessRunner[D, T]],
+    finishedRunners: mutable.Map[String, ChildProcessRunner[D, T]],
+    retainedRunners: Int): Unit = {
+
+    val runner = runners.remove(runnerId).get
+    finishedRunners(runnerId) = runner
+    trimFinishedRunnersIfNecessary(finishedRunners, retainedRunners)
+    coresUsed -= runner.info.setup.cores
+    memoryUsed -= runner.info.setup.memory
   }
 }
 
@@ -691,8 +769,14 @@ private[deploy] object Worker extends Logging {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
-    val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
-      args.memory, args.masters, args.workDir)
+    val (rpcEnv, _) = startRpcEnvAndEndpoint(
+      args.host,
+      args.port,
+      args.webUiPort,
+      args.cores,
+      args.memory,
+      args.masters,
+      args.workDir)
     rpcEnv.awaitTermination()
   }
 
@@ -705,16 +789,26 @@ private[deploy] object Worker extends Logging {
       masterUrls: Array[String],
       workDir: String,
       workerNumber: Option[Int] = None,
-      conf: SparkConf = new SparkConf): RpcEnv = {
+      conf: SparkConf = new SparkConf): (RpcEnv, Worker) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX RPC Environments
     val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
-    val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL(_))
-    rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
-      masterAddresses, systemName, ENDPOINT_NAME, workDir, conf, securityMgr))
-    rpcEnv
+    val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL)
+    val worker = new Worker(
+      rpcEnv,
+      webUiPort,
+      cores,
+      memory,
+      masterAddresses,
+      systemName,
+      ENDPOINT_NAME,
+      workDir,
+      conf,
+      securityMgr)
+    rpcEnv.setupEndpoint(ENDPOINT_NAME, worker)
+    (rpcEnv, worker)
   }
 
   def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
