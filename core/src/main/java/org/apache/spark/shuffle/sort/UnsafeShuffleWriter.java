@@ -22,8 +22,6 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
 
-import org.apache.spark.shuffle.sort.SortShuffleManager;
-import org.apache.spark.shuffle.sort.SerializedShuffleHandle;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
