@@ -472,9 +472,19 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
  * @param relativeSD the maximum estimation error allowed.
  */
 // scalastyle:on
-case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
-    extends ImperativeAggregate {
+case class HyperLogLogPlusPlus(
+    child: Expression,
+    relativeSD: Double = 0.05,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate {
   import HyperLogLogPlusPlus._
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   /**
    * HLL++ uses 'p' bits for addressing. The more addressing bits we use, the more precise the
@@ -545,6 +555,11 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
   override val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
     AttributeReference(s"MS[$i]", LongType)()
   }
+
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
 
   /** Fill all words with zeros. */
   override def initialize(buffer: MutableRow): Unit = {
