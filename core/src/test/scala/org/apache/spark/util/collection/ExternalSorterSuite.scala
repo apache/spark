@@ -101,8 +101,9 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
     def createCombiner(i: String): ArrayBuffer[String] = ArrayBuffer[String](i)
     def mergeValue(buffer: ArrayBuffer[String], i: String): ArrayBuffer[String] = buffer += i
-    def mergeCombiners(buffer1: ArrayBuffer[String], buffer2: ArrayBuffer[String])
-    : ArrayBuffer[String] = buffer1 ++= buffer2
+    def mergeCombiners(
+        buffer1: ArrayBuffer[String],
+        buffer2: ArrayBuffer[String]): ArrayBuffer[String] = buffer1 ++= buffer2
 
     val agg = new Aggregator[String, String, ArrayBuffer[String]](
       createCombiner _, mergeValue _, mergeCombiners _)
