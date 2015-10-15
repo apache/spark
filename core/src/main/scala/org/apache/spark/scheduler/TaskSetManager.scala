@@ -804,7 +804,8 @@ private[spark] class TaskSetManager(
         // and we are not using an external shuffle server which could serve the shuffle outputs.
         // The reason is the next stage wouldn't be able to fetch the data from this dead executor
         // so we would need to rerun these tasks on other executors.
-        if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {
+        if (tasks(0).isInstanceOf[ShuffleMapTask] &&
+            !env.blockManager.externalShuffleServiceEnabled) {
           for ((tid, info) <- taskInfos if info.executorId == execId) {
             val index = taskInfos(tid).index
             if (successful(index)) {
@@ -823,7 +824,8 @@ private[spark] class TaskSetManager(
             case exited: ExecutorExited => exited.isNormalExit
             case _ => false
           }
-          handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
+          handleFailedTask(tid, TaskState.FAILED,
+            ExecutorLostFailure(info.executorId, isNormalExit))
         }
     }
 

@@ -508,10 +508,10 @@ private[spark] class TaskSchedulerImpl(
               executorIdToHost -= executorId
 
             case None =>
-             // We may get multiple executorLost() calls with different loss reasons. For example, one
-             // may be triggered by a dropped connection from the slave while another may be a report
-             // of executor termination from Mesos. We produce log messages for both so we eventually
-             // report the termination reason.
+             // We may get multiple executorLost() calls with different loss reasons. For example,
+             // one may be triggered by a dropped connection from the slave while another may be a
+             // report of executor termination from Mesos. We produce log messages for both so we
+             // eventually report the termination reason.
              logInfo(s"Lost an executor $executorId (already removed): $reason")
           }
       }
