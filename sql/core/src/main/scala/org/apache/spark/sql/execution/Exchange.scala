@@ -250,8 +250,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
-        val minSize = Seq(requiredOrdering.size, child.outputOrdering.size).min
-        if (minSize == 0 || requiredOrdering.take(minSize) != child.outputOrdering.take(minSize)) {
+        if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
           sqlContext.planner.BasicOperators.getSortOperator(requiredOrdering, global = false, child)
         } else {
           child
