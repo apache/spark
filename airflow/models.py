@@ -1517,10 +1517,10 @@ class BaseOperator(object):
         if isinstance(content, basestring):
             result = jinja_env.from_string(content).render(**context)
         elif isinstance(content, (list, tuple)):
-            result = [rt(e, context, jinja_env) for e in content]
+            result = [rt(e, context) for e in content]
         elif isinstance(content, dict):
             result = {
-                k: rt(v, context, jinja_env)
+                k: rt(v, context)
                 for k, v in list(content.items())}
         else:
             param_type = type(content)
