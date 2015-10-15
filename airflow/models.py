@@ -1494,6 +1494,7 @@ class BaseOperator(object):
         Hack sorting double chained task lists by task_id to avoid hitting
         max_depth on deepcopy operations.
         """
+        sys.setrecursionlimit(5000)  # TODO fix this in a better way
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -1503,7 +1504,6 @@ class BaseOperator(object):
         for k, v in list(self.__dict__.items()):
             if k not in ('user_defined_macros', 'params'):
                 setattr(result, k, copy.deepcopy(v, memo))
-
         return result
 
     def render_template_from_field(self, content, context, jinja_env):
