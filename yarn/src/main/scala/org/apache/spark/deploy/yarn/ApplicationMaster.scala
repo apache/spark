@@ -62,10 +62,21 @@ private[spark] class ApplicationMaster(
     .asInstanceOf[YarnConfiguration]
   private val isClusterMode = args.userClass != null
 
-  // Default to numExecutors * 2, with minimum of 3
-  private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
-    sparkConf.getInt("spark.yarn.max.worker.failures",
-      math.max(sparkConf.getInt("spark.executor.instances", 0) *  2, 3)))
+  // Default to twice the number of executors (twice the maximum number of executors if dynamic
+  // allocation is enabled), with a minimum of 3.
+
+  private val maxNumExecutorFailures = {
+    val defaultKey =
+      if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+        "spark.dynamicAllocation.maxExecutors"
+      } else {
+        "spark.executor.instances"
+      }
+    val effectiveNumExecutors = sparkConf.getInt(defaultKey, 0)
+    val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
+
+    sparkConf.getInt("spark.yarn.max.executor.failures", defaultMaxNumExecutorFailures)
+  }
 
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
