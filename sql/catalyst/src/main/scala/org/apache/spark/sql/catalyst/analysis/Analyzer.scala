@@ -483,10 +483,7 @@ class Analyzer(
       // Construct a set that contains all of the attributes that we need to evaluate the
       // ordering.
 
-      val resolvedAttributes =
-        newOrdering.flatMap(_.collect {case a : AttributeReference if a.resolved => a})
-
-      val requiredAttributes = AttributeSet(resolvedAttributes)
+      val requiredAttributes = AttributeSet(newOrdering).filter(_.resolved)
 
       // Figure out which ones are missing from the projection, so that we can add them and
       // remove them after the sort.
