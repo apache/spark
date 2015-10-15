@@ -435,4 +435,13 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def stronglyConnectedComponents(numIter: Int): Graph[VertexId, ED] = {
     StronglyConnectedComponents.run(graph, numIter)
   }
+
+  /**
+   * Compute the local clustering coefficient for each vertex
+   *
+   * @see [[org.apache.spark.graphx.lib.LocalClusteringCoefficient#run]]
+   */
+  def localClusteringCoefficient(): Graph[Double, ED] = {
+    LocalClusteringCoefficient.run(graph)
+  }
 } // end of GraphOps
