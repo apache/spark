@@ -49,7 +49,9 @@ case class TungstenAggregate(
 
   override private[sql] lazy val metrics = Map(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   override def outputsUnsafeRows: Boolean = true
 
@@ -79,6 +81,8 @@ case class TungstenAggregate(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
+    val dataSize = longMetric("dataSize")
+    val spillSize = longMetric("spillSize")
 
     /**
      * Set up the underlying unsafe data structures used before computing the parent partition.
@@ -97,7 +101,9 @@ case class TungstenAggregate(
         child.output,
         testFallbackStartsAt,
         numInputRows,
-        numOutputRows)
+        numOutputRows,
+        dataSize,
+        spillSize)
     }
 
     /** Compute a partition using the iterator already set up previously. */
