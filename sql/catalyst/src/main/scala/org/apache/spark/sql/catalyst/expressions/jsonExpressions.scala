@@ -135,20 +135,19 @@ case class GetJsonObject(json: Expression, path: Expression)
 
     if (parsed.isDefined) {
       try {
-        val parser = jsonFactory.createParser(jsonStr.getBytes)
-        Utils.withResource(parser, () => {
+        Utils.tryWithResource(jsonFactory.createParser(jsonStr.getBytes)) { parser =>
           val output = new ByteArrayOutputStream()
-          val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
-          Utils.withResource(generator, () => {
+          val matched = Utils.tryWithResource(
+            jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
             parser.nextToken()
-            val matched = evaluatePath(parser, generator, RawStyle, parsed.get)
-            if (matched) {
-              UTF8String.fromBytes(output.toByteArray)
-            } else {
-              null
-            }
-          })
-        })
+            evaluatePath(parser, generator, RawStyle, parsed.get)
+          }
+          if (matched) {
+            UTF8String.fromBytes(output.toByteArray)
+          } else {
+            null
+          }
+        }
       } catch {
         case _: JsonProcessingException => null
       }
@@ -257,7 +256,7 @@ case class GetJsonObject(json: Expression, path: Expression)
         val flattenGenerator = jsonFactory.createGenerator(buffer)
 
         var dirty = 0
-        Utils.withResource(flattenGenerator, () => {
+        Utils.tryWithResource(jsonFactory.createGenerator(buffer)) { flattenGenerator =>
           flattenGenerator.writeStartArray()
 
           while (p.nextToken() != END_ARRAY) {
@@ -266,7 +265,7 @@ case class GetJsonObject(json: Expression, path: Expression)
             dirty += (if (evaluatePath(p, flattenGenerator, nextStyle, xs)) 1 else 0)
           }
           flattenGenerator.writeEndArray()
-        })
+        }
 
         val buf = buffer.getBuffer
         if (dirty > 1) {
@@ -376,8 +375,9 @@ case class JsonTuple(children: Seq[Expression])
     }
 
     try {
-      val parser = jsonFactory.createParser(json.getBytes)
-      Utils.withResource(parser, () => parseRow(parser, input))
+      Utils.tryWithResource(jsonFactory.createParser(json.getBytes)) {
+        parser => parseRow(parser, input)
+      }
     } catch {
       case _: JsonProcessingException =>
         nullRow
@@ -421,8 +421,9 @@ case class JsonTuple(children: Seq[Expression])
 
           // write the output directly to UTF8 encoded byte array
           if (parser.nextToken() != JsonToken.VALUE_NULL) {
-            val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
-            Utils.withResource(generator, () => copyCurrentStructure(generator, parser))
+            Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
+              generator => copyCurrentStructure(generator, parser)
+            }
 
             row(idx) = UTF8String.fromBytes(output.toByteArray)
           }

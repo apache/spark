@@ -2153,8 +2153,9 @@ private[spark] object Utils extends Logging {
       conf.getInt("spark.executor.instances", 0) == 0
   }
 
-  def withResource[R <: Closeable, T](resource: R, f: () => T): T = {
-    try f.apply() finally resource.close()
+  def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
+    val resource = createResource
+    try f.apply(resource) finally resource.close()
   }
 }
 

@@ -87,8 +87,9 @@ private[sql] object JacksonParser {
 
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()
-        val generator = factory.createGenerator(writer, JsonEncoding.UTF8)
-        Utils.withResource(generator, () => generator.copyCurrentStructure(parser))
+        Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
+          generator => generator.copyCurrentStructure(parser)
+        }
         UTF8String.fromBytes(writer.toByteArray)
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, FloatType) =>
@@ -245,8 +246,7 @@ private[sql] object JacksonParser {
 
       iter.flatMap { record =>
         try {
-          val parser = factory.createParser(record)
-          Utils.withResource(parser, () => {
+          Utils.tryWithResource(factory.createParser(record)) { parser =>
             parser.nextToken()
 
             convertField(factory, parser, schema) match {
@@ -264,7 +264,7 @@ private[sql] object JacksonParser {
                     "(or each string in the RDD) is a valid JSON object or " +
                     "an array of JSON objects.")
             }
-          })
+          }
         } catch {
           case _: JsonProcessingException =>
             failedRecord(record)

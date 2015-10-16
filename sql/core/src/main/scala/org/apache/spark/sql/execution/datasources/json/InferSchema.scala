@@ -48,11 +48,10 @@ private[sql] object InferSchema {
       val factory = new JsonFactory()
       iter.map { row =>
         try {
-          val parser = factory.createParser(row)
-          Utils.withResource(parser, () => {
+          Utils.tryWithResource(factory.createParser(row)) { parser =>
             parser.nextToken()
             inferField(parser)
-          })
+          }
         } catch {
           case _: JsonParseException =>
             StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))
