@@ -51,49 +51,71 @@ object LocalClusteringCoefficient {
     // Remove redundant edges
     val g = graph.groupEdges((a, b) => a).cache()
 
-    // Construct set representations of the neighborhoods
-    // ()
-    val nbrSets: VertexRDD[VertexSet] =
+    // Construct map representations of the neighborhoods
+    // key in the map: vertex ID of a neighbor
+    // value in the map: number of edges between the vertex and the corresonding nighbor
+    val nbrSets: VertexRDD[Map[VertexId, Int]] =
       g.collectNeighborIds(EdgeDirection.Either).mapValues { (vid, nbrs) =>
-        val set = new VertexSet(4)
+        var nbMap = Map.empty[VertexId, Int]
         var i = 0
         while (i < nbrs.size) {
           // prevent self cycle
-          if(nbrs(i) != vid) {
-            set.add(nbrs(i))
+          val nbId = nbrs(i)
+          if(nbId != vid) {
+            val count = nbMap.getOrElse(nbId, 0)
+            nbMap += (nbId -> (count + 1))
           }
           i += 1
         }
-        set
+        nbMap
       }
 
     // join the sets with the graph
-    val setGraph: Graph[VertexSet, ED] = g.outerJoinVertices(nbrSets) {
+    val setGraph: Graph[Map[VertexId, Int], ED] = g.outerJoinVertices(nbrSets) {
       (vid, _, optSet) => optSet.getOrElse(null)
     }
 
     // Edge function computes intersection of smaller vertex with larger vertex
-    def edgeFunc(et: EdgeTriplet[VertexSet, ED]): Iterator[(VertexId, Double)] = {
-      assert(et.srcAttr != null)
-      assert(et.dstAttr != null)
-      val (smallSet, largeSet) = if (et.srcAttr.size < et.dstAttr.size) {
-        (et.srcAttr, et.dstAttr)
-      } else {
-        (et.dstAttr, et.srcAttr)
+    def edgeFunc(ctx: EdgeContext[Map[VertexId, Int], ED, Double]) {
+      assert(ctx.srcAttr != null)
+      assert(ctx.dstAttr != null)
+
+      // handle duplated edge
+      if ((ctx.srcAttr(ctx.dstId) == 2 && ctx.srcId > ctx.dstId) || (ctx.srcId == ctx.dstId)) {
+        return
       }
-      val iter = smallSet.iterator
-      val buf = new ListBuffer[(VertexId, Double)]
+      val (smallId, largeId, smallMap, largeMap) = if (ctx.srcAttr.size < ctx.dstAttr.size) {
+        (ctx.srcId, ctx.dstId, ctx.srcAttr, ctx.dstAttr)
+      } else {
+        (ctx.dstId, ctx.srcId, ctx.dstAttr, ctx.srcAttr)
+      }
+      val iter = smallMap.iterator
+      var smallCount: Int = 0
+      var largeCount: Int = 0
       while (iter.hasNext) {
-        val vid = iter.next()
-        if (vid != et.srcId && vid != et.dstId && largeSet.contains(vid)) {
-          buf += ((vid, 1.0))
+        val valPair = iter.next()
+        val vid = valPair._1
+        val smallVal = valPair._2
+        val largeVal = largeMap.getOrElse(vid, 0)
+        if (vid != ctx.srcId && vid != ctx.dstId && largeVal > 0) {
+          smallCount += largeVal
+          largeCount += smallVal
         }
       }
-      buf.toIterator
+      //println(smallId, smallCount, largeId, largeCount)
+      if (ctx.srcId == smallId) {
+        ctx.sendToSrc(smallCount)
+        ctx.sendToDst(largeCount)
+      } else {
+        ctx.sendToDst(smallCount)
+        ctx.sendToSrc(largeCount)
+      }
     }
 
     // compute the intersection along edges
-    val counters: VertexRDD[Double] = setGraph.mapReduceTriplets(edgeFunc, _ + _)
+    //val counters: VertexRDD[Double] = setGraph.mapReduceTriplets(edgeFunc, _ + _)
+    val counters: VertexRDD[Double] = setGraph.aggregateMessages(edgeFunc, _ + _)
+
 
     // count number of neighbors for each vertex
     var nbNumMap = Map[VertexId, Int]()
@@ -106,8 +128,10 @@ object LocalClusteringCoefficient {
       (vid, _, optCounter: Option[Double]) =>
         val dblCount: Double = optCounter.getOrElse(0)
         val nbNum = nbNumMap(vid)
+        //println(vid, dblCount, nbNum)
+        assert((dblCount.toInt & 1) == 0)
         if (nbNum > 1) {
-          dblCount / (nbNum * (nbNum - 1))
+          dblCount / (2 * nbNum * (nbNum - 1))
         }
         else {
           0

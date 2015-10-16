@@ -25,6 +25,17 @@ class LocalClusteringCoefficientSuite extends SparkFunSuite with LocalSparkConte
     (a - b).abs < 1e-20
   }
 
+  test("test in a single triangle") {
+    withSpark { sc =>
+      val edges = Array( 0L->1L, 1L->2L, 2L->0L )
+      val rawEdges = sc.parallelize(edges, 2)
+      val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
+      val lccCount = graph.localClusteringCoefficient()
+      val verts = lccCount.vertices
+      verts.collect.foreach { case (_, count) => assert(approEqual(count, 2.0)) }
+    }
+  }
+
   test("test in a complete graph") {
     withSpark { sc =>
       val edges = Array( 0L->1L, 1L->2L, 2L->0L )
