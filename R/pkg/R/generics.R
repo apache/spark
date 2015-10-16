@@ -509,6 +509,10 @@ setGeneric("sample",
 setGeneric("sample_frac",
            function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
 
+#' @rdname statfunctions
+#' @export
+setGeneric("sampleBy", function(x, col, fractions, seed) { standardGeneric("sampleBy") })
+
 #' @rdname saveAsParquetFile
 #' @export
 setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
@@ -685,6 +689,10 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @rdname ceil
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
+
+#' @rdname col
+#' @export
+setGeneric("column", function(x) { standardGeneric("column") })
 
 #' @rdname concat
 #' @export
@@ -999,3 +1007,7 @@ setGeneric("rbind", signature = "...")
 #' @rdname as.data.frame
 #' @export
 setGeneric("as.data.frame")
+
+#' @rdname attach
+#' @export
+setGeneric("attach")

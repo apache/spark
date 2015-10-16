@@ -443,7 +443,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   }
 
   def generateInputMetadataTable(inputMetadatas: Seq[(Int, String)]): Seq[Node] = {
-    <table class={SparkUIUtils.TABLE_CLASS_STRIPED}>
+    <table class={SparkUIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
       <thead>
         <tr>
           <th>Input</th>
