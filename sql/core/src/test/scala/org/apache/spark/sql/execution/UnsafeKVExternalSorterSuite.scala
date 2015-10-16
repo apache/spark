@@ -20,13 +20,12 @@ package org.apache.spark.sql.execution
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.memory.{GrantEverythingMemoryManager, TestShuffleMemoryManager}
+import org.apache.spark.memory.{TaskMemoryManager, GrantEverythingMemoryManager, TestShuffleMemoryManager}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.memory.TaskMemoryManager
 
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.

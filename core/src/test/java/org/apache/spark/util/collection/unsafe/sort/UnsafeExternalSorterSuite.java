@@ -51,7 +51,7 @@ import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.memory.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
 
 public class UnsafeExternalSorterSuite {

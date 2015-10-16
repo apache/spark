@@ -28,11 +28,12 @@ public class MemoryBlock extends MemoryLocation {
 
   private final long length;
 
+  // TODO(josh)
   /**
    * Optional page number; used when this MemoryBlock represents a page allocated by a
    * MemoryManager. This is package-private and is modified by MemoryManager.
    */
-  int pageNumber = -1;
+  public int pageNumber = -1;
 
   public MemoryBlock(@Nullable Object obj, long offset, long length) {
     super(obj, offset);

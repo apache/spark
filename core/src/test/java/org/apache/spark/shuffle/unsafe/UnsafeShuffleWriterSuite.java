@@ -57,7 +57,7 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.memory.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
 
 public class UnsafeShuffleWriterSuite {

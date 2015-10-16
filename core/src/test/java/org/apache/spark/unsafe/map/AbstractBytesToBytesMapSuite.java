@@ -21,6 +21,7 @@ import java.lang.Exception;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.apache.spark.memory.TaskMemoryManager;
 import org.junit.*;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;

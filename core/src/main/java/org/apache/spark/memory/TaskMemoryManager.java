@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.memory;
+package org.apache.spark.memory;
 
 import java.util.*;
 
@@ -24,8 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkEnv$;
-import org.apache.spark.memory.MemoryManager;
-import org.apache.spark.memory.ShuffleMemoryManager;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * Manages the memory allocated by an individual task.

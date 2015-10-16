@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.memory;
+package org.apache.spark.memory;
 
 import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.memory.GrantEverythingMemoryManager;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TaskMemoryManagerSuite {
 

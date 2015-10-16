@@ -23,7 +23,7 @@ import static org.junit.Assert.*;
 import org.apache.spark.SparkConf;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 import static org.apache.spark.shuffle.unsafe.PackedRecordPointer.*;
 
 public class PackedRecordPointerSuite {
