@@ -22,4 +22,4 @@ SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 # disable randomized hash for string in Python 3.3+
 export PYTHONHASHSEED=0
 
-exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"
+exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit --jars "$SPARK_HOME"/lib/starscream-assembly-1.5.0.jar "$@"
