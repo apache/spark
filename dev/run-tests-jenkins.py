@@ -65,49 +65,6 @@ def post_message_to_github(msg, ghprb_pull_id):
         print_err(" > data: %s" % posted_message)
 
 
-def send_archived_logs():
-    print("Archiving unit tests logs...")
-
-    # find any files rescursively with the name 'unit-tests.log'
-    log_files = [os.path.join(path, f)
-                 for path, _, filenames in os.walk(SPARK_HOME)
-                 for f in filenames if f == 'unit-tests.log']
-    # ensure we have a default list if no 'unit-tests.log' files were found
-    log_files = log_files if log_files else list()
-
-    # check if any of the three explicit paths exist on the system
-    log_files += [f for f in ['./sql/hive/target/HiveCompatibilitySuite.failed',
-                              './sql/hive/target/HiveCompatibilitySuite.hiveFailed',
-                              './sql/hive/target/HiveCompatibilitySuite.wrong']
-                  if os.path.isfile(f)]
-
-    if log_files:
-        log_archive = "unit-tests-logs.tar.gz"
-
-        run_cmd(['tar', '-czf', '--absolute-names', log_archive] + log_files)
-
-        jenkins_build_dir = os.environ["JENKINS_HOME"] + "/jobs/" + os.environ["JOB_NAME"] + \
-            "/builds/" + os.environ["BUILD_NUMBER"]
-
-        scp_proc = subprocess.Popen(['scp', log_archive,
-                                     'amp-jenkins-master:' + jenkins_build_dir + '/' + log_archive],
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-        scp_stdout, _ = scp_proc.communicate()
-        scp_returncode = scp_proc.returncode
-
-        if not scp_returncode == 0:
-            print_err("Failed to send archived unit tests logs to Jenkins master.")
-            print_err(" > scp_status: %s" % scp_returncode)
-            print_err(" > scp_output: %s" % scp_stdout)
-        else:
-            print(" > Send successful.")
-
-        rm_r(log_archive)
-    else:
-        print_err(" > No log files found.")
-
-
 def pr_message(build_display_name,
                build_url,
                ghprb_pull_id,
@@ -178,7 +135,6 @@ def run_tests(tests_timeout):
         test_result_note = ' * This patch passes all tests.'
     else:
         test_result_note = ' * This patch **fails %s**.' % failure_note_by_errcode[test_result_code]
-        send_archived_logs()
 
     return [test_result_code, test_result_note]
 
