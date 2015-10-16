@@ -1275,22 +1275,6 @@ object Client extends Logging {
         val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
         val hiveConf = hiveConfClass.newInstance()
 
-        // Set metastore to be a local temp directory to avoid conflict of the `metaStore client`
-        // in `HiveContext` which will use the same derby dataBase by default.
-        val hiveConfSet = (param: String, value: String) => hiveConfClass
-          .getMethod("set", classOf[Unit])
-          .invoke(hiveConf, param, value)
-        val tempDir = Utils.createTempDir()
-        val localMetastore = new File(tempDir, "metastore")
-        hiveConfSet("hive.metastore.warehouse.dir", localMetastore.toURI.toString)
-        hiveConfSet("javax.jdo.option.ConnectionURL",
-          s"jdbc:derby:;databaseName=${localMetastore.getAbsolutePath};create=true")
-        hiveConfSet("datanucleus.rdbms.datastoreAdapterClassName",
-          "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
-
-        val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
-        val hive = hiveClass.getMethod("get").invoke(null, hiveConf.asInstanceOf[Object])
-
         val hiveConfGet = (param: String) => Option(hiveConfClass
           .getMethod("get", classOf[java.lang.String])
           .invoke(hiveConf, param))
@@ -1299,6 +1283,9 @@ object Client extends Logging {
 
         // Check for local metastore
         if (metastore_uri != None && metastore_uri.get.toString.size > 0) {
+          val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
+          val hive = hiveClass.getMethod("get").invoke(null, hiveConf.asInstanceOf[Object])
+
           val metastore_kerberos_principal_conf_var = mirror.classLoader
             .loadClass("org.apache.hadoop.hive.conf.HiveConf$ConfVars")
             .getField("METASTORE_KERBEROS_PRINCIPAL").get("varname").toString
