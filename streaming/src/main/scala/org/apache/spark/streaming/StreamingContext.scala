@@ -716,10 +716,6 @@ class StreamingContext private[streaming] (
             }
             logInfo("StreamingContext stopped successfully")
         }
-        // Even if we have already stopped, we still need to attempt to stop the SparkContext
-        // because a user might stop(stopSparkContext = false) and then call
-        // stop(stopSparkContext = true).
-        if (stopSparkContext) sc.stop()
       } finally {
         // The state should always be Stopped after calling `stop()`, even if we haven't started yet
         state = STOPPED
@@ -728,6 +724,9 @@ class StreamingContext private[streaming] (
     if (shutdownHookRefToRemove != null) {
       ShutdownHookManager.removeShutdownHook(shutdownHookRefToRemove)
     }
+    // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+    // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
+    if (stopSparkContext) sc.stop()
   }
 
   private def stopOnShutdown(): Unit = {
