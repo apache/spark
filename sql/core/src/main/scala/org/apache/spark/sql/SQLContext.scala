@@ -56,7 +56,7 @@ import org.apache.spark.util.Utils
  * @groupname specificdata Specific Data Sources
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
- * @groupname Ungrouped Support functions for language integrated queries.
+ * @groupname Ungrouped Support functions for language integrated queries
  *
  * @since 1.0.0
  */
