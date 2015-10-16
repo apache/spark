@@ -90,16 +90,18 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
       if (is.null(schema)) {
         schema <- names(data)
       }
-      # get rid of factor type
-      dropFactor <- function(x) {
+      # get rid of factor type and adjust for lists
+      cleanCols <- function(x) {
         if (is.factor(x)) {
           as.character(x)
+        } else if(is.list(x) && !is.environment(x)) {
+          lapply(x, list)
         } else {
           x
         }
       }
-      args <- list(FUN=list, SIMPLIFY=FALSE, USE.NAMES=FALSE)
-      data <- do.call(mapply, append(args, setNames(lapply(data, dropFactor), NULL)))
+      args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+      data <- do.call(mapply, append(args, setNames(lapply(data, cleanCols), NULL)))
   }
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlContext)
