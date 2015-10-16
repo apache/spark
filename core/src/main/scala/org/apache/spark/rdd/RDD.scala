@@ -1546,18 +1546,13 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD is marked for checkpointing, either reliably or locally.
    */
-  def isCheckpointed: Boolean = {
-    checkpointData match {
-      case Some(_: RDDCheckpointData[_]) => true
-      case _ => false
-    }
-  }
+  def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
   /**
    * Return whether this RDD is marked for checkpointing and materialized,
    * either reliably or locally.
    */
-  def isCheckpointedAndMaterialized: Boolean = checkpointData.exists(_.isCheckpointed)
+  private[spark] def isCheckpointedAndMaterialized: Boolean = isCheckpointed
 
   /**
    * Return whether this RDD is marked for local checkpointing.

@@ -1419,11 +1419,13 @@ public class JavaAPISuite implements Serializable {
   public void checkpointAndComputation() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     sc.setCheckpointDir(tempDir.getAbsolutePath());
+    Assert.assertFalse(rdd.isCheckpointed());
     Assert.assertFalse(rdd.isCheckpointedAndMaterialized());
     rdd.checkpoint();
-    Assert.assertTrue(rdd.isCheckpointed());
+    Assert.assertFalse(rdd.isCheckpointed());
     Assert.assertFalse(rdd.isCheckpointedAndMaterialized());
     rdd.count(); // Forces the DAG to cause a checkpoint
+    Assert.assertTrue(rdd.isCheckpointed());
     Assert.assertTrue(rdd.isCheckpointedAndMaterialized());
     Assert.assertEquals(Arrays.asList(1, 2, 3, 4, 5), rdd.collect());
   }
@@ -1432,11 +1434,13 @@ public class JavaAPISuite implements Serializable {
   public void checkpointAndRestore() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     sc.setCheckpointDir(tempDir.getAbsolutePath());
+    Assert.assertFalse(rdd.isCheckpointed());
     Assert.assertFalse(rdd.isCheckpointedAndMaterialized());
     rdd.checkpoint();
-    Assert.assertTrue(rdd.isCheckpointed());
+    Assert.assertFalse(rdd.isCheckpointed());
     Assert.assertFalse(rdd.isCheckpointedAndMaterialized());
     rdd.count(); // Forces the DAG to cause a checkpoint
+    Assert.assertTrue(rdd.isCheckpointed());
     Assert.assertTrue(rdd.isCheckpointedAndMaterialized());
 
     Assert.assertTrue(rdd.getCheckpointFile().isPresent());

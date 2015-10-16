@@ -550,7 +550,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Return whether this RDD has been checkpointed and materialized or not
    */
-  def isCheckpointedAndMaterialized: Boolean = rdd.isCheckpointedAndMaterialized
+  private[spark] def isCheckpointedAndMaterialized: Boolean = rdd.isCheckpointedAndMaterialized
 
   /**
    * Gets the name of the file to which this RDD was checkpointed

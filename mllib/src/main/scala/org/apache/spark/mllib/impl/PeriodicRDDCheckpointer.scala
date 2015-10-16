@@ -81,7 +81,7 @@ private[mllib] class PeriodicRDDCheckpointer[T](
 
   override protected def checkpoint(data: RDD[T]): Unit = data.checkpoint()
 
-  override protected def isCheckpointed(data: RDD[T]): Boolean = data.isCheckpointedAndMaterialized
+  override protected def isCheckpointed(data: RDD[T]): Boolean = data.isCheckpointed
 
   override protected def persist(data: RDD[T]): Unit = {
     if (data.getStorageLevel == StorageLevel.NONE) {
