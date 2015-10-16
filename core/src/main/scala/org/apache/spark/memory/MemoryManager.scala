@@ -92,8 +92,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf) extends Logging {
         }
       }
       tungstenMemoryAllocator.allocate(size)
-    }
-    else {
+    } else {
       tungstenMemoryAllocator.allocate(size)
     }
   }
@@ -110,8 +109,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf) extends Logging {
         }
         pool.add(new WeakReference[MemoryBlock](memory))
       }
-    }
-    else {
+    } else {
       tungstenMemoryAllocator.free(memory)
     }
   }

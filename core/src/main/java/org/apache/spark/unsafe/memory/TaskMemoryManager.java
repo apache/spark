@@ -95,7 +95,7 @@ public class TaskMemoryManager {
    */
   private final HashSet<MemoryBlock> allocatedNonPageMemory = new HashSet<MemoryBlock>();
 
-  private final MemoryManager executorMemoryManager;
+  private final MemoryManager memoryManager;
 
   /**
    * Tracks whether we're in-heap or off-heap. For off-heap, we short-circuit most of these methods
@@ -107,9 +107,9 @@ public class TaskMemoryManager {
   /**
    * Construct a new MemoryManager.
    */
-  public TaskMemoryManager(MemoryManager executorMemoryManager) {
-    this.inHeap = executorMemoryManager.tungstenMemoryIsAllocatedInHeap();
-    this.executorMemoryManager = executorMemoryManager;
+  public TaskMemoryManager(MemoryManager memoryManager) {
+    this.inHeap = memoryManager.tungstenMemoryIsAllocatedInHeap();
+    this.memoryManager = memoryManager;
   }
 
   /**
@@ -131,7 +131,7 @@ public class TaskMemoryManager {
       }
       allocatedPages.set(pageNumber);
     }
-    final MemoryBlock page = executorMemoryManager.allocateMemoryBlock(size);
+    final MemoryBlock page = memoryManager.allocateMemoryBlock(size);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
@@ -155,7 +155,7 @@ public class TaskMemoryManager {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
     // Cannot access a page once it's freed.
-    executorMemoryManager.freeMemoryBlock(page);
+    memoryManager.freeMemoryBlock(page);
   }
 
   /**
@@ -169,7 +169,7 @@ public class TaskMemoryManager {
    */
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
     assert(size > 0) : "Size must be positive, but got " + size;
-    final MemoryBlock memory = executorMemoryManager.allocateMemoryBlock(size);
+    final MemoryBlock memory = memoryManager.allocateMemoryBlock(size);
     synchronized(allocatedNonPageMemory) {
       allocatedNonPageMemory.add(memory);
     }
@@ -181,7 +181,7 @@ public class TaskMemoryManager {
    */
   public void free(MemoryBlock memory) {
     assert (memory.pageNumber == -1) : "Should call freePage() for pages, not free()";
-    executorMemoryManager.freeMemoryBlock(memory);
+    memoryManager.freeMemoryBlock(memory);
     synchronized(allocatedNonPageMemory) {
       final boolean wasAlreadyRemoved = !allocatedNonPageMemory.remove(memory);
       assert (!wasAlreadyRemoved) : "Called free() on memory that was already freed!";
@@ -279,7 +279,7 @@ public class TaskMemoryManager {
         freedBytes += memory.size();
         // We don't call free() here because that calls Set.remove, which would lead to a
         // ConcurrentModificationException here.
-        executorMemoryManager.freeMemoryBlock(memory);
+        memoryManager.freeMemoryBlock(memory);
         iter.remove();
       }
     }
