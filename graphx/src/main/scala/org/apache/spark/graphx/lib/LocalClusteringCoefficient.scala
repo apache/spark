@@ -75,18 +75,21 @@ object LocalClusteringCoefficient {
       (vid, _, optSet) => optSet.getOrElse(null)
     }
 
-    // Edge function computes intersection of smaller vertex with larger vertex
+    // map function: for each edge (srcId = v_i, dstId = v_j),
+    // compute |{e_jk: e_ik, e_jk \in E, v_k \in V}| for vertex v_i
+    // and |{e_ik: e_ik, e_jk \in E, v_k \in V}| for vertex v_j
     def edgeFunc(ctx: EdgeContext[Map[VertexId, Int], ED, Double]) {
       assert(ctx.srcAttr != null)
       assert(ctx.dstAttr != null)
-
-      if (! ctx.srcAttr.contains(ctx.dstId)) {
+      // make sure srcId != dstId
+      if (ctx.srcId == ctx.dstId) {
         return
       }
-      // handle duplated edge
+      // handle duplated edges
       if ((ctx.srcAttr(ctx.dstId) == 2 && ctx.srcId > ctx.dstId) || (ctx.srcId == ctx.dstId)) {
         return
       }
+
       val (smallId, largeId, smallMap, largeMap) = if (ctx.srcAttr.size < ctx.dstAttr.size) {
         (ctx.srcId, ctx.dstId, ctx.srcAttr, ctx.dstAttr)
       } else {
@@ -114,9 +117,8 @@ object LocalClusteringCoefficient {
       }
     }
 
-    // compute the intersection along edges
+    // compute |{e_jk: v_j, v_k \in N_i, e_jk \in E}| for each vertex i
     val counters: VertexRDD[Double] = setGraph.aggregateMessages(edgeFunc, _ + _)
-
 
     // count number of neighbors for each vertex
     var nbNumMap = Map[VertexId, Int]()
