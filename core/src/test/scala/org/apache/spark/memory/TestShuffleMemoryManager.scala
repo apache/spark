@@ -17,10 +17,11 @@
 
 package org.apache.spark.memory
 
+import org.apache.spark.memory.ShuffleMemoryManager
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
-import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 /**

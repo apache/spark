@@ -54,7 +54,7 @@ import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.serializer.*;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.shuffle.ShuffleMemoryManager;
+import org.apache.spark.memory.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;

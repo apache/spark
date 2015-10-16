@@ -21,8 +21,7 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.memory.StaticMemoryManager
-import org.apache.spark.shuffle.ShuffleMemoryManager
+import org.apache.spark.memory.{ShuffleMemoryManager, StaticMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.memory.ShuffleMemoryManager
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.{InternalAccumulator, Logging, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,7 +33,7 @@ import org.apache.spark.sql.types.StructType
  *
  * This iterator first uses hash-based aggregation to process input rows. It uses
  * a hash map to store groups and their corresponding aggregation buffers. If we
- * this map cannot allocate memory from [[org.apache.spark.shuffle.ShuffleMemoryManager]],
+ * this map cannot allocate memory from [[ShuffleMemoryManager]],
  * it switches to sort-based aggregation. The process of the switch has the following step:
  *  - Step 1: Sort all entries of the hash map based on values of grouping expressions and
  *            spill them to disk.

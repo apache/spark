@@ -20,6 +20,7 @@ package org.apache.spark.shuffle
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.memory.ShuffleMemoryManager
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._

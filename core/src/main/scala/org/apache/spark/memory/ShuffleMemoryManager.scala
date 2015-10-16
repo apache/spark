@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.memory
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.annotations.VisibleForTesting
 
 import org.apache.spark._
-import org.apache.spark.memory.{StaticMemoryManager, MemoryManager}
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
