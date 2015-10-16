@@ -30,22 +30,22 @@ if [ "$?" != "0" ] || [ -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
   exit 1
 fi
 
-# # Remove everything not in dist or conf
-# find * -maxdepth 0 -name 'dist' -o -name 'conf' -prune -o -exec rm -rf '{}' ';'
+# Remove everything not in dist or conf
+find * -maxdepth 0 -name 'dist' -o -name 'conf' -prune -o -exec rm -rf '{}' ';'
 
-# # Copy everything out of dist that doesn't exist already
-# mv -n dist/* .
-# echo $GIT_SHA > ./GIT_SHA
-# echo $GIT_BRANCH >> ./GIT_DESC
-# echo $GIT_DESC >> ./GIT_DESC
-# echo $GIT_HUMAN >> ./GIT_DESC
+# Copy everything out of dist that doesn't exist already
+mv -n dist/* .
+echo $GIT_SHA > ./GIT_SHA
+echo $GIT_BRANCH >> ./GIT_DESC
+echo $GIT_DESC >> ./GIT_DESC
+echo $GIT_HUMAN >> ./GIT_DESC
 
-# # Tar the local dir and upload it to s3 for public (passwordless) consumption
-# # Packserv also builds this tar after the fact but we need the tar to be accessible everywhere
-# # and it has nothing sensitive in it, so we just upload it so we don't need to store the
-# # much more sensitive packserv password everywhere we want to fetch spark.
-# S3_TAR=/tmp/spark-$GIT_SHA.tgz
-# tar -c -z --exclude=.git -f $S3_TAR .
-# ls -lA /etc
-# s3cmd --config=/etc/packserv-spark-s3cmd.cfg --acl-public put $S3_TAR s3://shopify-sparks/
-# rm $S3_TAR
+# Tar the local dir and upload it to s3 for public (passwordless) consumption
+# Packserv also builds this tar after the fact but we need the tar to be accessible everywhere
+# and it has nothing sensitive in it, so we just upload it so we don't need to store the
+# much more sensitive packserv password everywhere we want to fetch spark.
+S3_TAR=/tmp/spark-$GIT_SHA.tgz
+tar -c -z --exclude=.git -f $S3_TAR .
+ls -lA /etc
+s3cmd --config=/etc/packserv-spark-s3cmd.cfg --acl-public put $S3_TAR s3://shopify-sparks/
+rm $S3_TAR
