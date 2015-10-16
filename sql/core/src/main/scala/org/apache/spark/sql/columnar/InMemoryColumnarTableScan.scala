@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.{ConvertToUnsafe, LeafNode, SparkPlan}
+import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{Accumulable, Accumulator, Accumulators}
 
@@ -310,9 +311,12 @@ private[sql] case class InMemoryColumnarTableScan(
         }
 
       val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
-      val columnarIterator = GenerateColumnAccessor.generate(requestedColumnDataTypes)
-      columnarIterator.initialize(cachedBatchesToScan, nextRow,
-        requestedColumnDataTypes.toArray,
+      val columnTypes = requestedColumnDataTypes.map {
+        case udt: UserDefinedType[_] => udt.sqlType
+        case other => other
+      }.toArray
+      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
+      columnarIterator.initialize(cachedBatchesToScan, nextRow, columnTypes,
         requestedColumnIndices.toArray)
       if (enableAccumulators && columnarIterator.hasNext) {
         readPartitions += 1

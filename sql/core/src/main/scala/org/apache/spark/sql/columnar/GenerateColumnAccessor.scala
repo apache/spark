@@ -41,12 +41,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
   protected def create(columnTypes: Seq[DataType]): ColumnarIterator = {
     val ctx = newCodeGenContext()
-    val (creaters, accesses) = columnTypes.zipWithIndex.map { case (dataType, index) =>
+    val (creaters, accesses) = columnTypes.zipWithIndex.map { case (dt, index) =>
       val accessorName = ctx.freshName("accessor")
-      val dt = dataType match {
-        case udt: UserDefinedType[_] => udt.sqlType
-        case other => other
-      }
       val accessorCls = dt match {
         case NullType => classOf[NullColumnAccessor].getName
         case BooleanType => classOf[BooleanColumnAccessor].getName
