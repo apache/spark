@@ -82,7 +82,7 @@ class LocalClusteringCoefficientSuite extends SparkFunSuite with LocalSparkConte
       val graph = Graph.fromEdgeTuples(rawEdges, true, uniqueEdges = Some(RandomVertexCut)).cache()
       val lccCount = graph.localClusteringCoefficient()
       val verts = lccCount.vertices
-      verts.collect.foreach { case (vid, count) => assert(approEqual(count, 1.0)) }
+      verts.collect.foreach { case (vid, count) => assert(approEqual(count, 0.5)) }
     }
   }
 }
