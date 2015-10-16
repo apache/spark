@@ -253,7 +253,6 @@ case class GetJsonObject(json: Expression, path: Expression)
         // temporarily buffer child matches, the emitted json will need to be
         // modified slightly if there is only a single element written
         val buffer = new StringWriter()
-        val flattenGenerator = jsonFactory.createGenerator(buffer)
 
         var dirty = 0
         Utils.tryWithResource(jsonFactory.createGenerator(buffer)) { flattenGenerator =>
