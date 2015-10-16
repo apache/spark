@@ -276,25 +276,15 @@ private[sql] case class InMemoryColumnarTableScan(
     val buffers = relation.cachedColumnBuffers
 
     buffers.mapPartitions { cachedBatchIterator =>
-    val partitionFilter = newPredicate(
-      partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-      schema)
+      val partitionFilter = newPredicate(
+        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+        schema)
 
-      // Find the ordinals and data types of the requested columns.  If none are requested, use the
-      // narrowest (the field with minimum default element size).
-      val (requestedColumnIndices, requestedColumnDataTypes) = if (attributes.isEmpty) {
-        val (narrowestOrdinal, narrowestDataType) =
-          relOutput.zipWithIndex.map { case (a, ordinal) =>
-            ordinal -> a.dataType
-          } minBy { case (_, dataType) =>
-            ColumnType(dataType).defaultSize
-          }
-        Seq(narrowestOrdinal) -> Seq(narrowestDataType)
-      } else {
+      // Find the ordinals and data types of the requested columns.
+      val (requestedColumnIndices, requestedColumnDataTypes) =
         attributes.map { a =>
           relOutput.indexWhere(_.exprId == a.exprId) -> a.dataType
         }.unzip
-      }
 
       // Do partition batch pruning if enabled
       val cachedBatchesToScan =
@@ -320,9 +310,9 @@ private[sql] case class InMemoryColumnarTableScan(
         }
 
       val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
-      val columnTypes = requestedColumnIndices.map(relOutput(_).dataType).toArray
-      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
-      columnarIterator.initialize(cachedBatchesToScan, nextRow, columnTypes,
+      val columnarIterator = GenerateColumnAccessor.generate(requestedColumnDataTypes)
+      columnarIterator.initialize(cachedBatchesToScan, nextRow,
+        requestedColumnDataTypes.toArray,
         requestedColumnIndices.toArray)
       if (enableAccumulators && columnarIterator.hasNext) {
         readPartitions += 1
