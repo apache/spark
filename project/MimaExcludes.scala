@@ -121,7 +121,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.shuffle.unsafe.UnsafeShuffleHandle"),
         ProblemFilters.exclude[MissingClassProblem](
-          "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager$")
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.shuffle.sort.SortShuffleFileWriter")
       )
     case v if v.startsWith("1.5") =>
       Seq(
