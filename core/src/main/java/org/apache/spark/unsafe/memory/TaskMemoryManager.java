@@ -97,6 +97,8 @@ public class TaskMemoryManager {
 
   private final MemoryManager memoryManager;
 
+  private final long taskAttemptId;
+
   /**
    * Tracks whether we're in-heap or off-heap. For off-heap, we short-circuit most of these methods
    * without doing any masking or lookups. Since this branching should be well-predicted by the JIT,
@@ -105,11 +107,12 @@ public class TaskMemoryManager {
   private final boolean inHeap;
 
   /**
-   * Construct a new MemoryManager.
+   * Construct a new TaskMemoryManager.
    */
-  public TaskMemoryManager(MemoryManager memoryManager) {
+  public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
     this.inHeap = memoryManager.tungstenMemoryIsAllocatedInHeap();
     this.memoryManager = memoryManager;
+    this.taskAttemptId = taskAttemptId;
   }
 
   /**

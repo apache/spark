@@ -111,7 +111,7 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       spill: Boolean): Unit = {
 
     val taskMemMgr = new TaskMemoryManager(
-        new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")))
+        new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0)
     val shuffleMemMgr =
       new TestShuffleMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"))
     TaskContext.setTaskContext(new TaskContextImpl(

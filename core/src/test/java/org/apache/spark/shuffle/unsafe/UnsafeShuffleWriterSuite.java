@@ -64,7 +64,7 @@ public class UnsafeShuffleWriterSuite {
 
   static final int NUM_PARTITITONS = 4;
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(
-    new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")));
+    new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
   final HashPartitioner hashPartitioner = new HashPartitioner(NUM_PARTITITONS);
   File mergedOutputFile;
   File tempDir;

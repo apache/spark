@@ -50,7 +50,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   public void setup() {
     shuffleMemoryManager = ShuffleMemoryManager.create(Long.MAX_VALUE, PAGE_SIZE_BYTES);
     taskMemoryManager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")));
+      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
     // Mocked memory manager for tests that check the maximum array size, since actually allocating
     // such large arrays will cause us to run out of memory in our tests.
     sizeLimitedTaskMemoryManager = mock(TaskMemoryManager.class);

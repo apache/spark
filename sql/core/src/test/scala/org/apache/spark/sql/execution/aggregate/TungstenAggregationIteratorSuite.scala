@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager
 class TungstenAggregationIteratorSuite extends SparkFunSuite with SharedSQLContext {
 
   test("memory acquired on construction") {
-    val taskMemoryManager = new TaskMemoryManager(SparkEnv.get.memoryManager)
+    val taskMemoryManager = new TaskMemoryManager(SparkEnv.get.memoryManager, 0)
     val taskContext = new TaskContextImpl(0, 0, 0, 0, taskMemoryManager, null, Seq.empty)
     TaskContext.setTaskContext(taskContext)
 

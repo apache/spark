@@ -32,7 +32,7 @@ public class PackedRecordPointerSuite {
   public void heap() {
     final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new GrantEverythingMemoryManager(conf));
+      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
     final MemoryBlock page0 = memoryManager.allocatePage(128);
     final MemoryBlock page1 = memoryManager.allocatePage(128);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
@@ -51,7 +51,7 @@ public class PackedRecordPointerSuite {
   public void offHeap() {
     final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "true");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new GrantEverythingMemoryManager(conf));
+      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
     final MemoryBlock page0 = memoryManager.allocatePage(128);
     final MemoryBlock page1 = memoryManager.allocatePage(128);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,

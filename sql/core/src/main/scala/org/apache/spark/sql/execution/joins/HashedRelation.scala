@@ -325,7 +325,7 @@ private[joins] final class UnsafeHashedRelation(
     // so that tests compile:
     val taskMemoryManager = new TaskMemoryManager(
       new StaticMemoryManager(
-        new SparkConf().set("spark.unsafe.offHeap", "false"), Long.MaxValue, Long.MaxValue));
+        new SparkConf().set("spark.unsafe.offHeap", "false"), Long.MaxValue, Long.MaxValue), 0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.shuffleMemoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))

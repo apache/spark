@@ -60,7 +60,7 @@ public class UnsafeShuffleInMemorySorterSuite {
     };
     final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new GrantEverythingMemoryManager(conf));
+      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048);
     final Object baseObject = dataPage.getBaseObject();
     final UnsafeShuffleInMemorySorter sorter = new UnsafeShuffleInMemorySorter(4);
