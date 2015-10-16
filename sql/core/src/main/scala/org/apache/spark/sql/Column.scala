@@ -41,10 +41,10 @@ private[sql] object Column {
  * :: Experimental ::
  * A column in a [[DataFrame]].
  *
- * @groupname java_expr_ops Java-specific expression operators.
- * @groupname expr_ops Expression operators.
- * @groupname df_ops DataFrame functions.
- * @groupname Ungrouped Support functions for DataFrames.
+ * @groupname java_expr_ops Java-specific expression operators
+ * @groupname expr_ops Expression operators
+ * @groupname df_ops DataFrame functions
+ * @groupname Ungrouped Support functions for DataFrames
  *
  * @since 1.3.0
  */
