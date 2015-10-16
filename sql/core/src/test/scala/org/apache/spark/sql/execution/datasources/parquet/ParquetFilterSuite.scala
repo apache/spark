@@ -219,7 +219,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - string") {
+  // See https://issues.apache.org/jira/browse/SPARK-11153
+  ignore("filter pushdown - string") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate(
@@ -247,7 +248,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - binary") {
+  // See https://issues.apache.org/jira/browse/SPARK-11153
+  ignore("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes("UTF-8")
     }
