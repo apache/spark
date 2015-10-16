@@ -312,6 +312,27 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        // Not like the equal-join, BroadcastNestedLoopJoin doesn't support condition
+        // for cartesian join, as in cartesian join, probably, the records satisfy the
+        // condition, but exists in another partition of the large table, so we may not able
+        // to eliminate the duplicates.
+      case logical.Join(
+        CanBroadcast(left), right, joinType @ (FullOuter | LeftOuter | RightOuter), None) =>
+        execution.joins.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joins.BuildLeft, joinType, None) :: Nil
+      case logical.Join(
+        left, CanBroadcast(right), joinType @ (FullOuter | LeftOuter | RightOuter), None) =>
+        execution.joins.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joins.BuildRight, joinType, None) :: Nil
+        // Since BroadCastNestedLoopJoin supports condition already, we simply passed it down.
+      case logical.Join(
+        CanBroadcast(left), right, Inner, condition) =>
+          execution.joins.BroadcastNestedLoopJoin(
+            planLater(left), planLater(right), joins.BuildLeft, Inner, condition) :: Nil
+      case logical.Join(
+        left, CanBroadcast(right), Inner, condition) =>
+          execution.joins.BroadcastNestedLoopJoin(
+            planLater(left), planLater(right), joins.BuildRight, Inner, condition) :: Nil
       case logical.Join(left, right, _, None) =>
         execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
