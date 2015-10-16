@@ -155,6 +155,7 @@ package object dsl {
     def last(e: Expression): Expression = Last(e)
     def min(e: Expression): Expression = Min(e)
     def max(e: Expression): Expression = Max(e)
+    def range(e: Expression): Expression = Range(e)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
