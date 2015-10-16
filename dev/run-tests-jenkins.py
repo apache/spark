@@ -163,6 +163,7 @@ def run_tests(tests_timeout):
         ERROR_CODES["BLOCK_RAT"]: 'RAT tests',
         ERROR_CODES["BLOCK_SCALA_STYLE"]: 'Scala style tests',
         ERROR_CODES["BLOCK_PYTHON_STYLE"]: 'Python style tests',
+        ERROR_CODES["BLOCK_R_STYLE"]: 'R style tests',
         ERROR_CODES["BLOCK_DOCUMENTATION"]: 'to generate documentation',
         ERROR_CODES["BLOCK_BUILD"]: 'to build',
         ERROR_CODES["BLOCK_MIMA"]: 'MiMa tests',
