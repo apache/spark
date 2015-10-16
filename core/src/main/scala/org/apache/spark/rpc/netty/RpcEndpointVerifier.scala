@@ -14,26 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.rpc.netty
 
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 
 /**
- * A message used to ask the remote [[IDVerifier]] if an [[RpcEndpoint]] exists
+ * An [[RpcEndpoint]] for remote [[RpcEnv]]s to query if an [[RpcEndpoint]] exists.
+ *
+ * This is used when setting up a remote endpoint reference.
  */
-private[netty] case class ID(name: String)
-
-/**
- * An [[RpcEndpoint]] for remote [[RpcEnv]]s to query if a [[RpcEndpoint]] exists in this [[RpcEnv]]
- */
-private[netty] class IDVerifier(override val rpcEnv: RpcEnv, dispatcher: Dispatcher)
+private[netty] class RpcEndpointVerifier(override val rpcEnv: RpcEnv, dispatcher: Dispatcher)
   extends RpcEndpoint {
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case ID(name) => context.reply(dispatcher.verify(name))
+    case RpcEndpointVerifier.CheckExistence(name) => context.reply(dispatcher.verify(name))
   }
 }
 
-private[netty] object IDVerifier {
-  val NAME = "id-verifier"
+private[netty] object RpcEndpointVerifier {
+  val NAME = "endpoint-verifier"
+
+  /** A message used to ask the remote [[RpcEndpointVerifier]] if an [[RpcEndpoint]] exists. */
+  case class CheckExistence(name: String)
 }

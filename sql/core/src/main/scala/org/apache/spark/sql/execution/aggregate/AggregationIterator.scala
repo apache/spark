@@ -83,7 +83,7 @@ abstract class AggregationIterator(
     var i = 0
     while (i < allAggregateExpressions.length) {
       val func = allAggregateExpressions(i).aggregateFunction
-      val funcWithBoundReferences = allAggregateExpressions(i).mode match {
+      val funcWithBoundReferences: AggregateFunction2 = allAggregateExpressions(i).mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
@@ -94,24 +94,24 @@ abstract class AggregationIterator(
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
-          func match {
+          val updatedFunc = func match {
             case function: ImperativeAggregate =>
               function.withNewInputAggBufferOffset(inputBufferOffset)
-            case _ =>
+            case function => function
           }
           inputBufferOffset += func.aggBufferSchema.length
-          func
+          updatedFunc
       }
-      // Set mutableBufferOffset for this function. It is important that setting
-      // mutableBufferOffset happens after all potential bindReference operations
-      // because bindReference will create a new instance of the function.
-      funcWithBoundReferences match {
+      val funcWithUpdatedAggBufferOffset = funcWithBoundReferences match {
         case function: ImperativeAggregate =>
+          // Set mutableBufferOffset for this function. It is important that setting
+          // mutableBufferOffset happens after all potential bindReference operations
+          // because bindReference will create a new instance of the function.
           function.withNewMutableAggBufferOffset(mutableBufferOffset)
-        case _ =>
+        case function => function
       }
-      mutableBufferOffset += funcWithBoundReferences.aggBufferSchema.length
-      functions(i) = funcWithBoundReferences
+      mutableBufferOffset += funcWithUpdatedAggBufferOffset.aggBufferSchema.length
+      functions(i) = funcWithUpdatedAggBufferOffset
       i += 1
     }
     functions
@@ -320,7 +320,7 @@ abstract class AggregationIterator(
   // Initializing the function used to generate the output row.
   protected val generateOutput: (InternalRow, MutableRow) => InternalRow = {
     val rowToBeEvaluated = new JoinedRow
-    val safeOutputRow = new GenericMutableRow(resultExpressions.length)
+    val safeOutputRow = new SpecificMutableRow(resultExpressions.map(_.dataType))
     val mutableOutput = if (outputsUnsafeRows) {
       UnsafeProjection.create(resultExpressions.map(_.dataType).toArray).apply(safeOutputRow)
     } else {
@@ -358,7 +358,8 @@ abstract class AggregationIterator(
         val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferSchemata)()
         val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
         // TODO: Use unsafe row.
-        val aggregateResult = new GenericMutableRow(aggregateResultSchema.length)
+        val aggregateResult = new SpecificMutableRow(aggregateResultSchema.map(_.dataType))
+        expressionAggEvalProjection.target(aggregateResult)
         val resultProjection =
           newMutableProjection(
             resultExpressions, groupingKeyAttributes ++ aggregateResultSchema)()
@@ -366,7 +367,7 @@ abstract class AggregationIterator(
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           // Generate results for all expression-based aggregate functions.
-          expressionAggEvalProjection.target(aggregateResult)(currentBuffer)
+          expressionAggEvalProjection(currentBuffer)
           // Generate results for all imperative aggregate functions.
           var i = 0
           while (i < allImperativeAggregateFunctions.length) {
