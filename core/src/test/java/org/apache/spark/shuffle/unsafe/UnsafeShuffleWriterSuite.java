@@ -201,7 +201,6 @@ public class UnsafeShuffleWriterSuite {
       blockManager,
       shuffleBlockResolver,
       taskMemoryManager,
-      shuffleMemoryManager,
       new UnsafeShuffleHandle<Object, Object>(0, 1, shuffleDep),
       0, // map id
       taskContext,
@@ -513,7 +512,6 @@ public class UnsafeShuffleWriterSuite {
         blockManager,
         shuffleBlockResolver,
         taskMemoryManager,
-        shuffleMemoryManager,
         new UnsafeShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,

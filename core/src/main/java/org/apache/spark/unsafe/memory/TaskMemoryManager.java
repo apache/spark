@@ -23,7 +23,9 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.SparkEnv$;
 import org.apache.spark.memory.MemoryManager;
+import org.apache.spark.memory.ShuffleMemoryManager;
 
 /**
  * Manages the memory allocated by an individual task.
@@ -116,8 +118,36 @@ public class TaskMemoryManager {
   }
 
   /**
+   * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
+   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
+   * @return number of bytes successfully granted (<= N).
+   */
+  public long acquireExecutionMemory(long size) {
+    // TODO(josh): temp hack
+    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
+    return shuffleMemoryManager.tryToAcquire(size);
+  }
+
+  /**
+   * Release N bytes of execution memory.
+   */
+  public void releaseExecutionMemory(long size) {
+    // TODO(josh): temp hack
+    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
+    shuffleMemoryManager.release(size);
+  }
+
+  public long pageSizeBytes() {
+    // TODO(josh): temp hack
+    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
+    return shuffleMemoryManager.pageSizeBytes();
+  }
+
+  /**
    * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
    * intended for allocating large blocks of memory that will be shared between operators.
+   *
+   * Returns `null` if there was not enough memory to allocate the page.
    */
   public MemoryBlock allocatePage(long size) {
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {

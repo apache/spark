@@ -33,7 +33,6 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
-import org.apache.spark.memory.ShuffleMemoryManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempShuffleBlockId;
@@ -72,7 +71,6 @@ final class UnsafeShuffleExternalSorter {
   @VisibleForTesting
   final int maxRecordSizeBytes;
   private final TaskMemoryManager taskMemoryManager;
-  private final ShuffleMemoryManager shuffleMemoryManager;
   private final BlockManager blockManager;
   private final TaskContext taskContext;
   private final ShuffleWriteMetrics writeMetrics;
@@ -101,7 +99,6 @@ final class UnsafeShuffleExternalSorter {
 
   public UnsafeShuffleExternalSorter(
       TaskMemoryManager memoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
       BlockManager blockManager,
       TaskContext taskContext,
       int initialSize,
@@ -109,7 +106,6 @@ final class UnsafeShuffleExternalSorter {
       SparkConf conf,
       ShuffleWriteMetrics writeMetrics) throws IOException {
     this.taskMemoryManager = memoryManager;
-    this.shuffleMemoryManager = shuffleMemoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;
     this.initialSize = initialSize;
@@ -118,7 +114,7 @@ final class UnsafeShuffleExternalSorter {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.pageSizeBytes = (int) Math.min(
-      PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, shuffleMemoryManager.pageSizeBytes());
+      PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, taskMemoryManager.pageSizeBytes());
     this.maxRecordSizeBytes = pageSizeBytes - 4;
     this.writeMetrics = writeMetrics;
     initializeForWriting();
@@ -134,9 +130,9 @@ final class UnsafeShuffleExternalSorter {
   private void initializeForWriting() throws IOException {
     // TODO: move this sizing calculation logic into a static method of sorter:
     final long memoryRequested = initialSize * 8L;
-    final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryRequested);
+    final long memoryAcquired = taskMemoryManager.acquireExecutionMemory(memoryRequested);
     if (memoryAcquired != memoryRequested) {
-      shuffleMemoryManager.release(memoryAcquired);
+      taskMemoryManager.releaseExecutionMemory(memoryAcquired);
       throw new IOException("Could not acquire " + memoryRequested + " bytes of memory");
     }
 
@@ -274,7 +270,7 @@ final class UnsafeShuffleExternalSorter {
     writeSortedFile(false);
     final long inMemSorterMemoryUsage = inMemSorter.getMemoryUsage();
     inMemSorter = null;
-    shuffleMemoryManager.release(inMemSorterMemoryUsage);
+    taskMemoryManager.releaseExecutionMemory(inMemSorterMemoryUsage);
     final long spillSize = freeMemory();
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
 
@@ -309,7 +305,6 @@ final class UnsafeShuffleExternalSorter {
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
       taskMemoryManager.freePage(block);
-      shuffleMemoryManager.release(block.size());
       memoryFreed += block.size();
     }
     allocatedPages.clear();
@@ -330,7 +325,7 @@ final class UnsafeShuffleExternalSorter {
       }
     }
     if (inMemSorter != null) {
-      shuffleMemoryManager.release(inMemSorter.getMemoryUsage());
+      taskMemoryManager.releaseExecutionMemory(inMemSorter.getMemoryUsage());
       inMemSorter = null;
     }
   }
@@ -346,21 +341,20 @@ final class UnsafeShuffleExternalSorter {
       logger.debug("Attempting to expand sort pointer array");
       final long oldPointerArrayMemoryUsage = inMemSorter.getMemoryUsage();
       final long memoryToGrowPointerArray = oldPointerArrayMemoryUsage * 2;
-      final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryToGrowPointerArray);
+      final long memoryAcquired = taskMemoryManager.acquireExecutionMemory(memoryToGrowPointerArray);
       if (memoryAcquired < memoryToGrowPointerArray) {
-        shuffleMemoryManager.release(memoryAcquired);
+        taskMemoryManager.releaseExecutionMemory(memoryAcquired);
         spill();
       } else {
         inMemSorter.expandPointerArray();
-        shuffleMemoryManager.release(oldPointerArrayMemoryUsage);
+        taskMemoryManager.releaseExecutionMemory(oldPointerArrayMemoryUsage);
       }
     }
   }
   
   /**
    * Allocates more memory in order to insert an additional record. This will request additional
-   * memory from the {@link ShuffleMemoryManager} and spill if the requested memory can not be
-   * obtained.
+   * memory from the memory manager and spill if the requested memory can not be obtained.
    *
    * @param requiredSpace the required space in the data page, in bytes, including space for storing
    *                      the record size. This must be less than or equal to the page size (records
@@ -379,17 +373,14 @@ final class UnsafeShuffleExternalSorter {
         throw new IOException("Required space " + requiredSpace + " is greater than page size (" +
           pageSizeBytes + ")");
       } else {
-        final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-        if (memoryAcquired < pageSizeBytes) {
-          shuffleMemoryManager.release(memoryAcquired);
+        currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
+        if (currentPage == null) {
           spill();
-          final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-          if (memoryAcquiredAfterSpilling != pageSizeBytes) {
-            shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
+          currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
+          if (currentPage == null) {
             throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
           }
         }
-        currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
         currentPagePosition = currentPage.getBaseOffset();
         freeSpaceInCurrentPage = pageSizeBytes;
         allocatedPages.add(currentPage);
@@ -419,17 +410,14 @@ final class UnsafeShuffleExternalSorter {
       long overflowPageSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSpaceRequired);
       // The record is larger than the page size, so allocate a special overflow page just to hold
       // that record.
-      final long memoryGranted = shuffleMemoryManager.tryToAcquire(overflowPageSize);
-      if (memoryGranted != overflowPageSize) {
-        shuffleMemoryManager.release(memoryGranted);
+      MemoryBlock overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
+      if (overflowPage == null) {
         spill();
-        final long memoryGrantedAfterSpill = shuffleMemoryManager.tryToAcquire(overflowPageSize);
-        if (memoryGrantedAfterSpill != overflowPageSize) {
-          shuffleMemoryManager.release(memoryGrantedAfterSpill);
+        overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
+        if (overflowPage == null) {
           throw new IOException("Unable to acquire " + overflowPageSize + " bytes of memory");
         }
       }
-      MemoryBlock overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
       allocatedPages.add(overflowPage);
       dataPage = overflowPage;
       dataPagePosition = overflowPage.getBaseOffset();

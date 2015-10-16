@@ -166,7 +166,6 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
           env.blockManager,
           shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           context.taskMemoryManager(),
-          env.shuffleMemoryManager,
           unsafeShuffleHandle,
           mapId,
           context,

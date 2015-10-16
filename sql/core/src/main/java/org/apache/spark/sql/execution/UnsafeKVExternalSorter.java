@@ -24,7 +24,6 @@ import javax.annotation.Nullable;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.TaskContext;
-import org.apache.spark.memory.ShuffleMemoryManager;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BaseOrdering;
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
@@ -50,14 +49,19 @@ public final class UnsafeKVExternalSorter {
   private final UnsafeExternalRowSorter.PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
-  public UnsafeKVExternalSorter(StructType keySchema, StructType valueSchema,
-      BlockManager blockManager, ShuffleMemoryManager shuffleMemoryManager, long pageSizeBytes)
-    throws IOException {
-    this(keySchema, valueSchema, blockManager, shuffleMemoryManager, pageSizeBytes, null);
+  public UnsafeKVExternalSorter(
+      StructType keySchema,
+      StructType valueSchema,
+      BlockManager blockManager,
+      long pageSizeBytes) throws IOException {
+    this(keySchema, valueSchema, blockManager, pageSizeBytes, null);
   }
 
-  public UnsafeKVExternalSorter(StructType keySchema, StructType valueSchema,
-      BlockManager blockManager, ShuffleMemoryManager shuffleMemoryManager, long pageSizeBytes,
+  public UnsafeKVExternalSorter(
+      StructType keySchema,
+      StructType valueSchema,
+      BlockManager blockManager,
+      long pageSizeBytes,
       @Nullable BytesToBytesMap map) throws IOException {
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
@@ -73,7 +77,6 @@ public final class UnsafeKVExternalSorter {
     if (map == null) {
       sorter = UnsafeExternalSorter.create(
         taskMemoryManager,
-        shuffleMemoryManager,
         blockManager,
         taskContext,
         recordComparator,
@@ -115,7 +118,6 @@ public final class UnsafeKVExternalSorter {
 
       sorter = UnsafeExternalSorter.createWithExistingInMemorySorter(
         taskContext.taskMemoryManager(),
-        shuffleMemoryManager,
         blockManager,
         taskContext,
         new KVComparator(ordering, keySchema.length()),

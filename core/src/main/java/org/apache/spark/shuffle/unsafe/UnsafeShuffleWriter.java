@@ -49,7 +49,6 @@ import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.memory.ShuffleMemoryManager;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
@@ -69,7 +68,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final BlockManager blockManager;
   private final IndexShuffleBlockResolver shuffleBlockResolver;
   private final TaskMemoryManager memoryManager;
-  private final ShuffleMemoryManager shuffleMemoryManager;
   private final SerializerInstance serializer;
   private final Partitioner partitioner;
   private final ShuffleWriteMetrics writeMetrics;
@@ -103,7 +101,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       BlockManager blockManager,
       IndexShuffleBlockResolver shuffleBlockResolver,
       TaskMemoryManager memoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
       UnsafeShuffleHandle<K, V> handle,
       int mapId,
       TaskContext taskContext,
@@ -117,7 +114,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.blockManager = blockManager;
     this.shuffleBlockResolver = shuffleBlockResolver;
     this.memoryManager = memoryManager;
-    this.shuffleMemoryManager = shuffleMemoryManager;
     this.mapId = mapId;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
@@ -197,7 +193,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     assert (sorter == null);
     sorter = new UnsafeShuffleExternalSorter(
       memoryManager,
-      shuffleMemoryManager,
       blockManager,
       taskContext,
       INITIAL_SORT_BUFFER_SIZE,

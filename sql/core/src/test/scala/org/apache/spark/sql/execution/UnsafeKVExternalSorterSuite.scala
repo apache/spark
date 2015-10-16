@@ -124,14 +124,14 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       internalAccumulators = Seq.empty))
 
     val sorter = new UnsafeKVExternalSorter(
-      keySchema, valueSchema, SparkEnv.get.blockManager, shuffleMemMgr, pageSize)
+      keySchema, valueSchema, SparkEnv.get.blockManager, pageSize)
 
     // Insert the keys and values into the sorter
     inputData.foreach { case (k, v) =>
       sorter.insertKV(k.asInstanceOf[UnsafeRow], v.asInstanceOf[UnsafeRow])
       // 1% chance we will spill
       if (rand.nextDouble() < 0.01 && spill) {
-        shuffleMemMgr.markAsOutOfMemory()
+        shuffleMemMgr.markAsOutOfMemory() // TODO(josh): update this test
         sorter.closeCurrentPage()
       }
     }

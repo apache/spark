@@ -177,7 +177,6 @@ public class UnsafeExternalSorterSuite {
   private UnsafeExternalSorter newSorter() throws IOException {
     return UnsafeExternalSorter.create(
       taskMemoryManager,
-      shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,
@@ -322,7 +321,6 @@ public class UnsafeExternalSorterSuite {
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
     final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       taskMemoryManager,
-      shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,

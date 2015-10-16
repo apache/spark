@@ -21,7 +21,7 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.memory.{ShuffleMemoryManager, StaticMemoryManager}
+import org.apache.spark.memory.StaticMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -329,16 +329,11 @@ private[joins] final class UnsafeHashedRelation(
     val pageSizeBytes = Option(SparkEnv.get).map(_.shuffleMemoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
 
-    // Dummy shuffle memory manager which always grants all memory allocation requests.
-    // We use this because it doesn't make sense count shared broadcast variables' memory usage
-    // towards individual tasks' quotas. In the future, we should devise a better way of handling
-    // this.
-    val shuffleMemoryManager =
-      ShuffleMemoryManager.create(maxMemory = Long.MaxValue, pageSizeBytes = pageSizeBytes)
+    // TODO(josh): We won't need this dummy memory manager after future refactorings; revisit
+    // during code review
 
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
-      shuffleMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
       pageSizeBytes)
 
