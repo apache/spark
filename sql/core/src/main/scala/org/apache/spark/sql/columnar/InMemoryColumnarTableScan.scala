@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.columnar
 
-import java.nio.ByteBuffer
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
@@ -43,7 +41,7 @@ private[sql] object InMemoryRelation {
       tableName)()
 }
 
-private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: InternalRow)
+private[sql] case class CachedBatch(count: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
@@ -151,7 +149,7 @@ private[sql] case class InMemoryRelation(
                         .flatMap(_.values))
 
           batchStats += stats
-          CachedBatch(columnBuilders.map(_.build().array()), stats)
+          CachedBatch(rowCount, columnBuilders.map(_.build().array()), stats)
         }
 
         def hasNext: Boolean = rowIterator.hasNext
@@ -298,40 +296,6 @@ private[sql] case class InMemoryColumnarTableScan(
         }.unzip
       }
 
-      val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
-
-      def cachedBatchesToRows(cacheBatches: Iterator[CachedBatch]): Iterator[InternalRow] = {
-        val rows = cacheBatches.flatMap { cachedBatch =>
-          // Build column accessors
-          val columnAccessors = requestedColumnIndices.map { batchColumnIndex =>
-            ColumnAccessor(
-              relOutput(batchColumnIndex).dataType,
-              ByteBuffer.wrap(cachedBatch.buffers(batchColumnIndex)))
-          }
-
-          // Extract rows via column accessors
-          new Iterator[InternalRow] {
-            private[this] val rowLen = nextRow.numFields
-            override def next(): InternalRow = {
-              var i = 0
-              while (i < rowLen) {
-                columnAccessors(i).extractTo(nextRow, i)
-                i += 1
-              }
-              if (attributes.isEmpty) InternalRow.empty else nextRow
-            }
-
-            override def hasNext: Boolean = columnAccessors(0).hasNext
-          }
-        }
-
-        if (rows.hasNext && enableAccumulators) {
-          readPartitions += 1
-        }
-
-        rows
-      }
-
       // Do partition batch pruning if enabled
       val cachedBatchesToScan =
         if (inMemoryPartitionPruningEnabled) {
@@ -355,7 +319,15 @@ private[sql] case class InMemoryColumnarTableScan(
           cachedBatchIterator
         }
 
-      cachedBatchesToRows(cachedBatchesToScan)
+      val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
+      val columnTypes = requestedColumnIndices.map(relOutput(_).dataType).toArray
+      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
+      columnarIterator.initialize(cachedBatchesToScan, nextRow, columnTypes,
+        requestedColumnIndices.toArray)
+      if (enableAccumulators && columnarIterator.hasNext) {
+        readPartitions += 1
+      }
+      columnarIterator
     }
   }
 }

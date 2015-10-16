@@ -23,14 +23,16 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.types._
 
-
+/**
+ * An Iterator to walk throught the InternalRows from a CachedBatch
+ */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
-  def initialize(mutableRow: MutableRow, columnTypes: Array[DataType],
-    input: Iterator[CachedBatch], bufferIndex: Array[Int]): Unit
+  def initialize(input: Iterator[CachedBatch], mutableRow: MutableRow, columnTypes: Array[DataType],
+    columnIndexes: Array[Int]): Unit
 }
 
 /**
- * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
+ * Generates bytecode for an [[ColumnarIterator]] for columnar cache.
  */
 object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
 
@@ -67,11 +69,11 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
-          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(order));"
+          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
-          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(order));"
+          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case other =>
-          s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(order),
+          s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
              (${dt.getClass.getName}) columnTypes[$index]);"""
       }
 
@@ -90,33 +92,34 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
       class SpecificColumnarIterator extends ${classOf[ColumnarIterator].getName} {
 
-        private final ByteOrder order = null;
+        private ByteOrder nativeOrder = null;
+        private byte[][] buffers = null;
+
         private int currentRow = 0;
         private int totalRows = 0;
-        private byte[][] buffers = null;
-        private MutableRow mutableRow = null;
+
         private scala.collection.Iterator input = null;
+        private MutableRow mutableRow = null;
         private ${classOf[DataType].getName}[] columnTypes = null;
-        private int[] bufferIndex = null;
+        private int[] columnIndexes = null;
 
         ${declareMutableStates(ctx)}
 
         public SpecificColumnarIterator() {
-          order = ByteOrder.nativeOrder();
+          this.nativeOrder = ByteOrder.nativeOrder();
+          this.buffers = new byte[${columnTypes.length}][];
+
+          ${initMutableStates(ctx)}
         }
 
-        public void initialize(MutableRow mutableRow, ${classOf[DataType].getName}[] columnTypes,
-                               scala.collection.Iterator input, int[] bufferIndex) {
-          ${initMutableStates(ctx)}
-
+        public void initialize(scala.collection.Iterator input, MutableRow mutableRow,
+                               ${classOf[DataType].getName}[] columnTypes, int[] columnIndexes) {
+          this.input = input;
           this.mutableRow = mutableRow;
           this.columnTypes = columnTypes;
-          this.input = input;
-          this.bufferIndex = bufferIndex;
-          this.buffers = new byte[bufferIndex.length][];
+          this.columnIndexes = columnIndexes;
         }
 
-        @Override
         public boolean hasNext() {
           if (currentRow < totalRows) {
             return true;
@@ -128,15 +131,14 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           ${classOf[CachedBatch].getName} batch = (${classOf[CachedBatch].getName}) input.next();
           currentRow = 0;
           totalRows = batch.count();
-          for (int i=0; i<bufferIndex.length; i++) {
-            buffers[i] = batch.buffers()[bufferIndex[i]];
+          for (int i=0; i<columnIndexes.length; i++) {
+            buffers[i] = batch.buffers()[columnIndexes[i]];
           }
           ${creaters.mkString("\n")}
 
           return hasNext();
         }
 
-        @Override
         public InternalRow next() {
           ${accesses.mkString("\n")}
           currentRow += 1;
