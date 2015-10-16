@@ -19,19 +19,15 @@ package org.apache.spark.sql.execution.ui
 
 import scala.collection.mutable
 
-import com.google.common.annotations.VisibleForTesting
-
-import org.apache.spark.{JobExecutionStatus, Logging}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
+import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 
-private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener with Logging {
+private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
-  private val retainedExecutions =
-    sqlContext.sparkContext.conf.getInt("spark.sql.ui.retainedExecutions", 1000)
+  private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
   private val activeExecutions = mutable.HashMap[Long, SQLExecutionUIData]()
 
@@ -256,7 +252,7 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
   /**
    * Get all accumulator updates from all tasks which belong to this execution and merge them.
    */
-  def getExecutionMetrics(executionId: Long): Map[Long, Any] = synchronized {
+  def getExecutionMetrics(executionId: Long): Map[Long, String] = synchronized {
     _executionIdToData.get(executionId) match {
       case Some(executionUIData) =>
         val accumulatorUpdates = {
@@ -268,8 +264,7 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
-          executionUIData.accumulatorMetrics(accumulatorId).metricParam).
-          mapValues(_.asInstanceOf[SQLMetricValue[_]].value)
+          executionUIData.accumulatorMetrics(accumulatorId).metricParam)
       case None =>
         // This execution has been dropped
         Map.empty
@@ -278,11 +273,11 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
 
   private def mergeAccumulatorUpdates(
       accumulatorUpdates: Seq[(Long, Any)],
-      paramFunc: Long => SQLMetricParam[SQLMetricValue[Any], Any]): Map[Long, Any] = {
+      paramFunc: Long => SQLMetricParam[SQLMetricValue[Any], Any]): Map[Long, String] = {
     accumulatorUpdates.groupBy(_._1).map { case (accumulatorId, values) =>
       val param = paramFunc(accumulatorId)
       (accumulatorId,
-        values.map(_._2.asInstanceOf[SQLMetricValue[Any]]).foldLeft(param.zero)(param.addInPlace))
+        param.stringValue(values.map(_._2.asInstanceOf[SQLMetricValue[Any]].value)))
     }
   }
 

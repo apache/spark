@@ -14,26 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.rpc.netty
 
-import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
+package org.apache.spark.launcher;
 
-/**
- * A message used to ask the remote [[IDVerifier]] if an [[RpcEndpoint]] exists
- */
-private[netty] case class ID(name: String)
+import org.slf4j.bridge.SLF4JBridgeHandler;
 
 /**
- * An [[RpcEndpoint]] for remote [[RpcEnv]]s to query if a [[RpcEndpoint]] exists in this [[RpcEnv]]
+ * Handles configuring the JUL -> SLF4J bridge.
  */
-private[netty] class IDVerifier(
-    override val rpcEnv: RpcEnv, dispatcher: Dispatcher) extends RpcEndpoint {
+class BaseSuite {
 
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case ID(name) => context.reply(dispatcher.verify(name))
+  static {
+    SLF4JBridgeHandler.removeHandlersForRootLogger();
+    SLF4JBridgeHandler.install();
   }
-}
 
-private[netty] object IDVerifier {
-  val NAME = "id-verifier"
 }

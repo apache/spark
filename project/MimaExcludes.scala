@@ -79,7 +79,27 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.regression.LeastSquaresCostFun.this")
+          "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.clearLastInstantiatedContext"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.setLastInstantiatedContext"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.sql.SQLContext$SQLSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.detachSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.tlSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.defaultSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.currentSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.openSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.setSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.createSession")
       )
     case v if v.startsWith("1.5") =>
       Seq(

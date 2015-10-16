@@ -62,4 +62,8 @@ object ArrayBasedMapData {
     val values = map.valueArray.asInstanceOf[GenericArrayData].array
     keys.zip(values).toMap
   }
+
+  def toScalaMap(keys: Array[Any], values: Array[Any]): Map[Any, Any] = {
+    keys.zip(values).toMap
+  }
 }

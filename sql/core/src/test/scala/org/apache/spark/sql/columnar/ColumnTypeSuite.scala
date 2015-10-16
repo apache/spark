@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.columnar
 
-import java.nio.ByteBuffer
+import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.{Logging, SparkFunSuite}
@@ -55,7 +55,8 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       assertResult(expected, s"Wrong actualSize for $columnType") {
         val row = new GenericMutableRow(1)
         row.update(0, CatalystTypeConverters.convertToCatalyst(value))
-        columnType.actualSize(row, 0)
+        val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
+        columnType.actualSize(proj(row), 0)
       }
     }
 
@@ -99,32 +100,24 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   def testColumnType[JvmType](columnType: ColumnType[JvmType]): Unit = {
 
-    val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE)
-    val seq = (0 until 4).map(_ => makeRandomValue(columnType))
+    val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).order(ByteOrder.nativeOrder())
+    val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
     val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
+    val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
 
     test(s"$columnType append/extract") {
       buffer.rewind()
-      seq.foreach(columnType.append(_, buffer))
+      seq.foreach(columnType.append(_, 0, buffer))
 
       buffer.rewind()
-      seq.foreach { expected =>
-        logInfo("buffer = " + buffer + ", expected = " + expected)
-        val extracted = columnType.extract(buffer)
-        assert(
-          converter(expected) === converter(extracted),
-          "Extracted value didn't equal to the original one. " +
-            hexDump(expected) + " != " + hexDump(extracted) +
-            ", buffer = " + dumpBuffer(buffer.duplicate().rewind().asInstanceOf[ByteBuffer]))
+      seq.foreach { row =>
+        logInfo("buffer = " + buffer + ", expected = " + row)
+        val expected = converter(row.get(0, columnType.dataType))
+        val extracted = converter(columnType.extract(buffer))
+        assert(expected === extracted,
+          s"Extracted value didn't equal to the original one. $expected != $extracted, buffer =" +
+          dumpBuffer(buffer.duplicate().rewind().asInstanceOf[ByteBuffer]))
       }
-    }
-  }
-
-  private def hexDump(value: Any): String = {
-    if (value == null) {
-      ""
-    } else {
-      value.toString.map(ch => Integer.toHexString(ch & 0xffff)).mkString(" ")
     }
   }
 
