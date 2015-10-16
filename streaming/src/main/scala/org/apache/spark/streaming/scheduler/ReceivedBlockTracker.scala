@@ -42,6 +42,8 @@ private[streaming] case class BatchAllocationEvent(time: Time, allocatedBlocks: 
   extends ReceivedBlockTrackerLogEvent
 private[streaming] case class BatchCleanupEvent(times: Seq[Time])
   extends ReceivedBlockTrackerLogEvent
+private[streaming] case class CombinedRBTLogEvent(events: List[ReceivedBlockTrackerLogEvent])
+  extends ReceivedBlockTrackerLogEvent
 
 /** Class representing the blocks of all the streams allocated to a batch */
 private[streaming]
@@ -285,6 +287,7 @@ private[streaming] class ReceivedBlockTracker(
 
     def resolveEvent(event: ReceivedBlockTrackerLogEvent): Unit = {
       event match {
+        case CombinedRBTLogEvent(events) => events.foreach(resolveEvent)
         case BlockAdditionEvent(receivedBlockInfo) =>
           insertAddedBlock(receivedBlockInfo)
         case BatchAllocationEvent(time, allocatedBlocks) =>
@@ -298,14 +301,8 @@ private[streaming] class ReceivedBlockTracker(
       logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
       writeAheadLog.readAll().asScala.foreach { byteBuffer =>
         logTrace("Recovering record " + byteBuffer)
-        try {
-          Utils.deserialize[List[ReceivedBlockTrackerLogEvent]](
-            byteBuffer.array, Thread.currentThread().getContextClassLoader).foreach(resolveEvent)
-        } catch {
-          case e: ClassCastException =>
-            resolveEvent(Utils.deserialize[ReceivedBlockTrackerLogEvent](
-              byteBuffer.array, Thread.currentThread().getContextClassLoader))
-        }
+        resolveEvent(Utils.deserialize[ReceivedBlockTrackerLogEvent](
+          byteBuffer.array, Thread.currentThread().getContextClassLoader))
       }
     }
   }
@@ -381,7 +378,8 @@ private[streaming] class ReceivedBlockTracker(
       writeAheadLogOption.foreach { logManager =>
         if (records.nonEmpty) {
           logDebug(s"Batched ${records.length} records for WAL write")
-          logManager.write(ByteBuffer.wrap(Utils.serialize(records)), clock.getTimeMillis())
+          logManager.write(ByteBuffer.wrap(Utils.serialize(CombinedRBTLogEvent(records))), 
+            clock.getTimeMillis())
         }
       }
     }

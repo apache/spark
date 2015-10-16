@@ -265,11 +265,9 @@ abstract class ReceivedBlockTrackerSuite
     logFiles.flatMap {
       file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq
     }.flatMap { byteBuffer =>
-      try {
-        Utils.deserialize[List[ReceivedBlockTrackerLogEvent]](byteBuffer.array)
-      } catch {
-        case e: ClassCastException =>
-          Seq(Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array))
+      Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array) match {
+        case CombinedRBTLogEvent(events) => events
+        case others: ReceivedBlockTrackerLogEvent => Seq(others)
       }
     }.toList
   }
