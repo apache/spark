@@ -388,7 +388,7 @@ private[spark] class TaskSetManager(
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NO_PREF)) {
       // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
       for (index <- dequeueTaskFromList(execId, pendingTasksWithNoPrefs)) {
-        return Some((index, TaskLocality.PROCESS_LOCAL, false))
+        return Some((index, TaskLocality.NO_PREF, false))
       }
     }
 
