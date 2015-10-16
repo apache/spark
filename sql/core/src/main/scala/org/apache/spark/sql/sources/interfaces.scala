@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.IOException
+
 import scala.collection.mutable
 import scala.util.Try
 
@@ -603,9 +605,20 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         !name.startsWith("_") && !name.startsWith(".")
       }
     }
+    if (!allowEmptyInputPaths && inputStatuses.isEmpty) {
+       throw new IOException("Input paths do not exist or are empty directories, "
+         + "Input Paths=" + inputPaths.mkString(","))
+    }
 
     buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
   }
+
+  /**
+   * By default inputPaths must be not empty. But it can be empty for some cases like JsonRelation
+   *
+   * @since 1.6.0
+   */
+  def allowEmptyInputPaths: Boolean = false
 
   /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned

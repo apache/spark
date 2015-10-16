@@ -109,6 +109,8 @@ private[sql] class JSONRelation(
       classOf[Text]).map(_._2.toString) // get the text line
   }
 
+  override def allowEmptyInputPaths: Boolean = true
+
   override lazy val dataSchema = {
     val jsonSchema = maybeDataSchema.getOrElse {
       val files = cachedLeafStatuses().filterNot { status =>
@@ -131,6 +133,9 @@ private[sql] class JSONRelation(
       filters: Array[Filter],
       inputPaths: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+    if (inputPaths.isEmpty) {
+      throw new IOException()
+    }
     val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
     val rows = JacksonParser(
       inputRDD.getOrElse(createBaseRdd(inputPaths)),
