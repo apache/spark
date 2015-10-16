@@ -28,7 +28,8 @@ __all__ = ['LabeledPoint', 'LinearModel',
            'LinearRegressionModel', 'LinearRegressionWithSGD',
            'RidgeRegressionModel', 'RidgeRegressionWithSGD',
            'LassoModel', 'LassoWithSGD', 'IsotonicRegressionModel',
-           'IsotonicRegression']
+           'IsotonicRegression', 'StreamingLinearAlgorithm',
+           'StreamingLinearRegressionWithSGD']
 
 
 class LabeledPoint(object):
@@ -97,9 +98,11 @@ class LinearRegressionModelBase(LinearModel):
 
     def predict(self, x):
         """
-        Predict the value of the dependent variable given a vector x
-        containing values for the independent variables.
+        Predict the value of the dependent variable given a vector or
+        an RDD of vectors containing values for the independent variables.
         """
+        if isinstance(x, RDD):
+            return x.map(self.predict)
         x = _convert_to_vector(x)
         return self.weights.dot(x) + self.intercept
 
@@ -123,6 +126,8 @@ class LinearRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -198,13 +203,15 @@ class LinearRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.0, regType=None, intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a linear regression model using Stochastic Gradient
         Descent (SGD).
         This solves the least squares regression formulation
-                f(weights) = 1/n ||A weights-y||^2^
-        (which is the mean squared error).
+
+            f(weights) = 1/(2n) ||A weights - y||^2,
+
+        which is the mean squared error.
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -238,11 +245,14 @@ class LinearRegressionWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam),
-                                 regType, bool(intercept), bool(validateData))
+                                 regType, bool(intercept), bool(validateData),
+                                 float(convergenceTol))
 
         return _regression_train_wrapper(train, LinearRegressionModel, data, initialWeights)
 
@@ -266,6 +276,8 @@ class LassoModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -322,13 +334,15 @@ class LassoWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a regression model with L1-regularization using
         Stochastic Gradient Descent.
         This solves the l1-regularized least squares regression
         formulation
-            f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
+
+            f(weights) = 1/(2n) ||A weights - y||^2  + regParam ||weights||_1.
+
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -352,11 +366,13 @@ class LassoWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, bool(intercept),
-                                 bool(validateData))
+                                 bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, LassoModel, data, initialWeights)
 
@@ -381,6 +397,8 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -437,13 +455,15 @@ class RidgeRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a regression model with L2-regularization using
         Stochastic Gradient Descent.
         This solves the l2-regularized least squares regression
         formulation
-            f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
+
+            f(weights) = 1/(2n) ||A weights - y||^2 + regParam/2 ||weights||^2.
+
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -467,11 +487,13 @@ class RidgeRegressionWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, bool(intercept),
-                                 bool(validateData))
+                                 bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, RidgeRegressionModel, data, initialWeights)
 
@@ -622,15 +644,17 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     After training on a batch of data, the weights obtained at the end of
     training are used as initial weights for the next batch.
 
-    :param: stepSize Step size for each iteration of gradient descent.
-    :param: numIterations Total number of iterations run.
-    :param: miniBatchFraction Fraction of data on which SGD is run for each
+    :param stepSize: Step size for each iteration of gradient descent.
+    :param numIterations: Total number of iterations run.
+    :param miniBatchFraction: Fraction of data on which SGD is run for each
                               iteration.
+    :param convergenceTol: A condition which decides iteration termination.
     """
-    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0):
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, convergenceTol=0.001):
         self.stepSize = stepSize
         self.numIterations = numIterations
         self.miniBatchFraction = miniBatchFraction
+        self.convergenceTol = convergenceTol
         self._model = None
         super(StreamingLinearRegressionWithSGD, self).__init__(
             model=self._model)
@@ -655,7 +679,7 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
                 self._model = LinearRegressionWithSGD.train(
                     rdd, self.numIterations, self.stepSize,
                     self.miniBatchFraction, self._model.weights,
-                    self._model.intercept)
+                    intercept=self._model.intercept, convergenceTol=self.convergenceTol)
 
         dstream.foreachRDD(update)
 

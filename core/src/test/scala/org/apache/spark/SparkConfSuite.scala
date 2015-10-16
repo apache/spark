@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.util.concurrent.{TimeUnit, Executors}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Try, Random}
@@ -148,7 +149,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("Thread safeness - SPARK-5425") {
-    import scala.collection.JavaConversions._
     val executor = Executors.newSingleThreadScheduledExecutor()
     val sf = executor.scheduleAtFixedRate(new Runnable {
       override def run(): Unit =
@@ -163,8 +163,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       }
     } finally {
       executor.shutdownNow()
-      for (key <- System.getProperties.stringPropertyNames() if key.startsWith("spark.5425."))
-        System.getProperties.remove(key)
+      val sysProps = System.getProperties
+      for (key <- sysProps.stringPropertyNames().asScala if key.startsWith("spark.5425."))
+        sysProps.remove(key)
     }
   }
 

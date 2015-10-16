@@ -24,6 +24,9 @@ import scala.annotation.varargs
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.util.Identifiable
 
@@ -65,7 +68,12 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
    */
   private[param] def validate(value: T): Unit = {
     if (!isValid(value)) {
-      throw new IllegalArgumentException(s"$parent parameter $name given invalid value $value.")
+      val valueToString = value match {
+        case v: Array[_] => v.mkString("[", ",", "]")
+        case _ => value.toString
+      }
+      throw new IllegalArgumentException(
+        s"$parent parameter $name given invalid value $valueToString.")
     }
   }
 
@@ -74,6 +82,30 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
 
   /** Creates a param pair with the given value (for Scala). */
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
+
+  /** Encodes a param value into JSON, which can be decoded by [[jsonDecode()]]. */
+  def jsonEncode(value: T): String = {
+    value match {
+      case x: String =>
+        compact(render(JString(x)))
+      case _ =>
+        throw new NotImplementedError(
+          "The default jsonEncode only supports string. " +
+            s"${this.getClass.getName} must override jsonEncode for ${value.getClass.getName}.")
+    }
+  }
+
+  /** Decodes a param value from JSON. */
+  def jsonDecode(json: String): T = {
+    parse(json) match {
+      case JString(x) =>
+        x.asInstanceOf[T]
+      case _ =>
+        throw new NotImplementedError(
+          "The default jsonDecode only supports string. " +
+            s"${this.getClass.getName} must override jsonDecode to support its value type.")
+    }
+  }
 
   override final def toString: String = s"${parent}__$name"
 
@@ -166,6 +198,11 @@ object ParamValidators {
   def inArray[T](allowed: java.util.List[T]): T => Boolean = { (value: T) =>
     allowed.contains(value)
   }
+
+  /** Check that the array length is greater than lowerBound. */
+  def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
+    value.length > lowerBound
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
@@ -188,6 +225,46 @@ class DoubleParam(parent: String, name: String, doc: String, isValid: Double => 
 
   /** Creates a param pair with the given value (for Java). */
   override def w(value: Double): ParamPair[Double] = super.w(value)
+
+  override def jsonEncode(value: Double): String = {
+    compact(render(DoubleParam.jValueEncode(value)))
+  }
+
+  override def jsonDecode(json: String): Double = {
+    DoubleParam.jValueDecode(parse(json))
+  }
+}
+
+private[param] object DoubleParam {
+  /** Encodes a param value into JValue. */
+  def jValueEncode(value: Double): JValue = {
+    value match {
+      case _ if value.isNaN =>
+        JString("NaN")
+      case Double.NegativeInfinity =>
+        JString("-Inf")
+      case Double.PositiveInfinity =>
+        JString("Inf")
+      case _ =>
+        JDouble(value)
+    }
+  }
+
+  /** Decodes a param value from JValue. */
+  def jValueDecode(jValue: JValue): Double = {
+    jValue match {
+      case JString("NaN") =>
+        Double.NaN
+      case JString("-Inf") =>
+        Double.NegativeInfinity
+      case JString("Inf") =>
+        Double.PositiveInfinity
+      case JDouble(x) =>
+        x
+      case _ =>
+        throw new IllegalArgumentException(s"Cannot decode $jValue to Double.")
+    }
+  }
 }
 
 /**
@@ -208,6 +285,15 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
 
   /** Creates a param pair with the given value (for Java). */
   override def w(value: Int): ParamPair[Int] = super.w(value)
+
+  override def jsonEncode(value: Int): String = {
+    compact(render(JInt(value)))
+  }
+
+  override def jsonDecode(json: String): Int = {
+    implicit val formats = DefaultFormats
+    parse(json).extract[Int]
+  }
 }
 
 /**
@@ -228,6 +314,47 @@ class FloatParam(parent: String, name: String, doc: String, isValid: Float => Bo
 
   /** Creates a param pair with the given value (for Java). */
   override def w(value: Float): ParamPair[Float] = super.w(value)
+
+  override def jsonEncode(value: Float): String = {
+    compact(render(FloatParam.jValueEncode(value)))
+  }
+
+  override def jsonDecode(json: String): Float = {
+    FloatParam.jValueDecode(parse(json))
+  }
+}
+
+private object FloatParam {
+
+  /** Encodes a param value into JValue. */
+  def jValueEncode(value: Float): JValue = {
+    value match {
+      case _ if value.isNaN =>
+        JString("NaN")
+      case Float.NegativeInfinity =>
+        JString("-Inf")
+      case Float.PositiveInfinity =>
+        JString("Inf")
+      case _ =>
+        JDouble(value)
+    }
+  }
+
+  /** Decodes a param value from JValue. */
+  def jValueDecode(jValue: JValue): Float = {
+    jValue match {
+      case JString("NaN") =>
+        Float.NaN
+      case JString("-Inf") =>
+        Float.NegativeInfinity
+      case JString("Inf") =>
+        Float.PositiveInfinity
+      case JDouble(x) =>
+        x.toFloat
+      case _ =>
+        throw new IllegalArgumentException(s"Cannot decode $jValue to Float.")
+    }
+  }
 }
 
 /**
@@ -248,6 +375,15 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
 
   /** Creates a param pair with the given value (for Java). */
   override def w(value: Long): ParamPair[Long] = super.w(value)
+
+  override def jsonEncode(value: Long): String = {
+    compact(render(JInt(value)))
+  }
+
+  override def jsonDecode(json: String): Long = {
+    implicit val formats = DefaultFormats
+    parse(json).extract[Long]
+  }
 }
 
 /**
@@ -262,6 +398,15 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 
   /** Creates a param pair with the given value (for Java). */
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
+
+  override def jsonEncode(value: Boolean): String = {
+    compact(render(JBool(value)))
+  }
+
+  override def jsonDecode(json: String): Boolean = {
+    implicit val formats = DefaultFormats
+    parse(json).extract[Boolean]
+  }
 }
 
 /**
@@ -277,6 +422,16 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
   def w(value: java.util.List[String]): ParamPair[Array[String]] = w(value.asScala.toArray)
+
+  override def jsonEncode(value: Array[String]): String = {
+    import org.json4s.JsonDSL._
+    compact(render(value.toSeq))
+  }
+
+  override def jsonDecode(json: String): Array[String] = {
+    implicit val formats = DefaultFormats
+    parse(json).extract[Seq[String]].toArray
+  }
 }
 
 /**
@@ -293,6 +448,46 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
   /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
   def w(value: java.util.List[java.lang.Double]): ParamPair[Array[Double]] =
     w(value.asScala.map(_.asInstanceOf[Double]).toArray)
+
+  override def jsonEncode(value: Array[Double]): String = {
+    import org.json4s.JsonDSL._
+    compact(render(value.toSeq.map(DoubleParam.jValueEncode)))
+  }
+
+  override def jsonDecode(json: String): Array[Double] = {
+    parse(json) match {
+      case JArray(values) =>
+        values.map(DoubleParam.jValueDecode).toArray
+      case _ =>
+        throw new IllegalArgumentException(s"Cannot decode $json to Array[Double].")
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Specialized version of [[Param[Array[Int]]]] for Java.
+ */
+@DeveloperApi
+class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
+  extends Param[Array[Int]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[java.lang.Integer]): ParamPair[Array[Int]] =
+    w(value.asScala.map(_.asInstanceOf[Int]).toArray)
+
+  override def jsonEncode(value: Array[Int]): String = {
+    import org.json4s.JsonDSL._
+    compact(render(value.toSeq))
+  }
+
+  override def jsonDecode(json: String): Array[Int] = {
+    implicit val formats = DefaultFormats
+    parse(json).extract[Seq[Int]].toArray
+  }
 }
 
 /**
@@ -428,7 +623,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Clears the user-supplied value for the input param.
    */
-  protected final def clear(param: Param[_]): this.type = {
+  final def clear(param: Param[_]): this.type = {
     shouldOwn(param)
     paramMap.remove(param)
     this
@@ -440,7 +635,8 @@ trait Params extends Identifiable with Serializable {
    */
   final def getOrDefault[T](param: Param[T]): T = {
     shouldOwn(param)
-    get(param).orElse(getDefault(param)).get
+    get(param).orElse(getDefault(param)).getOrElse(
+      throw new NoSuchElementException(s"Failed to find a default value for ${param.name}"))
   }
 
   /** An alias for [[getOrDefault()]]. */
@@ -460,11 +656,14 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets default values for a list of params.
    *
+   * Note: Java developers should use the single-parameter [[setDefault()]].
+   *       Annotating this with varargs can cause compilation failures due to a Scala compiler bug.
+   *       See SPARK-9268.
+   *
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
-  @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)
@@ -535,13 +734,26 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Copies param values from this instance to another instance for params shared by them.
-   * @param to the target instance
-   * @param extra extra params to be copied
+   *
+   * This handles default Params and explicitly set Params separately.
+   * Default Params are copied from and to [[defaultParamMap]], and explicitly set Params are
+   * copied from and to [[paramMap]].
+   * Warning: This implicitly assumes that this [[Params]] instance and the target instance
+   *          share the same set of default Params.
+   *
+   * @param to the target instance, which should work with the same set of default Params as this
+   *           source instance
+   * @param extra extra params to be copied to the target's [[paramMap]]
    * @return the target instance with param values copied
    */
   protected def copyValues[T <: Params](to: T, extra: ParamMap = ParamMap.empty): T = {
-    val map = extractParamMap(extra)
+    val map = paramMap ++ extra
     params.foreach { param =>
+      // copy default Params
+      if (defaultParamMap.contains(param) && to.hasParam(param.name)) {
+        to.defaultParamMap.put(to.getParam(param.name), defaultParamMap(param))
+      }
+      // copy explicitly set Params
       if (map.contains(param) && to.hasParam(param.name)) {
         to.set(param.name, map(param))
       }

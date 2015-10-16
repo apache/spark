@@ -88,7 +88,7 @@ private[spark] class MetricsSystem private (
    */
   def getServletHandlers: Array[ServletContextHandler] = {
     require(running, "Can only call getServletHandlers on a running MetricsSystem")
-    metricsServlet.map(_.getHandlers).getOrElse(Array())
+    metricsServlet.map(_.getHandlers(conf)).getOrElse(Array())
   }
 
   metricsConfig.initialize()
@@ -141,6 +141,9 @@ private[spark] class MetricsSystem private (
       }
     } else { defaultName }
   }
+
+  def getSourcesByName(sourceName: String): Seq[Source] =
+    sources.filter(_.sourceName == sourceName)
 
   def registerSource(source: Source) {
     sources += source

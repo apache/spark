@@ -20,13 +20,22 @@ package org.apache.spark.mllib.clustering
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.random.XORShiftRandom
 
 class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
 
   override def maxWaitTimeMillis: Int = 30000
+
+  var ssc: StreamingContext = _
+
+  override def afterFunction() {
+    super.afterFunction()
+    if (ssc != null) {
+      ssc.stop()
+    }
+  }
 
   test("accuracy for single center and equivalence to grand average") {
     // set parameters
@@ -46,7 +55,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
     val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       model.trainOn(inputDStream)
       inputDStream.count()
     })
@@ -82,7 +91,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
     val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       kMeans.trainOn(inputDStream)
       inputDStream.count()
     })
@@ -114,7 +123,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
       StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42, Array(Vectors.dense(0.0)))
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       kMeans.trainOn(inputDStream)
       inputDStream.count()
     })

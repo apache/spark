@@ -18,15 +18,11 @@
 package org.apache.spark.sql.execution.debug
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DebuggingSuite extends SparkFunSuite {
+class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
+
   test("DataFrame.debug()") {
     testData.debug()
-  }
-
-  test("DataFrame.typeCheck()") {
-    testData.typeCheck()
   }
 }

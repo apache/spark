@@ -19,7 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
@@ -100,6 +100,10 @@ public final class UnsafeInMemorySorter {
     return pointerArray.length * 8L;
   }
 
+  static long getMemoryRequirementsForPointerArray(long numEntries) {
+    return numEntries * 2L * 8L;
+  }
+
   public boolean hasSpaceForAnotherRecord() {
     return pointerArrayInsertPosition + 2 < pointerArray.length;
   }
@@ -129,7 +133,7 @@ public final class UnsafeInMemorySorter {
     pointerArrayInsertPosition++;
   }
 
-  private static final class SortedIterator extends UnsafeSorterIterator {
+  public static final class SortedIterator extends UnsafeSorterIterator {
 
     private final TaskMemoryManager memoryManager;
     private final int sortBufferInsertPosition;
@@ -140,7 +144,7 @@ public final class UnsafeInMemorySorter {
     private long keyPrefix;
     private int recordLength;
 
-    SortedIterator(
+    private SortedIterator(
         TaskMemoryManager memoryManager,
         int sortBufferInsertPosition,
         long[] sortBuffer) {
@@ -160,7 +164,7 @@ public final class UnsafeInMemorySorter {
       final long recordPointer = sortBuffer[position];
       baseObject = memoryManager.getPage(recordPointer);
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
-      recordLength = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset - 4);
+      recordLength = Platform.getInt(baseObject, baseOffset - 4);
       keyPrefix = sortBuffer[position + 1];
       position += 2;
     }
@@ -182,7 +186,7 @@ public final class UnsafeInMemorySorter {
    * Return an iterator over record pointers in sorted order. For efficiency, all calls to
    * {@code next()} will return the same mutable object.
    */
-  public UnsafeSorterIterator getSortedIterator() {
+  public SortedIterator getSortedIterator() {
     sorter.sort(pointerArray, 0, pointerArrayInsertPosition / 2, sortComparator);
     return new SortedIterator(memoryManager, pointerArrayInsertPosition, pointerArray);
   }

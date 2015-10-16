@@ -19,7 +19,7 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
@@ -28,7 +28,7 @@ import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 import org.apache.spark.{Logging, TaskState, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.scheduler.cluster.mesos.{MesosTaskLaunchData}
+import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
 import org.apache.spark.util.{SignalLogger, Utils}
 
 private[spark] class MesosExecutorBackend
@@ -55,7 +55,7 @@ private[spark] class MesosExecutorBackend
       slaveInfo: SlaveInfo) {
 
     // Get num cores for this task from ExecutorInfo, created in MesosSchedulerBackend.
-    val cpusPerTask = executorInfo.getResourcesList
+    val cpusPerTask = executorInfo.getResourcesList.asScala
       .find(_.getName == "cpus")
       .map(_.getScalar.getValue.toInt)
       .getOrElse(0)

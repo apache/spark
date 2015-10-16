@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import scala.collection.JavaConversions.mapAsJavaMap
+import scala.collection.JavaConverters._
 
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
@@ -92,7 +92,7 @@ private[spark] object AkkaUtils extends Logging {
     val akkaSslConfig = securityManager.akkaSSLOptions.createAkkaConfig
         .getOrElse(ConfigFactory.empty())
 
-    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String])
+    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap.asJava)
       .withFallback(akkaSslConfig).withFallback(ConfigFactory.parseString(
       s"""
       |akka.daemonic = on
@@ -128,7 +128,7 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Returns the configured max frame size for Akka messages in bytes. */
   def maxFrameSizeBytes(conf: SparkConf): Int = {
-    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 10)
+    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 128)
     if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
       throw new IllegalArgumentException(
         s"spark.akka.frameSize should not be greater than $AKKA_MAX_FRAME_SIZE_IN_MB MB")

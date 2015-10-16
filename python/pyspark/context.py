@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import shutil
+import signal
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
@@ -152,6 +153,11 @@ class SparkContext(object):
         self.master = self._conf.get("spark.master")
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
+
+        # Let YARN know it's a pyspark app, so it distributes needed libraries.
+        if self.master == "yarn-client":
+            self._conf.set("spark.yarn.isPython", "true")
+
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
@@ -212,6 +218,12 @@ class SparkContext(object):
         else:
             self.profiler_collector = None
 
+        # create a signal handler which would be invoked on receiving SIGINT
+        def signal_handler(signal, frame):
+            self.cancelAllJobs()
+
+        signal.signal(signal.SIGINT, signal_handler)
+
     def _initialize_context(self, jconf):
         """
         Initialize SparkContext in function to allow subclass specific initialization
@@ -250,7 +262,7 @@ class SparkContext(object):
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise Exception(
             "It appears that you are attempting to reference SparkContext from a broadcast "
-            "variable, action, or transforamtion. SparkContext can only be used on the driver, "
+            "variable, action, or transformation. SparkContext can only be used on the driver, "
             "not in code that it run on workers. For more information, see SPARK-5063."
         )
 
@@ -297,10 +309,10 @@ class SparkContext(object):
         """
         A unique identifier for the Spark application.
         Its format depends on the scheduler implementation.
-        (i.e.
-            in case of local spark app something like 'local-1433865536131'
-            in case of YARN something like 'application_1433865536131_34483'
-        )
+
+        * in case of local spark app something like 'local-1433865536131'
+        * in case of YARN something like 'application_1433865536131_34483'
+
         >>> sc.applicationId  # doctest: +ELLIPSIS
         u'local-...'
         """
@@ -908,8 +920,7 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions,
-                                          allowLocal)
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
         return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):

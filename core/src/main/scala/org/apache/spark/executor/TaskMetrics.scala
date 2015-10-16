@@ -223,6 +223,22 @@ class TaskMetrics extends Serializable {
     // overhead.
     _hostname = TaskMetrics.getCachedHostName(_hostname)
   }
+
+  private var _accumulatorUpdates: Map[Long, Any] = Map.empty
+  @transient private var _accumulatorsUpdater: () => Map[Long, Any] = null
+
+  private[spark] def updateAccumulators(): Unit = synchronized {
+    _accumulatorUpdates = _accumulatorsUpdater()
+  }
+
+  /**
+   * Return the latest updates of accumulators in this task.
+   */
+  def accumulatorUpdates(): Map[Long, Any] = _accumulatorUpdates
+
+  private[spark] def setAccumulatorsUpdater(accumulatorsUpdater: () => Map[Long, Any]): Unit = {
+    _accumulatorsUpdater = accumulatorsUpdater
+  }
 }
 
 private[spark] object TaskMetrics {

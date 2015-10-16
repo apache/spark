@@ -26,7 +26,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 
 import org.apache.spark.HashPartitioner;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -36,11 +36,7 @@ public class UnsafeInMemorySorterSuite {
 
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int length) {
     final byte[] strBytes = new byte[length];
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset,
-      strBytes,
-      PlatformDependent.BYTE_ARRAY_OFFSET, length);
+    Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, length);
     return new String(strBytes);
   }
 
@@ -76,14 +72,10 @@ public class UnsafeInMemorySorterSuite {
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
       final byte[] strBytes = str.getBytes("utf-8");
-      PlatformDependent.UNSAFE.putInt(baseObject, position, strBytes.length);
+      Platform.putInt(baseObject, position, strBytes.length);
       position += 4;
-      PlatformDependent.copyMemory(
-        strBytes,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        baseObject,
-        position,
-        strBytes.length);
+      Platform.copyMemory(
+        strBytes, Platform.BYTE_ARRAY_OFFSET, baseObject, position, strBytes.length);
       position += strBytes.length;
     }
     // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
@@ -113,7 +105,7 @@ public class UnsafeInMemorySorterSuite {
     position = dataPage.getBaseOffset();
     for (int i = 0; i < dataToSort.length; i++) {
       // position now points to the start of a record (which holds its length).
-      final int recordLength = PlatformDependent.UNSAFE.getInt(baseObject, position);
+      final int recordLength = Platform.getInt(baseObject, position);
       final long address = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final String str = getStringFromDataPage(baseObject, position + 4, recordLength);
       final int partitionId = hashPartitioner.getPartition(str);

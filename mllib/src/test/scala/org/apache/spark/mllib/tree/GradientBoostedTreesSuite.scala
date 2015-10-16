@@ -166,41 +166,56 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
     val algos = Array(Regression, Regression, Classification)
     val losses = Array(SquaredError, AbsoluteError, LogLoss)
-    (algos zip losses) map {
-      case (algo, loss) => {
-        val treeStrategy = new Strategy(algo = algo, impurity = Variance, maxDepth = 2,
-          categoricalFeaturesInfo = Map.empty)
-        val boostingStrategy =
-          new BoostingStrategy(treeStrategy, loss, numIterations, validationTol = 0.0)
-        val gbtValidate = new GradientBoostedTrees(boostingStrategy)
-          .runWithValidation(trainRdd, validateRdd)
-        val numTrees = gbtValidate.numTrees
-        assert(numTrees !== numIterations)
+    algos.zip(losses).foreach { case (algo, loss) =>
+      val treeStrategy = new Strategy(algo = algo, impurity = Variance, maxDepth = 2,
+        categoricalFeaturesInfo = Map.empty)
+      val boostingStrategy =
+        new BoostingStrategy(treeStrategy, loss, numIterations, validationTol = 0.0)
+      val gbtValidate = new GradientBoostedTrees(boostingStrategy)
+        .runWithValidation(trainRdd, validateRdd)
+      val numTrees = gbtValidate.numTrees
+      assert(numTrees !== numIterations)
 
-        // Test that it performs better on the validation dataset.
-        val gbt = new GradientBoostedTrees(boostingStrategy).run(trainRdd)
-        val (errorWithoutValidation, errorWithValidation) = {
-          if (algo == Classification) {
-            val remappedRdd = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))
-            (loss.computeError(gbt, remappedRdd), loss.computeError(gbtValidate, remappedRdd))
-          } else {
-            (loss.computeError(gbt, validateRdd), loss.computeError(gbtValidate, validateRdd))
-          }
-        }
-        assert(errorWithValidation <= errorWithoutValidation)
-
-        // Test that results from evaluateEachIteration comply with runWithValidation.
-        // Note that convergenceTol is set to 0.0
-        val evaluationArray = gbt.evaluateEachIteration(validateRdd, loss)
-        assert(evaluationArray.length === numIterations)
-        assert(evaluationArray(numTrees) > evaluationArray(numTrees - 1))
-        var i = 1
-        while (i < numTrees) {
-          assert(evaluationArray(i) <= evaluationArray(i - 1))
-          i += 1
+      // Test that it performs better on the validation dataset.
+      val gbt = new GradientBoostedTrees(boostingStrategy).run(trainRdd)
+      val (errorWithoutValidation, errorWithValidation) = {
+        if (algo == Classification) {
+          val remappedRdd = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))
+          (loss.computeError(gbt, remappedRdd), loss.computeError(gbtValidate, remappedRdd))
+        } else {
+          (loss.computeError(gbt, validateRdd), loss.computeError(gbtValidate, validateRdd))
         }
       }
+      assert(errorWithValidation <= errorWithoutValidation)
+
+      // Test that results from evaluateEachIteration comply with runWithValidation.
+      // Note that convergenceTol is set to 0.0
+      val evaluationArray = gbt.evaluateEachIteration(validateRdd, loss)
+      assert(evaluationArray.length === numIterations)
+      assert(evaluationArray(numTrees) > evaluationArray(numTrees - 1))
+      var i = 1
+      while (i < numTrees) {
+        assert(evaluationArray(i) <= evaluationArray(i - 1))
+        i += 1
+      }
     }
+  }
+
+  test("Checkpointing") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    sc.setCheckpointDir(path)
+
+    val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
+
+    val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
+      categoricalFeaturesInfo = Map.empty, checkpointInterval = 2)
+    val boostingStrategy = new BoostingStrategy(treeStrategy, SquaredError, 5, 0.1)
+
+    val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
+
+    sc.checkpointDir = None
+    Utils.deleteRecursively(tempDir)
   }
 
 }

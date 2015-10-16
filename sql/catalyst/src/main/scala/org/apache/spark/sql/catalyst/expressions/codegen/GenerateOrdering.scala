@@ -18,14 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Private
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.StructType
 
 /**
  * Inherits some default implementation for Java from `Ordering[Row]`
  */
-@Private
 class BaseOrdering extends Ordering[InternalRow] {
   def compare(a: InternalRow, b: InternalRow): Int = {
     throw new UnsupportedOperationException
@@ -43,9 +42,30 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
-    val ctx = newCodeGenContext()
+  /**
+   * Creates a code gen ordering for sorting this schema, in ascending order.
+   */
+  def create(schema: StructType): BaseOrdering = {
+    create(schema.zipWithIndex.map { case (field, ordinal) =>
+      SortOrder(BoundReference(ordinal, field.dataType, nullable = true), Ascending)
+    })
+  }
 
+  /**
+   * Generates the code for comparing a struct type according to its natural ordering
+   * (i.e. ascending order by field 1, then field 2, ..., then field n.
+   */
+  def genComparisons(ctx: CodeGenContext, schema: StructType): String = {
+    val ordering = schema.fields.map(_.dataType).zipWithIndex.map {
+      case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    }
+    genComparisons(ctx, ordering)
+  }
+
+  /**
+   * Generates the code for ordering based on the given order.
+   */
+  def genComparisons(ctx: CodeGenContext, ordering: Seq[SortOrder]): String = {
     val comparisons = ordering.map { order =>
       val eval = order.child.gen(ctx)
       val asc = order.direction == Ascending
@@ -54,21 +74,21 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
       val isNullB = ctx.freshName("isNullB")
       val primitiveB = ctx.freshName("primitiveB")
       s"""
-          i = a;
+          ${ctx.INPUT_ROW} = a;
           boolean $isNullA;
           ${ctx.javaType(order.child.dataType)} $primitiveA;
           {
             ${eval.code}
             $isNullA = ${eval.isNull};
-            $primitiveA = ${eval.primitive};
+            $primitiveA = ${eval.value};
           }
-          i = b;
+          ${ctx.INPUT_ROW} = b;
           boolean $isNullB;
           ${ctx.javaType(order.child.dataType)} $primitiveB;
           {
             ${eval.code}
             $isNullB = ${eval.isNull};
-            $primitiveB = ${eval.primitive};
+            $primitiveB = ${eval.value};
           }
           if ($isNullA && $isNullB) {
             // Nothing
@@ -84,9 +104,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           }
       """
     }.mkString("\n")
-    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
-      s"private $javaType $variableName = $initialValue;"
-    }.mkString("\n      ")
+    comparisons
+  }
+
+  protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
+    val ctx = newCodeGenContext()
+    val comparisons = genComparisons(ctx, ordering)
     val code = s"""
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);
@@ -94,22 +117,24 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 
       class SpecificOrdering extends ${classOf[BaseOrdering].getName} {
 
-        private $exprType[] expressions = null;
-        $mutableStates
+        private $exprType[] expressions;
+        ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificOrdering($exprType[] expr) {
           expressions = expr;
+          ${initMutableStates(ctx)}
         }
 
         @Override
         public int compare(InternalRow a, InternalRow b) {
-          InternalRow i = null;  // Holds current row being evaluated.
+          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
           $comparisons
           return 0;
         }
       }"""
 
-    logDebug(s"Generated Ordering: $code")
+    logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }

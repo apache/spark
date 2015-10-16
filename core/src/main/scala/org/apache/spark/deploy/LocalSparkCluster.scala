@@ -73,12 +73,8 @@ class LocalSparkCluster(
   def stop() {
     logInfo("Shutting down local Spark cluster.")
     // Stop the workers before the master so they don't get upset that it disconnected
-    // TODO: In Akka 2.1.x, ActorSystem.awaitTermination hangs when you have remote actors!
-    //       This is unfortunate, but for now we just comment it out.
     workerRpcEnvs.foreach(_.shutdown())
-    // workerActorSystems.foreach(_.awaitTermination())
     masterRpcEnvs.foreach(_.shutdown())
-    // masterActorSystems.foreach(_.awaitTermination())
     masterRpcEnvs.clear()
     workerRpcEnvs.clear()
   }

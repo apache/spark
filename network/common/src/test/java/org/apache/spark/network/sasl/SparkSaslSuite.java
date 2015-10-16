@@ -17,11 +17,11 @@
 
 package org.apache.spark.network.sasl;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -138,8 +138,8 @@ public class SparkSaslSuite {
         public Void answer(InvocationOnMock invocation) {
           byte[] message = (byte[]) invocation.getArguments()[1];
           RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
-          assertEquals("Ping", new String(message, UTF_8));
-          cb.onSuccess("Pong".getBytes(UTF_8));
+          assertEquals("Ping", new String(message, StandardCharsets.UTF_8));
+          cb.onSuccess("Pong".getBytes(StandardCharsets.UTF_8));
           return null;
         }
       })
@@ -148,10 +148,13 @@ public class SparkSaslSuite {
 
     SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
     try {
-      byte[] response = ctx.client.sendRpcSync("Ping".getBytes(UTF_8), TimeUnit.SECONDS.toMillis(10));
-      assertEquals("Pong", new String(response, UTF_8));
+      byte[] response = ctx.client.sendRpcSync("Ping".getBytes(StandardCharsets.UTF_8),
+                                               TimeUnit.SECONDS.toMillis(10));
+      assertEquals("Pong", new String(response, StandardCharsets.UTF_8));
     } finally {
       ctx.close();
+      // There should be 2 terminated events; one for the client, one for the server.
+      verify(rpcHandler, times(2)).connectionTerminated(any(TransportClient.class));
     }
   }
 
@@ -235,7 +238,7 @@ public class SparkSaslSuite {
     final String blockSizeConf = "spark.network.sasl.maxEncryptedBlockSize";
     System.setProperty(blockSizeConf, "1k");
 
-    final AtomicReference<ManagedBuffer> response = new AtomicReference();
+    final AtomicReference<ManagedBuffer> response = new AtomicReference<>();
     final File file = File.createTempFile("sasltest", ".txt");
     SaslTestCtx ctx = null;
     try {
@@ -321,7 +324,8 @@ public class SparkSaslSuite {
     SaslTestCtx ctx = null;
     try {
       ctx = new SaslTestCtx(mock(RpcHandler.class), true, true);
-      ctx.client.sendRpcSync("Ping".getBytes(UTF_8), TimeUnit.SECONDS.toMillis(10));
+      ctx.client.sendRpcSync("Ping".getBytes(StandardCharsets.UTF_8),
+                             TimeUnit.SECONDS.toMillis(10));
       fail("Should have failed to send RPC to server.");
     } catch (Exception e) {
       assertFalse(e.getCause() instanceof TimeoutException);
@@ -330,6 +334,23 @@ public class SparkSaslSuite {
         ctx.close();
       }
     }
+  }
+
+  @Test
+  public void testRpcHandlerDelegate() throws Exception {
+    // Tests all delegates exception for receive(), which is more complicated and already handled
+    // by all other tests.
+    RpcHandler handler = mock(RpcHandler.class);
+    RpcHandler saslHandler = new SaslRpcHandler(null, null, handler, null);
+
+    saslHandler.getStreamManager();
+    verify(handler).getStreamManager();
+
+    saslHandler.connectionTerminated(null);
+    verify(handler).connectionTerminated(any(TransportClient.class));
+
+    saslHandler.exceptionCaught(null, null);
+    verify(handler).exceptionCaught(any(Throwable.class), any(TransportClient.class));
   }
 
   private static class SaslTestCtx {

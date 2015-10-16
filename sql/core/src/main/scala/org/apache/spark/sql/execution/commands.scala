@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.NoSuchElementException
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -35,8 +34,6 @@ import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
  * wrapped in `ExecutedCommand` during execution.
  */
 private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
-  self: Product =>
-
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
   def run(sqlContext: SQLContext): Seq[Row]
@@ -56,27 +53,27 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
    * The `execute()` method of all the physical command classes should reference `sideEffectResult`
    * so that the command can be executed eagerly right after the command query is created.
    */
-  protected[sql] lazy val sideEffectResult: Seq[Row] = cmd.run(sqlContext)
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    cmd.run(sqlContext).map(converter(_).asInstanceOf[InternalRow])
+  }
 
   override def output: Seq[Attribute] = cmd.output
 
   override def children: Seq[SparkPlan] = Nil
 
-  override def executeCollect(): Array[Row] = sideEffectResult.toArray
+  override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
+  override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val convert = CatalystTypeConverters.createToCatalystConverter(schema)
-    val converted = sideEffectResult.map(convert(_).asInstanceOf[InternalRow])
-    sqlContext.sparkContext.parallelize(converted, 1)
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
+
+  override def argString: String = cmd.toString
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
@@ -102,6 +99,15 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
           sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
           Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
         }
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.EXTERNAL_SORT, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.EXTERNAL_SORT} is deprecated and will be ignored. " +
+            s"External sort will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.EXTERNAL_SORT, "true"))
       }
       (keyValueOutput, runFunc)
 
@@ -170,10 +176,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
  *
  * Note that this command takes in a logical plan, runs the optimizer on the logical plan
  * (but do NOT actually execute it).
- *
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
@@ -193,10 +196,7 @@ case class ExplainCommand(
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class CacheTableCommand(
     tableName: String,
     plan: Option[LogicalPlan],
@@ -221,10 +221,6 @@ case class CacheTableCommand(
 }
 
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -236,10 +232,8 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 }
 
 /**
- * :: DeveloperApi ::
  * Clear all cached data from the in-memory cache.
  */
-@DeveloperApi
 case object ClearCacheCommand extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -250,10 +244,7 @@ case object ClearCacheCommand extends RunnableCommand {
   override def output: Seq[Attribute] = Seq.empty
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class DescribeCommand(
     child: SparkPlan,
     override val output: Seq[Attribute],
@@ -276,9 +267,7 @@ case class DescribeCommand(
  * {{{
  *    SHOW TABLES [IN databaseName]
  * }}}
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.
@@ -298,5 +287,80 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     }
 
     rows
+  }
+}
+
+/**
+ * A command for users to list all of the registered functions.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    SHOW FUNCTIONS
+ * }}}
+ * TODO currently we are simply ignore the db
+ */
+case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("function", StringType, nullable = false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = pattern match {
+    case Some(p) =>
+      try {
+        val regex = java.util.regex.Pattern.compile(p)
+        sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+      } catch {
+        // probably will failed in the regex that user provided, then returns empty row.
+        case _: Throwable => Seq.empty[Row]
+      }
+    case None =>
+      sqlContext.functionRegistry.listFunction().map(Row(_))
+  }
+}
+
+/**
+ * A command for users to get the usage of a registered function.
+ * The syntax of using this command in SQL is
+ * {{{
+ *   DESCRIBE FUNCTION [EXTENDED] upper;
+ * }}}
+ */
+case class DescribeFunction(
+    functionName: String,
+    isExtended: Boolean) extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("function_desc", StringType, nullable = false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  private def replaceFunctionName(usage: String, functionName: String): String = {
+    if (usage == null) {
+      "To be added."
+    } else {
+      usage.replaceAll("_FUNC_", functionName)
+    }
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.functionRegistry.lookupFunction(functionName) match {
+      case Some(info) =>
+        val result =
+          Row(s"Function: ${info.getName}") ::
+          Row(s"Class: ${info.getClassName}") ::
+          Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
+
+        if (isExtended) {
+          result :+ Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
+        } else {
+          result
+        }
+
+      case None => Seq(Row(s"Function: $functionName is not found."))
+    }
   }
 }

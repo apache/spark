@@ -40,9 +40,6 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
   protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
     val ctx = newCodeGenContext()
     val eval = predicate.gen(ctx)
-    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
-      s"private $javaType $variableName = $initialValue;"
-    }.mkString("\n      ")
     val code = s"""
       public SpecificPredicate generate($exprType[] expr) {
         return new SpecificPredicate(expr);
@@ -50,19 +47,22 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
 
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final $exprType[] expressions;
-        $mutableStates
+        ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
+
         public SpecificPredicate($exprType[] expr) {
           expressions = expr;
+          ${initMutableStates(ctx)}
         }
 
         @Override
-        public boolean eval(InternalRow i) {
+        public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
-          return !${eval.isNull} && ${eval.primitive};
+          return !${eval.isNull} && ${eval.value};
         }
       }"""
 
-    logDebug(s"Generated predicate '$predicate':\n$code")
+    logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
     val p = compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
     (r: InternalRow) => p.eval(r)

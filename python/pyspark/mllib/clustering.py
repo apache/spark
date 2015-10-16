@@ -20,6 +20,7 @@ import array as pyarray
 
 if sys.version > '3':
     xrange = range
+    basestring = str
 
 from math import exp, log
 
@@ -89,6 +90,12 @@ class KMeansModel(Saveable, Loader):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
+
+    >>> data = array([-383.1,-382.9, 28.7,31.2, 366.2,367.3]).reshape(3, 2)
+    >>> model = KMeans.train(sc.parallelize(data), 3, maxIterations=0,
+    ...     initialModel = KMeansModel([(-1000.0,-1000.0),(5.0,5.0),(1000.0,1000.0)]))
+    >>> model.clusterCenters
+    [array([-1000., -1000.]), array([ 5.,  5.]), array([ 1000.,  1000.])]
     """
 
     def __init__(self, centers):
@@ -143,19 +150,34 @@ class KMeans(object):
 
     @classmethod
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
-              seed=None, initializationSteps=5, epsilon=1e-4):
+              seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
         """Train a k-means clustering model."""
+        clusterInitialModel = []
+        if initialModel is not None:
+            if not isinstance(initialModel, KMeansModel):
+                raise Exception("initialModel is of "+str(type(initialModel))+". It needs "
+                                "to be of <type 'KMeansModel'>")
+            clusterInitialModel = [_convert_to_vector(c) for c in initialModel.clusterCenters]
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode, seed, initializationSteps, epsilon)
+                              runs, initializationMode, seed, initializationSteps, epsilon,
+                              clusterInitialModel)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
 
 
-class GaussianMixtureModel(object):
+@inherit_doc
+class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
-    """A clustering model derived from the Gaussian Mixture Model method.
+    """
+    .. note:: Experimental
+
+    A clustering model derived from the Gaussian Mixture Model method.
 
     >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
+    >>> from numpy.testing import assert_equal
+    >>> from shutil import rmtree
+    >>> import os, tempfile
+
     >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
     ...                                         0.9,0.8,0.75,0.935,
     ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2))
@@ -168,6 +190,25 @@ class GaussianMixtureModel(object):
     True
     >>> labels[4]==labels[5]
     True
+
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = GaussianMixtureModel.load(sc, path)
+    >>> assert_equal(model.weights, sameModel.weights)
+    >>> mus, sigmas = list(
+    ...     zip(*[(g.mu, g.sigma) for g in model.gaussians]))
+    >>> sameMus, sameSigmas = list(
+    ...     zip(*[(g.mu, g.sigma) for g in sameModel.gaussians]))
+    >>> mus == sameMus
+    True
+    >>> sigmas == sameSigmas
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
+
     >>> data =  array([-5.1971, -2.5359, -3.8220,
     ...                -5.2211, -5.0602,  4.7118,
     ...                 6.8989, 3.4592,  4.6322,
@@ -181,17 +222,7 @@ class GaussianMixtureModel(object):
     True
     >>> labels[3]==labels[4]
     True
-    >>> clusterdata_3 = sc.parallelize(data.reshape(15, 1))
-    >>> im = GaussianMixtureModel([0.5, 0.5],
-    ...      [MultivariateGaussian(Vectors.dense([-1.0]), DenseMatrix(1, 1, [1.0])),
-    ...      MultivariateGaussian(Vectors.dense([1.0]), DenseMatrix(1, 1, [1.0]))])
-    >>> model = GaussianMixture.train(clusterdata_3, 2, initialModel=im)
     """
-
-    def __init__(self, weights, gaussians):
-        self._weights = weights
-        self._gaussians = gaussians
-        self._k = len(self._weights)
 
     @property
     def weights(self):
@@ -199,7 +230,7 @@ class GaussianMixtureModel(object):
         Weights for each Gaussian distribution in the mixture, where weights[i] is
         the weight for Gaussian i, and weights.sum == 1.
         """
-        return self._weights
+        return array(self.call("weights"))
 
     @property
     def gaussians(self):
@@ -207,12 +238,14 @@ class GaussianMixtureModel(object):
         Array of MultivariateGaussian where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i.
         """
-        return self._gaussians
+        return [
+            MultivariateGaussian(gaussian[0], gaussian[1])
+            for gaussian in zip(*self.call("gaussians"))]
 
     @property
     def k(self):
         """Number of gaussians in mixture."""
-        return self._k
+        return len(self.weights)
 
     def predict(self, x):
         """
@@ -237,17 +270,30 @@ class GaussianMixtureModel(object):
         :return:     membership_matrix. RDD of array of double values.
         """
         if isinstance(x, RDD):
-            means, sigmas = zip(*[(g.mu, g.sigma) for g in self._gaussians])
+            means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
             membership_matrix = callMLlibFunc("predictSoftGMM", x.map(_convert_to_vector),
-                                              _convert_to_vector(self._weights), means, sigmas)
+                                              _convert_to_vector(self.weights), means, sigmas)
             return membership_matrix.map(lambda x: pyarray.array('d', x))
         else:
             raise TypeError("x should be represented by an RDD, "
                             "but got %s." % type(x))
 
+    @classmethod
+    def load(cls, sc, path):
+        """Load the GaussianMixtureModel from disk.
+
+        :param sc: SparkContext
+        :param path: str, path to where the model is stored.
+        """
+        model = cls._load_java(sc, path)
+        wrapper = sc._jvm.GaussianMixtureModelWrapper(model)
+        return cls(wrapper)
+
 
 class GaussianMixture(object):
     """
+    .. note:: Experimental
+
     Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
 
     :param data:            RDD of data points
@@ -270,11 +316,10 @@ class GaussianMixture(object):
             initialModelWeights = initialModel.weights
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
-        weight, mu, sigma = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),
-                                          k, convergenceTol, maxIterations, seed,
-                                          initialModelWeights, initialModelMu, initialModelSigma)
-        mvg_obj = [MultivariateGaussian(mu[i], sigma[i]) for i in range(k)]
-        return GaussianMixtureModel(weight, mvg_obj)
+        java_model = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),
+                                   k, convergenceTol, maxIterations, seed,
+                                   initialModelWeights, initialModelMu, initialModelSigma)
+        return GaussianMixtureModel(java_model)
 
 
 class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
@@ -579,7 +624,7 @@ class LDAModel(JavaModelWrapper):
     Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> from numpy.testing import assert_almost_equal
+    >>> from numpy.testing import assert_almost_equal, assert_equal
     >>> data = [
     ...     [1, Vectors.dense([0.0, 1.0])],
     ...     [2, SparseVector(2, {0: 1.0})],
@@ -591,6 +636,19 @@ class LDAModel(JavaModelWrapper):
     >>> topics = model.topicsMatrix()
     >>> topics_expect = array([[0.5,  0.5], [0.5, 0.5]])
     >>> assert_almost_equal(topics, topics_expect, 1)
+
+    >>> import os, tempfile
+    >>> from shutil import rmtree
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = LDAModel.load(sc, path)
+    >>> assert_equal(sameModel.topicsMatrix(), model.topicsMatrix())
+    >>> sameModel.vocabSize() == model.vocabSize()
+    True
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
     """
 
     def topicsMatrix(self):
@@ -600,6 +658,33 @@ class LDAModel(JavaModelWrapper):
     def vocabSize(self):
         """Vocabulary size (number of terms or terms in the vocabulary)"""
         return self.call("vocabSize")
+
+    def save(self, sc, path):
+        """Save the LDAModel on to disk.
+
+        :param sc: SparkContext
+        :param path: str, path to where the model needs to be stored.
+        """
+        if not isinstance(sc, SparkContext):
+            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
+        self._java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        """Load the LDAModel from disk.
+
+        :param sc: SparkContext
+        :param path: str, path to where the model is stored.
+        """
+        if not isinstance(sc, SparkContext):
+            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
+        java_model = sc._jvm.org.apache.spark.mllib.clustering.DistributedLDAModel.load(
+            sc._jsc.sc(), path)
+        return cls(java_model)
 
 
 class LDA(object):

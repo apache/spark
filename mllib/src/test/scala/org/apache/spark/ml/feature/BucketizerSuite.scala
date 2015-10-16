@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._

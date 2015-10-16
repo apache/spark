@@ -41,6 +41,9 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
   val min: DoubleParam = new DoubleParam(this, "min",
     "lower bound of the output feature range")
 
+  /** @group getParam */
+  def getMin: Double = $(min)
+
   /**
    * upper bound after transformation, shared by all features
    * Default: 1.0
@@ -48,6 +51,9 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
    */
   val max: DoubleParam = new DoubleParam(this, "max",
     "upper bound of the output feature range")
+
+  /** @group getParam */
+  def getMax: Double = $(max)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -115,6 +121,9 @@ class MinMaxScaler(override val uid: String)
  * :: Experimental ::
  * Model fitted by [[MinMaxScaler]].
  *
+ * @param originalMin min value for each original column during fitting
+ * @param originalMax max value for each original column during fitting
+ *
  * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
 @Experimental
@@ -135,7 +144,6 @@ class MinMaxScalerModel private[ml] (
 
   /** @group setParam */
   def setMax(value: Double): this.type = set(max, value)
-
 
   override def transform(dataset: DataFrame): DataFrame = {
     val originalRange = (originalMax.toBreeze - originalMin.toBreeze).toArray
@@ -165,6 +173,6 @@ class MinMaxScalerModel private[ml] (
 
   override def copy(extra: ParamMap): MinMaxScalerModel = {
     val copied = new MinMaxScalerModel(uid, originalMin, originalMax)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

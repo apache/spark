@@ -35,7 +35,8 @@ object Main extends Logging {
   s.processArguments(List("-Yrepl-class-based",
     "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
     "-classpath", getAddedJars.mkString(File.pathSeparator)), true)
-  val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
+  // the creation of SecurityManager has to be lazy so SPARK_YARN_MODE is set if needed
+  lazy val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
   var interp = new SparkILoop // this is a public var because tests reset it.
@@ -65,9 +66,9 @@ object Main extends Logging {
     val jars = getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster)
-      .setAppName("Spark shell")
       .setJars(jars)
       .set("spark.repl.class.uri", classServer.uri)
+      .setIfMissing("spark.app.name", "Spark shell")
     logInfo("Spark class server started at " + classServer.uri)
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)

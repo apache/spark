@@ -40,21 +40,22 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
   def render(request: HttpServletRequest): Seq[Node] = {
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
-    val sessionStat = listener.sessionList.find(stat => {
-      stat._1 == parameterId
-    }).getOrElse(null)
-    require(sessionStat != null, "Invalid sessionID[" + parameterId + "]")
 
     val content =
-      generateBasicStats() ++
-      <br/> ++
-      <h4>
-        User {sessionStat._2.userName},
-        IP {sessionStat._2.ip},
-        Session created at {formatDate(sessionStat._2.startTimestamp)},
-        Total run {sessionStat._2.totalExecution} SQL
-      </h4> ++
-      generateSQLStatsTable(sessionStat._2.sessionId)
+      listener.synchronized { // make sure all parts in this page are consistent
+        val sessionStat = listener.getSession(parameterId).getOrElse(null)
+        require(sessionStat != null, "Invalid sessionID[" + parameterId + "]")
+
+        generateBasicStats() ++
+        <br/> ++
+        <h4>
+        User {sessionStat.userName},
+        IP {sessionStat.ip},
+        Session created at {formatDate(sessionStat.startTimestamp)},
+        Total run {sessionStat.totalExecution} SQL
+        </h4> ++
+        generateSQLStatsTable(sessionStat.sessionId)
+      }
     UIUtils.headerSparkPage("JDBC/ODBC Session", content, parent, Some(5000))
   }
 
@@ -73,13 +74,13 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
   /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(sessionID: String): Seq[Node] = {
-    val executionList = listener.executionList
-      .filter(_._2.sessionId == sessionID)
+    val executionList = listener.getExecutionList
+      .filter(_.sessionId == sessionID)
     val numStatement = executionList.size
     val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
         "Statement", "State", "Detail")
-      val dataRows = executionList.values.toSeq.sortBy(_.startTimestamp).reverse
+      val dataRows = executionList.sortBy(_.startTimestamp).reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
@@ -146,10 +147,11 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
   /** Generate stats of batch sessions of the thrift server program */
   private def generateSessionStatsTable(): Seq[Node] = {
-    val numBatches = listener.sessionList.size
+    val sessionList = listener.getSessionList
+    val numBatches = sessionList.size
     val table = if (numBatches > 0) {
       val dataRows =
-        listener.sessionList.values.toSeq.sortBy(_.startTimestamp).reverse.map ( session =>
+        sessionList.sortBy(_.startTimestamp).reverse.map ( session =>
         Seq(
           session.userName,
           session.ip,

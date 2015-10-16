@@ -21,10 +21,10 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types._
 
 object Literal {
   def apply(v: Any): Literal = v match {
@@ -36,12 +36,14 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
-    case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
-    case d: Decimal => Literal(d, DecimalType.Unlimited)
+    case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case d: java.math.BigDecimal =>
+      Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+    case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
+    case i: CalendarInterval => Literal(i, CalendarIntervalType)
     case null => Literal(null, NullType)
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
@@ -74,7 +76,8 @@ object IntegerLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal protected (value: Any, dataType: DataType) extends LeafExpression {
+case class Literal protected (value: Any, dataType: DataType)
+  extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
@@ -94,12 +97,12 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      s"final ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};"
+      s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};"
     } else {
       dataType match {
         case BooleanType =>
           ev.isNull = "false"
-          ev.primitive = value.toString
+          ev.value = value.toString
           ""
         case FloatType =>
           val v = value.asInstanceOf[Float]
@@ -107,7 +110,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
             super.genCode(ctx, ev)
           } else {
             ev.isNull = "false"
-            ev.primitive = s"${value}f"
+            ev.value = s"${value}f"
             ""
           }
         case DoubleType =>
@@ -116,20 +119,20 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
             super.genCode(ctx, ev)
           } else {
             ev.isNull = "false"
-            ev.primitive = s"${value}"
+            ev.value = s"${value}D"
             ""
           }
         case ByteType | ShortType =>
           ev.isNull = "false"
-          ev.primitive = s"(${ctx.javaType(dataType)})$value"
+          ev.value = s"(${ctx.javaType(dataType)})$value"
           ""
         case IntegerType | DateType =>
           ev.isNull = "false"
-          ev.primitive = value.toString
+          ev.value = value.toString
           ""
         case TimestampType | LongType =>
           ev.isNull = "false"
-          ev.primitive = s"${value}L"
+          ev.value = s"${value}L"
           ""
         // eval() version may be faster for non-primitive types
         case other =>
@@ -141,7 +144,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 
 // TODO: Specialize
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
-    extends LeafExpression {
+  extends LeafExpression with CodegenFallback {
 
   def update(expression: Expression, input: InternalRow): Unit = {
     value = expression.eval(input)

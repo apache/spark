@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.ImplicitTypeCasts
  *
  * Most function expressions (e.g. [[Substring]] should extends [[ImplicitCastInputTypes]]) instead.
  */
-trait ExpectsInputTypes { self: Expression =>
+trait ExpectsInputTypes extends Expression {
 
   /**
    * Expected input types from child expressions. The i-th position in the returned seq indicates
@@ -44,8 +44,8 @@ trait ExpectsInputTypes { self: Expression =>
   override def checkInputDataTypes(): TypeCheckResult = {
     val mismatches = children.zip(inputTypes).zipWithIndex.collect {
       case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
-        s"argument ${idx + 1} is expected to be of type ${expected.simpleString}, " +
-          s"however, '${child.prettyString}' is of type ${child.dataType.simpleString}."
+        s"argument ${idx + 1} requires ${expected.simpleString} type, " +
+          s"however, '${child.prettyString}' is of ${child.dataType.simpleString} type."
     }
 
     if (mismatches.isEmpty) {
@@ -60,6 +60,6 @@ trait ExpectsInputTypes { self: Expression =>
 /**
  * A mixin for the analyzer to perform implicit type casting using [[ImplicitTypeCasts]].
  */
-trait ImplicitCastInputTypes extends ExpectsInputTypes { self: Expression =>
+trait ImplicitCastInputTypes extends ExpectsInputTypes {
   // No other methods
 }

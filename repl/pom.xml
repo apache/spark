@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.5.0-SNAPSHOT</version>
+    <version>1.6.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -91,6 +91,10 @@
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+    </dependency>
 
     <!-- Explicit listing of transitive deps that are shaded. Otherwise, odd compiler crashes. -->
     <dependency>
@@ -133,7 +137,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/main/scala</source>
                 <source>${extra.source.dir}</source>
               </sources>
             </configuration>
@@ -146,7 +149,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/test/scala</source>
                 <source>${extra.testsource.dir}</source>
               </sources>
             </configuration>

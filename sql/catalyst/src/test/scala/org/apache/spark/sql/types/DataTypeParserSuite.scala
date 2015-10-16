@@ -44,7 +44,7 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("float", FloatType)
   checkDataType("dOUBle", DoubleType)
   checkDataType("decimal(10, 5)", DecimalType(10, 5))
-  checkDataType("decimal", DecimalType.Unlimited)
+  checkDataType("decimal", DecimalType.USER_DEFAULT)
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
@@ -87,7 +87,7 @@ class DataTypeParserSuite extends SparkFunSuite {
     StructType(
       StructField("struct",
         StructType(
-          StructField("deciMal", DecimalType.Unlimited, true) ::
+          StructField("deciMal", DecimalType.USER_DEFAULT, true) ::
           StructField("anotherDecimal", DecimalType(5, 2), true) :: Nil), true) ::
       StructField("MAP", MapType(TimestampType, StringType), true) ::
       StructField("arrAy", ArrayType(DoubleType, true), true) :: Nil)

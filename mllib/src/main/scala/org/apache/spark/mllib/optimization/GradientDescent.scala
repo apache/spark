@@ -32,7 +32,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-class GradientDescent private[mllib] (private var gradient: Gradient, private var updater: Updater)
+class GradientDescent private[spark] (private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
   private var stepSize: Double = 1.0
@@ -235,7 +235,7 @@ object GradientDescent extends Logging {
 
       if (miniBatchSize > 0) {
         /**
-         * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
+         * lossSum is computed using the weights from the previous iteration
          * and regVal is the regularization value computed in the previous iteration as well.
          */
         stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
@@ -264,6 +264,9 @@ object GradientDescent extends Logging {
 
   }
 
+  /**
+   * Alias of [[runMiniBatchSGD]] with convergenceTol set to default value of 0.001.
+   */
   def runMiniBatchSGD(
       data: RDD[(Double, Vector)],
       gradient: Gradient,

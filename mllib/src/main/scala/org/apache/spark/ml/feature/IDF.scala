@@ -35,6 +35,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
 
   /**
    * The minimum of documents in which a term should appear.
+   * Default: 0
    * @group param
    */
   final val minDocFreq = new IntParam(
@@ -114,6 +115,6 @@ class IDFModel private[ml] (
 
   override def copy(extra: ParamMap): IDFModel = {
     val copied = new IDFModel(uid, idfModel)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

@@ -20,7 +20,9 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
@@ -67,13 +69,13 @@ public class RetryingBlockFetcherSuite {
   public void testNoFailures() throws IOException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
-    Map[] interactions = new Map[] {
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
       // Immediately return both blocks successfully.
       ImmutableMap.<String, Object>builder()
         .put("b0", block0)
         .put("b1", block1)
-        .build(),
-    };
+        .build()
+      );
 
     performInteractions(interactions, listener);
 
@@ -86,13 +88,13 @@ public class RetryingBlockFetcherSuite {
   public void testUnrecoverableFailure() throws IOException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
-    Map[] interactions = new Map[] {
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
       // b0 throws a non-IOException error, so it will be failed without retry.
       ImmutableMap.<String, Object>builder()
         .put("b0", new RuntimeException("Ouch!"))
         .put("b1", block1)
-        .build(),
-    };
+        .build()
+    );
 
     performInteractions(interactions, listener);
 
@@ -105,7 +107,7 @@ public class RetryingBlockFetcherSuite {
   public void testSingleIOExceptionOnFirst() throws IOException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
-    Map[] interactions = new Map[] {
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
       // IOException will cause a retry. Since b0 fails, we will retry both.
       ImmutableMap.<String, Object>builder()
         .put("b0", new IOException("Connection failed or something"))
@@ -114,8 +116,8 @@ public class RetryingBlockFetcherSuite {
       ImmutableMap.<String, Object>builder()
         .put("b0", block0)
         .put("b1", block1)
-        .build(),
-    };
+        .build()
+    );
 
     performInteractions(interactions, listener);
 
@@ -128,7 +130,7 @@ public class RetryingBlockFetcherSuite {
   public void testSingleIOExceptionOnSecond() throws IOException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
-    Map[] interactions = new Map[] {
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
       // IOException will cause a retry. Since b1 fails, we will not retry b0.
       ImmutableMap.<String, Object>builder()
         .put("b0", block0)
@@ -136,8 +138,8 @@ public class RetryingBlockFetcherSuite {
         .build(),
       ImmutableMap.<String, Object>builder()
         .put("b1", block1)
-        .build(),
-    };
+        .build()
+    );
 
     performInteractions(interactions, listener);
 
@@ -150,7 +152,7 @@ public class RetryingBlockFetcherSuite {
   public void testTwoIOExceptions() throws IOException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
-    Map[] interactions = new Map[] {
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
       // b0's IOException will trigger retry, b1's will be ignored.
       ImmutableMap.<String, Object>builder()
         .put("b0", new IOException())
@@ -164,8 +166,8 @@ public class RetryingBlockFetcherSuite {
       // b1 returns successfully within 2 retries.
       ImmutableMap.<String, Object>builder()
         .put("b1", block1)
-        .build(),
-    };
+        .build()
+    );
 
     performInteractions(interactions, listener);
 
@@ -178,7 +180,7 @@ public class RetryingBlockFetcherSuite {
   public void testThreeIOExceptions() throws IOException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
-    Map[] interactions = new Map[] {
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
       // b0's IOException will trigger retry, b1's will be ignored.
       ImmutableMap.<String, Object>builder()
         .put("b0", new IOException())
@@ -196,8 +198,8 @@ public class RetryingBlockFetcherSuite {
       // This is not reached -- b1 has failed.
       ImmutableMap.<String, Object>builder()
         .put("b1", block1)
-        .build(),
-    };
+        .build()
+    );
 
     performInteractions(interactions, listener);
 
@@ -210,7 +212,7 @@ public class RetryingBlockFetcherSuite {
   public void testRetryAndUnrecoverable() throws IOException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
-    Map[] interactions = new Map[] {
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
       // b0's IOException will trigger retry, subsequent messages will be ignored.
       ImmutableMap.<String, Object>builder()
         .put("b0", new IOException())
@@ -226,8 +228,8 @@ public class RetryingBlockFetcherSuite {
       // b2 succeeds in its last retry.
       ImmutableMap.<String, Object>builder()
         .put("b2", block2)
-        .build(),
-    };
+        .build()
+    );
 
     performInteractions(interactions, listener);
 
@@ -248,7 +250,8 @@ public class RetryingBlockFetcherSuite {
    * subset of the original blocks in a second interaction.
    */
   @SuppressWarnings("unchecked")
-  private void performInteractions(final Map[] interactions, BlockFetchingListener listener)
+  private static void performInteractions(List<? extends Map<String, Object>> interactions,
+                                          BlockFetchingListener listener)
     throws IOException {
 
     TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());

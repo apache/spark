@@ -23,7 +23,7 @@ import org.apache.spark.Accumulator
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.expressions.ScalaUDF
+import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.execution.PythonUDF
 import org.apache.spark.sql.types.DataType
 
@@ -66,10 +66,14 @@ private[sql] case class UserDefinedPythonFunction(
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType) {
 
+  def builder(e: Seq[Expression]): PythonUDF = {
+    PythonUDF(name, command, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars,
+      accumulator, dataType, e)
+  }
+
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    val udf = PythonUDF(name, command, envVars, pythonIncludes, pythonExec, pythonVer,
-      broadcastVars, accumulator, dataType, exprs.map(_.expr))
+    val udf = builder(exprs.map(_.expr))
     Column(udf)
   }
 }

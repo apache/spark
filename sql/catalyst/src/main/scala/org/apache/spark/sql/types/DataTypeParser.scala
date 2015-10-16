@@ -48,7 +48,7 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     "(?i)binary".r ^^^ BinaryType |
     "(?i)boolean".r ^^^ BooleanType |
     fixedDecimalType |
-    "(?i)decimal".r ^^^ DecimalType.Unlimited |
+    "(?i)decimal".r ^^^ DecimalType.USER_DEFAULT |
     "(?i)date".r ^^^ DateType |
     "(?i)timestamp".r ^^^ TimestampType |
     varchar

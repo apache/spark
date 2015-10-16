@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.rdd.RDD
 
@@ -35,6 +35,7 @@ import org.apache.spark.rdd.RDD
  *
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
+@Since("1.2.0")
 @Experimental
 class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
   extends Logging with Serializable {
@@ -56,6 +57,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @param k the position to compute the truncated precision, must be positive
    * @return the average precision at the first k ranking positions
    */
+  @Since("1.2.0")
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab) =>
@@ -125,6 +127,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @param k the position to compute the truncated ndcg, must be positive
    * @return the average ndcg at the first k ranking positions
    */
+  @Since("1.2.0")
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab) =>
@@ -163,6 +166,7 @@ object RankingMetrics {
    * Creates a [[RankingMetrics]] instance (for Java users).
    * @param predictionAndLabels a JavaRDD of (predicted ranking, ground truth set) pairs
    */
+  @Since("1.4.0")
   def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]
     val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>

@@ -28,7 +28,7 @@ import akka.actor.{ActorSystem, ExtendedActorSystem, Actor, ActorRef, Props, Add
 import akka.event.Logging.Error
 import akka.pattern.{ask => akkaAsk}
 import akka.remote.{AssociationEvent, AssociatedEvent, DisassociatedEvent, AssociationErrorEvent}
-import com.google.common.util.concurrent.MoreExecutors
+import akka.serialization.JavaSerializer
 
 import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.rpc._
@@ -39,10 +39,6 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
  *
  * TODO Once we remove all usages of Akka in other place, we can move this file to a new project and
  * remove Akka from the dependencies.
- *
- * @param actorSystem
- * @param conf
- * @param boundPort
  */
 private[spark] class AkkaRpcEnv private[akka] (
     val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
@@ -87,9 +83,9 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     @volatile var endpointRef: AkkaRpcEndpointRef = null
-    // Use lazy because the Actor needs to use `endpointRef`.
+    // Use defered function because the Actor needs to use `endpointRef`.
     // So `actorRef` should be created after assigning `endpointRef`.
-    lazy val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
+    val actorRef = () => actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
       assert(endpointRef != null)
 
@@ -166,9 +162,9 @@ private[spark] class AkkaRpcEnv private[akka] (
             _sender ! AkkaMessage(response, false)
           }
 
-          // Some RpcEndpoints need to know the sender's address
-          override val sender: RpcEndpointRef =
-            new AkkaRpcEndpointRef(defaultAddress, _sender, conf)
+          // Use "lazy" because most of RpcEndpoints don't need "senderAddress"
+          override lazy val senderAddress: RpcAddress =
+            new AkkaRpcEndpointRef(defaultAddress, _sender, conf).address
         })
       } else {
         endpoint.receive
@@ -239,6 +235,12 @@ private[spark] class AkkaRpcEnv private[akka] (
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorSystem)"
+
+  override def deserialize[T](deserializationAction: () => T): T = {
+    JavaSerializer.currentSystem.withValue(actorSystem.asInstanceOf[ExtendedActorSystem]) {
+      deserializationAction()
+    }
+  }
 }
 
 private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
@@ -266,13 +268,20 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
 }
 
 private[akka] class AkkaRpcEndpointRef(
-    @transient defaultAddress: RpcAddress,
-    @transient _actorRef: => ActorRef,
-    @transient conf: SparkConf,
-    @transient initInConstructor: Boolean = true)
+    @transient private val defaultAddress: RpcAddress,
+    @transient private val _actorRef: () => ActorRef,
+    conf: SparkConf,
+    initInConstructor: Boolean)
   extends RpcEndpointRef(conf) with Logging {
 
-  lazy val actorRef = _actorRef
+  def this(
+      defaultAddress: RpcAddress,
+      _actorRef: ActorRef,
+      conf: SparkConf) = {
+    this(defaultAddress, () => _actorRef, conf, true)
+  }
+
+  lazy val actorRef = _actorRef()
 
   override lazy val address: RpcAddress = {
     val akkaAddress = actorRef.path.address
@@ -315,6 +324,12 @@ private[akka] class AkkaRpcEndpointRef(
 
   override def toString: String = s"${getClass.getSimpleName}($actorRef)"
 
+  final override def equals(that: Any): Boolean = that match {
+    case other: AkkaRpcEndpointRef => actorRef == other.actorRef
+    case _ => false
+  }
+
+  final override def hashCode(): Int = if (actorRef == null) 0 else actorRef.hashCode()
 }
 
 /**

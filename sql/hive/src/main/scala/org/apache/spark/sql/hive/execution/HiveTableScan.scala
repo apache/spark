@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
@@ -44,7 +44,7 @@ private[hive]
 case class HiveTableScan(
     requestedAttributes: Seq[Attribute],
     relation: MetastoreRelation,
-    partitionPruningPred: Option[Expression])(
+    partitionPruningPred: Seq[Expression])(
     @transient val context: HiveContext)
   extends LeafNode {
 
@@ -56,7 +56,7 @@ case class HiveTableScan(
 
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
-  private[this] val boundPruningPred = partitionPruningPred.map { pred =>
+  private[this] val boundPruningPred = partitionPruningPred.reduceLeftOption(And).map { pred =>
     require(
       pred.dataType == BooleanType,
       s"Data type of predicate $pred must be BooleanType rather than ${pred.dataType}.")
@@ -98,7 +98,7 @@ case class HiveTableScan(
       .asInstanceOf[StructObjectInspector]
 
     val columnTypeNames = structOI
-      .getAllStructFieldRefs
+      .getAllStructFieldRefs.asScala
       .map(_.getFieldObjectInspector)
       .map(TypeInfoUtils.getTypeInfoFromObjectInspector(_).getTypeName)
       .mkString(",")
@@ -118,9 +118,8 @@ case class HiveTableScan(
       case None => partitions
       case Some(shouldKeep) => partitions.filter { part =>
         val dataTypes = relation.partitionKeys.map(_.dataType)
-        val castedValues = for ((value, dataType) <- part.getValues.zip(dataTypes)) yield {
-          castFromString(value, dataType)
-        }
+        val castedValues = part.getValues.asScala.zip(dataTypes)
+          .map { case (value, dataType) => castFromString(value, dataType) }
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
@@ -133,7 +132,8 @@ case class HiveTableScan(
   protected override def doExecute(): RDD[InternalRow] = if (!relation.hiveQlTable.isPartitioned) {
     hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
-    hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
+    hadoopReader.makeRDDForPartitionedTable(
+      prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
   }
 
   override def output: Seq[Attribute] = attributes

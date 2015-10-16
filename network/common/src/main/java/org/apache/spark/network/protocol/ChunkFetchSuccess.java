@@ -62,6 +62,11 @@ public final class ChunkFetchSuccess implements ResponseMessage {
   }
 
   @Override
+  public int hashCode() {
+    return Objects.hashCode(streamChunkId, buffer);
+  }
+
+  @Override
   public boolean equals(Object other) {
     if (other instanceof ChunkFetchSuccess) {
       ChunkFetchSuccess o = (ChunkFetchSuccess) other;

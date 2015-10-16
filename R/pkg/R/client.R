@@ -48,7 +48,7 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
     jars <- paste("--jars", jars)
   }
 
-  if (packages != "") {
+  if (!identical(packages, "")) {
     packages <- paste("--packages", packages)
   }
 

@@ -86,6 +86,9 @@ class StreamingContext(object):
     """
     _transformerSerializer = None
 
+    # Reference to a currently active StreamingContext
+    _activeContext = None
+
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
         """
         Create a new StreamingContext.
@@ -142,19 +145,19 @@ class StreamingContext(object):
         Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
         If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
         recreated from the checkpoint data. If the data does not exist, then the provided setupFunc
-        will be used to create a JavaStreamingContext.
+        will be used to create a new context.
 
-        @param checkpointPath: Checkpoint directory used in an earlier JavaStreamingContext program
-        @param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
+        @param checkpointPath: Checkpoint directory used in an earlier streaming program
+        @param setupFunc:      Function to create a new context and setup DStreams
         """
-        # TODO: support checkpoint in HDFS
-        if not os.path.exists(checkpointPath) or not os.listdir(checkpointPath):
+        cls._ensure_initialized()
+        gw = SparkContext._gateway
+
+        # Check whether valid checkpoint information exists in the given path
+        if gw.jvm.CheckpointReader.read(checkpointPath).isEmpty():
             ssc = setupFunc()
             ssc.checkpoint(checkpointPath)
             return ssc
-
-        cls._ensure_initialized()
-        gw = SparkContext._gateway
 
         try:
             jssc = gw.jvm.JavaStreamingContext(checkpointPath)
@@ -162,13 +165,63 @@ class StreamingContext(object):
             print("failed to load StreamingContext from checkpoint", file=sys.stderr)
             raise
 
-        jsc = jssc.sparkContext()
-        conf = SparkConf(_jconf=jsc.getConf())
-        sc = SparkContext(conf=conf, gateway=gw, jsc=jsc)
+        # If there is already an active instance of Python SparkContext use it, or create a new one
+        if not SparkContext._active_spark_context:
+            jsc = jssc.sparkContext()
+            conf = SparkConf(_jconf=jsc.getConf())
+            SparkContext(conf=conf, gateway=gw, jsc=jsc)
+
+        sc = SparkContext._active_spark_context
+
         # update ctx in serializer
-        SparkContext._active_spark_context = sc
         cls._transformerSerializer.ctx = sc
         return StreamingContext(sc, None, jssc)
+
+    @classmethod
+    def getActive(cls):
+        """
+        Return either the currently active StreamingContext (i.e., if there is a context started
+        but not stopped) or None.
+        """
+        activePythonContext = cls._activeContext
+        if activePythonContext is not None:
+            # Verify that the current running Java StreamingContext is active and is the same one
+            # backing the supposedly active Python context
+            activePythonContextJavaId = activePythonContext._jssc.ssc().hashCode()
+            activeJvmContextOption = activePythonContext._jvm.StreamingContext.getActive()
+
+            if activeJvmContextOption.isEmpty():
+                cls._activeContext = None
+            elif activeJvmContextOption.get().hashCode() != activePythonContextJavaId:
+                cls._activeContext = None
+                raise Exception("JVM's active JavaStreamingContext is not the JavaStreamingContext "
+                                "backing the action Python StreamingContext. This is unexpected.")
+        return cls._activeContext
+
+    @classmethod
+    def getActiveOrCreate(cls, checkpointPath, setupFunc):
+        """
+        Either return the active StreamingContext (i.e. currently started but not stopped),
+        or recreate a StreamingContext from checkpoint data or create a new StreamingContext
+        using the provided setupFunc function. If the checkpointPath is None or does not contain
+        valid checkpoint data, then setupFunc will be called to create a new context and setup
+        DStreams.
+
+        @param checkpointPath: Checkpoint directory used in an earlier streaming program. Can be
+                               None if the intention is to always create a new context when there
+                               is no active context.
+        @param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
+        """
+
+        if setupFunc is None:
+            raise Exception("setupFunc cannot be None")
+        activeContext = cls.getActive()
+        if activeContext is not None:
+            return activeContext
+        elif checkpointPath is not None:
+            return cls.getOrCreate(checkpointPath, setupFunc)
+        else:
+            return setupFunc()
 
     @property
     def sparkContext(self):
@@ -182,10 +235,12 @@ class StreamingContext(object):
         Start the execution of the streams.
         """
         self._jssc.start()
+        StreamingContext._activeContext = self
 
     def awaitTermination(self, timeout=None):
         """
         Wait for the execution to stop.
+
         @param timeout: time to wait in seconds
         """
         if timeout is None:
@@ -198,6 +253,7 @@ class StreamingContext(object):
         Wait for the execution to stop. Return `true` if it's stopped; or
         throw the reported error during the execution; or `false` if the
         waiting time elapsed before returning from the method.
+
         @param timeout: time to wait in seconds
         """
         self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
@@ -212,6 +268,7 @@ class StreamingContext(object):
                               of all received data to be completed
         """
         self._jssc.stop(stopSparkContext, stopGraceFully)
+        StreamingContext._activeContext = None
         if stopSparkContext:
             self._sc.stop()
 

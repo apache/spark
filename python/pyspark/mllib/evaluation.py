@@ -82,7 +82,7 @@ class RegressionMetrics(JavaModelWrapper):
     ...     (2.5, 3.0), (0.0, -0.5), (2.0, 2.0), (8.0, 7.0)])
     >>> metrics = RegressionMetrics(predictionAndObservations)
     >>> metrics.explainedVariance
-    0.95...
+    8.859...
     >>> metrics.meanAbsoluteError
     0.5...
     >>> metrics.meanSquaredError
@@ -147,7 +147,7 @@ class MulticlassMetrics(JavaModelWrapper):
     """
     Evaluator for multiclass classification.
 
-    :param predictionAndLabels an RDD of (prediction, label) pairs.
+    :param predictionAndLabels: an RDD of (prediction, label) pairs.
 
     >>> predictionAndLabels = sc.parallelize([(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)])

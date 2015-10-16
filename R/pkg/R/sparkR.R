@@ -22,7 +22,8 @@
 connExists <- function(env) {
   tryCatch({
     exists(".sparkRCon", envir = env) && isOpen(env[[".sparkRCon"]])
-  }, error = function(err) {
+  },
+  error = function(err) {
     return(FALSE)
   })
 }
@@ -104,16 +105,13 @@ sparkR.init <- function(
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
-  sparkMem <- Sys.getenv("SPARK_MEM", "1024m")
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
 
   # Classpath separator is ";" on Windows
   # URI needs four /// as from http://stackoverflow.com/a/18522792
   if (.Platform$OS.type == "unix") {
-    collapseChar <- ":"
     uriSep <- "//"
   } else {
-    collapseChar <- ";"
     uriSep <- "////"
   }
 
@@ -140,7 +138,7 @@ sparkR.init <- function(
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
     }
-    f <- file(path, open='rb')
+    f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     close(f)
@@ -156,30 +154,25 @@ sparkR.init <- function(
   .sparkREnv$backendPort <- backendPort
   tryCatch({
     connectBackend("localhost", backendPort)
-  }, error = function(err) {
+  },
+  error = function(err) {
     stop("Failed to connect JVM\n")
   })
 
   if (nchar(sparkHome) != 0) {
-    sparkHome <- normalizePath(sparkHome)
+    sparkHome <- suppressWarnings(normalizePath(sparkHome))
   }
 
-  sparkEnvirMap <- new.env()
-  for (varname in names(sparkEnvir)) {
-    sparkEnvirMap[[varname]] <- sparkEnvir[[varname]]
-  }
+  sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
 
-  sparkExecutorEnvMap <- new.env()
-  if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
+  sparkExecutorEnvMap <- convertNamedListToEnv(sparkExecutorEnv)
+  if(is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
     sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <-
       paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
   }
-  for (varname in names(sparkExecutorEnv)) {
-    sparkExecutorEnvMap[[varname]] <- sparkExecutorEnv[[varname]]
-  }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- sapply(nonEmptyJars,
+  localJarPaths <- lapply(nonEmptyJars,
                           function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
 
   # Set the start time to identify jobjs
@@ -194,7 +187,7 @@ sparkR.init <- function(
       master,
       appName,
       as.character(sparkHome),
-      as.list(localJarPaths),
+      localJarPaths,
       sparkEnvirMap,
       sparkExecutorEnvMap),
     envir = .sparkREnv
@@ -267,7 +260,8 @@ sparkRHive.init <- function(jsc = NULL) {
   ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.HiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     stop("Spark SQL is not built with Hive support")
   })
 

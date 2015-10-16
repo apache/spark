@@ -32,6 +32,7 @@ infer_type <- function(x) {
                  numeric = "double",
                  raw = "binary",
                  list = "array",
+                 struct = "struct",
                  environment = "map",
                  Date = "date",
                  POSIXlt = "timestamp",
@@ -41,45 +42,45 @@ infer_type <- function(x) {
   if (type == "map") {
     stopifnot(length(x) > 0)
     key <- ls(x)[[1]]
-    list(type = "map",
-         keyType = "string",
-         valueType = infer_type(get(key, x)),
-         valueContainsNull = TRUE)
+    paste0("map<string,", infer_type(get(key, x)), ">")
   } else if (type == "array") {
     stopifnot(length(x) > 0)
+
+    paste0("array<", infer_type(x[[1]]), ">")
+  } else if (type == "struct") {
+    stopifnot(length(x) > 0)
     names <- names(x)
-    if (is.null(names)) {
-      list(type = "array", elementType = infer_type(x[[1]]), containsNull = TRUE)
-    } else {
-      # StructType
-      types <- lapply(x, infer_type)
-      fields <- lapply(1:length(x), function(i) {
-        structField(names[[i]], types[[i]], TRUE)
-      })
-      do.call(structType, fields)
-    }
+    stopifnot(!is.null(names))
+
+    type <- lapply(seq_along(x), function(i) {
+      paste0(names[[i]], ":", infer_type(x[[i]]), ",")
+    })
+    type <- Reduce(paste0, type)
+    type <- paste0("struct<", substr(type, 1, nchar(type) - 1), ">")
   } else if (length(x) > 1) {
-    list(type = "array", elementType = type, containsNull = TRUE)
+    paste0("array<", infer_type(x[[1]]), ">")
   } else {
     type
   }
 }
 
-#' Create a DataFrame from an RDD
+#' Create a DataFrame
 #'
-#' Converts an RDD to a DataFrame by infer the types.
+#' Converts R data.frame or list into DataFrame.
 #'
 #' @param sqlContext A SQLContext
 #' @param data An RDD or list or data.frame
 #' @param schema a list of column names or named list (StructType), optional
 #' @return an DataFrame
+#' @rdname createDataFrame
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-#' df <- createDataFrame(sqlContext, rdd)
+#' df1 <- as.DataFrame(sqlContext, iris)
+#' df2 <- as.DataFrame(sqlContext, list(3,4,5,6))
+#' df3 <- createDataFrame(sqlContext, iris)
 #' }
 
 # TODO(davies): support sampling and infer type from NA
@@ -152,6 +153,13 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
   dataFrame(sdf)
 }
 
+#' @rdname createDataFrame
+#' @aliases createDataFrame
+#' @export
+as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
+  createDataFrame(sqlContext, data, schema, samplingRatio)
+}
+
 # toDF
 #
 # Converts an RDD to a DataFrame by infer the types.
@@ -201,7 +209,7 @@ setMethod("toDF", signature(x = "RDD"),
 
 jsonFile <- function(sqlContext, path) {
   # Allow the user to have a more flexible definiton of the text file path
-  path <- normalizePath(path)
+  path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
   sdf <- callJMethod(sqlContext, "jsonFile", path)
@@ -251,7 +259,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 # TODO: Implement saveasParquetFile and write examples for both
 parquetFile <- function(sqlContext, ...) {
   # Allow the user to have a more flexible definiton of the text file path
-  paths <- lapply(list(...), normalizePath)
+  paths <- lapply(list(...), function(x) suppressWarnings(normalizePath(x)))
   sdf <- callJMethod(sqlContext, "parquetFile", paths)
   dataFrame(sdf)
 }
@@ -457,7 +465,7 @@ dropTempTable <- function(sqlContext, tableName) {
 read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
-    options[['path']] <- path
+    options[["path"]] <- path
   }
   if (is.null(source)) {
     sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
@@ -506,7 +514,7 @@ loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
 createExternalTable <- function(sqlContext, tableName, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
-    options[['path']] <- path
+    options[["path"]] <- path
   }
   sdf <- callJMethod(sqlContext, "createExternalTable", tableName, source, options)
   dataFrame(sdf)
