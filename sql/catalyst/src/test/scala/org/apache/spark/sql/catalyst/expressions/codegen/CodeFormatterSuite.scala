@@ -34,9 +34,9 @@ class CodeFormatterSuite extends SparkFunSuite {
       |}""".stripMargin
   }{
     """
-      |001 class A {
-      |002   blahblah;
-      |003 }
+      |/* 001 */ class A {
+      |/* 002 */   blahblah;
+      |/* 003 */ }
     """.stripMargin
   }
 
@@ -48,11 +48,11 @@ class CodeFormatterSuite extends SparkFunSuite {
       |}""".stripMargin
   } {
     """
-      |001 class A {
-      |002   if (c) {
-      |003     duh;
-      |004   }
-      |005 }
+      |/* 001 */ class A {
+      |/* 002 */   if (c) {
+      |/* 003 */     duh;
+      |/* 004 */   }
+      |/* 005 */ }
     """.stripMargin
   }
 
@@ -62,9 +62,9 @@ class CodeFormatterSuite extends SparkFunSuite {
       |}""".stripMargin
   }{
     """
-      |001 class A {
-      |002   if (c) {duh;}
-      |003 }
+      |/* 001 */ class A {
+      |/* 002 */   if (c) {duh;}
+      |/* 003 */ }
     """.stripMargin
   }
 
@@ -74,9 +74,9 @@ class CodeFormatterSuite extends SparkFunSuite {
       |}""".stripMargin
   }{
     """
-      |001 class A {
-      |002   if (c) {duh;} else {boo;}
-      |003 }
+      |/* 001 */ class A {
+      |/* 002 */   if (c) {duh;} else {boo;}
+      |/* 003 */ }
     """.stripMargin
   }
 
@@ -87,10 +87,10 @@ class CodeFormatterSuite extends SparkFunSuite {
       |c)""".stripMargin
   }{
     """
-      |001 foo(
-      |002   a,
-      |003   b,
-      |004   c)
+      |/* 001 */ foo(
+      |/* 002 */   a,
+      |/* 003 */   b,
+      |/* 004 */   c)
     """.stripMargin
   }
 }

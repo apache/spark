@@ -45,7 +45,7 @@ private class CodeFormatter {
     } else {
       indentString
     }
-    code.append(f"${currentLine}%03d ")
+    code.append(f"/* ${currentLine}%03d */ ")
     code.append(thisLineIndent)
     code.append(line)
     code.append("\n")
