@@ -17,6 +17,7 @@
 package org.apache.spark.graphx.lib
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.graphx.PartitionStrategy.RandomVertexCut
 import org.apache.spark.graphx._
 
 class LocalClusteringCoefficientSuite extends SparkFunSuite with LocalSparkContext {
@@ -78,7 +79,7 @@ class LocalClusteringCoefficientSuite extends SparkFunSuite with LocalSparkConte
     withSpark { sc =>
       val edges = Array( 0L->1L, 1L->2L, 2L->0L )
       val rawEdges = sc.parallelize(edges ++ edges, 2)
-      val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
+      val graph = Graph.fromEdgeTuples(rawEdges, true, uniqueEdges = Some(RandomVertexCut)).cache()
       val lccCount = graph.localClusteringCoefficient()
       val verts = lccCount.vertices
       verts.collect.foreach { case (vid, count) => assert(approEqual(count, 1.0)) }
