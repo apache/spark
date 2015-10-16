@@ -84,7 +84,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       shuffleId: Int,
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    if (SortShuffleWriter.shouldBypassMergeSort(
+    if (!dependency.mapSideCombine && SortShuffleWriter.shouldBypassMergeSort(
         SparkEnv.get.conf,
         dependency.partitioner.numPartitions,
         aggregator = None,
