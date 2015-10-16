@@ -17,8 +17,10 @@
 
 package org.apache.spark.streaming.scheduler
 
+import scala.util.{Failure, Try}
+
 import org.apache.spark.streaming.Time
-import scala.util.Try
+import org.apache.spark.util.{Utils, CallSite}
 
 /**
  * Class representing a Spark computation. It may contain multiple Spark jobs.
@@ -29,7 +31,9 @@ class Job(val time: Time, func: () => _) {
   private var _outputOpId: Int = _
   private var isSet = false
   private var _result: Try[_] = null
-  private var _callSite: String = "Unknown"
+  private var _callSite: CallSite = null
+  private var _startTime: Option[Long] = None
+  private var _endTime: Option[Long] = None
 
   def run() {
     _result = Try(func())
@@ -71,11 +75,29 @@ class Job(val time: Time, func: () => _) {
     _outputOpId = outputOpId
   }
 
-  def setCallSite(callSite: String): Unit = {
+  def setCallSite(callSite: CallSite): Unit = {
     _callSite = callSite
   }
 
-  def callSite: String = _callSite
+  def callSite: CallSite = _callSite
+
+  def setStartTime(startTime: Long): Unit = {
+    _startTime = Some(startTime)
+  }
+
+  def setEndTime(endTime: Long): Unit = {
+    _endTime = Some(endTime)
+  }
+
+  def toOutputOperationInfo: OutputOperationInfo = {
+    val failureReason = if (_result != null && _result.isFailure) {
+      Some(Utils.exceptionString(_result.asInstanceOf[Failure[_]].exception))
+    } else {
+      None
+    }
+    OutputOperationInfo(
+      time, outputOpId, callSite.shortForm, callSite.longForm, _startTime, _endTime, failureReason)
+  }
 
   override def toString: String = id
 }
