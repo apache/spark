@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
@@ -53,6 +54,10 @@ class CrossValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setEvaluator(eval)
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
+
+    // copied model must have the same paren.
+    MLTestingUtils.checkCopy(cvModel)
+
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
@@ -137,6 +142,8 @@ object CrossValidatorSuite {
     override def evaluate(dataset: DataFrame): Double = {
       throw new UnsupportedOperationException
     }
+
+    override def isLargerBetter: Boolean = true
 
     override val uid: String = "eval"
 

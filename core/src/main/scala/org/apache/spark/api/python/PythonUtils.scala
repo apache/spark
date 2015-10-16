@@ -17,10 +17,10 @@
 
 package org.apache.spark.api.python
 
-import java.io.{File}
+import java.io.File
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkContext
@@ -51,7 +51,14 @@ private[spark] object PythonUtils {
    * Convert list of T into seq of T (for calling API with varargs)
    */
   def toSeq[T](vs: JList[T]): Seq[T] = {
-    vs.toList.toSeq
+    vs.asScala
+  }
+
+  /**
+   * Convert list of T into a (Scala) List of T
+   */
+  def toList[T](vs: JList[T]): List[T] = {
+    vs.asScala.toList
   }
 
   /**
@@ -65,6 +72,6 @@ private[spark] object PythonUtils {
    * Convert java map of K, V into Map of K, V (for calling API with varargs)
    */
   def toScalaMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
-    jm.toMap
+    jm.asScala.toMap
   }
 }

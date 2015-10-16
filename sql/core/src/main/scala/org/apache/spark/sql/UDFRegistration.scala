@@ -56,6 +56,7 @@ class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
 
   /**
    * Register a user-defined aggregate function (UDAF).
+   *
    * @param name the name of the UDAF.
    * @param udaf the UDAF needs to be registered.
    * @return the registered UDAF.

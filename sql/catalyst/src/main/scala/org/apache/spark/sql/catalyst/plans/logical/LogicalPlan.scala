@@ -135,16 +135,25 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     val input = children.flatMap(_.output)
+    def cleanExpression(e: Expression) = e match {
+      case a: Alias =>
+        // As the root of the expression, Alias will always take an arbitrary exprId, we need
+        // to erase that for equality testing.
+        val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
+        BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
+      case other => BindReferences.bindReference(other, input, allowFailures = true)
+    }
+
     productIterator.map {
       // Children are checked using sameResult above.
       case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+      case e: Expression => cleanExpression(e)
       case s: Option[_] => s.map {
-        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+        case e: Expression => cleanExpression(e)
         case other => other
       }
       case s: Seq[_] => s.map {
-        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+        case e: Expression => cleanExpression(e)
         case other => other
       }
       case other => other
@@ -259,13 +268,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
         // The foldLeft adds ExtractValues for every remaining parts of the identifier,
-        // and wrap it with UnresolvedAlias which will be removed later.
+        // and aliased it with the last part of the name.
         // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-        // Then this will add ExtractValue("c", ExtractValue("b", a)), and wrap it as
-        // UnresolvedAlias(ExtractValue("c", ExtractValue("b", a))).
+        // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
+        // expression as "c".
         val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
           ExtractValue(expr, Literal(fieldName), resolver))
-        Some(UnresolvedAlias(fieldExprs))
+        Some(Alias(fieldExprs, nestedFields.last)())
 
       // No matches.
       case Seq() =>

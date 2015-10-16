@@ -79,6 +79,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   def start(): Unit = synchronized {
     if (eventLoop != null) return // generator has already been started
 
+    // Call checkpointWriter here to initialize it before eventLoop uses it to avoid a deadlock.
+    // See SPARK-10125
+    checkpointWriter
+
     eventLoop = new EventLoop[JobGeneratorEvent]("JobGenerator") {
       override protected def onReceive(event: JobGeneratorEvent): Unit = processEvent(event)
 

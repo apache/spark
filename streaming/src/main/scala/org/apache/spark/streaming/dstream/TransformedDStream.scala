@@ -17,9 +17,11 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.{PairRDDFunctions, RDD}
-import org.apache.spark.streaming.{Duration, Time}
 import scala.reflect.ClassTag
+
+import org.apache.spark.SparkException
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{Duration, Time}
 
 private[streaming]
 class TransformedDStream[U: ClassTag] (
@@ -37,7 +39,16 @@ class TransformedDStream[U: ClassTag] (
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
-    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
-    Some(transformFunc(parentRDDs, validTime))
+    val parentRDDs = parents.map { parent => parent.getOrCompute(validTime).getOrElse(
+      // Guard out against parent DStream that return None instead of Some(rdd) to avoid NPE
+      throw new SparkException(s"Couldn't generate RDD from parent at time $validTime"))
+    }
+    val transformedRDD = transformFunc(parentRDDs, validTime)
+    if (transformedRDD == null) {
+      throw new SparkException("Transform function must not return null. " +
+        "Return SparkContext.emptyRDD() instead to represent no element " +
+        "as the result of transformation.")
+    }
+    Some(transformedRDD)
   }
 }

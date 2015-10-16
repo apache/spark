@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -68,10 +69,12 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
   }
 }
 
-class DDLTestSuite extends DataSourceTest {
+class DDLTestSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
 
-  before {
-    caseInsensitiveContext.sql(
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sql(
       """
       |CREATE TEMPORARY TABLE ddlPeople
       |USING org.apache.spark.sql.sources.DDLScanSource
@@ -105,7 +108,7 @@ class DDLTestSuite extends DataSourceTest {
       ))
 
   test("SPARK-7686 DescribeCommand should have correct physical plan output attributes") {
-    val attributes = caseInsensitiveContext.sql("describe ddlPeople")
+    val attributes = sql("describe ddlPeople")
       .queryExecution.executedPlan.output
     assert(attributes.map(_.name) === Seq("col_name", "data_type", "comment"))
     assert(attributes.map(_.dataType).toSet === Set(StringType))

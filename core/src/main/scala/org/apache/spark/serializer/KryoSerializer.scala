@@ -21,6 +21,8 @@ import java.io.{EOFException, IOException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 import javax.annotation.Nullable
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoException}
@@ -33,11 +35,10 @@ import org.roaringbitmap.{ArrayContainer, BitmapContainer, RoaringArray, Roaring
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
-import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
+import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -129,6 +130,38 @@ class KryoSerializer(conf: SparkConf)
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
     // our code override the generic serializers in Chill for things like Seq
     new AllScalaRegistrar().apply(kryo)
+
+    // Register types missed by Chill.
+    // scalastyle:off
+    kryo.register(classOf[Array[Tuple1[Any]]])
+    kryo.register(classOf[Array[Tuple2[Any, Any]]])
+    kryo.register(classOf[Array[Tuple3[Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple4[Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple5[Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple6[Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple7[Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple8[Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple9[Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+    kryo.register(classOf[Array[Tuple22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
+
+    // scalastyle:on
+
+    kryo.register(None.getClass)
+    kryo.register(Nil.getClass)
+    kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
+    kryo.register(classOf[ArrayBuffer[Any]])
 
     kryo.setClassLoader(classLoader)
     kryo
@@ -328,9 +361,6 @@ private[serializer] object KryoSerializer {
   private val toRegister: Seq[Class[_]] = Seq(
     ByteBuffer.allocate(1).getClass,
     classOf[StorageLevel],
-    classOf[PutBlock],
-    classOf[GotBlock],
-    classOf[GetBlock],
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
     classOf[RoaringBitmap],
@@ -373,16 +403,15 @@ private class JavaIterableWrapperSerializer
   override def read(kryo: Kryo, in: KryoInput, clz: Class[java.lang.Iterable[_]])
     : java.lang.Iterable[_] = {
     kryo.readClassAndObject(in) match {
-      case scalaIterable: Iterable[_] =>
-        scala.collection.JavaConversions.asJavaIterable(scalaIterable)
-      case javaIterable: java.lang.Iterable[_] =>
-        javaIterable
+      case scalaIterable: Iterable[_] => scalaIterable.asJava
+      case javaIterable: java.lang.Iterable[_] => javaIterable
     }
   }
 }
 
 private object JavaIterableWrapperSerializer extends Logging {
-  // The class returned by asJavaIterable (scala.collection.convert.Wrappers$IterableWrapper).
+  // The class returned by JavaConverters.asJava
+  // (scala.collection.convert.Wrappers$IterableWrapper).
   val wrapperClass =
     scala.collection.convert.WrapAsJava.asJavaIterable(Seq(1)).getClass
 

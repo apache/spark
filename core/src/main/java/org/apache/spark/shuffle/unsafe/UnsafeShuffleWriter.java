@@ -24,7 +24,7 @@ import java.util.Iterator;
 
 import scala.Option;
 import scala.Product2;
-import scala.collection.JavaConversions;
+import scala.collection.JavaConverters;
 import scala.collection.immutable.Map;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
@@ -53,7 +53,7 @@ import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 @Private
@@ -160,7 +160,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    */
   @VisibleForTesting
   public void write(Iterator<Product2<K, V>> records) throws IOException {
-    write(JavaConversions.asScalaIterator(records));
+    write(JavaConverters.asScalaIteratorConverter(records).asScala());
   }
 
   @Override
@@ -244,7 +244,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     assert (serializedRecordSize > 0);
 
     sorter.insertRecord(
-      serBuffer.getBuf(), PlatformDependent.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
+      serBuffer.getBuf(), Platform.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
   }
 
   @VisibleForTesting

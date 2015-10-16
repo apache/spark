@@ -48,8 +48,8 @@ COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
 SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
 
 # format: http://linux.die.net/man/1/timeout
-# must be less than the timeout configured on Jenkins (currently 180m)
-TESTS_TIMEOUT="175m"
+# must be less than the timeout configured on Jenkins (currently 300m)
+TESTS_TIMEOUT="250m"
 
 # Array to capture all tests to run on the pull request. These tests are held under the
 #+ dev/tests/ directory.
@@ -116,39 +116,6 @@ function post_message () {
   fi
 }
 
-function send_archived_logs () {
-  echo "Archiving unit tests logs..."
-
-  local log_files=$(
-    find .\
-      -name "unit-tests.log" -o\
-      -path "./sql/hive/target/HiveCompatibilitySuite.failed" -o\
-      -path "./sql/hive/target/HiveCompatibilitySuite.hiveFailed" -o\
-      -path "./sql/hive/target/HiveCompatibilitySuite.wrong"
-  )
-
-  if [ -z "$log_files" ]; then
-    echo "> No log files found." >&2
-  else
-    local log_archive="unit-tests-logs.tar.gz"
-    echo "$log_files" | xargs tar czf ${log_archive}
-
-    local jenkins_build_dir=${JENKINS_HOME}/jobs/${JOB_NAME}/builds/${BUILD_NUMBER}
-    local scp_output=$(scp ${log_archive} amp-jenkins-master:${jenkins_build_dir}/${log_archive})
-    local scp_status="$?"
-
-    if [ "$scp_status" -ne 0 ]; then
-      echo "Failed to send archived unit tests logs to Jenkins master." >&2
-      echo "> scp_status: ${scp_status}" >&2
-      echo "> scp_output: ${scp_output}" >&2
-    else
-      echo "> Send successful."
-    fi
-
-    rm -f ${log_archive}
-  fi
-}
-
 # post start message
 {
   start_message="\
@@ -164,8 +131,9 @@ pr_message=""
 current_pr_head="`git rev-parse HEAD`"
 
 echo "HEAD:  `git rev-parse HEAD`"
-echo "GHPRB: $ghprbActualCommit"
-echo "SHA1:  $sha1"
+echo "\$ghprbActualCommit: $ghprbActualCommit"
+echo "\$sha1:  $sha1"
+echo "\$ghprbPullTitle: $ghprbPullTitle"
 
 # Run pull request tests
 for t in "${PR_TESTS[@]}"; do
@@ -189,6 +157,19 @@ done
 {
   # Marks this build is a pull request build.
   export AMP_JENKINS_PRB=true
+  if [[ $ghprbPullTitle == *"test-maven"* ]]; then
+    export AMPLAB_JENKINS_BUILD_TOOL="maven"
+  fi
+  if [[ $ghprbPullTitle == *"test-hadoop1.0"* ]]; then
+    export AMPLAB_JENKINS_BUILD_PROFILE="hadoop1.0"
+  elif [[ $ghprbPullTitle == *"test-hadoop2.0"* ]]; then
+    export AMPLAB_JENKINS_BUILD_PROFILE="hadoop2.0"
+  elif [[ $ghprbPullTitle == *"test-hadoop2.2"* ]]; then
+    export AMPLAB_JENKINS_BUILD_PROFILE="hadoop2.2"
+  elif [[ $ghprbPullTitle == *"test-hadoop2.3"* ]]; then
+    export AMPLAB_JENKINS_BUILD_PROFILE="hadoop2.3"
+  fi
+
   timeout "${TESTS_TIMEOUT}" ./dev/run-tests
   test_result="$?"
 
@@ -210,6 +191,8 @@ done
       failing_test="Scala style tests"
     elif [ "$test_result" -eq "$BLOCK_PYTHON_STYLE" ]; then
       failing_test="Python style tests"
+    elif [ "$test_result" -eq "$BLOCK_R_STYLE" ]; then
+      failing_test="R style tests"
     elif [ "$test_result" -eq "$BLOCK_DOCUMENTATION" ]; then
       failing_test="to generate documentation"
     elif [ "$test_result" -eq "$BLOCK_BUILD" ]; then
@@ -228,8 +211,6 @@ done
 
     test_result_note=" * This patch **fails $failing_test**."
   fi
-
-  send_archived_logs
 }
 
 # post end message

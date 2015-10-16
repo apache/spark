@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.types._
 
 
 /**
- * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
- * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
+ * Generates byte code that produces a [[MutableRow]] object (not an [[UnsafeRow]]) that can update
+ * itself based on a new input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection] {
 
@@ -43,6 +41,9 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val tmp = ctx.freshName("tmp")
     val output = ctx.freshName("safeRow")
     val values = ctx.freshName("values")
+    // These expressions could be splitted into multiple functions
+    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+
     val rowClass = classOf[GenericInternalRow].getName
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
@@ -50,15 +51,15 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       s"""
         if (!$tmp.isNullAt($i)) {
           ${converter.code}
-          $values[$i] = ${converter.primitive};
+          $values[$i] = ${converter.value};
         }
       """
-    }.mkString("\n")
-
+    }
+    val allFields = ctx.splitExpressions(tmp, fieldWriters)
     val code = s"""
       final InternalRow $tmp = $input;
-      final Object[] $values = new Object[${schema.length}];
-      $fieldWriters
+      this.$values = new Object[${schema.length}];
+      $allFields
       final InternalRow $output = new $rowClass($values);
     """
 
@@ -84,7 +85,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       for (int $index = 0; $index < $numElements; $index++) {
         if (!$tmp.isNullAt($index)) {
           ${elementConverter.code}
-          $values[$index] = ${elementConverter.primitive};
+          $values[$index] = ${elementConverter.value};
         }
       }
       final ArrayData $output = new $arrayClass($values);
@@ -108,7 +109,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final MapData $tmp = $input;
       ${keyConverter.code}
       ${valueConverter.code}
-      final MapData $output = new $mapClass(${keyConverter.primitive}, ${valueConverter.primitive});
+      final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
     GeneratedExpressionCode(code, "false", output)
@@ -123,56 +124,28 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     // UTF8String act as a pointer if it's inside UnsafeRow, so copy it to make it safe.
     case StringType => GeneratedExpressionCode("", "false", s"$input.clone()")
+    case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
     case _ => GeneratedExpressionCode("", "false", input)
   }
 
   protected def create(expressions: Seq[Expression]): Projection = {
     val ctx = newCodeGenContext()
-    val projectionCode = expressions.zipWithIndex.map {
+    val expressionCodes = expressions.zipWithIndex.map {
       case (NoOp, _) => ""
       case (e, i) =>
         val evaluationCode = e.gen(ctx)
-        val converter = convertToSafe(ctx, evaluationCode.primitive, e.dataType)
+        val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
         evaluationCode.code +
           s"""
             if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);
             } else {
               ${converter.code}
-              ${ctx.setColumn("mutableRow", e.dataType, i, converter.primitive)};
+              ${ctx.setColumn("mutableRow", e.dataType, i, converter.value)};
             }
           """
     }
-    // collect projections into blocks as function has 64kb codesize limit in JVM
-    val projectionBlocks = new ArrayBuffer[String]()
-    val blockBuilder = new StringBuilder()
-    for (projection <- projectionCode) {
-      if (blockBuilder.length > 16 * 1000) {
-        projectionBlocks.append(blockBuilder.toString())
-        blockBuilder.clear()
-      }
-      blockBuilder.append(projection)
-    }
-    projectionBlocks.append(blockBuilder.toString())
-
-    val (projectionFuns, projectionCalls) = {
-      // inline it if we have only one block
-      if (projectionBlocks.length == 1) {
-        ("", projectionBlocks.head)
-      } else {
-        (
-          projectionBlocks.zipWithIndex.map { case (body, i) =>
-            s"""
-               |private void apply$i(InternalRow i) {
-               |  $body
-               |}
-             """.stripMargin
-          }.mkString,
-          projectionBlocks.indices.map(i => s"apply$i(i);").mkString("\n")
-          )
-      }
-    }
-
+    val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificSafeProjection(expr);
@@ -183,6 +156,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificSafeProjection($exprType[] expr) {
           expressions = expr;
@@ -190,12 +164,9 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${initMutableStates(ctx)}
         }
 
-        $projectionFuns
-
         public Object apply(Object _i) {
-          InternalRow i = (InternalRow) _i;
-          $projectionCalls
-
+          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+          $allExpressions
           return mutableRow;
         }
       }

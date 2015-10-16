@@ -20,7 +20,18 @@ package org.apache.spark.sql.types
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class GenericArrayData(private[sql] val array: Array[Any]) extends ArrayData {
+class GenericArrayData(val array: Array[Any]) extends ArrayData {
+
+  def this(seq: scala.collection.GenIterable[Any]) = this(seq.toArray)
+
+  // TODO: This is boxing.  We should specialize.
+  def this(primitiveArray: Array[Int]) = this(primitiveArray.toSeq)
+  def this(primitiveArray: Array[Long]) = this(primitiveArray.toSeq)
+  def this(primitiveArray: Array[Float]) = this(primitiveArray.toSeq)
+  def this(primitiveArray: Array[Double]) = this(primitiveArray.toSeq)
+  def this(primitiveArray: Array[Short]) = this(primitiveArray.toSeq)
+  def this(primitiveArray: Array[Byte]) = this(primitiveArray.toSeq)
+  def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toSeq)
 
   override def copy(): ArrayData = new GenericArrayData(array.clone())
 

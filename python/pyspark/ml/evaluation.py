@@ -23,7 +23,8 @@ from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredict
 from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator']
+__all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
+           'MulticlassClassificationEvaluator']
 
 
 @inherit_doc
@@ -45,7 +46,7 @@ class Evaluator(Params):
         """
         raise NotImplementedError()
 
-    def evaluate(self, dataset, params={}):
+    def evaluate(self, dataset, params=None):
         """
         Evaluates the output with optional parameters.
 
@@ -55,6 +56,8 @@ class Evaluator(Params):
                        params
         :return: metric
         """
+        if params is None:
+            params = dict()
         if isinstance(params, dict):
             if params:
                 return self.copy(params)._evaluate(dataset)
@@ -62,6 +65,14 @@ class Evaluator(Params):
                 return self._evaluate(dataset)
         else:
             raise ValueError("Params must be a param map but got %s." % type(params))
+
+    def isLargerBetter(self):
+        """
+        Indicates whether the metric returned by :py:meth:`evaluate` should be maximized
+        (True, default) or minimized (False).
+        A given evaluator may support multiple metrics which may be maximized or minimized.
+        """
+        return True
 
 
 @inherit_doc
@@ -81,6 +92,10 @@ class JavaEvaluator(Evaluator, JavaWrapper):
         """
         self._transfer_params_to_java()
         return self._java_obj.evaluate(dataset._jdf)
+
+    def isLargerBetter(self):
+        self._transfer_params_to_java()
+        return self._java_obj.isLargerBetter()
 
 
 @inherit_doc
@@ -160,11 +175,11 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     ...
     >>> evaluator = RegressionEvaluator(predictionCol="raw")
     >>> evaluator.evaluate(dataset)
-    -2.842...
+    2.842...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "r2"})
     0.993...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "mae"})
-    -2.649...
+    2.649...
     """
     # Because we will maximize evaluation value (ref: `CrossValidator`),
     # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),

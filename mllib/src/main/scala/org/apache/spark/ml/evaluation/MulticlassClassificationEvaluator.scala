@@ -81,5 +81,13 @@ class MulticlassClassificationEvaluator (override val uid: String)
     metric
   }
 
+  override def isLargerBetter: Boolean = $(metricName) match {
+    case "f1" => true
+    case "precision" => true
+    case "recall" => true
+    case "weightedPrecision" => true
+    case "weightedRecall" => true
+  }
+
   override def copy(extra: ParamMap): MulticlassClassificationEvaluator = defaultCopy(extra)
 }

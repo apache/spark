@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kinesis
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
@@ -36,7 +37,7 @@ import org.apache.spark.Logging
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data
  */
-private class KinesisTestUtils extends Logging {
+private[kinesis] class KinesisTestUtils extends Logging {
 
   val endpointUrl = KinesisTestUtils.endpointUrl
   val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
@@ -115,7 +116,7 @@ private class KinesisTestUtils extends Logging {
    * Expose a Python friendly API.
    */
   def pushData(testData: java.util.List[Int]): Unit = {
-    pushData(scala.collection.JavaConversions.asScalaBuffer(testData))
+    pushData(testData.asScala)
   }
 
   def deleteStream(): Unit = {

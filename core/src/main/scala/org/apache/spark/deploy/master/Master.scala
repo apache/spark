@@ -127,14 +127,8 @@ private[deploy] class Master(
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
-  private val restServer =
-    if (restServerEnabled) {
-      val port = conf.getInt("spark.master.rest.port", 6066)
-      Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
-    } else {
-      None
-    }
-  private val restServerBoundPort = restServer.map(_.start())
+  private var restServer: Option[StandaloneRestServer] = None
+  private var restServerBoundPort: Option[Int] = None
 
   override def onStart(): Unit = {
     logInfo("Starting Spark master at " + masterUrl)
@@ -147,6 +141,12 @@ private[deploy] class Master(
         self.send(CheckForWorkerTimeOut)
       }
     }, 0, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+
+    if (restServerEnabled) {
+      val port = conf.getInt("spark.master.rest.port", 6066)
+      restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
+    }
+    restServerBoundPort = restServer.map(_.start())
 
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
@@ -944,7 +944,7 @@ private[deploy] class Master(
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
+        appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)

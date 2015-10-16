@@ -28,3 +28,14 @@ if ! type "Rscript" > /dev/null; then
 fi
 
 `which Rscript` --vanilla "$SPARK_ROOT_DIR/dev/lint-r.R" "$SPARK_ROOT_DIR" | tee "$LINT_R_REPORT_FILE_NAME"
+
+NUM_LINES=`wc -l < "$LINT_R_REPORT_FILE_NAME" | awk '{print $1}'`
+if [ "$NUM_LINES" = "0" ] ; then
+  lint_status=0
+  echo "lintr checks passed."
+else
+  lint_status=1
+  echo "lintr checks failed."
+fi
+
+exit "$lint_status"

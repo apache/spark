@@ -148,6 +148,14 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     receiverInfos.size
   }
 
+  def numActiveReceivers: Int = synchronized {
+    receiverInfos.count(_._2.active)
+  }
+
+  def numInactiveReceivers: Int = {
+    ssc.graph.getReceiverInputStreams().size - numActiveReceivers
+  }
+
   def numTotalCompletedBatches: Long = synchronized {
     totalCompletedBatches
   }

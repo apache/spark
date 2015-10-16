@@ -75,6 +75,10 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
 
   override def simpleString: String = s"array<${elementType.simpleString}>"
 
-  private[spark] override def asNullable: ArrayType =
+  override private[spark] def asNullable: ArrayType =
     ArrayType(elementType.asNullable, containsNull = true)
+
+  override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
+    f(this) || elementType.existsRecursively(f)
+  }
 }

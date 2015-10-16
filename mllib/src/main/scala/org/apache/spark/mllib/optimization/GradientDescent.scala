@@ -235,7 +235,7 @@ object GradientDescent extends Logging {
 
       if (miniBatchSize > 0) {
         /**
-         * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
+         * lossSum is computed using the weights from the previous iteration
          * and regVal is the regularization value computed in the previous iteration as well.
          */
         stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
@@ -264,6 +264,9 @@ object GradientDescent extends Logging {
 
   }
 
+  /**
+   * Alias of [[runMiniBatchSGD]] with convergenceTol set to default value of 0.001.
+   */
   def runMiniBatchSGD(
       data: RDD[(Double, Vector)],
       gradient: Gradient,

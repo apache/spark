@@ -76,9 +76,9 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
     val elements = batchCompleted.batchInfo.streamIdToInputInfo
 
     for {
-      processingEnd <- batchCompleted.batchInfo.processingEndTime;
-      workDelay <- batchCompleted.batchInfo.processingDelay;
-      waitDelay <- batchCompleted.batchInfo.schedulingDelay;
+      processingEnd <- batchCompleted.batchInfo.processingEndTime
+      workDelay <- batchCompleted.batchInfo.processingDelay
+      waitDelay <- batchCompleted.batchInfo.schedulingDelay
       elems <- elements.get(streamUID).map(_.numRecords)
     } computeAndPublish(processingEnd, elems, workDelay, waitDelay)
   }
@@ -86,5 +86,5 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
 
 object RateController {
   def isBackPressureEnabled(conf: SparkConf): Boolean =
-    conf.getBoolean("spark.streaming.backpressure.enable", false)
+    conf.getBoolean("spark.streaming.backpressure.enabled", false)
 }

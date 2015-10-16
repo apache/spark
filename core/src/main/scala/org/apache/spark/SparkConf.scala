@@ -389,6 +389,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val driverOptsKey = "spark.driver.extraJavaOptions"
     val driverClassPathKey = "spark.driver.extraClassPath"
     val driverLibraryPathKey = "spark.driver.extraLibraryPath"
+    val sparkExecutorInstances = "spark.executor.instances"
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -417,16 +418,35 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     // Validate memory fractions
-    val memoryKeys = Seq(
+    val deprecatedMemoryKeys = Seq(
       "spark.storage.memoryFraction",
       "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",
       "spark.storage.unrollFraction",
       "spark.storage.safetyFraction")
+    val memoryKeys = Seq(
+      "spark.memory.fraction",
+      "spark.memory.storageFraction") ++
+      deprecatedMemoryKeys
     for (key <- memoryKeys) {
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
-        throw new IllegalArgumentException("$key should be between 0 and 1 (was '$value').")
+        throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
+      }
+    }
+
+    // Warn against deprecated memory fractions (unless legacy memory management mode is enabled)
+    val legacyMemoryManagementKey = "spark.memory.useLegacyMode"
+    val legacyMemoryManagement = getBoolean(legacyMemoryManagementKey, false)
+    if (!legacyMemoryManagement) {
+      val keyset = deprecatedMemoryKeys.toSet
+      val detected = settings.keys().asScala.filter(keyset.contains)
+      if (detected.nonEmpty) {
+        logWarning("Detected deprecated memory fraction settings: " +
+          detected.mkString("[", ", ", "]") + ". As of Spark 1.6, execution and storage " +
+          "memory management are unified. All memory fractions used in the old model are " +
+          "now deprecated and no longer read. If you wish to use the old memory management, " +
+          s"you may explicitly enable `$legacyMemoryManagementKey` (not recommended).")
       }
     }
 
@@ -474,6 +494,24 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           logWarning(s"Setting '$key' to '$value' as a work-around.")
           set(key, value)
         }
+      }
+    }
+
+    if (!contains(sparkExecutorInstances)) {
+      sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
+        val warning =
+          s"""
+             |SPARK_WORKER_INSTANCES was detected (set to '$value').
+             |This is deprecated in Spark 1.0+.
+             |
+             |Please instead use:
+             | - ./spark-submit with --num-executors to specify the number of executors
+             | - Or set SPARK_EXECUTOR_INSTANCES
+             | - spark.executor.instances to configure the number of instances in the spark config.
+        """.stripMargin
+        logWarning(warning)
+
+        set("spark.executor.instances", value)
       }
     }
   }

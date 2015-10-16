@@ -768,16 +768,14 @@ class GraphOps[VD, ED] {
     // Loop until no messages remain or maxIterations is achieved
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
-      // Receive the messages: -----------------------------------------------------------------------
-      // Run the vertex program on all vertices that receive messages
-      val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
-      // Merge the new vertex values back into the graph
-      g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }.cache()
-      // Send Messages: ------------------------------------------------------------------------------
-      // Vertices that didn't receive a message above don't appear in newVerts and therefore don't
-      // get to send messages.  More precisely the map phase of mapReduceTriplets is only invoked
-      // on edges in the activeDir of vertices in newVerts
-      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDir))).cache()
+      // Receive the messages and update the vertices.
+      g = g.joinVertices(messages)(vprog).cache()
+      val oldMessages = messages
+      // Send new messages, skipping edges where neither side received a message. We must cache
+      // messages so it can be materialized on the next line, allowing us to uncache the previous
+      // iteration.
+      messages = g.mapReduceTriplets(
+        sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
       activeMessages = messages.count()
       i += 1
     }

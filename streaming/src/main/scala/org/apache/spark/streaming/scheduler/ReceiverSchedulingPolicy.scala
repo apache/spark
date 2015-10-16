@@ -22,6 +22,36 @@ import scala.collection.mutable
 
 import org.apache.spark.streaming.receiver.Receiver
 
+/**
+ * A class that tries to schedule receivers with evenly distributed. There are two phases for
+ * scheduling receivers.
+ *
+ * - The first phase is global scheduling when ReceiverTracker is starting and we need to schedule
+ *   all receivers at the same time. ReceiverTracker will call `scheduleReceivers` at this phase.
+ *   It will try to schedule receivers with evenly distributed. ReceiverTracker should update its
+ *   receiverTrackingInfoMap according to the results of `scheduleReceivers`.
+ *   `ReceiverTrackingInfo.scheduledExecutors` for each receiver will set to an executor list that
+ *   contains the scheduled locations. Then when a receiver is starting, it will send a register
+ *   request and `ReceiverTracker.registerReceiver` will be called. In
+ *   `ReceiverTracker.registerReceiver`, if a receiver's scheduled executors is set, it should check
+ *   if the location of this receiver is one of the scheduled executors, if not, the register will
+ *   be rejected.
+ * - The second phase is local scheduling when a receiver is restarting. There are two cases of
+ *   receiver restarting:
+ *   - If a receiver is restarting because it's rejected due to the real location and the scheduled
+ *     executors mismatching, in other words, it fails to start in one of the locations that
+ *     `scheduleReceivers` suggested, `ReceiverTracker` should firstly choose the executors that are
+ *     still alive in the list of scheduled executors, then use them to launch the receiver job.
+ *   - If a receiver is restarting without a scheduled executors list, or the executors in the list
+ *     are dead, `ReceiverTracker` should call `rescheduleReceiver`. If so, `ReceiverTracker` should
+ *     not set `ReceiverTrackingInfo.scheduledExecutors` for this executor, instead, it should clear
+ *     it. Then when this receiver is registering, we can know this is a local scheduling, and
+ *     `ReceiverTrackingInfo` should call `rescheduleReceiver` again to check if the launching
+ *     location is matching.
+ *
+ * In conclusion, we should make a global schedule, try to achieve that exactly as long as possible,
+ * otherwise do local scheduling.
+ */
 private[streaming] class ReceiverSchedulingPolicy {
 
   /**
@@ -102,8 +132,7 @@ private[streaming] class ReceiverSchedulingPolicy {
 
   /**
    * Return a list of candidate executors to run the receiver. If the list is empty, the caller can
-   * run this receiver in arbitrary executor. The caller can use `preferredNumExecutors` to require
-   * returning `preferredNumExecutors` executors if possible.
+   * run this receiver in arbitrary executor.
    *
    * This method tries to balance executors' load. Here is the approach to schedule executors
    * for a receiver.
@@ -122,9 +151,8 @@ private[streaming] class ReceiverSchedulingPolicy {
    *         If a receiver is scheduled to an executor but has not yet run, it contributes
    *         `1.0 / #candidate_executors_of_this_receiver` to the executor's weight.</li>
    *     </ul>
-   *     At last, if there are more than `preferredNumExecutors` idle executors (weight = 0),
-   *     returns all idle executors. Otherwise, we only return `preferredNumExecutors` best options
-   *     according to the weights.
+   *     At last, if there are any idle executors (weight = 0), returns all idle executors.
+   *     Otherwise, returns the executors that have the minimum weight.
    *   </li>
    * </ol>
    *
@@ -134,8 +162,7 @@ private[streaming] class ReceiverSchedulingPolicy {
       receiverId: Int,
       preferredLocation: Option[String],
       receiverTrackingInfoMap: Map[Int, ReceiverTrackingInfo],
-      executors: Seq[String],
-      preferredNumExecutors: Int = 3): Seq[String] = {
+      executors: Seq[String]): Seq[String] = {
     if (executors.isEmpty) {
       return Seq.empty
     }
@@ -156,15 +183,18 @@ private[streaming] class ReceiverSchedulingPolicy {
       }
     }.groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor
 
-    val idleExecutors = (executors.toSet -- executorWeights.keys).toSeq
-    if (idleExecutors.size >= preferredNumExecutors) {
-      // If there are more than `preferredNumExecutors` idle executors, return all of them
+    val idleExecutors = executors.toSet -- executorWeights.keys
+    if (idleExecutors.nonEmpty) {
       scheduledExecutors ++= idleExecutors
     } else {
-      // If there are less than `preferredNumExecutors` idle executors, return 3 best options
-      scheduledExecutors ++= idleExecutors
-      val sortedExecutors = executorWeights.toSeq.sortBy(_._2).map(_._1)
-      scheduledExecutors ++= (idleExecutors ++ sortedExecutors).take(preferredNumExecutors)
+      // There is no idle executor. So select all executors that have the minimum weight.
+      val sortedExecutors = executorWeights.toSeq.sortBy(_._2)
+      if (sortedExecutors.nonEmpty) {
+        val minWeight = sortedExecutors(0)._2
+        scheduledExecutors ++= sortedExecutors.takeWhile(_._2 == minWeight).map(_._1)
+      } else {
+        // This should not happen since "executors" is not empty
+      }
     }
     scheduledExecutors.toSeq
   }

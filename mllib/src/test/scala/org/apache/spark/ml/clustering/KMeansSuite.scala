@@ -52,10 +52,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(kmeans.getFeaturesCol === "features")
     assert(kmeans.getPredictionCol === "prediction")
     assert(kmeans.getMaxIter === 20)
-    assert(kmeans.getRuns === 1)
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
     assert(kmeans.getInitSteps === 5)
-    assert(kmeans.getEpsilon === 1e-4)
+    assert(kmeans.getTol === 1e-4)
   }
 
   test("set parameters") {
@@ -64,21 +63,19 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setFeaturesCol("test_feature")
       .setPredictionCol("test_prediction")
       .setMaxIter(33)
-      .setRuns(7)
       .setInitMode(MLlibKMeans.RANDOM)
       .setInitSteps(3)
       .setSeed(123)
-      .setEpsilon(1e-3)
+      .setTol(1e-3)
 
     assert(kmeans.getK === 9)
     assert(kmeans.getFeaturesCol === "test_feature")
     assert(kmeans.getPredictionCol === "test_prediction")
     assert(kmeans.getMaxIter === 33)
-    assert(kmeans.getRuns === 7)
     assert(kmeans.getInitMode === MLlibKMeans.RANDOM)
     assert(kmeans.getInitSteps === 3)
     assert(kmeans.getSeed === 123)
-    assert(kmeans.getEpsilon === 1e-3)
+    assert(kmeans.getTol === 1e-3)
   }
 
   test("parameters validation") {
@@ -90,9 +87,6 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
     intercept[IllegalArgumentException] {
       new KMeans().setInitSteps(0)
-    }
-    intercept[IllegalArgumentException] {
-      new KMeans().setRuns(0)
     }
   }
 

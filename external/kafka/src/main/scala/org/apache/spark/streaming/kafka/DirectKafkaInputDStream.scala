@@ -58,7 +58,7 @@ class DirectKafkaInputDStream[
   U <: Decoder[K]: ClassTag,
   T <: Decoder[V]: ClassTag,
   R: ClassTag](
-    @transient ssc_ : StreamingContext,
+    ssc_ : StreamingContext,
     val kafkaParams: Map[String, String],
     val fromOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R
@@ -79,7 +79,7 @@ class DirectKafkaInputDStream[
   override protected[streaming] val rateController: Option[RateController] = {
     if (RateController.isBackPressureEnabled(ssc.conf)) {
       Some(new DirectKafkaRateController(id,
-        RateEstimator.create(ssc.conf, ssc_.graph.batchDuration)))
+        RateEstimator.create(ssc.conf, context.graph.batchDuration)))
     } else {
       None
     }
@@ -95,8 +95,13 @@ class DirectKafkaInputDStream[
 
     val effectiveRateLimitPerPartition = estimatedRateLimit
       .filter(_ > 0)
-      .map(limit => Math.min(maxRateLimitPerPartition, (limit / numPartitions)))
-      .getOrElse(maxRateLimitPerPartition)
+      .map { limit =>
+        if (maxRateLimitPerPartition > 0) {
+          Math.min(maxRateLimitPerPartition, (limit / numPartitions))
+        } else {
+          limit / numPartitions
+        }
+      }.getOrElse(maxRateLimitPerPartition)
 
     if (effectiveRateLimitPerPartition > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000

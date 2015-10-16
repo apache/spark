@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
@@ -124,6 +124,9 @@ class GroupedData protected[sql](
       case "avg" | "average" | "mean" => Average
       case "max" => Max
       case "min" => Min
+      case "stddev" => Stddev
+      case "stddev_pop" => StddevPop
+      case "stddev_samp" => StddevSamp
       case "sum" => Sum
       case "count" | "size" =>
         // Turn count(*) into count(1)
@@ -188,7 +191,7 @@ class GroupedData protected[sql](
    * @since 1.3.0
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.toMap)
+    agg(exprs.asScala.toMap)
   }
 
   /**
@@ -281,6 +284,42 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Min)
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Stddev)
+  }
+
+  /**
+   * Compute the population standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev_pop(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(StddevPop)
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev_samp(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(StddevSamp)
   }
 
   /**

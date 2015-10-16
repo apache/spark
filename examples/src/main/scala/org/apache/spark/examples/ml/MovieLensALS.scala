@@ -76,7 +76,7 @@ object MovieLensALS {
         .text("path to a MovieLens dataset of movies")
         .action((x, c) => c.copy(movies = x))
       opt[Int]("rank")
-        .text(s"rank, default: ${defaultParams.rank}}")
+        .text(s"rank, default: ${defaultParams.rank}")
         .action((x, c) => c.copy(rank = x))
       opt[Int]("maxIter")
         .text(s"max number of iterations, default: ${defaultParams.maxIter}")

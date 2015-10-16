@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.param.{Param, Params, IntParam, DoubleParam, ParamMap}
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasMaxIter, HasPredictionCol, HasSeed}
+import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.ml.param.{Param, Params, IntParam, ParamMap}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
@@ -27,48 +27,24 @@ import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.util.Utils
 
 
 /**
  * Common params for KMeans and KMeansModel
  */
-private[clustering] trait KMeansParams
-    extends Params with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
+private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
+  with HasSeed with HasPredictionCol with HasTol {
 
   /**
    * Set the number of clusters to create (k). Must be > 1. Default: 2.
    * @group param
    */
+  @Since("1.5.0")
   final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getK: Int = $(k)
-
-  /**
-   * Param the number of runs of the algorithm to execute in parallel. We initialize the algorithm
-   * this many times with random starting conditions (configured by the initialization mode), then
-   * return the best clustering found over any run. Must be >= 1. Default: 1.
-   * @group param
-   */
-  final val runs = new IntParam(this, "runs",
-    "number of runs of the algorithm to execute in parallel", (value: Int) => value >= 1)
-
-  /** @group getParam */
-  def getRuns: Int = $(runs)
-
-  /**
-   * Param the distance threshold within which we've consider centers to have converged.
-   * If all centers move less than this Euclidean distance, we stop iterating one run.
-   * Must be >= 0.0. Default: 1e-4
-   * @group param
-   */
-  final val epsilon = new DoubleParam(this, "epsilon",
-    "distance threshold within which we've consider centers to have converge",
-    (value: Double) => value >= 0.0)
-
-  /** @group getParam */
-  def getEpsilon: Double = $(epsilon)
 
   /**
    * Param for the initialization algorithm. This can be either "random" to choose random points as
@@ -76,10 +52,12 @@ private[clustering] trait KMeansParams
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    * @group expertParam
    */
+  @Since("1.5.0")
   final val initMode = new Param[String](this, "initMode", "initialization algorithm",
     (value: String) => MLlibKMeans.validateInitMode(value))
 
   /** @group expertGetParam */
+  @Since("1.5.0")
   def getInitMode: String = $(initMode)
 
   /**
@@ -87,10 +65,12 @@ private[clustering] trait KMeansParams
    * setting -- the default of 5 is almost always enough. Must be > 0. Default: 5.
    * @group expertParam
    */
+  @Since("1.5.0")
   final val initSteps = new IntParam(this, "initSteps", "number of steps for k-means||",
     (value: Int) => value > 0)
 
   /** @group expertGetParam */
+  @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
 
   /**
@@ -110,78 +90,93 @@ private[clustering] trait KMeansParams
  *
  * @param parentModel a model trained by spark.mllib.clustering.KMeans.
  */
+@Since("1.5.0")
 @Experimental
 class KMeansModel private[ml] (
-    override val uid: String,
+    @Since("1.5.0") override val uid: String,
     private val parentModel: MLlibKMeansModel) extends Model[KMeansModel] with KMeansParams {
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = new KMeansModel(uid, parentModel)
     copyValues(copied, extra)
   }
 
+  @Since("1.5.0")
   override def transform(dataset: DataFrame): DataFrame = {
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
+  @Since("1.5.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters
 }
 
 /**
  * :: Experimental ::
- * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
- * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
- * they are executed together with joint passes over the data for efficiency.
+ * K-means clustering with support for k-means|| initialization proposed by Bahmani et al.
+ *
+ * @see [[http://dx.doi.org/10.14778/2180912.2180915 Bahmani et al., Scalable k-means++.]]
  */
+@Since("1.5.0")
 @Experimental
-class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMeansParams {
+class KMeans @Since("1.5.0") (
+    @Since("1.5.0") override val uid: String)
+  extends Estimator[KMeansModel] with KMeansParams {
 
   setDefault(
     k -> 2,
     maxIter -> 20,
-    runs -> 1,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 5,
-    epsilon -> 1e-4)
+    tol -> 1e-4)
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("kmeans"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setK(value: Int): this.type = set(k, value)
 
   /** @group expertSetParam */
+  @Since("1.5.0")
   def setInitMode(value: String): this.type = set(initMode, value)
 
   /** @group expertSetParam */
+  @Since("1.5.0")
   def setInitSteps(value: Int): this.type = set(initSteps, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
-  def setRuns(value: Int): this.type = set(runs, value)
+  @Since("1.5.0")
+  def setTol(value: Double): this.type = set(tol, value)
 
   /** @group setParam */
-  def setEpsilon(value: Double): this.type = set(epsilon, value)
-
-  /** @group setParam */
+  @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  @Since("1.5.0")
   override def fit(dataset: DataFrame): KMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
 
@@ -191,13 +186,13 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
       .setInitializationSteps($(initSteps))
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
-      .setEpsilon($(epsilon))
-      .setRuns($(runs))
+      .setEpsilon($(tol))
     val parentModel = algo.run(rdd)
     val model = new KMeansModel(uid, parentModel)
     copyValues(model)
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }

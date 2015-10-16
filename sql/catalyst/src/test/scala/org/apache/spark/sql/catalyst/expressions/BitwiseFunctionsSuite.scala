@@ -45,6 +45,10 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseNot(negativeIntLit), ~negativeInt)
     checkEvaluation(BitwiseNot(positiveLongLit), ~positiveLong)
     checkEvaluation(BitwiseNot(negativeLongLit), ~negativeLong)
+
+    DataTypeTestUtils.integralType.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseNot, dt)
+    }
   }
 
   test("BitwiseAnd") {
@@ -68,6 +72,10 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (positiveShort & negativeShort).toShort)
     checkEvaluation(BitwiseAnd(positiveIntLit, negativeIntLit), positiveInt & negativeInt)
     checkEvaluation(BitwiseAnd(positiveLongLit, negativeLongLit), positiveLong & negativeLong)
+
+    DataTypeTestUtils.integralType.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseAnd, dt, dt)
+    }
   }
 
   test("BitwiseOr") {
@@ -91,6 +99,10 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (positiveShort | negativeShort).toShort)
     checkEvaluation(BitwiseOr(positiveIntLit, negativeIntLit), positiveInt | negativeInt)
     checkEvaluation(BitwiseOr(positiveLongLit, negativeLongLit), positiveLong | negativeLong)
+
+    DataTypeTestUtils.integralType.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseOr, dt, dt)
+    }
   }
 
   test("BitwiseXor") {
@@ -110,10 +122,13 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseXor(nullLit, Literal(1)), null)
     checkEvaluation(BitwiseXor(Literal(1), nullLit), null)
     checkEvaluation(BitwiseXor(nullLit, nullLit), null)
-
     checkEvaluation(BitwiseXor(positiveShortLit, negativeShortLit),
       (positiveShort ^ negativeShort).toShort)
     checkEvaluation(BitwiseXor(positiveIntLit, negativeIntLit), positiveInt ^ negativeInt)
     checkEvaluation(BitwiseXor(positiveLongLit, negativeLongLit), positiveLong ^ negativeLong)
+
+    DataTypeTestUtils.integralType.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseXor, dt, dt)
+    }
   }
 }
