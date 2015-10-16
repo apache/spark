@@ -91,10 +91,10 @@ class Job(val time: Time, func: () => _) {
 
   def toOutputOperationInfo: OutputOperationInfo = {
     val failureReason = if (_result != null && _result.isFailure) {
-        Some(Utils.exceptionString(_result.asInstanceOf[Failure[_]].exception))
-      } else {
-        None
-      }
+      Some(Utils.exceptionString(_result.asInstanceOf[Failure[_]].exception))
+    } else {
+      None
+    }
     OutputOperationInfo(
       time, outputOpId, callSite.shortForm, callSite.longForm, _startTime, _endTime, failureReason)
   }
