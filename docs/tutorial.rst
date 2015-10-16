@@ -27,7 +27,7 @@ complicated, a line by line explanation follows below.
         'depends_on_past': False,
         'start_date': datetime(2015, 6, 1),
         'email': ['airflow@airflow.com'],
-        'email_on_failure': False,
+        'email_on_failure': True,
         'email_on_retry': False,
         'retries': 1,
         'retry_delay': timedelta(minutes=5),
@@ -117,7 +117,7 @@ of default parameters that we can use when creating tasks.
         'depends_on_past': False,
         'start_date': datetime(2015, 6, 1),
         'email': ['airflow@airflow.com'],
-        'email_on_failure': False,
+        'email_on_failure': True,
         'email_on_retry': False,
         'retries': 1,
         'retry_delay': timedelta(minutes=5),
@@ -164,6 +164,7 @@ instantiated from an operator is called a constructor. The first argument
     t2 = BashOperator(
         task_id='sleep',
         bash_command='sleep 5',
+        email_on_failure=False,
         dag=dag)
 
 Notice how we pass a mix of operator specific arguments (``bash_command``) and
@@ -277,7 +278,7 @@ something like this:
         'depends_on_past': False,
         'start_date': datetime(2015, 6, 1),
         'email': ['airflow@airflow.com'],
-        'email_on_failure': False,
+        'email_on_failure': True,
         'email_on_retry': False,
         'retries': 1,
         'retry_delay': timedelta(minutes=5),
