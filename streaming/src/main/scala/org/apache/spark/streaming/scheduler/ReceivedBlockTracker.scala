@@ -74,15 +74,11 @@ private[streaming] class ReceivedBlockTracker(
   private val streamIdToUnallocatedBlockQueues = new mutable.HashMap[Int, ReceivedBlockQueue]
   private val timeToAllocatedBlocks = new mutable.HashMap[Time, AllocatedBlocks]
   private val writeAheadLogOption = createWriteAheadLog()
-  private val walWriteQueue = new ConcurrentLinkedQueue[ReceivedBlockTrackerLogEvent]()
+  // exposed for tests
+  protected val walWriteQueue = new ConcurrentLinkedQueue[ReceivedBlockTrackerLogEvent]()
 
-  private trait WALWriteStatus
-  private object Pending extends WALWriteStatus
-  private object Success extends WALWriteStatus
-  private object Fail extends WALWriteStatus
-
-  // stores the status for wal writes added to the queue
-  private val walWriteStatusMap =
+  // stores the status for wal writes added to the queue. Exposed for tests
+  protected val walWriteStatusMap =
     new ConcurrentHashMap[ReceivedBlockTrackerLogEvent, WALWriteStatus]()
 
   private val WAL_WRITE_STATUS_CHECK_BACKOFF = 10 // 10 millis
@@ -119,13 +115,14 @@ private[streaming] class ReceivedBlockTracker(
     }
   }
 
-  /** Add received block. This event will get written to the write ahead log (if enabled). */
-  def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = synchronized {
-    addBlock0(receivedBlockInfo, writeToLog)
+  /** Update in-memory state after block add event has been logged to WAL. */
+  private def afterBlockAddAcknowledged(receivedBlockInfo: ReceivedBlockInfo): Unit = synchronized {
+    getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
   }
 
-  private def afterBlockAddAcknowledged(receivedBlockInfo: ReceivedBlockInfo): Unit = {
-    getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
+  /** Add received block. This event will get written to the write ahead log (if enabled). */
+  def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
+    addBlock0(receivedBlockInfo, writeToLog)
   }
 
   def addBlockAsync(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
@@ -166,7 +163,7 @@ private[streaming] class ReceivedBlockTracker(
    * Allocate all unallocated blocks to the given batch.
    * This event will get written to the write ahead log (if enabled).
    */
-  def allocateBlocksToBatch(batchTime: Time): Unit = synchronized {
+  def allocateBlocksToBatch(batchTime: Time): Unit = {
     allocateBlocksToBatch0(batchTime, writeToLog)
   }
 
@@ -174,9 +171,10 @@ private[streaming] class ReceivedBlockTracker(
     allocateBlocksToBatch0(batchTime, writeToLogAsync)
   }
 
+  /** Update in-memory state after batch allocation event has been logged to WAL. */
   private def afterBatchAllocationAcknowledged(
       batchTime: Time,
-      allocatedBlocks: AllocatedBlocks): Unit = {
+      allocatedBlocks: AllocatedBlocks): Unit = synchronized {
     timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
     lastAllocatedBatchTime = batchTime
   }
@@ -230,22 +228,24 @@ private[streaming] class ReceivedBlockTracker(
    * Clean up block information of old batches. If waitForCompletion is true, this method
    * returns only after the files are cleaned up.
    */
-  def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
+  def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = {
     cleanupOldBatches0(cleanupThreshTime, waitForCompletion, writeToLog)
   }
 
   /**
    * Clean up block information of old batches. If waitForCompletion is true, this method
-   * returns only after the files are cleaned up.
+   * returns only after the files are cleaned up. Not really async, the event will be written to
+   * a WAL within a batch, if WAL's are enabled.
    */
   def cleanupOldBatchesAsync(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = {
     cleanupOldBatches0(cleanupThreshTime, waitForCompletion, writeToLogAsync)
   }
 
+  /** Update in-memory state after clean up event has been logged to WAL. */
   private def afterBatchCleanupAcknowledged(
       cleanupThreshTime: Time,
       waitForCompletion: Boolean,
-      timesToCleanup: Seq[Time]): Unit = {
+      timesToCleanup: Seq[Time]): Unit = synchronized {
     timeToAllocatedBlocks --= timesToCleanup
     writeAheadLogOption.foreach(_.clean(cleanupThreshTime.milliseconds, waitForCompletion))
   }
@@ -314,13 +314,20 @@ private[streaming] class ReceivedBlockTracker(
   private def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
     if (isWriteAheadLogEnabled) {
       writeAheadLogOption.foreach { logManager =>
+        logTrace(s"Writing record: $record")
         logManager.write(ByteBuffer.wrap(Utils.serialize(record)), clock.getTimeMillis())
       }
     }
     true
   }
 
-  private def writeToLogAsync(event: ReceivedBlockTrackerLogEvent): Boolean = {
+  import WALWriteStatus._
+
+  /**
+   * Adds LogEvents to a queue so that they can be batched and written to the WAL.
+   * Exposed for testing.
+   */
+  private[streaming] def writeToLogAsync(event: ReceivedBlockTrackerLogEvent): Boolean = {
     if (!isWriteAheadLogEnabled) return true // return early if WAL is not enabled
     walWriteStatusMap.put(event, Pending)
     walWriteQueue.offer(event)
@@ -346,7 +353,11 @@ private[streaming] class ReceivedBlockTracker(
     }
   }
 
-  private def createBatchWriteAheadLogWriter(): Option[BatchLogWriter] = {
+  /**
+   * Creates a WAL Writer in a separate thread to enable batching of log events.
+   * Exposed for tests.
+   */
+  protected def createBatchWriteAheadLogWriter(): Option[BatchLogWriter] = {
     if (!WriteAheadLogUtils.isBatchingEnabled(conf)) return None
     val writer = checkpointDirOption.map(_ => new BatchLogWriter)
     writer.foreach { runnable =>
@@ -361,7 +372,8 @@ private[streaming] class ReceivedBlockTracker(
   /** Check if the write ahead log is enabled. This is only used for testing purposes. */
   private[streaming] def isWriteAheadLogEnabled: Boolean = writeAheadLogOption.nonEmpty
 
-  private class BatchLogWriter extends Runnable {
+  /** A helper class that writes LogEvents in a separate thread to allow for batching. */
+  private[streaming] class BatchLogWriter extends Runnable {
 
     var active: Boolean = true
 
@@ -407,4 +419,12 @@ private[streaming] object ReceivedBlockTracker {
   def checkpointDirToLogDir(checkpointDir: String): String = {
     new Path(checkpointDir, "receivedBlockMetadata").toString
   }
+}
+
+/** State of LogEvents during batching. */
+private[streaming] trait WALWriteStatus
+private[streaming] object WALWriteStatus {
+  private[streaming] case object Pending extends WALWriteStatus
+  private[streaming] case object Success extends WALWriteStatus
+  private[streaming] case object Fail extends WALWriteStatus
 }

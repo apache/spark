@@ -18,13 +18,16 @@
 package org.apache.spark.streaming
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{Future, ExecutionContext}
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.mock.MockitoSugar
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
@@ -34,7 +37,7 @@ import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.{WriteAheadLogUtils, FileBasedWriteAheadLogReader}
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
-import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
+import org.apache.spark.util._
 
 abstract class ReceivedBlockTrackerSuite
   extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
@@ -298,6 +301,92 @@ class SyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite {
   override val isBatchingEnabled = false
 }
 
-class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite {
+class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with MockitoSugar {
   override val isBatchingEnabled = true
+
+  /** Class that will help us test batching. */
+  private class TestRBT(
+      clock: Clock = new SystemClock,
+      cpDirOption: Option[String] = Some(checkpointDirectory.toString),
+      recoverFromWriteAheadLog: Boolean = true)
+    extends ReceivedBlockTracker(conf, hadoopConf, Seq(streamId), clock,
+      recoverFromWriteAheadLog, cpDirOption) {
+
+    override def createBatchWriteAheadLogWriter(): Option[BatchLogWriter] = None
+
+    def updateWALWriteStatus(event: ReceivedBlockTrackerLogEvent, status: WALWriteStatus): Unit = {
+      walWriteStatusMap.put(event, status)
+      walWriteQueue.poll()
+    }
+
+    def getQueueLength(): Int = walWriteQueue.size()
+
+    def addToQueue(event: ReceivedBlockTrackerLogEvent): Boolean = {
+      writeToLogAsync(event)
+    }
+  }
+
+  private def waitUntilTrue(f: () => Int, value: Int): Boolean = {
+    val timeOut = 2000
+    val start = System.currentTimeMillis()
+    var result = false
+    while (!result && (System.currentTimeMillis() - start) < timeOut) {
+      Thread.sleep(50)
+      result = f() == value
+    }
+    result
+  }
+
+  import WALWriteStatus._
+
+  test("records get added to a queue") {
+    val numSuccess = new AtomicInteger()
+    val numFail = new AtomicInteger()
+    val rbt = new TestRBT()
+
+    def getNumSuccess(): Int = numSuccess.get()
+    def getNumFail(): Int = numFail.get()
+
+    val walBatchingThreadPool = ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonCachedThreadPool("wal-batching-thead-pool"))
+
+    def eventFuture(event: ReceivedBlockTrackerLogEvent): Unit = {
+      val f = Future(rbt.addToQueue(event))(walBatchingThreadPool)
+      f.onSuccess{ case v =>
+        if (v) numSuccess.incrementAndGet() else numFail.incrementAndGet()
+      }(walBatchingThreadPool)
+    }
+
+    assert(rbt.getQueueLength === 0)
+    val event1 = BlockAdditionEvent(ReceivedBlockInfo(1, None, None, null))
+    val event2 = BlockAdditionEvent(null)
+    val event3 = BatchAllocationEvent(null, null)
+    val event4 = BlockAdditionEvent(ReceivedBlockInfo(2, None, None, null))
+    val event5 = BatchCleanupEvent(Nil)
+
+    eventFuture(event1)
+    assert(waitUntilTrue(rbt.getQueueLength, 1))
+    assert(numSuccess.get() === 0)
+    assert(numFail.get() === 0)
+
+    rbt.updateWALWriteStatus(event1, Fail)
+    assert(waitUntilTrue(getNumFail, 1))
+    assert(waitUntilTrue(rbt.getQueueLength, 0))
+
+    eventFuture(event2)
+    eventFuture(event3)
+    eventFuture(event4)
+    assert(waitUntilTrue(rbt.getQueueLength, 3))
+    rbt.updateWALWriteStatus(event2, Success)
+    rbt.updateWALWriteStatus(event3, Success)
+    assert(waitUntilTrue(getNumSuccess, 2))
+    assert(waitUntilTrue(rbt.getQueueLength, 1))
+
+    eventFuture(event5)
+    assert(waitUntilTrue(rbt.getQueueLength, 2))
+    rbt.updateWALWriteStatus(event4, Success)
+    rbt.updateWALWriteStatus(event5, Success)
+    assert(waitUntilTrue(getNumSuccess, 4))
+    assert(waitUntilTrue(rbt.getQueueLength, 0))
+  }
 }
