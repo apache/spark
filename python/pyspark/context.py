@@ -287,10 +287,10 @@ class SparkContext(object):
 
         :param conf: SparkConf (optional)
         """
-        if SparkContext._active_spark_context is None:
-            with SparkContext._lock:
+        with SparkContext._lock:
+            if SparkContext._active_spark_context is None:
                 SparkContext(conf=conf or SparkConf())
-        return SparkContext._active_spark_context
+            return SparkContext._active_spark_context
 
     def setLogLevel(self, logLevel):
         """
