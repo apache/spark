@@ -80,6 +80,9 @@ object LocalClusteringCoefficient {
       assert(ctx.srcAttr != null)
       assert(ctx.dstAttr != null)
 
+      if (! ctx.srcAttr.contains(ctx.dstId)) {
+        return
+      }
       // handle duplated edge
       if ((ctx.srcAttr(ctx.dstId) == 2 && ctx.srcId > ctx.dstId) || (ctx.srcId == ctx.dstId)) {
         return
