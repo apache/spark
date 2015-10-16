@@ -15,32 +15,13 @@
 # limitations under the License.
 #
 
-
-from py4j.java_gateway import JavaGateway
-
-
-"""
-class StreamingListenerEvent(object):
-
-class StreamingListenerBatchSubmitted(StreamingListenerEvent, batchInfo):
-
-class StreamingListenerBatchCompleted(StreamingListenerEvent, batchInfo):
-
-class StreamingListenerBatchStarted(StreamingListenerEvent, batchInfo):
-
-class StreamingListenerStarted(StreamingListenerEvent, receiverInfo):
-
-class StreamingListenerReceiverError(StreamingListenerEvent, receiverInfo):
-
-class StreamingListenerReceiverStopped(StreamingListenerEvent, receiverInfo):
-"""
-
 __all__ = ["StreamingListener"]
 
 
 class StreamingListener(object):
 
     def __init__(self):
+        pass
 
     # Called when a receiver has been started.
     def onReceiverStarted(self, receiverStarted):
@@ -50,12 +31,13 @@ class StreamingListener(object):
     def onReceiverError(self, receiverError):
         pass
 
-    # Called when a receiver has been stopped
+    # Called when a receiver has been stopped.
     def onReceiverStopped(self, receiverStopped):
         pass
 
     # Called when a batch of jobs has been submitted for processing.
     def onBatchSubmitted(self, batchSubmitted):
+        pass
 
     # Called when processing of a batch of jobs has started.
     def onBatchStarted(self, batchStarted):
@@ -73,6 +55,21 @@ class StreamingListener(object):
     def onOutputOperationCompleted(self, outputOperationCompleted):
         pass
 
+    def getEventInfo(self, event):
+        """
+        :param event: StreamingListenerEvent
+        :return Returns a BatchInfo, OutputOperationInfo, or ReceiverInfo based on
+                event passed.
+        """
+        event_name = event.getClass().getSimpleName()
+        if 'Batch' in event_name:
+            return event.batchInfo()
+
+        elif 'Output' in event_name:
+            return event.outputOperationInfo()
+
+        elif 'Receiver' in event_name:
+            return event.receiverInfo()
+
     class Java:
         implements = ["org.apache.spark.streaming.scheduler.StreamingListener"]
-
