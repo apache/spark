@@ -105,7 +105,6 @@ object LocalClusteringCoefficient {
           largeCount += smallVal
         }
       }
-      //println(smallId, smallCount, largeId, largeCount)
       if (ctx.srcId == smallId) {
         ctx.sendToSrc(smallCount)
         ctx.sendToDst(largeCount)
@@ -116,7 +115,6 @@ object LocalClusteringCoefficient {
     }
 
     // compute the intersection along edges
-    //val counters: VertexRDD[Double] = setGraph.mapReduceTriplets(edgeFunc, _ + _)
     val counters: VertexRDD[Double] = setGraph.aggregateMessages(edgeFunc, _ + _)
 
 
@@ -131,7 +129,6 @@ object LocalClusteringCoefficient {
       (vid, _, optCounter: Option[Double]) =>
         val dblCount: Double = optCounter.getOrElse(0)
         val nbNum = nbNumMap(vid)
-        //println(vid, dblCount, nbNum)
         assert((dblCount.toInt & 1) == 0)
         if (nbNum > 1) {
           dblCount / (2 * nbNum * (nbNum - 1))
