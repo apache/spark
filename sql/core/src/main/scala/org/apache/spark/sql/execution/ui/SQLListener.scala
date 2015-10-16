@@ -25,6 +25,18 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 
+private[sql] case class SparkListenerSQLExecutionStart(
+    executionId: Long,
+    description: String,
+    details: String,
+    physicalPlanDescription: String,
+    physicalPlanGraph: SparkPlanGraph,
+    time: Long)
+  extends SparkListenerEvent
+
+private[sql] case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
+  extends SparkListenerEvent
+
 private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
   private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
@@ -193,37 +205,39 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
     }
   }
 
-  def onExecutionStart(
-      executionId: Long,
-      description: String,
-      details: String,
-      physicalPlanDescription: String,
-      physicalPlanGraph: SparkPlanGraph,
-      time: Long): Unit = {
-    val sqlPlanMetrics = physicalPlanGraph.nodes.flatMap { node =>
-      node.metrics.map(metric => metric.accumulatorId -> metric)
-    }
-
-    val executionUIData = new SQLExecutionUIData(executionId, description, details,
-      physicalPlanDescription, physicalPlanGraph, sqlPlanMetrics.toMap, time)
-    synchronized {
-      activeExecutions(executionId) = executionUIData
-      _executionIdToData(executionId) = executionUIData
-    }
-  }
-
-  def onExecutionEnd(executionId: Long, time: Long): Unit = synchronized {
-    _executionIdToData.get(executionId).foreach { executionUIData =>
-      executionUIData.completionTime = Some(time)
-      if (!executionUIData.hasRunningJobs) {
-        // onExecutionEnd happens after all "onJobEnd"s
-        // So we should update the execution lists.
-        markExecutionFinished(executionId)
-      } else {
-        // There are some running jobs, onExecutionEnd happens before some "onJobEnd"s.
-        // Then we don't if the execution is successful, so let the last onJobEnd updates the
-        // execution lists.
-      }
+  override def onOtherEvent(event: SparkListenerEvent): Unit = {
+    event match {
+      case executionStart: SparkListenerSQLExecutionStart =>
+        val sqlPlanMetrics = executionStart.physicalPlanGraph.nodes.flatMap { node =>
+          node.metrics.map(metric => metric.accumulatorId -> metric)
+        }
+        val executionUIData = new SQLExecutionUIData(
+          executionStart.executionId,
+          executionStart.description,
+          executionStart.details,
+          executionStart.physicalPlanDescription,
+          executionStart.physicalPlanGraph,
+          sqlPlanMetrics.toMap,
+          executionStart.time)
+        synchronized {
+          activeExecutions(executionStart.executionId) = executionUIData
+          _executionIdToData(executionStart.executionId) = executionUIData
+        }
+      case executionEnd: SparkListenerSQLExecutionEnd =>
+        synchronized {
+          _executionIdToData.get(executionEnd.executionId).foreach { executionUIData =>
+            executionUIData.completionTime = Some(executionEnd.time)
+            if (!executionUIData.hasRunningJobs) {
+              // onExecutionEnd happens after all "onJobEnd"s
+              // So we should update the execution lists.
+              markExecutionFinished(executionEnd.executionId)
+            } else {
+              // There are some running jobs, onExecutionEnd happens before some "onJobEnd"s.
+              // Then we don't if the execution is successful, so let the last onJobEnd updates the
+              // execution lists.
+            }
+          }
+        }
     }
   }
 
