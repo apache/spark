@@ -27,7 +27,7 @@ complicated, a line by line explanation follows below.
         'depends_on_past': False,
         'start_date': datetime(2015, 6, 1),
         'email': ['airflow@airflow.com'],
-        'email_on_failure': True,
+        'email_on_failure': False,
         'email_on_retry': False,
         'retries': 1,
         'retry_delay': timedelta(minutes=5),
@@ -48,6 +48,7 @@ complicated, a line by line explanation follows below.
     t2 = BashOperator(
         task_id='sleep',
         bash_command='sleep 5',
+        retries=3,
         dag=dag)
 
     templated_command = """
@@ -117,7 +118,7 @@ of default parameters that we can use when creating tasks.
         'depends_on_past': False,
         'start_date': datetime(2015, 6, 1),
         'email': ['airflow@airflow.com'],
-        'email_on_failure': True,
+        'email_on_failure': False,
         'email_on_retry': False,
         'retries': 1,
         'retry_delay': timedelta(minutes=5),
@@ -164,14 +165,14 @@ instantiated from an operator is called a constructor. The first argument
     t2 = BashOperator(
         task_id='sleep',
         bash_command='sleep 5',
-        email_on_failure=False,
+        retries=3,
         dag=dag)
 
 Notice how we pass a mix of operator specific arguments (``bash_command``) and
-an argument common to all operators (``email_on_failure``) inherited
+an argument common to all operators (``retries``) inherited
 from BaseOperator to the operator's constructor. This is simpler than
 passing every argument for every constructor call. Also, notice that in
-the second task we override the ``email_on_failure`` parameter with ``False``.
+the second task we override the ``retries`` parameter with ``3``.
 
 The precedence rules for a task are as follows:
 
@@ -278,7 +279,7 @@ something like this:
         'depends_on_past': False,
         'start_date': datetime(2015, 6, 1),
         'email': ['airflow@airflow.com'],
-        'email_on_failure': True,
+        'email_on_failure': False,
         'email_on_retry': False,
         'retries': 1,
         'retry_delay': timedelta(minutes=5),
@@ -300,6 +301,7 @@ something like this:
     t2 = BashOperator(
         task_id='sleep',
         bash_command='sleep 5',
+        retries=3,
         dag=dag)
 
     templated_command = """
