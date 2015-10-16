@@ -24,64 +24,6 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle._
 
 /**
- * Subclass of [[BaseShuffleHandle]], used to identify when we've chosen to use the
- * serialized shuffle.
- */
-private[spark] class SerializedShuffleHandle[K, V](
-    shuffleId: Int,
-    numMaps: Int,
-    dependency: ShuffleDependency[K, V, V])
-  extends BaseShuffleHandle(shuffleId, numMaps, dependency) {
-}
-
-/**
- * Subclass of [[BaseShuffleHandle]], used to identify when we've chosen to use the
- * bypass merge sort shuffle path.
- */
-private[spark] class BypassMergeSortShuffleHandle[K, V](
-    shuffleId: Int,
-    numMaps: Int,
-    dependency: ShuffleDependency[K, V, V])
-  extends BaseShuffleHandle(shuffleId, numMaps, dependency) {
-}
-
-private[spark] object SortShuffleManager extends Logging {
-
-  /**
-   * The maximum number of shuffle output partitions that SortShuffleManager supports when
-   *
-   */
-  val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE =
-    PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
-
-  /**
-   * Helper method for determining whether a shuffle should use an optimized serialized shuffle
-   * path or whether it should fall back to the original path that operates on deserialized objects.
-   */
-  def canUseSerializedShuffle(dependency: ShuffleDependency[_, _, _]): Boolean = {
-    val shufId = dependency.shuffleId
-    val numPartitions = dependency.partitioner.numPartitions
-    val serializer = Serializer.getSerializer(dependency.serializer)
-    if (!serializer.supportsRelocationOfSerializedObjects) {
-      log.debug(s"Can't use serialized shuffle for shuffle $shufId because the serializer, " +
-        s"${serializer.getClass.getName}, does not support object relocation")
-      false
-    } else if (dependency.aggregator.isDefined) {
-      log.debug(
-        s"Can't use serialized shuffle for shuffle $shufId because an aggregator is defined")
-      false
-    } else if (numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE) {
-      log.debug(s"Can't use serialized shuffle for shuffle $shufId because it has more than " +
-        s"$MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE partitions")
-      false
-    } else {
-      log.debug(s"Can use serialized shuffle for shuffle $shufId")
-      true
-    }
-  }
-}
-
-/**
  * A shuffle implementation that uses directly-managed memory to implement several performance
  * optimizations for certain types of shuffles. In cases where the new performance optimizations
  * cannot be applied, this shuffle manager delegates to [[SortShuffleManager]] to handle those
@@ -223,4 +165,63 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
   }
+}
+
+
+private[spark] object SortShuffleManager extends Logging {
+
+  /**
+   * The maximum number of shuffle output partitions that SortShuffleManager supports when
+   *
+   */
+  val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE =
+    PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
+
+  /**
+   * Helper method for determining whether a shuffle should use an optimized serialized shuffle
+   * path or whether it should fall back to the original path that operates on deserialized objects.
+   */
+  def canUseSerializedShuffle(dependency: ShuffleDependency[_, _, _]): Boolean = {
+    val shufId = dependency.shuffleId
+    val numPartitions = dependency.partitioner.numPartitions
+    val serializer = Serializer.getSerializer(dependency.serializer)
+    if (!serializer.supportsRelocationOfSerializedObjects) {
+      log.debug(s"Can't use serialized shuffle for shuffle $shufId because the serializer, " +
+        s"${serializer.getClass.getName}, does not support object relocation")
+      false
+    } else if (dependency.aggregator.isDefined) {
+      log.debug(
+        s"Can't use serialized shuffle for shuffle $shufId because an aggregator is defined")
+      false
+    } else if (numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE) {
+      log.debug(s"Can't use serialized shuffle for shuffle $shufId because it has more than " +
+        s"$MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE partitions")
+      false
+    } else {
+      log.debug(s"Can use serialized shuffle for shuffle $shufId")
+      true
+    }
+  }
+}
+
+/**
+ * Subclass of [[BaseShuffleHandle]], used to identify when we've chosen to use the
+ * serialized shuffle.
+ */
+private[spark] class SerializedShuffleHandle[K, V](
+  shuffleId: Int,
+  numMaps: Int,
+  dependency: ShuffleDependency[K, V, V])
+  extends BaseShuffleHandle(shuffleId, numMaps, dependency) {
+}
+
+/**
+ * Subclass of [[BaseShuffleHandle]], used to identify when we've chosen to use the
+ * bypass merge sort shuffle path.
+ */
+private[spark] class BypassMergeSortShuffleHandle[K, V](
+  shuffleId: Int,
+  numMaps: Int,
+  dependency: ShuffleDependency[K, V, V])
+  extends BaseShuffleHandle(shuffleId, numMaps, dependency) {
 }
