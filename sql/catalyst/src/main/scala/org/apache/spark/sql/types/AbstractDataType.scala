@@ -135,6 +135,7 @@ protected[sql] abstract class AtomicType extends DataType {
   }
 }
 
+
 /**
  * :: DeveloperApi ::
  * Numeric data types.

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.joins
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -29,11 +28,9 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * :: DeveloperApi ::
  * Performs a hash based outer join for two child relations by shuffling the data using
  * the join keys. This operator requires loading the associated partition in both side into memory.
  */
-@DeveloperApi
 case class ShuffledHashOuterJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
