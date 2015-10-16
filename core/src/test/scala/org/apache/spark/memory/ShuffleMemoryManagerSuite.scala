@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.memory
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.memory.ShuffleMemoryManager
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.{SparkFunSuite, TaskContext}
 
 class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
 
@@ -67,6 +66,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
     assert(manager.tryToAcquire(300L) === 300L)
     assert(manager.tryToAcquire(300L) === 200L)
 
+    // TODO(josh): task memory manager
     manager.releaseMemoryForThisTask()
     assert(manager.tryToAcquire(1000L) === 1000L)
     assert(manager.tryToAcquire(100L) === 0L)

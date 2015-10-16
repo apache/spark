@@ -48,7 +48,6 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.serializer.SerializerInstance;
-import org.apache.spark.memory.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -81,7 +80,6 @@ public class UnsafeExternalSorterSuite {
 
   SparkConf sparkConf;
   File tempDir;
-  ShuffleMemoryManager shuffleMemoryManager;
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
@@ -101,7 +99,6 @@ public class UnsafeExternalSorterSuite {
     MockitoAnnotations.initMocks(this);
     sparkConf = new SparkConf();
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
-    shuffleMemoryManager = ShuffleMemoryManager.create(Long.MAX_VALUE, pageSizeBytes);
     spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
@@ -142,13 +139,7 @@ public class UnsafeExternalSorterSuite {
   @After
   public void tearDown() {
     try {
-      long leakedUnsafeMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
-      if (shuffleMemoryManager != null) {
-        long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
-        shuffleMemoryManager = null;
-        assertEquals(0L, leakedShuffleMemory);
-      }
-      assertEquals(0, leakedUnsafeMemory);
+      assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
     } finally {
       Utils.deleteRecursively(tempDir);
       tempDir = null;
@@ -234,7 +225,7 @@ public class UnsafeExternalSorterSuite {
 
   @Test
   public void spillingOccursInResponseToMemoryPressure() throws Exception {
-    shuffleMemoryManager = ShuffleMemoryManager.create(pageSizeBytes * 2, pageSizeBytes);
+    // TODO(josh): shuffleMemoryManager = ShuffleMemoryManager.create(pageSizeBytes * 2, pageSizeBytes);
     final UnsafeExternalSorter sorter = newSorter();
     final int numRecords = (int) pageSizeBytes / 4;
     for (int i = 0; i <= numRecords; i++) {

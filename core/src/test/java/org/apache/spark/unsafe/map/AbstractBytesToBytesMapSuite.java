@@ -32,7 +32,6 @@ import static org.mockito.Mockito.*;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
-import org.apache.spark.memory.ShuffleMemoryManager;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.memory.*;
 import org.apache.spark.unsafe.Platform;
@@ -42,14 +41,12 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private final Random rand = new Random(42);
 
-  private ShuffleMemoryManager shuffleMemoryManager;
   private TaskMemoryManager taskMemoryManager;
   private TaskMemoryManager sizeLimitedTaskMemoryManager;
   private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
   @Before
   public void setup() {
-    shuffleMemoryManager = ShuffleMemoryManager.create(Long.MAX_VALUE, PAGE_SIZE_BYTES);
     taskMemoryManager = new TaskMemoryManager(
       new GrantEverythingMemoryManager(
         new SparkConf().set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator())), 0);
@@ -72,10 +69,10 @@ public abstract class AbstractBytesToBytesMapSuite {
   @After
   public void tearDown() {
     Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
-    if (shuffleMemoryManager != null) {
-      long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
-      shuffleMemoryManager = null;
-      Assert.assertEquals(0L, leakedShuffleMemory);
+    if (taskMemoryManager != null) {
+      long leakedMemory = taskMemoryManager.getMemoryConsumptionForThisTask();
+      taskMemoryManager = null;
+      Assert.assertEquals(0L, leakedMemory);
     }
   }
 
@@ -435,7 +432,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToAllocateFirstPage() {
-    shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024);
+    // TODO(josh)     shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024);
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, PAGE_SIZE_BYTES);
     try {
       final long[] emptyArray = new long[0];
@@ -452,7 +449,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToGrow() {
-    shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024 * 10);
+    // TODO(josh) shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024 * 10);
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, 1024);
     try {
       boolean success = true;

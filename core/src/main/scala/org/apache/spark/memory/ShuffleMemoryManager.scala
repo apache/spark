@@ -146,7 +146,7 @@ class ShuffleMemoryManager protected (
   }
 
   /** Release all memory for the current task and mark it as inactive (e.g. when a task ends). */
-  def releaseMemoryForThisTask(): Unit = memoryManager.synchronized {
+  private[memory] def releaseMemoryForThisTask(): Unit = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     taskMemory.remove(taskAttemptId).foreach { numBytes =>
       memoryManager.releaseExecutionMemory(numBytes)
@@ -155,7 +155,7 @@ class ShuffleMemoryManager protected (
   }
 
   /** Returns the memory consumption, in bytes, for the current task */
-  def getMemoryConsumptionForThisTask(): Long = memoryManager.synchronized {
+  private[memory] def getMemoryConsumptionForThisTask(): Long = memoryManager.synchronized {
     val taskAttemptId = currentTaskAttemptId()
     taskMemory.getOrElse(taskAttemptId, 0L)
   }
@@ -164,6 +164,7 @@ class ShuffleMemoryManager protected (
 
 private[spark] object ShuffleMemoryManager {
 
+  // Called from SparkEnv.
   def create(
       conf: SparkConf,
       memoryManager: MemoryManager,
@@ -173,19 +174,11 @@ private[spark] object ShuffleMemoryManager {
     new ShuffleMemoryManager(memoryManager, pageSize)
   }
 
-  /**
-   * Create a dummy [[ShuffleMemoryManager]] with the specified capacity and page size.
-   */
-  def create(maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
+  private[memory] def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
     val conf = new SparkConf
     val memoryManager = new StaticMemoryManager(
       conf, maxExecutionMemory = maxMemory, maxStorageMemory = Long.MaxValue)
-    new ShuffleMemoryManager(memoryManager, pageSizeBytes)
-  }
-
-  @VisibleForTesting
-  def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
-    create(maxMemory, 4 * 1024 * 1024)
+    new ShuffleMemoryManager(memoryManager, 4 * 1024 * 1024)
   }
 
   /**

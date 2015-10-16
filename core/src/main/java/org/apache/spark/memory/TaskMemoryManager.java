@@ -315,6 +315,21 @@ public class TaskMemoryManager {
         iter.remove();
       }
     }
+
+    // TODO(josh): temp hack
+    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
+    freedBytes += shuffleMemoryManager.getMemoryConsumptionForThisTask();
+    shuffleMemoryManager.releaseMemoryForThisTask();
+
     return freedBytes;
+  }
+
+  /**
+   * Returns the memory consumption, in bytes, for the current task
+   */
+  public long getMemoryConsumptionForThisTask() {
+    // TODO(josh): temp hack
+    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
+    return shuffleMemoryManager.getMemoryConsumptionForThisTask();
   }
 }
