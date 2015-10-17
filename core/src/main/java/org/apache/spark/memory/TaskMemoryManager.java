@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.SparkEnv$;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
@@ -123,8 +122,7 @@ public class TaskMemoryManager {
    */
   public long acquireExecutionMemory(long size) {
     // TODO(josh): temp hack
-    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
-    return shuffleMemoryManager.tryToAcquire(size);
+    return memoryManager.tryToAcquire(size);
   }
 
   /**
@@ -132,14 +130,12 @@ public class TaskMemoryManager {
    */
   public void releaseExecutionMemory(long size) {
     // TODO(josh): temp hack
-    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
-    shuffleMemoryManager.release(size);
+    memoryManager.release(size);
   }
 
   public long pageSizeBytes() {
     // TODO(josh): temp hack
-    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
-    return shuffleMemoryManager.pageSizeBytes();
+    return memoryManager.pageSizeBytes();
   }
 
   /**
@@ -317,9 +313,8 @@ public class TaskMemoryManager {
     }
 
     // TODO(josh): temp hack
-    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
-    freedBytes += shuffleMemoryManager.getMemoryConsumptionForThisTask();
-    shuffleMemoryManager.releaseMemoryForThisTask();
+    freedBytes += memoryManager.getMemoryConsumptionForThisTask();
+    memoryManager.releaseMemoryForThisTask();
 
     return freedBytes;
   }
@@ -329,7 +324,6 @@ public class TaskMemoryManager {
    */
   public long getMemoryConsumptionForThisTask() {
     // TODO(josh): temp hack
-    ShuffleMemoryManager shuffleMemoryManager = SparkEnv$.MODULE$.get().shuffleMemoryManager();
-    return shuffleMemoryManager.getMemoryConsumptionForThisTask();
+    return memoryManager.getMemoryConsumptionForThisTask();
   }
 }

@@ -30,7 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.memory.{ShuffleMemoryManager, MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcEnv}
@@ -69,9 +69,7 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    // TODO: unify these *MemoryManager classes (SPARK-10984)
     val memoryManager: MemoryManager,
-    val shuffleMemoryManager: ShuffleMemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
@@ -341,8 +339,6 @@ object SparkEnv extends Logging {
         new UnifiedMemoryManager(conf)
       }
 
-    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, memoryManager, numUsableCores)
-
     val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
@@ -418,7 +414,6 @@ object SparkEnv extends Logging {
       sparkFilesDir,
       metricsSystem,
       memoryManager,
-      shuffleMemoryManager,
       outputCommitCoordinator,
       conf)
 
