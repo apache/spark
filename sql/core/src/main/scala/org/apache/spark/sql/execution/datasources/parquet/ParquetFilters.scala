@@ -27,46 +27,53 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object ParquetFilters {
-  case class SetInFilter[T <: Comparable[T]](
-    valueSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
+  case class InSetFilter[T <: Comparable[T]](valueSet: Set[T])
+    extends UserDefinedPredicate[T] {
+
+    private val min = valueSet.min
+    private val max = valueSet.max
 
     override def keep(value: T): Boolean = {
       value != null && valueSet.contains(value)
     }
 
-    override def canDrop(statistics: Statistics[T]): Boolean = false
+    override def canDrop(statistics: Statistics[T]): Boolean = {
+      statistics.getMax.compareTo(min) < 0 || statistics.getMin.compareTo(max) > 0
+    }
 
     override def inverseCanDrop(statistics: Statistics[T]): Boolean = false
   }
 
-  object StringFilter extends Enumeration {
-    type Mode = Value
-    val STARTS_WITH, ENDS_WITH, CONTAINS = Value
+  abstract class StringFilter extends UserDefinedPredicate[Binary] {
+    override def canDrop(statistics: Statistics[Binary]): Boolean = false
+    override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
+
+    def binaryToUTF8String(value: Binary): UTF8String = {
+      // This is a trick used in CatalystStringConverter to steal the underlying
+      // byte array of the binary without copying it.
+      val buffer = value.toByteBuffer
+      val offset = buffer.position()
+      val numBytes = buffer.limit() - buffer.position()
+      UTF8String.fromBytes(buffer.array(), offset, numBytes)
+    }
   }
 
-  case class StringFilter(
-    v: java.lang.String,
-    mode: StringFilter.Mode) extends UserDefinedPredicate[Binary] with Serializable {
+  case class StringStartsWithFilter(prefix: String) extends StringFilter {
+    private val strToCompare: UTF8String = UTF8String.fromString(prefix)
+    override def keep(value: Binary): Boolean = binaryToUTF8String(value).startsWith(strToCompare)
+  }
 
-    private val compare = mode match {
-      case StringFilter.STARTS_WITH =>
-        (x: java.lang.String) => x.startsWith(v)
-      case StringFilter.ENDS_WITH =>
-        (x: java.lang.String) => x.endsWith(v)
-      case StringFilter.CONTAINS =>
-        (x: java.lang.String) => x.contains(v)
-    }
+  case class StringEndsWithFilter(suffix: String) extends StringFilter {
+    private val strToCompare: UTF8String = UTF8String.fromString(suffix)
+    override def keep(value: Binary): Boolean = binaryToUTF8String(value).endsWith(strToCompare)
+  }
 
-    override def keep(value: Binary): Boolean = {
-      val str = value.toStringUsingUTF8()
-      compare(str)
-    }
-
-    override def canDrop(statistics: Statistics[Binary]): Boolean = false
-
-    override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
+  case class StringContainsFilter(str: String) extends StringFilter {
+    private val strToCompare: UTF8String = UTF8String.fromString(str)
+    override def keep(value: Binary): Boolean = binaryToUTF8String(value).contains(strToCompare)
   }
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -185,38 +192,54 @@ private[sql] object ParquetFilters {
         FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
   }
 
-  private val makeStringFilter: PartialFunction[DataType,
-      (String, String, StringFilter.Mode) => FilterPredicate] = {
+  private val makeStringStartsFilter: PartialFunction[DataType,
+      (String, String) => FilterPredicate] = {
     case StringType =>
-      (n: String, v: String, mode: StringFilter.Mode) =>
+      (n: String, v: String) =>
         FilterApi.userDefined(binaryColumn(n),
-          StringFilter(v.asInstanceOf[java.lang.String], mode))
+          StringStartsWithFilter(v.asInstanceOf[java.lang.String]))
+  }
+
+  private val makeStringEndsFilter: PartialFunction[DataType,
+      (String, String) => FilterPredicate] = {
+    case StringType =>
+      (n: String, v: String) =>
+        FilterApi.userDefined(binaryColumn(n),
+          StringEndsWithFilter(v.asInstanceOf[java.lang.String]))
+  }
+
+  private val makeStringContainsFilter: PartialFunction[DataType,
+      (String, String) => FilterPredicate] = {
+    case StringType =>
+      (n: String, v: String) =>
+        FilterApi.userDefined(binaryColumn(n),
+          StringContainsFilter(v.asInstanceOf[java.lang.String]))
   }
 
   private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
     case BooleanType =>
       (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(booleanColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Boolean]]))
+        FilterApi.userDefined(booleanColumn(n), InSetFilter(v.asInstanceOf[Set[java.lang.Boolean]]))
     case IntegerType =>
       (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(intColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Integer]]))
+        FilterApi.userDefined(intColumn(n), InSetFilter(v.asInstanceOf[Set[java.lang.Integer]]))
     case LongType =>
       (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(longColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Long]]))
+        FilterApi.userDefined(longColumn(n), InSetFilter(v.asInstanceOf[Set[java.lang.Long]]))
     case FloatType =>
       (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(floatColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Float]]))
+        FilterApi.userDefined(floatColumn(n), InSetFilter(v.asInstanceOf[Set[java.lang.Float]]))
     case DoubleType =>
       (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(doubleColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Double]]))
+        FilterApi.userDefined(doubleColumn(n), InSetFilter(v.asInstanceOf[Set[java.lang.Double]]))
     case StringType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(binaryColumn(n),
-          SetInFilter(v.map(s => Binary.fromByteArray(s.asInstanceOf[String].getBytes("utf-8")))))
+          InSetFilter(v.map(s => Binary.fromByteArray(s.asInstanceOf[String].getBytes("utf-8")))))
     case BinaryType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(binaryColumn(n),
-          SetInFilter(v.map(e => Binary.fromByteArray(e.asInstanceOf[Array[Byte]]))))
+          InSetFilter(v.map(e => Binary.fromByteArray(e.asInstanceOf[Array[Byte]]))))
   }
 
   /**
@@ -272,11 +295,11 @@ private[sql] object ParquetFilters {
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.StringStartsWith(name, value) =>
-        makeStringFilter.lift(dataTypeOf(name)).map(_(name, value, StringFilter.STARTS_WITH))
+        makeStringStartsFilter.lift(dataTypeOf(name)).map(_(name, value))
       case sources.StringEndsWith(name, value) =>
-        makeStringFilter.lift(dataTypeOf(name)).map(_(name, value, StringFilter.ENDS_WITH))
+        makeStringEndsFilter.lift(dataTypeOf(name)).map(_(name, value))
       case sources.StringContains(name, value) =>
-        makeStringFilter.lift(dataTypeOf(name)).map(_(name, value, StringFilter.CONTAINS))
+        makeStringContainsFilter.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.And(lhs, rhs) =>
         (createFilter(schema, lhs) ++ createFilter(schema, rhs)).reduceOption(FilterApi.and)
