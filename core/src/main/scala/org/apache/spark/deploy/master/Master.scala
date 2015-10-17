@@ -367,7 +367,7 @@ private[deploy] class Master(
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
-        // ignore, don't send response
+        context.reply(MasterInStandby)
       } else if (idToWorker.contains(id)) {
         context.reply(RegisterWorkerFailed("Duplicate worker ID"))
       } else {

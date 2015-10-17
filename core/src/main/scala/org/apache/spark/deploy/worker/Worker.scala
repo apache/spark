@@ -380,6 +380,9 @@ private[deploy] class Worker(
           logError("Worker registration failed: " + message)
           System.exit(1)
         }
+
+      case MasterInStandby =>
+        // Ignore. Master not yet ready.
     }
   }
 
