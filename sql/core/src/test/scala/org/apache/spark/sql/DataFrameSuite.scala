@@ -890,6 +890,24 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .collect()
   }
 
+  test("SPARK-10185: Read multiple Hadoop Filesystem paths and paths with a comma in it") {
+    withTempDir { dir =>
+      val df1 = Seq((1, 22)).toDF("a", "b")
+      val dir1 = new File(dir, "dir,1").getCanonicalPath
+      df1.write.format("json").save(dir1)
+
+      val df2 = Seq((2, 23)).toDF("a", "b")
+      val dir2 = new File(dir, "dir2").getCanonicalPath
+      df2.write.format("json").save(dir2)
+
+      checkAnswer(sqlContext.read.format("json").load(Array(dir1, dir2)),
+        Row(1, 22) :: Row(2, 23) :: Nil)
+
+      checkAnswer(sqlContext.read.format("json").load(dir1),
+        Row(1, 22) :: Nil)
+    }
+  }
+
   test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
     val df = Seq(1 -> 2).toDF("i", "j")
     val query = df.groupBy('i)

@@ -24,6 +24,7 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Success, Failure, Try}
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -89,7 +90,11 @@ object ResolvedDataSource extends Logging {
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
-          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          if (caseInsensitiveOptions.contains("paths")) {
+            throw new AnalysisException(s"$className does not support paths option.")
+          }
+          dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
         case dataSource: HadoopFsRelationProvider =>
           val maybePartitionsSchema = if (partitionColumns.isEmpty) {
             None
@@ -99,10 +104,19 @@ object ResolvedDataSource extends Logging {
 
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
-            val patternPath = new Path(caseInsensitiveOptions("path"))
-            val fs = patternPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-            val qualifiedPattern = patternPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-            SparkHadoopUtil.get.globPathIfNecessary(qualifiedPattern).map(_.toString).toArray
+            if (caseInsensitiveOptions.contains("paths") &&
+              caseInsensitiveOptions.contains("path")) {
+              throw new AnalysisException(s"Both path and paths options are present.")
+            }
+            caseInsensitiveOptions.get("paths")
+              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
+              .getOrElse(Array(caseInsensitiveOptions("path")))
+              .flatMap{ pathString =>
+                val hdfsPath = new Path(pathString)
+                val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+                val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+                SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
+              }
           }
 
           val dataSchema =
@@ -122,14 +136,27 @@ object ResolvedDataSource extends Logging {
 
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
-          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          if (caseInsensitiveOptions.contains("paths")) {
+            throw new AnalysisException(s"$className does not support paths option.")
+          }
+          dataSource.createRelation(sqlContext, caseInsensitiveOptions)
         case dataSource: HadoopFsRelationProvider =>
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
-            val patternPath = new Path(caseInsensitiveOptions("path"))
-            val fs = patternPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-            val qualifiedPattern = patternPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-            SparkHadoopUtil.get.globPathIfNecessary(qualifiedPattern).map(_.toString).toArray
+            if (caseInsensitiveOptions.contains("paths") &&
+              caseInsensitiveOptions.contains("path")) {
+              throw new AnalysisException(s"Both path and paths options are present.")
+            }
+            caseInsensitiveOptions.get("paths")
+              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
+              .getOrElse(Array(caseInsensitiveOptions("path")))
+              .flatMap{ pathString =>
+                val hdfsPath = new Path(pathString)
+                val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+                val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+                SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
+              }
           }
           dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
