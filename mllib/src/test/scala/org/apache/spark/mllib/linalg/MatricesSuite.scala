@@ -103,6 +103,21 @@ class MatricesSuite extends SparkFunSuite {
     assert(smz === dmz)
     assert(sm2z === dmz)
     assert(sm2z === smz)
+    val dm3 = Matrices.dense(3, 3, Array(1.0, 0.0, 4.0, 0.0, 1.0, 0.0, 3.0, 0.0, 1.0))
+    val sm3 = dm3.asInstanceOf[DenseMatrix].toSparse
+    assert(sm3 === sm3)
+    assert(sm3 === dm3)
+    assert(sm3 !== sm3.transpose)
+
+    val sm3explicit = Matrices.sparse(3, 3, colPtrs = Array(0, 3, 6, 9),
+      rowIndices = Array(0, 1, 2, 0, 1, 2, 0, 1, 2), values = dm3.toArray)
+    assert(sm3 === sm3explicit)
+
+    val dmEye = Matrices.eye(10)
+    val smEye = Matrices.speye(10)
+    assert(smEye === smEye)
+    assert(smEye === dmEye)
+    assert(smEye === smEye.transpose)
   }
 
   test("matrix copies are deep copies") {
