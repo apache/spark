@@ -709,9 +709,10 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
-      case e: ExecutorLostFailure if e.isNormalExit =>
+      case e: ExecutorLostFailure if e.exitUnrelatedToRunningTasks =>
         logInfo(s"Task $tid failed because while it was being computed, its executor" +
-          s" exited normally. Not marking the task as failed.")
+          "exited for a reason unrelated to the task. Not counting this failure towards the " +
+          "maximum number of failures for the task.")
         None
 
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
@@ -729,7 +730,7 @@ private[spark] class TaskSetManager(
     addPendingTask(index)
     if (!isZombie && state != TaskState.KILLED
         && reason.isInstanceOf[TaskFailedReason]
-        && reason.asInstanceOf[TaskFailedReason].shouldEventuallyFailJob) {
+        && reason.asInstanceOf[TaskFailedReason].countTowardsTaskFailures) {
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
@@ -814,11 +815,12 @@ private[spark] class TaskSetManager(
       }
     }
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      val isNormalExit: Boolean = reason match {
-        case exited: ExecutorExited => exited.isNormalExit
+      val exitUnrelatedToRunningTasks: Boolean = reason match {
+        case exited: ExecutorExited => exited.exitUnrelatedToRunningTasks
         case _ => false
       }
-      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
+      handleFailedTask(
+        tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitUnrelatedToRunningTasks))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()

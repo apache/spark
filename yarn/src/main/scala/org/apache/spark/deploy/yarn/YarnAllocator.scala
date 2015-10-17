@@ -442,12 +442,12 @@ private[yarn] class YarnAllocator(
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
         val exitStatus = completedContainer.getExitStatus
-        val (isNormalExit, containerExitReason) = exitStatus match {
+        val (exitUnrelatedToRunningTasks, containerExitReason) = exitStatus match {
           case ContainerExitStatus.SUCCESS =>
             (true, s"Executor for container $containerId exited normally.")
           case ContainerExitStatus.PREEMPTED =>
-            // Preemption should count as a normal exit, since YARN preempts containers merely
-            // to do resource sharing, and tasks that fail due to preempted executors could
+            // Preemption is not the fault of the running tasks, since YARN preempts containers
+            // merely to do resource sharing, and tasks that fail due to preempted executors could
             // just as easily finish on any other executor. See SPARK-8167.
             (true, s"Container $containerId was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
@@ -466,16 +466,16 @@ private[yarn] class YarnAllocator(
               ". Diagnostics: " + completedContainer.getDiagnostics)
 
         }
-        if (isNormalExit) {
+        if (exitUnrelatedToRunningTasks) {
           logInfo(containerExitReason)
         } else {
           logWarning(containerExitReason)
         }
-        ExecutorExited(0, isNormalExit, containerExitReason)
+        ExecutorExited(0, exitUnrelatedToRunningTasks, containerExitReason)
       } else {
         // If we have already released this container, then it must mean
         // that the driver has explicitly requested it to be killed
-        ExecutorExited(completedContainer.getExitStatus, isNormalExit = true,
+        ExecutorExited(completedContainer.getExitStatus, exitUnrelatedToRunningTasks = true,
           s"Container $containerId exited from explicit termination request.")
       }
 
