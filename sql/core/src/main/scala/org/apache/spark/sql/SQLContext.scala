@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{execution => sparkexecution}
+import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
 
 /**
@@ -58,19 +59,22 @@ import org.apache.spark.util.Utils
  * @groupname specificdata Specific Data Sources
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
- * @groupname Ungrouped Support functions for language integrated queries.
+ * @groupname Ungrouped Support functions for language integrated queries
  *
  * @since 1.0.0
  */
 class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
     @transient protected[sql] val cacheManager: CacheManager,
+    @transient private[sql] val listener: SQLListener,
     val isRootContext: Boolean)
   extends org.apache.spark.Logging with Serializable {
 
   self =>
 
-  def this(sparkContext: SparkContext) = this(sparkContext, new CacheManager, true)
+  def this(sparkContext: SparkContext) = {
+    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
+  }
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
@@ -97,7 +101,7 @@ class SQLContext private[sql](
 
   /**
    * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
-   * registered functions, but sharing the same SparkContext and CacheManager.
+   * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
    *
    * @since 1.6.0
    */
@@ -105,6 +109,7 @@ class SQLContext private[sql](
     new SQLContext(
       sparkContext = sparkContext,
       cacheManager = cacheManager,
+      listener = listener,
       isRootContext = false)
   }
 
@@ -112,11 +117,6 @@ class SQLContext private[sql](
    * @return Spark SQL configuration
    */
   protected[sql] lazy val conf = new SQLConf
-
-  // `listener` should be only used in the driver
-  @transient private[sql] val listener = new SQLListener(this)
-  sparkContext.addSparkListener(listener)
-  sparkContext.ui.foreach(new SQLTab(this, _))
 
   /**
    * Set Spark SQL configuration properties.
@@ -177,6 +177,9 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
+
+  @transient
+  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
@@ -711,7 +714,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(Seq(tableName), df.logicalPlan)
+    catalog.registerTable(TableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -725,7 +728,7 @@ class SQLContext private[sql](
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))
-    catalog.unregisterTable(Seq(tableName))
+    catalog.unregisterTable(TableIdentifier(tableName))
   }
 
   /**
@@ -792,7 +795,7 @@ class SQLContext private[sql](
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
+    DataFrame(this, catalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -1311,5 +1314,15 @@ object SQLContext {
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
       ): InternalRow
     }
+  }
+
+  /**
+   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
+   */
+  private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
+    val listener = new SQLListener(sc.conf)
+    sc.addSparkListener(listener)
+    sc.ui.foreach(new SQLTab(listener, _))
+    listener
   }
 }
