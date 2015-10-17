@@ -127,7 +127,12 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def start() {
     super.start()
     val driver = createSchedulerDriver(
-      master, CoarseMesosSchedulerBackend.this, sc.sparkUser, sc.appName, sc.conf)
+      master,
+      CoarseMesosSchedulerBackend.this,
+      sc.sparkUser,
+      sc.appName,
+      sc.conf,
+      sc.ui.map(_.appUIAddress))
     startScheduler(driver)
   }
 
