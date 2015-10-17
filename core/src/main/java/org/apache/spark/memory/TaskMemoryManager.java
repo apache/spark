@@ -121,20 +121,17 @@ public class TaskMemoryManager {
    * @return number of bytes successfully granted (<= N).
    */
   public long acquireExecutionMemory(long size) {
-    // TODO(josh): temp hack
-    return memoryManager.tryToAcquire(size);
+    return memoryManager.tryToAcquire(size, taskAttemptId);
   }
 
   /**
    * Release N bytes of execution memory.
    */
   public void releaseExecutionMemory(long size) {
-    // TODO(josh): temp hack
-    memoryManager.release(size);
+    memoryManager.release(size, taskAttemptId);
   }
 
   public long pageSizeBytes() {
-    // TODO(josh): temp hack
     return memoryManager.pageSizeBytes();
   }
 
@@ -312,9 +309,8 @@ public class TaskMemoryManager {
       }
     }
 
-    // TODO(josh): temp hack
-    freedBytes += memoryManager.getMemoryConsumptionForThisTask();
-    memoryManager.releaseMemoryForThisTask();
+    freedBytes += memoryManager.getMemoryConsumptionForTask(taskAttemptId);
+    memoryManager.releaseMemoryForTask(taskAttemptId);
 
     return freedBytes;
   }
@@ -323,7 +319,6 @@ public class TaskMemoryManager {
    * Returns the memory consumption, in bytes, for the current task
    */
   public long getMemoryConsumptionForThisTask() {
-    // TODO(josh): temp hack
-    return memoryManager.getMemoryConsumptionForThisTask();
+    return memoryManager.getMemoryConsumptionForTask(taskAttemptId);
   }
 }

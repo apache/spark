@@ -202,11 +202,6 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
 
   private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
 
-  private def currentTaskAttemptId(): Long = {
-    // In case this is called on the driver, return an invalid task attempt id.
-    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
-  }
-
   /**
    * Try to acquire up to numBytes memory for the current task, and return the number of bytes
    * obtained, or 0 if none can be allocated. This call may block until there is enough free memory
@@ -214,8 +209,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
    * total memory pool (where N is the # of active tasks) before it is forced to spill. This can
    * happen if the number of tasks increases but an older task had a lot of memory already.
    */
-  def tryToAcquire(numBytes: Long): Long = synchronized {
-    val taskAttemptId = currentTaskAttemptId()
+  def tryToAcquire(numBytes: Long, taskAttemptId: Long): Long = synchronized {
     assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
@@ -248,14 +242,14 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
         // (this happens if older tasks allocated lots of memory before N grew)
         if (
           freeMemory >= math.min(maxToGrant, maxExecutionMemory / (2 * numActiveTasks) - curMem)) {
-          return acquire(toGrant)
+          return acquire(toGrant, taskAttemptId)
         } else {
           logInfo(
             s"TID $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
           wait()
         }
       } else {
-        return acquire(toGrant)
+        return acquire(toGrant, taskAttemptId)
       }
     }
     0L  // Never reached
@@ -265,8 +259,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
    * Acquire N bytes of execution memory from the memory manager for the current task.
    * @return number of bytes actually acquired (<= N).
    */
-  private def acquire(numBytes: Long): Long = synchronized {
-    val taskAttemptId = currentTaskAttemptId()
+  private def acquire(numBytes: Long, taskAttemptId: Long): Long = synchronized {
     val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val acquired = acquireExecutionMemory(numBytes, evictedBlocks)
     // Register evicted blocks, if any, with the active task metrics
@@ -281,8 +274,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
   }
 
   /** Release numBytes bytes for the current task. */
-  def release(numBytes: Long): Unit = synchronized {
-    val taskAttemptId = currentTaskAttemptId()
+  def release(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
     val curMem = taskMemory.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
       throw new SparkException(
@@ -296,8 +288,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
   }
 
   /** Release all memory for the current task and mark it as inactive (e.g. when a task ends). */
-  private[memory] def releaseMemoryForThisTask(): Unit = synchronized {
-    val taskAttemptId = currentTaskAttemptId()
+  private[memory] def releaseMemoryForTask(taskAttemptId: Long): Unit = synchronized {
     taskMemory.remove(taskAttemptId).foreach { numBytes =>
       releaseExecutionMemory(numBytes)
     }
@@ -305,8 +296,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
   }
 
   /** Returns the memory consumption, in bytes, for the current task */
-  private[memory] def getMemoryConsumptionForThisTask(): Long = synchronized {
-    val taskAttemptId = currentTaskAttemptId()
+  private[memory] def getMemoryConsumptionForTask(taskAttemptId: Long): Long = synchronized {
     taskMemory.getOrElse(taskAttemptId, 0L)
   }
 
