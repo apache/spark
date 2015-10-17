@@ -113,7 +113,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     val jobs = this.synchronized {
       outputStreams.flatMap { outputStream =>
         val jobOption = outputStream.generateJob(time)
-        jobOption.foreach(_.setCallSite(outputStream.creationSite.longForm))
+        jobOption.foreach(_.setCallSite(outputStream.creationSite))
         jobOption
       }
     }

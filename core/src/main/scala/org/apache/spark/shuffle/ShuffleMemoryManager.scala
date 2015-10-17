@@ -139,8 +139,10 @@ class ShuffleMemoryManager protected (
       throw new SparkException(
         s"Internal error: release called on $numBytes bytes but task only has $curMem")
     }
-    taskMemory(taskAttemptId) -= numBytes
-    memoryManager.releaseExecutionMemory(numBytes)
+    if (taskMemory.contains(taskAttemptId)) {
+      taskMemory(taskAttemptId) -= numBytes
+      memoryManager.releaseExecutionMemory(numBytes)
+    }
     memoryManager.notifyAll() // Notify waiters in tryToAcquire that memory has been freed
   }
 
