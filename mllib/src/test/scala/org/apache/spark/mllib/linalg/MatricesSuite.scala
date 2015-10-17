@@ -82,6 +82,9 @@ class MatricesSuite extends SparkFunSuite {
     val dm2 = Matrices.dense(2, 2, Array(0.0, 2.0, 1.0, 3.0))
     assert(dm1 === dm2.transpose)
 
+    val dmz = Matrices.dense(2, 2, Array(0.0, 0.0, 0.0, 0.0))
+    assert(dmz === dmz.transpose)
+
     val sm1 = dm1.asInstanceOf[DenseMatrix].toSparse
     assert(sm1 === sm1)
     assert(sm1 === dm1)
@@ -91,17 +94,15 @@ class MatricesSuite extends SparkFunSuite {
     assert(sm1 === sm2.transpose)
     assert(sm1 === dm2.transpose)
 
-    val dm3 = Matrices.dense(3, 3, Array(1.0, 0.0, 4.0, 0.0, 1.0, 0.0, 3.0, 0.0, 1.0))
-    val sm3 = dm3.asInstanceOf[DenseMatrix].toSparse
-    assert(sm3 === sm3)
-    assert(sm3 === dm3)
-    assert(sm3 !== sm3.transpose)
-
-    val dmEye = Matrices.eye(10)
-    val smEye = Matrices.speye(10)
-    assert(smEye === smEye)
-    assert(smEye === dmEye)
-    assert(smEye === smEye.transpose)
+    val smz = dmz.asInstanceOf[DenseMatrix].toSparse
+    val sm2z = dm2.asInstanceOf[DenseMatrix].toSparse
+    sm2z(0,1) = 0.0
+    sm2z(1,0) = 0.0
+    sm2z(1,1) = 0.0
+    assert(smz === sm2z)
+    assert(smz === dmz)
+    assert(sm2z === dmz)
+    assert(sm2z === smz)
   }
 
   test("matrix copies are deep copies") {

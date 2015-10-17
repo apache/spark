@@ -555,7 +555,10 @@ class SparseMatrix @Since("1.3.0") (
       if (this.numNonzeros != m.numNonzeros) return false
       val activeIterator = toBreeze.activeIterator
       m match {
-        case s: SparseMatrix => s.toBreeze.activeIterator.sameElements(activeIterator)
+        case s: SparseMatrix =>
+          val filterIter = s.toBreeze.activeIterator.withFilter(_._2 != 0.0)
+          val currFilterIter = activeIterator.withFilter(_._2 != 0.0)
+          filterIter.sameElements(currFilterIter)
         case d: DenseMatrix =>
           while(activeIterator.hasNext){
             val next = activeIterator.next()
