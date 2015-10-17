@@ -47,12 +47,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val factory = new JsonFactory()
     def enforceCorrectType(value: Any, dataType: DataType): Any = {
       val writer = new StringWriter()
-			Utils.tryWithResource(factory.createGenerator(writer)) { generator =>
+      Utils.tryWithResource(factory.createGenerator(writer)) { generator =>
         generator.writeObject(value)
         generator.flush()
       }
 
-			Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
+      Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
         parser.nextToken()
         JacksonParser.convertField(factory, parser, dataType)
       }
