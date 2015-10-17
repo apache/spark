@@ -129,17 +129,9 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * @since 1.6.0
    */
-  def load(paths: Seq[String]): DataFrame = {
+  def load(paths: Array[String]): DataFrame = {
     option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
   }
-
-  /**
-   * Loads input in as a [[DataFrame]], for data sources that support multiple paths.
-   * Only works if the source is a HadoopFsRelationProvider.
-   *
-   * @since 1.6.0
-   */
-  def load(paths: java.util.List[String]): DataFrame = load(paths.asScala)
 
   /**
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
