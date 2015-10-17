@@ -179,7 +179,7 @@ def parse_args():
         help="SSH private key file to use for logging into instances")
     parser.add_option(
         "-p", "--profile", default="default",
-        help=" If you have multiple profiles, you can configure additional, named profiles by using this option (default: %default)")
+        help=" If you have multiple profiles(aws or boto config), you can configure additional, named profiles by using this option (default: %default)")
     parser.add_option(
         "-t", "--instance-type", default="m1.large",
         help="Type of instance to launch (default: %default). " +
