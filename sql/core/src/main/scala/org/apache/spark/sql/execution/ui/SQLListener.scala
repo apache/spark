@@ -131,7 +131,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
     } else {
       // If a stage belongs to some SQL execution, its stageId will be put in "onJobStart".
       // Since "_stageIdToStageMetrics" doesn't contain it, it must not belong to any SQL execution.
-      // So we can ignore it.
+      // So we can ignore it. Otherwise, this may lead to memory leaks (SPARK-11126).
     }
   }
 
