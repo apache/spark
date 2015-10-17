@@ -133,7 +133,10 @@ if __name__ == "__main__":
         ("thresholds", "Thresholds in multi-class classification to adjust the probability of " +
          "predicting each class. Array must have length equal to the number of classes, with " +
          "values >= 0. The class with largest value p/t is predicted, where p is the original " +
-         "probability of that class and t is the class' threshold.", None)]
+         "probability of that class and t is the class' threshold.", None),
+        ("weightCol", "weight column name. If this is not set or empty, we treat " +
+         "all instance weights as 1.0.", None)]
+
     code = []
     for name, doc, defaultValueStr in shared:
         param_code = _gen_param_header(name, doc, defaultValueStr)

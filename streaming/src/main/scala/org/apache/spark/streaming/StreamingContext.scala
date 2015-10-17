@@ -44,7 +44,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils}
+import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -564,6 +564,13 @@ class StreamingContext private[streaming] (
           )
       }
     }
+
+    if (Utils.isDynamicAllocationEnabled(sc.conf)) {
+      logWarning("Dynamic Allocation is enabled for this application. " +
+        "Enabling Dynamic allocation for Spark Streaming applications can cause data loss if " +
+        "Write Ahead Log is not enabled for non-replayable sources like Flume. " +
+        "See the programming guide for details on how to enable the Write Ahead Log")
+    }
   }
 
   /**
@@ -687,32 +694,39 @@ class StreamingContext private[streaming] (
    * @param stopGracefully if true, stops gracefully by waiting for the processing of all
    *                       received data to be completed
    */
-  def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
-    try {
-      state match {
-        case INITIALIZED =>
-          logWarning("StreamingContext has not been started yet")
-        case STOPPED =>
-          logWarning("StreamingContext has already been stopped")
-        case ACTIVE =>
-          scheduler.stop(stopGracefully)
-          // Removing the streamingSource to de-register the metrics on stop()
-          env.metricsSystem.removeSource(streamingSource)
-          uiTab.foreach(_.detach())
-          StreamingContext.setActiveContext(null)
-          waiter.notifyStop()
-          if (shutdownHookRef != null) {
-            ShutdownHookManager.removeShutdownHook(shutdownHookRef)
-          }
-          logInfo("StreamingContext stopped successfully")
+  def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
+    var shutdownHookRefToRemove: AnyRef = null
+    synchronized {
+      try {
+        state match {
+          case INITIALIZED =>
+            logWarning("StreamingContext has not been started yet")
+          case STOPPED =>
+            logWarning("StreamingContext has already been stopped")
+          case ACTIVE =>
+            scheduler.stop(stopGracefully)
+            // Removing the streamingSource to de-register the metrics on stop()
+            env.metricsSystem.removeSource(streamingSource)
+            uiTab.foreach(_.detach())
+            StreamingContext.setActiveContext(null)
+            waiter.notifyStop()
+            if (shutdownHookRef != null) {
+              shutdownHookRefToRemove = shutdownHookRef
+              shutdownHookRef = null
+            }
+            logInfo("StreamingContext stopped successfully")
+        }
+      } finally {
+        // The state should always be Stopped after calling `stop()`, even if we haven't started yet
+        state = STOPPED
       }
-      // Even if we have already stopped, we still need to attempt to stop the SparkContext because
-      // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
-      if (stopSparkContext) sc.stop()
-    } finally {
-      // The state should always be Stopped after calling `stop()`, even if we haven't started yet
-      state = STOPPED
     }
+    if (shutdownHookRefToRemove != null) {
+      ShutdownHookManager.removeShutdownHook(shutdownHookRefToRemove)
+    }
+    // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+    // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
+    if (stopSparkContext) sc.stop()
   }
 
   private def stopOnShutdown(): Unit = {

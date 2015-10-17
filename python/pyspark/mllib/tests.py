@@ -237,18 +237,30 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(dv.array.dtype == 'float64')
 
     def test_sparse_vector_indexing(self):
-        sv = SparseVector(4, {1: 1, 3: 2})
+        sv = SparseVector(5, {1: 1, 3: 2})
         self.assertEqual(sv[0], 0.)
         self.assertEqual(sv[3], 2.)
         self.assertEqual(sv[1], 1.)
         self.assertEqual(sv[2], 0.)
-        self.assertEqual(sv[-1], 2)
-        self.assertEqual(sv[-2], 0)
-        self.assertEqual(sv[-4], 0)
-        for ind in [4, -5]:
+        self.assertEqual(sv[4], 0.)
+        self.assertEqual(sv[-1], 0.)
+        self.assertEqual(sv[-2], 2.)
+        self.assertEqual(sv[-3], 0.)
+        self.assertEqual(sv[-5], 0.)
+        for ind in [5, -6]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
         for ind in [7.8, '1']:
             self.assertRaises(TypeError, sv.__getitem__, ind)
+
+        zeros = SparseVector(4, {})
+        self.assertEqual(zeros[0], 0.0)
+        self.assertEqual(zeros[3], 0.0)
+        for ind in [4, -5]:
+            self.assertRaises(ValueError, zeros.__getitem__, ind)
+
+        empty = SparseVector(0, {})
+        for ind in [-1, 0, 1]:
+            self.assertRaises(ValueError, empty.__getitem__, ind)
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])

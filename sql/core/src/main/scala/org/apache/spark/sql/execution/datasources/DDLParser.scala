@@ -140,7 +140,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
   protected lazy val describeTable: Parser[LogicalPlan] =
     (DESCRIBE ~> opt(EXTENDED)) ~ tableIdentifier ^^ {
       case e ~ tableIdent =>
-        DescribeCommand(UnresolvedRelation(tableIdent.toSeq, None), e.isDefined)
+        DescribeCommand(UnresolvedRelation(tableIdent, None), e.isDefined)
     }
 
   protected lazy val refreshTable: Parser[LogicalPlan] =

@@ -48,6 +48,11 @@ class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) exte
 }
 
 object ArrayBasedMapData {
+  def apply(map: Map[Any, Any]): ArrayBasedMapData = {
+    val array = map.toArray
+    ArrayBasedMapData(array.map(_._1), array.map(_._2))
+  }
+
   def apply(keys: Array[Any], values: Array[Any]): ArrayBasedMapData = {
     new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
   }
@@ -55,6 +60,10 @@ object ArrayBasedMapData {
   def toScalaMap(map: ArrayBasedMapData): Map[Any, Any] = {
     val keys = map.keyArray.asInstanceOf[GenericArrayData].array
     val values = map.valueArray.asInstanceOf[GenericArrayData].array
+    keys.zip(values).toMap
+  }
+
+  def toScalaMap(keys: Array[Any], values: Array[Any]): Map[Any, Any] = {
     keys.zip(values).toMap
   }
 }

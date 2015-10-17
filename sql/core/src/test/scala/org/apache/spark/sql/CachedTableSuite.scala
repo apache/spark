@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.execution.PhysicalRDD
 
 import scala.concurrent.duration._
@@ -287,8 +288,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
     testData.select('key).registerTempTable("t1")
     sqlContext.table("t1")
     sqlContext.dropTempTable("t1")
-    assert(
-      intercept[RuntimeException](sqlContext.table("t1")).getMessage.startsWith("Table Not Found"))
+    intercept[NoSuchTableException](sqlContext.table("t1"))
   }
 
   test("Drops cached temporary table") {
@@ -300,8 +300,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
     assert(sqlContext.isCached("t2"))
 
     sqlContext.dropTempTable("t1")
-    assert(
-      intercept[RuntimeException](sqlContext.table("t1")).getMessage.startsWith("Table Not Found"))
+    intercept[NoSuchTableException](sqlContext.table("t1"))
     assert(!sqlContext.isCached("t2"))
   }
 

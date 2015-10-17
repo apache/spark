@@ -28,7 +28,7 @@ import org.apache.spark.sql.sources.BaseRelation
  * changing the output attributes' IDs.  The `expectedOutputAttributes` parameter is used for
  * this purpose.  See https://issues.apache.org/jira/browse/SPARK-10741 for more details.
  */
-private[sql] case class LogicalRelation(
+case class LogicalRelation(
     relation: BaseRelation,
     expectedOutputAttributes: Option[Seq[Attribute]] = None)
   extends LeafNode with MultiInstanceRelation {

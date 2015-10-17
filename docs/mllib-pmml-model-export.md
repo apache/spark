@@ -45,6 +45,8 @@ The table below outlines the MLlib models that can be exported to PMML and their
 <div data-lang="scala" markdown="1">
 To export a supported `model` (see table above) to PMML, simply call `model.toPMML`.
 
+Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`Vectors` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors) for details on the API.
+
 Here a complete example of building a KMeansModel and print it out in PMML format:
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.KMeans

@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
-import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -73,6 +72,10 @@ public class UnsafeArrayData extends ArrayData {
   private void assertIndexIsValid(int ordinal) {
     assert ordinal >= 0 : "ordinal (" + ordinal + ") should >= 0";
     assert ordinal < numElements : "ordinal (" + ordinal + ") should < " + numElements;
+  }
+
+  public Object[] array() {
+    throw new UnsupportedOperationException("Only supported on GenericArrayData.");
   }
 
   /**
@@ -147,6 +150,8 @@ public class UnsafeArrayData extends ArrayData {
       return getArray(ordinal);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof UserDefinedType) {
+      return get(ordinal, ((UserDefinedType)dataType).sqlType());
     } else {
       throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
@@ -256,7 +261,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public InternalRow getStruct(int ordinal, int numFields) {
+  public UnsafeRow getStruct(int ordinal, int numFields) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -267,7 +272,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public ArrayData getArray(int ordinal) {
+  public UnsafeArrayData getArray(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -276,7 +281,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public MapData getMap(int ordinal) {
+  public UnsafeMapData getMap(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
@@ -286,7 +291,11 @@ public class UnsafeArrayData extends ArrayData {
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    int result = 37;
+    for (int i = 0; i < sizeInBytes; i++) {
+      result = 37 * result + Platform.getByte(baseObject, baseOffset + i);
+    }
+    return result;
   }
 
   @Override
@@ -302,6 +311,15 @@ public class UnsafeArrayData extends ArrayData {
 
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert(buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + sizeInBytes);
   }
 
   @Override
