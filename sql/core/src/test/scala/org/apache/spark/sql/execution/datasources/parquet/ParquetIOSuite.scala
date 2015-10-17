@@ -28,10 +28,10 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.example.data.{Group, GroupWriter}
+import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
-import org.apache.parquet.hadoop.metadata.{BlockMetaData, CompressionCodecName, FileMetaData, ParquetMetadata}
-import org.apache.parquet.hadoop.{Footer, ParquetFileWriter, ParquetOutputCommitter, ParquetWriter}
+import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -99,16 +99,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
   }
 
-  test("fixed-length decimals") {
-    def makeDecimalRDD(decimal: DecimalType): DataFrame =
-      sparkContext
-        .parallelize(0 to 1000)
-        .map(i => Tuple1(i / 100.0))
-        .toDF()
-        // Parquet doesn't allow column names with spaces, have to add an alias here
-        .select($"_1" cast decimal as "dec")
+  testStandardAndLegacyModes("fixed-length decimals") {
+    def makeDecimalRDD(decimal: DecimalType): DataFrame = {
+      sqlContext
+        .range(1000)
+        // Parquet doesn't allow column names with spaces, have to add an alias here.
+        // Minus 500 here so that negative decimals are also tested.
+        .select((('id - 500) / 100.0) cast decimal as 'dec)
+        .coalesce(1)
+    }
 
-    for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17), (19, 0), (38, 37))) {
+    val combinations = Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17), (19, 0), (38, 37))
+    for ((precision, scale) <- combinations) {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))
         data.write.parquet(dir.getCanonicalPath)
@@ -132,22 +134,22 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("map") {
+  testStandardAndLegacyModes("map") {
     val data = (1 to 4).map(i => Tuple1(Map(i -> s"val_$i")))
     checkParquetFile(data)
   }
 
-  test("array") {
+  testStandardAndLegacyModes("array") {
     val data = (1 to 4).map(i => Tuple1(Seq(i, i + 1)))
     checkParquetFile(data)
   }
 
-  test("array and double") {
+  testStandardAndLegacyModes("array and double") {
     val data = (1 to 4).map(i => (i.toDouble, Seq(i.toDouble, (i + 1).toDouble)))
     checkParquetFile(data)
   }
 
-  test("struct") {
+  testStandardAndLegacyModes("struct") {
     val data = (1 to 4).map(i => Tuple1((i, s"val_$i")))
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
@@ -157,7 +159,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("nested struct with array of array as field") {
+  testStandardAndLegacyModes("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
@@ -167,7 +169,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("nested map with struct as value type") {
+  testStandardAndLegacyModes("nested map with struct as value type") {
     val data = (1 to 4).map(i => Tuple1(Map(i -> (i, s"val_$i"))))
     withParquetDataFrame(data) { df =>
       checkAnswer(df, data.map { case Tuple1(m) =>
@@ -205,14 +207,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("compression codec") {
-    def compressionCodecFor(path: String): String = {
-      val codecs = ParquetTypesConverter
-        .readMetaData(new Path(path), Some(hadoopConfiguration)).getBlocks.asScala
-        .flatMap(_.getColumns.asScala)
-        .map(_.getCodec.name())
-        .distinct
+    def compressionCodecFor(path: String, codecName: String): String = {
+      val codecs = for {
+        footer <- readAllFootersWithoutSummaryFiles(new Path(path), hadoopConfiguration)
+        block <- footer.getParquetMetadata.getBlocks.asScala
+        column <- block.getColumns.asScala
+      } yield column.getCodec.name()
 
-      assert(codecs.size === 1)
+      assert(codecs.distinct === Seq(codecName))
       codecs.head
     }
 
@@ -222,7 +224,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
           assertResult(sqlContext.conf.parquetCompressionCodec.toUpperCase) {
-            compressionCodecFor(path)
+            compressionCodecFor(path, codec.name())
           }
         }
       }
@@ -278,15 +280,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withTempPath { file =>
       val path = new Path(file.toURI.toString)
       val fs = FileSystem.getLocal(hadoopConfiguration)
-      val attributes = ScalaReflection.attributesFor[(Int, String)]
-      ParquetTypesConverter.writeMetaData(attributes, path, hadoopConfiguration)
+      val schema = StructType.fromAttributes(ScalaReflection.attributesFor[(Int, String)])
+      writeMetadata(schema, path, hadoopConfiguration)
 
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
-      val metaData = ParquetTypesConverter.readMetaData(path, Some(hadoopConfiguration))
-      val actualSchema = metaData.getFileMetaData.getSchema
-      val expectedSchema = ParquetTypesConverter.convertFromAttributes(attributes)
+      val expectedSchema = new CatalystSchemaConverter().convert(schema)
+      val actualSchema = readFooter(path, hadoopConfiguration).getFileMetaData.getSchema
 
       actualSchema.checkContains(expectedSchema)
       expectedSchema.checkContains(actualSchema)
@@ -487,6 +488,25 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
+
+  test("read dictionary encoded decimals written as INT32") {
+    checkAnswer(
+      // Decimal column in this file is encoded using plain dictionary
+      readResourceParquetFile("dec-in-i32.parquet"),
+      sqlContext.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
+  }
+
+  test("read dictionary encoded decimals written as INT64") {
+    checkAnswer(
+      // Decimal column in this file is encoded using plain dictionary
+      readResourceParquetFile("dec-in-i64.parquet"),
+      sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
+  }
+
+  // TODO Adds test case for reading dictionary encoded decimals written as `FIXED_LEN_BYTE_ARRAY`
+  // The Parquet writer version Spark 1.6 and prior versions use is `PARQUET_1_0`, which doesn't
+  // provide dictionary encoding support for `FIXED_LEN_BYTE_ARRAY`.  Should add a test here once
+  // we upgrade to `PARQUET_2_0`.
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

@@ -14,26 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.rpc.netty
 
-import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
+package org.apache.spark.ml.feature
 
-/**
- * A message used to ask the remote [[IDVerifier]] if an [[RpcEndpoint]] exists
- */
-private[netty] case class ID(name: String)
+import org.apache.spark.mllib.linalg.Vector
 
 /**
- * An [[RpcEndpoint]] for remote [[RpcEnv]]s to query if a [[RpcEndpoint]] exists in this [[RpcEnv]]
+ * Class that represents an instance of weighted data point with label and features.
+ *
+ * @param label Label for this data point.
+ * @param weight The weight of this instance.
+ * @param features The vector of features for this data point.
  */
-private[netty] class IDVerifier(
-    override val rpcEnv: RpcEnv, dispatcher: Dispatcher) extends RpcEndpoint {
-
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case ID(name) => context.reply(dispatcher.verify(name))
-  }
-}
-
-private[netty] object IDVerifier {
-  val NAME = "id-verifier"
-}
+private[ml] case class Instance(label: Double, weight: Double, features: Vector)

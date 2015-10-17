@@ -88,7 +88,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (precision < 19) {
         return null  // Requested precision is too low to represent this value
       }
-      this.decimalVal = BigDecimal(unscaled)
+      this.decimalVal = BigDecimal(unscaled, scale)
       this.longVal = 0L
     } else {
       val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
@@ -107,8 +107,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Set this Decimal to the given BigDecimal value, with a given precision and scale.
    */
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
-    this.decimalVal = decimal.setScale(scale, ROUNDING_MODE)
-    require(decimalVal.precision <= precision, "Overflowed precision")
+    this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
+    require(
+      decimalVal.precision <= precision,
+      s"Decimal precision ${decimalVal.precision} exceeds max precision $precision")
     this.longVal = 0L
     this._precision = precision
     this._scale = scale
@@ -196,6 +198,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @return true if successful, false if overflow would occur
    */
   def changePrecision(precision: Int, scale: Int): Boolean = {
+    changePrecision(precision, scale, ROUND_HALF_UP)
+  }
+
+  /**
+   * Update precision and scale while keeping our value the same, and return true if successful.
+   *
+   * @return true if successful, false if overflow would occur
+   */
+  private[sql] def changePrecision(precision: Int, scale: Int,
+                      roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     // fast path for UnsafeProjection
     if (precision == this.precision && scale == this.scale) {
       return true
@@ -229,7 +241,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale decimalVal to the new scale.
-      val newVal = decimalVal.setScale(scale, ROUNDING_MODE)
+      val newVal = decimalVal.setScale(scale, roundMode)
       if (newVal.precision > precision) {
         return false
       }
@@ -307,10 +319,26 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
+
+  def floor: Decimal = if (scale == 0) this else {
+    val value = this.clone()
+    value.changePrecision(
+      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_FLOOR)
+    value
+  }
+
+  def ceil: Decimal = if (scale == 0) this else {
+    val value = this.clone()
+    value.changePrecision(
+      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_CEILING)
+    value
+  }
 }
 
 object Decimal {
-  private val ROUNDING_MODE = BigDecimal.RoundingMode.HALF_UP
+  val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
+  val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
+  val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18

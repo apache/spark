@@ -26,9 +26,7 @@ import scala.util.Sorting
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.netlib.util.intW
 
 import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -36,6 +34,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -366,8 +365,6 @@ object ALS extends Logging {
   /** Cholesky solver for least square problems. */
   private[recommendation] class CholeskySolver extends LeastSquaresNESolver {
 
-    private val upper = "U"
-
     /**
      * Solves a least squares problem with L2 regularization:
      *
@@ -387,10 +384,7 @@ object ALS extends Logging {
         i += j
         j += 1
       }
-      val info = new intW(0)
-      lapack.dppsv(upper, k, 1, ne.ata, ne.atb, k, info)
-      val code = info.`val`
-      assert(code == 0, s"lapack.dppsv returned $code.")
+      CholeskyDecomposition.solve(ne.ata, ne.atb)
       val x = new Array[Float](k)
       i = 0
       while (i < k) {
