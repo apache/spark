@@ -213,18 +213,7 @@ private[deploy] class Worker(
             logInfo("Connecting to master " + masterAddress + "...")
             val masterEndpoint =
               rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
-            masterEndpoint.ask[RegisterWorkerResponse](RegisterWorker(
-              workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
-              .onComplete {
-                // This is a very fast action so we can use "ThreadUtils.sameThread"
-                case Success(msg) =>
-                  Utils.tryLogNonFatalError {
-                    handleRegisterResponse(msg)
-                  }
-                case Failure(e) =>
-                  logError(s"Cannot register with master: $masterAddress", e)
-                  System.exit(1)
-              }(ThreadUtils.sameThread)
+            registerWithMaster(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
             case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
@@ -281,8 +270,7 @@ private[deploy] class Worker(
                   logInfo("Connecting to master " + masterAddress + "...")
                   val masterEndpoint =
                     rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
-                  masterEndpoint.send(RegisterWorker(
-                    workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
+                  registerWithMaster(masterEndpoint)
                 } catch {
                   case ie: InterruptedException => // Cancelled
                   case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
@@ -349,6 +337,21 @@ private[deploy] class Worker(
         logInfo("Not spawning another attempt to register with the master, since there is an" +
           " attempt scheduled already.")
     }
+  }
+
+  private def registerWithMaster(masterEndpoint: RpcEndpointRef): Unit = {
+    masterEndpoint.ask[RegisterWorkerResponse](RegisterWorker(
+      workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
+      .onComplete {
+        // This is a very fast action so we can use "ThreadUtils.sameThread"
+        case Success(msg) =>
+          Utils.tryLogNonFatalError {
+            handleRegisterResponse(msg)
+          }
+        case Failure(e) =>
+          logError(s"Cannot register with master: ${masterEndpoint.address}", e)
+          System.exit(1)
+      }(ThreadUtils.sameThread)
   }
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
