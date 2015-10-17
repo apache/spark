@@ -17,10 +17,10 @@
 
 package org.apache.spark.streaming.scheduler
 
-import java.util.concurrent.{TimeUnit, CountDownLatch}
+import java.util.concurrent.{CountDownLatch, ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.HashMap
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, TimeoutException}
 import scala.language.existentials
 import scala.util.{Failure, Success}
 
@@ -79,6 +79,12 @@ private[streaming] case class StartAllReceivers(receiver: Seq[Receiver[_]])
  * receivers.
  */
 private[streaming] case object StopAllReceivers extends ReceiverTrackerLocalMessage
+
+/**
+ * This message will be sent to ReceiverTrackerEndpoint when the receiver cannot be started in time.
+ */
+private[streaming] case class ReceiverLaunchingTimeout(receiverId: Int)
+  extends ReceiverTrackerLocalMessage
 
 /**
  * A message used by ReceiverTracker to ask all receiver's ids still stored in
@@ -142,6 +148,21 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * receivers. It's only accessed in ReceiverTrackerEndpoint.
    */
   private val receiverPreferredLocations = new HashMap[Int, Option[String]]
+
+  /**
+   * Timeout to launch a receiver. If a receiver cannot register in time, StreamingContext
+   * will be stopped.
+   */
+  private val RECEIVER_LAUNCHING_TIMEOUT =
+    ssc.conf.getTimeAsMs("spark.streaming.receiver.launching.timeout", "600s")
+
+  /**
+   * Store all Futures to cancel the timeout tasks. It's only accessed in ReceiverTrackerEndpoint.
+   */
+  private val receiverTimeoutFutures = new HashMap[Int, ScheduledFuture[_]]
+
+  private val receiverTimeoutScheduler =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("receiver-timeout")
 
   /** Start the endpoint and receiver execution thread. */
   def start(): Unit = synchronized {
@@ -242,6 +263,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     if (!receiverInputStreamIds.contains(streamId)) {
       throw new SparkException("Register received for unexpected id " + streamId)
     }
+
+    // Cancel the timeout task that monitors the receiver
+    receiverTimeoutFutures.remove(streamId).foreach(_.cancel(true))
 
     if (isTrackerStopping || isTrackerStopped) {
       return false
@@ -439,6 +463,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           startReceiver(receiver, executors)
         }
       case RestartReceiver(receiver) =>
+        receiverTimeoutFutures.remove(receiver.streamId).foreach(_.cancel(true))
         // Old scheduled executors minus the ones that are not active any more
         val oldScheduledExecutors = getStoredScheduledExecutors(receiver.streamId)
         val scheduledExecutors = if (oldScheduledExecutors.nonEmpty) {
@@ -465,6 +490,24 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         for (info <- receiverTrackingInfos.get(streamUID); eP <- info.endpoint) {
           eP.send(UpdateRateLimit(newRate))
         }
+      case ReceiverLaunchingTimeout(receiverId) => {
+        val timeoutFuture = receiverTimeoutFutures.remove(receiverId)
+        timeoutFuture.foreach { f =>
+          // If the receiver has not yet registered, start a new thread to stop StreamingContext
+          // gracefully.
+          new Thread("stopping-StreamingContext") {
+            setDaemon(true)
+
+            override def run(): Unit = {
+              val errorMessage =
+                s"Receiver $receiverId cannot start in $RECEIVER_LAUNCHING_TIMEOUT milliseconds"
+              ssc.scheduler.reportError(errorMessage, new TimeoutException(errorMessage))
+            }
+          }.start()
+        }
+        // If timeoutFuture is None, the receiver should register or be restarted before we
+        // receive ReceiverLaunchingTimeout. In such case, we say it's not timeout.
+      }
       // Remote messages
       case ReportError(streamId, message, error) =>
         reportError(streamId, message, error)
@@ -577,11 +620,23 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             self.send(RestartReceiver(receiver))
           }
       }(submitJobThreadPool)
+
+      // Launch a timeout task to stop StreamingContext if a receiver cannot be started in time.
+      val timeoutFuture = receiverTimeoutScheduler.schedule(new Runnable {
+        override def run(): Unit = {
+          // If ReceiverTacker has been stopped, endpoint will be null. So use Option(endpoint) to
+          // avoid NPE.
+          Option(endpoint).foreach(_.send(ReceiverLaunchingTimeout(receiverId)))
+        }
+      }, RECEIVER_LAUNCHING_TIMEOUT, TimeUnit.MILLISECONDS)
+      receiverTimeoutFutures(receiverId) = timeoutFuture
       logInfo(s"Receiver ${receiver.streamId} started")
     }
 
     override def onStop(): Unit = {
       submitJobThreadPool.shutdownNow()
+      receiverTimeoutFutures.values.foreach(_.cancel(true))
+      receiverTimeoutScheduler.shutdownNow()
     }
 
     /**
