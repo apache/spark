@@ -684,7 +684,7 @@ class Airflow(BaseView):
 
         payload = {}
         for dag in dagbag.dags.values():
-            payload[dag.dag_id] = []
+            payload[dag.safe_dag_id] = []
             for state in states:
                 try:
                     count = data[dag.dag_id][state]
@@ -696,7 +696,7 @@ class Airflow(BaseView):
                     'dag_id': dag.dag_id,
                     'color': State.color(state)
                 }
-                payload[dag.dag_id].append(d)
+                payload[dag.safe_dag_id].append(d)
         return Response(
             response=json.dumps(payload, indent=4),
             status=200, mimetype="application/json")

@@ -1882,6 +1882,7 @@ class DAG(object):
         self.template_searchpath = template_searchpath
         self.parent_dag = None  # Gets set when DAGs are loaded
         self.last_loaded = datetime.now()
+        self.safe_dag_id = dag_id.replace('.', '__dot__')
 
         self._comps = {
             'dag_id',
