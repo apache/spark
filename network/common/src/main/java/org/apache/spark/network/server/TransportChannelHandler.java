@@ -123,5 +123,6 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
         ctx.close();
       }
     }
+    ctx.fireUserEventTriggered(evt);
   }
 }

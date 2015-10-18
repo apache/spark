@@ -17,6 +17,7 @@
 
 package org.apache.spark.rpc.akka
 
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.concurrent.Future
@@ -30,7 +31,7 @@ import akka.pattern.{ask => akkaAsk}
 import akka.remote.{AssociationEvent, AssociatedEvent, DisassociatedEvent, AssociationErrorEvent}
 import akka.serialization.JavaSerializer
 
-import org.apache.spark.{SparkException, Logging, SparkConf}
+import org.apache.spark.{HttpFileServer, Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
 
@@ -41,7 +42,10 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
  * remove Akka from the dependencies.
  */
 private[spark] class AkkaRpcEnv private[akka] (
-    val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
+    val actorSystem: ActorSystem,
+    val securityManager: SecurityManager,
+    conf: SparkConf,
+    boundPort: Int)
   extends RpcEnv(conf) with Logging {
 
   private val defaultAddress: RpcAddress = {
@@ -63,6 +67,8 @@ private[spark] class AkkaRpcEnv private[akka] (
    * Need this map to remove `RpcEndpoint` from `endpointToRef` via a `RpcEndpointRef`
    */
   private val refToEndpoint = new ConcurrentHashMap[RpcEndpointRef, RpcEndpoint]()
+
+  private val _fileServer = new AkkaFileServer(conf, securityManager)
 
   private def registerEndpoint(endpoint: RpcEndpoint, endpointRef: RpcEndpointRef): Unit = {
     endpointToRef.put(endpoint, endpointRef)
@@ -223,6 +229,7 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def shutdown(): Unit = {
     actorSystem.shutdown()
+    _fileServer.shutdown()
   }
 
   override def stop(endpoint: RpcEndpointRef): Unit = {
@@ -241,6 +248,52 @@ private[spark] class AkkaRpcEnv private[akka] (
       deserializationAction()
     }
   }
+
+  override def fetchFile(uri: String, dest: File, overwrite: Boolean): Unit = {
+    throw new UnsupportedOperationException(
+      "AkkaRpcEnv's files should be retrieved using an HTTP client.")
+  }
+
+  override def fileServer: RpcEnvFileServer = _fileServer
+
+}
+
+private[akka] class AkkaFileServer(
+    conf: SparkConf,
+    securityManager: SecurityManager) extends RpcEnvFileServer {
+
+  @volatile private var httpFileServer: HttpFileServer = _
+
+  override def addFile(file: File): String = {
+    getFileServer().addFile(file)
+  }
+
+  override def addJar(file: File): String = {
+    getFileServer().addJar(file)
+  }
+
+  def shutdown(): Unit = {
+    if (httpFileServer != null) {
+      httpFileServer.stop()
+    }
+  }
+
+  private def getFileServer(): HttpFileServer = {
+    if (httpFileServer == null) synchronized {
+      if (httpFileServer == null) {
+        httpFileServer = startFileServer()
+      }
+    }
+    httpFileServer
+  }
+
+  private def startFileServer(): HttpFileServer = {
+    val fileServerPort = conf.getInt("spark.fileserver.port", 0)
+    val server = new HttpFileServer(conf, securityManager, fileServerPort)
+    server.initialize()
+    server
+  }
+
 }
 
 private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
@@ -249,7 +302,7 @@ private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       config.name, config.host, config.port, config.conf, config.securityManager)
     actorSystem.actorOf(Props(classOf[ErrorMonitor]), "ErrorMonitor")
-    new AkkaRpcEnv(actorSystem, config.conf, boundPort)
+    new AkkaRpcEnv(actorSystem, config.securityManager, config.conf, boundPort)
   }
 }
 

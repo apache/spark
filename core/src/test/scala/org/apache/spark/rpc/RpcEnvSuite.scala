@@ -17,7 +17,9 @@
 
 package org.apache.spark.rpc
 
-import java.io.NotSerializableException
+import java.io.{File, NotSerializableException}
+import java.util.UUID
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.{TimeUnit, CountDownLatch, TimeoutException}
 
 import scala.collection.mutable
@@ -25,27 +27,36 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import com.google.common.io.Files
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.Utils
 
 /**
  * Common tests for an RpcEnv implementation.
  */
 abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
+  val conf = new SparkConf()
   var env: RpcEnv = _
 
   override def beforeAll(): Unit = {
-    val conf = new SparkConf()
     env = createRpcEnv(conf, "local", 12345)
+
+    val sparkEnv = mock(classOf[SparkEnv])
+    when(sparkEnv.rpcEnv).thenReturn(env)
+    SparkEnv.set(sparkEnv)
   }
 
   override def afterAll(): Unit = {
     if (env != null) {
       env.shutdown()
     }
+    SparkEnv.set(null)
   }
 
   def createRpcEnv(conf: SparkConf, name: String, port: Int, clientMode: Boolean = false): RpcEnv
@@ -711,6 +722,29 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // Ensure description is not in message twice after addMessageIfTimeout and awaitResult
     assert(shortTimeout.timeoutProp.r.findAllIn(reply4).length === 1)
+  }
+
+  test("file server") {
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir, "file")
+    Files.write(UUID.randomUUID().toString(), file, UTF_8)
+    val jar = new File(tempDir, "jar")
+    Files.write(UUID.randomUUID().toString(), jar, UTF_8)
+
+    val fileUri = env.fileServer.addFile(file)
+    val jarUri = env.fileServer.addJar(jar)
+
+    val destDir = Utils.createTempDir()
+    val destFile = new File(destDir, file.getName())
+    val destJar = new File(destDir, jar.getName())
+
+    val sm = new SecurityManager(conf)
+    val hc = SparkHadoopUtil.get.conf
+    Utils.fetchFile(fileUri, destDir, conf, sm, hc, 0L, false)
+    Utils.fetchFile(jarUri, destDir, conf, sm, hc, 0L, false)
+
+    assert(Files.equal(file, destFile))
+    assert(Files.equal(jar, destJar))
   }
 
 }
