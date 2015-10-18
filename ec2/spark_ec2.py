@@ -178,8 +178,8 @@ def parse_args():
         "-i", "--identity-file",
         help="SSH private key file to use for logging into instances")
     parser.add_option(
-        "-p", "--profile", default="default",
-        help=" If you have multiple profiles(aws or boto config), you can configure additional, named profiles by using this option (default: %default)")
+        "-p", "--profile", default=None,
+        help=" If you have multiple profiles (aws or boto config), you can configure additional, named profiles by using this option (default: None)")
     parser.add_option(
         "-t", "--instance-type", default="m1.large",
         help="Type of instance to launch (default: %default). " +
@@ -1314,10 +1314,10 @@ def real_main():
         sys.exit(1)
 
     try:
-        if opts.profile != "default":
-            conn = ec2.connect_to_region(opts.region, profile_name=opts.profile)
-        else:
+        if opts.profile is None:
             conn = ec2.connect_to_region(opts.region)
+        else:
+            conn = ec2.connect_to_region(opts.region, profile_name=opts.profile)
     except Exception as e:
         print((e), file=stderr)
         sys.exit(1)
