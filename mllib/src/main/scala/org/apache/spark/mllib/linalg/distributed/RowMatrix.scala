@@ -678,7 +678,7 @@ object RowMatrix {
 
   /** A Java-friendly auxiliary factory. */
   @Since("1.6.0")
-  def from[V <: Vector : ClassTag](
+  def from[V <: Vector](
       rows: JavaRDD[V],
       nRows: Long,
       nCols: Int): RowMatrix = {
@@ -691,7 +691,7 @@ object RowMatrix {
    * leaving matrix dimensions to be determined automatically.
    */
   @Since("1.6.0")
-  def from[V <: Vector : ClassTag](rows: JavaRDD[V]): RowMatrix = {
+  def from[V <: Vector](rows: JavaRDD[V]): RowMatrix = {
     from(rows, 0L, 0)
   }
 

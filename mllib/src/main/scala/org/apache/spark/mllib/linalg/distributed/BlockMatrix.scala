@@ -23,9 +23,9 @@ import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.storage.StorageLevel
 
 /**
