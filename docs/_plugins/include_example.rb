@@ -19,11 +19,11 @@ module Jekyll
         config_dir = (site.config['code_dir'] || '../examples/src/main').sub(/^\//,'')
         @code_dir = File.join(site.source, config_dir)
         
-        options = get_options
-        code = File.open(@file).read.encode("UTF-8")
-        code = select_lines(code)
-
         begin
+          get_options
+          code = File.open(@file).read.encode("UTF-8")
+          code = select_lines(code)
+
           render_code = tableize_code(code)
           render_code
         rescue => e
