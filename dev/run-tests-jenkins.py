@@ -26,7 +26,7 @@ import functools
 import subprocess
 
 from sparktestsupport import SPARK_HOME, ERROR_CODES
-from sparktestsupport.shellutils import run_cmd, rm_r
+from sparktestsupport.shellutils import run_cmd
 
 
 def print_err(msg):
@@ -166,8 +166,8 @@ def main():
     short_commit_hash = ghprb_actual_commit[0:7]
 
     # format: http://linux.die.net/man/1/timeout
-    # must be less than the timeout configured on Jenkins (currently 180m)
-    tests_timeout = "175m"
+    # must be less than the timeout configured on Jenkins (currently 300m)
+    tests_timeout = "250m"
 
     # Array to capture all test names to run on the pull request. These tests are represented
     # by their file equivalents in the dev/tests/ directory.
