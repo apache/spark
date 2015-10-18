@@ -309,7 +309,22 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     assert(executionUIData.failedJobs === Seq(0))
   }
 
-  ignore("no memory leak") {
+  test("SPARK-11126: no memory leak when running non SQL jobs") {
+    val previousStageNumber = sqlContext.listener.stageIdToStageMetrics.size
+    sqlContext.sparkContext.parallelize(1 to 10).foreach(i => ())
+    // listener should ignore the non SQL stage
+    assert(sqlContext.listener.stageIdToStageMetrics.size == previousStageNumber)
+
+    sqlContext.sparkContext.parallelize(1 to 10).toDF().foreach(i => ())
+    // listener should save the SQL stage
+    assert(sqlContext.listener.stageIdToStageMetrics.size == previousStageNumber + 1)
+  }
+
+}
+
+class SQLListenerMemoryLeakSuite extends SparkFunSuite {
+
+  test("no memory leak") {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
@@ -344,5 +359,4 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       sc.stop()
     }
   }
-
 }

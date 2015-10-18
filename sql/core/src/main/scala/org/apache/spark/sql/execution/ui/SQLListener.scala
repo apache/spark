@@ -130,7 +130,13 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
     val stageId = stageSubmitted.stageInfo.stageId
     val stageAttemptId = stageSubmitted.stageInfo.attemptId
     // Always override metrics for old stage attempt
-    _stageIdToStageMetrics(stageId) = new SQLStageMetrics(stageAttemptId)
+    if (_stageIdToStageMetrics.contains(stageId)) {
+      _stageIdToStageMetrics(stageId) = new SQLStageMetrics(stageAttemptId)
+    } else {
+      // If a stage belongs to some SQL execution, its stageId will be put in "onJobStart".
+      // Since "_stageIdToStageMetrics" doesn't contain it, it must not belong to any SQL execution.
+      // So we can ignore it. Otherwise, this may lead to memory leaks (SPARK-11126).
+    }
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
