@@ -721,4 +721,16 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       }
     }
   }
+
+  test("LBFGS and normal optimizer should not have diffs") {
+    val trainerWithLBFGS = (new LinearRegression).setElasticNetParam(0.0).setRegParam(0.23)
+      .setSolver("l-bfgs").setFitIntercept(true)
+    val trainerWithNormal = (new LinearRegression).setElasticNetParam(0.0).setRegParam(0.23)
+      .setSolver("normal").setFitIntercept(true)
+    val modelByLBFGS = trainerWithLBFGS.fit(dataset)
+    val modelByNormal = trainerWithNormal.fit(dataset)
+
+    assert(modelByLBFGS.weights ~== modelByNormal.weights absTol 1E-3)
+    assert(modelByLBFGS.intercept ~== modelByNormal.intercept absTol 1E-3)
+  }
 }
