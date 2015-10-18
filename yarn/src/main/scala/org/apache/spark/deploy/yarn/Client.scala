@@ -1327,11 +1327,8 @@ object Client extends Logging {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
       try {
-        val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
-        val hive = hiveClass.getMethod("get").invoke(null)
-
-        val hiveConf = hiveClass.getMethod("getConf").invoke(hive)
         val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
+        val hiveConf = hiveConfClass.newInstance()
 
         val hiveConfGet = (param: String) => Option(hiveConfClass
           .getMethod("get", classOf[java.lang.String])
@@ -1341,6 +1338,9 @@ object Client extends Logging {
 
         // Check for local metastore
         if (metastore_uri != None && metastore_uri.get.toString.size > 0) {
+          val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
+          val hive = hiveClass.getMethod("get").invoke(null, hiveConf.asInstanceOf[Object])
+
           val metastore_kerberos_principal_conf_var = mirror.classLoader
             .loadClass("org.apache.hadoop.hive.conf.HiveConf$ConfVars")
             .getField("METASTORE_KERBEROS_PRINCIPAL").get("varname").toString
