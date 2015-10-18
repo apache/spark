@@ -48,6 +48,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var driverExtraLibraryPath: String = null
   var driverExtraJavaOptions: String = null
   var queue: String = null
+  var priority: String = null
   var numExecutors: String = null
   var files: String = null
   var archives: String = null
@@ -293,6 +294,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  driverExtraJavaOptions  $driverExtraJavaOptions
     |  supervise               $supervise
     |  queue                   $queue
+    |  priority                $priority
     |  numExecutors            $numExecutors
     |  files                   $files
     |  pyFiles                 $pyFiles
@@ -380,6 +382,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case QUEUE =>
         queue = value
+
+      case PRIORITY =>
+        priority = value
 
       case FILES =>
         files = Utils.resolveURIs(value)
@@ -538,6 +543,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
         |                              (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
+        |  --priority PRIORITY         The priority of your YARN application (Default: 0).
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.

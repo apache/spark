@@ -422,6 +422,7 @@ object SparkSubmit {
 
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
+      OptionAssigner(args.priority, YARN, CLIENT, sysProp = "spark.yarn.priority"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.instances"),
       OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
@@ -434,6 +435,7 @@ object SparkSubmit {
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.driverCores, YARN, CLUSTER, clOption = "--driver-cores"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
+      OptionAssigner(args.priority, YARN, CLUSTER, clOption = "--priority"),
       OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
       OptionAssigner(args.executorCores, YARN, CLUSTER, clOption = "--executor-cores"),
       OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),

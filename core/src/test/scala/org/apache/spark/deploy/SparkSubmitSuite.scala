@@ -143,6 +143,7 @@ class SparkSubmitSuite
       "--jars", "one.jar,two.jar,three.jar",
       "--driver-memory", "4g",
       "--queue", "thequeue",
+      "--priority", "10",
       "--files", "file1.txt,file2.txt",
       "--archives", "archive1.txt,archive2.txt",
       "--num-executors", "6",
@@ -159,6 +160,7 @@ class SparkSubmitSuite
     childArgsStr should include ("--executor-cores 5")
     childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include ("--queue thequeue")
+    childArgsStr should include ("--priority 10")
     childArgsStr should include regex ("--jar .*thejar.jar")
     childArgsStr should include regex ("--addJars .*one.jar,.*two.jar,.*three.jar")
     childArgsStr should include regex ("--files .*file1.txt,.*file2.txt")
@@ -181,6 +183,7 @@ class SparkSubmitSuite
       "--jars", "one.jar,two.jar,three.jar",
       "--driver-memory", "4g",
       "--queue", "thequeue",
+      "--priority", "10",
       "--files", "file1.txt,file2.txt",
       "--archives", "archive1.txt,archive2.txt",
       "--num-executors", "6",
@@ -201,6 +204,7 @@ class SparkSubmitSuite
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.executor.cores") should be ("5")
     sysProps("spark.yarn.queue") should be ("thequeue")
+    sysProps("spark.yarn.priority") should be ("10")
     sysProps("spark.executor.instances") should be ("6")
     sysProps("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
     sysProps("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")

@@ -184,6 +184,7 @@ private[spark] class Client(
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(args.appName)
     appContext.setQueue(args.amQueue)
+    appContext.setPriority(Priority.newInstance(args.priority))
     appContext.setAMContainerSpec(containerContext)
     appContext.setApplicationType("SPARK")
     sparkConf.getOption(CONF_SPARK_YARN_APPLICATION_TAGS)

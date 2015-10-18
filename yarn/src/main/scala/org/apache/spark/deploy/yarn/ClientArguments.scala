@@ -41,7 +41,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var amMemory: Int = 512 // MB
   var amCores: Int = 1
   var appName: String = "Spark"
-  var priority = 0
+  var priority = sparkConf.getInt("spark.yarn.priority", 0)
   var principal: String = null
   var keytab: String = null
   def isClusterMode: Boolean = userClass != null
@@ -201,6 +201,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           amQueue = value
           args = tail
 
+        case ("--priority") :: IntParam(value) :: tail =>
+          priority = value
+          args = tail
+
         case ("--name") :: value :: tail =>
           appName = value
           args = tail
@@ -265,6 +269,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |  --name NAME              The name of your application (Default: Spark)
       |  --queue QUEUE            The hadoop queue to use for allocation requests (Default:
       |                           'default')
+      |  --priority PRIORITY      The priority of your YARN application (Default: 0)
       |  --addJars jars           Comma separated list of local jars that want SparkContext.addJar
       |                           to work with.
       |  --py-files PY_FILES      Comma-separated list of .zip, .egg, or .py files to

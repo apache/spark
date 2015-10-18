@@ -183,7 +183,8 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
       .set("spark.yarn.maxAppAttempts", "42")
     val args = new ClientArguments(Array(
       "--name", "foo-test-app",
-      "--queue", "staging-queue"), sparkConf)
+      "--queue", "staging-queue",
+      "--priority", "10"), sparkConf)
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
@@ -196,6 +197,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
     appContext.getApplicationName should be ("foo-test-app")
     appContext.getQueue should be ("staging-queue")
+    appContext.getPriority.getPriority should be (10)
     appContext.getAMContainerSpec should be (containerLaunchContext)
     appContext.getApplicationType should be ("SPARK")
     appContext.getClass.getMethods.filter(_.getName.equals("getApplicationTags")).foreach{ method =>
