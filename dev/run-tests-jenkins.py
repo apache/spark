@@ -153,10 +153,24 @@ def main():
     #     against master.
     ghprb_pull_id = os.environ["ghprbPullId"]
     ghprb_actual_commit = os.environ["ghprbActualCommit"]
+    ghprb_pull_title = os.environ["ghprbPullTitle"]
     sha1 = os.environ["sha1"]
 
     # Marks this build as a pull request build.
     os.environ["AMP_JENKINS_PRB"] = "true"
+    # Switch to a Maven-based build if the PR title contains "test-maven":
+    if ghprb_pull_title.contains("test-maven"):
+        os.environ["AMPLAB_JENKINS_BUILD_TOOL"] = "maven"
+    # Switch the Hadoop profile based on the PR title:
+    if ghprb_pull_title.contains("test-hadoop1.0"):
+        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop1.0"
+    elif ghprb_pull_title.contains("test-hadoop2.0"):
+        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.0"
+    elif ghprb_pull_title.contains("test-hadoop2.2"):
+        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.2"
+    elif ghprb_pull_title.contains("test-hadoop2.3"):
+        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.3"
+
     build_display_name = os.environ["BUILD_DISPLAY_NAME"]
     build_url = os.environ["BUILD_URL"]
 
