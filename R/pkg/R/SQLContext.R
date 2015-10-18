@@ -35,12 +35,12 @@ infer_type <- function(x) {
                  struct = "struct",
                  environment = "map",
                  Date = "date",
-                 POSIXlt = "timestamp",
+                 POSIXlt="timestamp",
                  POSIXct = "timestamp",
                  stop(paste("Unsupported type for DataFrame:", class(x))))
 
   if (type == "map") {
-    stopifnot(length(x) > 0)
+    stopifnot(length(x)>0)
     key <- ls(x)[[1]]
     paste0("map<string,", infer_type(get(key, x)), ">")
   } else if (type == "array") {
@@ -105,7 +105,7 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
       })
   }
   if (is.list(data)) {
-    sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlContext)
+    sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlContext) # THIS IS A LONG LINE TO TRIGGER A PURPOSEFUL STYLE FAILURE
     rdd <- parallelize(sc, data)
   } else if (inherits(data, "RDD")) {
     rdd <- data
