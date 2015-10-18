@@ -1071,7 +1071,7 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(names(joined2), c("age", "name", "name", "test"))
   expect_equal(count(joined2), 3)
 
-  joined3 <- join(df, df2, df$name == df2$name, "right_outer")
+  joined3 <- join(df, df2, df$name == df2$name, "rightouter")
   expect_equal(names(joined3), c("age", "name", "name", "test"))
   expect_equal(count(joined3), 4)
   expect_true(is.na(collect(orderBy(joined3, joined3$age))$age[2]))
@@ -1081,6 +1081,29 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(names(joined4), c("newAge", "name", "test"))
   expect_equal(count(joined4), 4)
   expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
+
+  joined5 <- join(df, df2, df$name == df2$name, "leftouter")
+  expect_equal(names(joined5), c("age", "name", "name", "test"))
+  expect_equal(count(joined5), 3)
+  expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[1]))
+  
+  joined6 <- join(df, df2, df$name == df2$name, "inner")
+  expect_equal(names(joined6), c("age", "name", "name", "test"))
+  expect_equal(count(joined6), 3)
+  
+  joined7 <- join(df, df2, df$name == df2$name, "leftsemi")
+  expect_equal(names(joined7), c("age", "name"))
+  expect_equal(count(joined7), 3)
+  
+  joined8 <- join(df, df2, df$name == df2$name, "left_outer")
+  expect_equal(names(joined8), c("age", "name", "name", "test"))
+  expect_equal(count(joined8), 3)
+  expect_true(is.na(collect(orderBy(joined8, joined8$age))$age[1]))
+  
+  joined9 <- join(df, df2, df$name == df2$name, "right_outer")
+  expect_equal(names(joined9), c("age", "name", "name", "test"))
+  expect_equal(count(joined9), 4)
+  expect_true(is.na(collect(orderBy(joined9, joined9$age))$age[2]))
 
   merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
   expect_equal(count(merged), 4)
@@ -1400,6 +1423,16 @@ test_that("freqItems() on a DataFrame", {
   result <- freqItems(df, c("a", "b"), 0.4)
   expect_identical(result[[1]], list(list(1L, 99L)))
   expect_identical(result[[2]], list(list(-1, -99)))
+})
+
+test_that("sampleBy() on a DataFrame", {
+  l <- lapply(c(0:99), function(i) { as.character(i %% 3) })
+  df <- createDataFrame(sqlContext, l, "key")
+  fractions <- list("0" = 0.1, "1" = 0.2)
+  sample <- sampleBy(df, "key", fractions, 0)
+  result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
+  expect_identical(as.list(result[1, ]), list(key = "0", count = 2))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 10))
 })
 
 test_that("SQL error message is returned from JVM", {

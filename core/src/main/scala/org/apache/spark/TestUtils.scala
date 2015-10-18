@@ -24,10 +24,14 @@ import java.util.Arrays
 import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.{ByteStreams, Files}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
 /**
@@ -153,5 +157,52 @@ private[spark] object TestUtils {
       "public class " + className + extendsText + " implements java.io.Serializable {" +
       "  @Override public String toString() { return \"" + toStringValue + "\"; }}")
     createCompiledClass(className, destDir, sourceFile, classpathUrls)
+  }
+
+  /**
+   * Run some code involving jobs submitted to the given context and assert that the jobs spilled.
+   */
+  def assertSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
+    val spillListener = new SpillListener
+    sc.addSparkListener(spillListener)
+    body
+    assert(spillListener.numSpilledStages > 0, s"expected $identifier to spill, but did not")
+  }
+
+  /**
+   * Run some code involving jobs submitted to the given context and assert that the jobs
+   * did not spill.
+   */
+  def assertNotSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
+    val spillListener = new SpillListener
+    sc.addSparkListener(spillListener)
+    body
+    assert(spillListener.numSpilledStages == 0, s"expected $identifier to not spill, but did")
+  }
+
+}
+
+
+/**
+ * A [[SparkListener]] that detects whether spills have occurred in Spark jobs.
+ */
+private class SpillListener extends SparkListener {
+  private val stageIdToTaskMetrics = new mutable.HashMap[Int, ArrayBuffer[TaskMetrics]]
+  private val spilledStageIds = new mutable.HashSet[Int]
+
+  def numSpilledStages: Int = spilledStageIds.size
+
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+    stageIdToTaskMetrics.getOrElseUpdate(
+      taskEnd.stageId, new ArrayBuffer[TaskMetrics]) += taskEnd.taskMetrics
+  }
+
+  override def onStageCompleted(stageComplete: SparkListenerStageCompleted): Unit = {
+    val stageId = stageComplete.stageInfo.stageId
+    val metrics = stageIdToTaskMetrics.remove(stageId).toSeq.flatten
+    val spilled = metrics.map(_.memoryBytesSpilled).sum > 0
+    if (spilled) {
+      spilledStageIds += stageId
+    }
   }
 }
