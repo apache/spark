@@ -167,7 +167,8 @@ def main():
         if module_name in python_modules:
             modules_to_test.append(python_modules[module_name])
         else:
-            print("Error: unrecognized module %s" % module_name)
+            print("Error: unrecognized module '%s'. Supported modules: %s" %
+                  (module_name, ", ".join(python_modules)))
             sys.exit(-1)
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
     LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
