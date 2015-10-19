@@ -1883,6 +1883,10 @@ class ContextTests(unittest.TestCase):
         # Regression test for SPARK-1550
         self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
 
+    def test_get_or_create(self):
+        with SparkContext.getOrCreate() as sc:
+            self.assertTrue(SparkContext.getOrCreate() is sc)
+
     def test_stop(self):
         sc = SparkContext()
         self.assertNotEqual(SparkContext._active_spark_context, None)

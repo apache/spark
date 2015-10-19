@@ -75,6 +75,8 @@ class SQLContext(object):
         SQLContext in the JVM, instead we make all calls to this object.
     """
 
+    _instantiatedContext = None
+
     @ignore_unicode_prefix
     def __init__(self, sparkContext, sqlContext=None):
         """Creates a new SQLContext.
@@ -99,6 +101,8 @@ class SQLContext(object):
         self._scala_SQLContext = sqlContext
         _monkey_patch_RDD(self)
         install_exception_handler()
+        if SQLContext._instantiatedContext is None:
+            SQLContext._instantiatedContext = self
 
     @property
     def _ssql_ctx(self):
@@ -110,6 +114,29 @@ class SQLContext(object):
         if self._scala_SQLContext is None:
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
+
+    @classmethod
+    @since(1.6)
+    def getOrCreate(cls, sc):
+        """
+        Get the existing SQLContext or create a new one with given SparkContext.
+
+        :param sc: SparkContext
+        """
+        if cls._instantiatedContext is None:
+            jsqlContext = sc._jvm.SQLContext.getOrCreate(sc._jsc.sc())
+            cls(sc, jsqlContext)
+        return cls._instantiatedContext
+
+    @since(1.6)
+    def newSession(self):
+        """
+        Returns a new SQLContext as new session, that has separate SQLConf,
+        registered temporary tables and UDFs, but shared SparkContext and
+        table cache.
+        """
+        jsqlContext = self._ssql_ctx.newSession()
+        return self.__class__(self._sc, jsqlContext)
 
     @since(1.3)
     def setConf(self, key, value):
