@@ -448,6 +448,16 @@ private[spark] class TaskSetManager(
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
           val taskId = sched.newTaskId()
+          
+          val executorManager = sched.sc.executorAllocationManager.getOrElse(null)
+          if (executorManager != null) {
+            if (!executorManager.isExecutorPendingToRemove(execId)) {
+              logWarning(s"Executor $execId is removed before scheduler task.")
+              return None
+            }
+            executorManager.onExecutorBusy(execId)
+          }
+
           // Do various bookkeeping
           copiesRunning(index) += 1
           val attemptNum = taskAttempts(index).size
@@ -474,14 +484,7 @@ private[spark] class TaskSetManager(
               abort(s"$msg Exception during serialization: $e")
               throw new TaskNotSerializableException(e)
           }
-          val executorManager = sched.sc.executorAllocationManager.getOrElse(null)
-          if (executorManager != null) {
-            if (!executorManager.isExecutorAlive(execId)) {
-              return None
-            }
-            executorManager.onExecutorBusy(execId)
-          }
-
+          
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
               !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true

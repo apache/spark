@@ -504,12 +504,8 @@ private[spark] class ExecutorAllocationManager(
     }
   }
 
-  def isExecutorAlive(executorId: String): Boolean = {
-    if (!executorsPendingToRemove.contains(executorId)) {
-      true
-    } else {
-      false
-    }
+  def isExecutorPendingToRemove(executorId: String): Boolean = {
+    !executorsPendingToRemove.contains(executorId)
   }
 
   /**
