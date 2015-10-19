@@ -9,8 +9,6 @@ TODO
 * Backfill, better logging, prompt with details about what tasks are about to run
 
 #### More Operators!
-* PIG
-* MR
 * Choose and implement a python MR lib
 * Merge Cascading
 
