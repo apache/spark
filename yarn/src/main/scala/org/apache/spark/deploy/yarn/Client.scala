@@ -505,11 +505,11 @@ private[spark] class Client(
     // from --files instead of $SPARK_CONF_DIR/log4j.properties.
     Option(Utils.getContextOrSparkClassLoader.getResource("log4j.properties"))
       .map(_.getPath).map(path => {
-      val file = new File(path)
-      if(file.isFile && file.canRead) {
-        hadoopConfFiles(file.getName) = file
-      }
-    })
+        val file = new File(path)
+        if(file.isFile && file.canRead) {
+          hadoopConfFiles(file.getName) = file
+        }
+      })
 
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
