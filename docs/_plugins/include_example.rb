@@ -1,4 +1,5 @@
 require 'liquid'
+require 'pygments'
 
 module Jekyll
   module IncludeExample
@@ -18,17 +19,37 @@ module Jekyll
         site = context.registers[:site]
         config_dir = (site.config['code_dir'] || '../examples/src/main').sub(/^\//,'')
         @code_dir = File.join(site.source, config_dir)
-        
-        begin
-          get_options
+
+        get_options
           code = File.open(@file).read.encode("UTF-8")
           code = select_lines(code)
 
-          render_code = tableize_code(code)
+          is_safe = !!context.registers[:site].safe
+
+          # render_code = tableize_code(code)
+          output = render_pygments(code, is_safe)
+
+            
+          render_code = tableize_code(output)
           render_code
-        rescue => e
-          puts "not work"
-        end
+        
+        
+      end
+
+      def add_code_tag(code)
+        code_attributes = [
+          "class=\"language-#{@lang.to_s.gsub('+', '-')}\"",
+          "data-lang=\"#{@lang.to_s}\""
+        ].join(" ")
+        "<figure class=\"highlight\"><pre><code #{code_attributes}>#{code.chomp}</code></pre></figure>"
+      end
+
+      def render_pygments(code, is_safe)
+        highlighted_code = Pygments.highlight(
+          code
+        )
+
+        highlighted_code.sub('<div class="highlight"><pre>', '').sub('</pre></div>', '')
       end
 
       def tableize_code(code)
