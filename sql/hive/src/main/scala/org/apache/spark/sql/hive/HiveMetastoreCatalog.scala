@@ -485,6 +485,10 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     client.listTables(db).map(tableName => (tableName, false))
   }
 
+  override def getDatabases(): Seq[String] = {
+    client.listDatabases()
+  }
+
   /**
    * When scanning or writing to non-partitioned Metastore Parquet tables, convert them to Parquet
    * data source relations for better performance.

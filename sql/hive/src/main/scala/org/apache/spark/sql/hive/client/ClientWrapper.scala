@@ -434,6 +434,10 @@ private[hive] class ClientWrapper(
     client.getAllTables(dbName).asScala
   }
 
+  override def listDatabases(): Seq[String] = withHiveState {
+    client.getAllDatabases.asScala
+  }
+
   /**
    * Runs the specified SQL query using Hive.
    */

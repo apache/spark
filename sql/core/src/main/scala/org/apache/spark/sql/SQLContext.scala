@@ -182,7 +182,7 @@ class SQLContext private[sql](
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf) with MetaDataCatalog
 
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
