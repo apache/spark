@@ -100,6 +100,9 @@ object MimaExcludes {
           "org.apache.spark.sql.SQLContext.setSession"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.sql.SQLContext.createSession")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.SparkContext.preferredNodeLocationData_=")
       )
     case v if v.startsWith("1.5") =>
       Seq(
