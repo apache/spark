@@ -288,10 +288,6 @@ class S3Hook(BaseHook):
         """
         Loads a local file to S3
 
-        This is provided as a convenience to drop a file in S3. It uses the
-        boto infrastructure to ship a file to s3. It is currently using only
-        a single part download, and should not be used to move large files.
-
         :param filename: name of the file to load.
         :type filename: str
         :param key: S3 key that will point to the file
@@ -302,6 +298,9 @@ class S3Hook(BaseHook):
             if it already exists. If replace is False and the key exists, an
             error will be raised.
         :type replace: bool
+        :param multipart_bytes: If provided, the file is uploaded in parts of
+            this size. If None, the whole file is uploaded at once.
+        :type multipart_bytes: int
         """
         if not bucket_name:
             (bucket_name, key) = self.parse_s3_url(key)
