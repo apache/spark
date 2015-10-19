@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -326,6 +327,8 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return getArray(ordinal);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof UserDefinedType) {
+      return get(ordinal, ((UserDefinedType)dataType).sqlType());
     } else {
       throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
@@ -458,7 +461,9 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
-      return UnsafeReaders.readArray(baseObject, baseOffset + offset, size);
+      final UnsafeArrayData array = new UnsafeArrayData();
+      array.pointTo(baseObject, baseOffset + offset, size);
+      return array;
     }
   }
 
@@ -470,7 +475,9 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
-      return UnsafeReaders.readMap(baseObject, baseOffset + offset, size);
+      final UnsafeMapData map = new UnsafeMapData();
+      map.pointTo(baseObject, baseOffset + offset, size);
+      return map;
     }
   }
 
@@ -600,6 +607,15 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert (buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + sizeInBytes);
   }
 
   @Override

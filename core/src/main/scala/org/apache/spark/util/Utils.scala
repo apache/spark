@@ -1749,6 +1749,13 @@ private[spark] object Utils extends Logging {
       if (uri.getScheme() != null) {
         return uri
       }
+      // make sure to handle if the path has a fragment (applies to yarn
+      // distributed cache)
+      if (uri.getFragment() != null) {
+        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
+        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+          uri.getFragment())
+      }
     } catch {
       case e: URISyntaxException =>
     }
@@ -1888,6 +1895,7 @@ private[spark] object Utils extends Logging {
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
    * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
    */
   def startServiceOnPort[T](
       startPort: Int,
@@ -2145,6 +2153,10 @@ private[spark] object Utils extends Logging {
       conf.getInt("spark.executor.instances", 0) == 0
   }
 
+  def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
+    val resource = createResource
+    try f.apply(resource) finally resource.close()
+  }
 }
 
 /**

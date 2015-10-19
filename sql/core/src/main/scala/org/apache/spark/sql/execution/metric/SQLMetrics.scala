@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.metric
 
+import org.apache.spark.util.Utils
 import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
 
 /**
@@ -34,6 +35,12 @@ private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
  * `Accumulable/AccumulableParam` because it will break Java source compatibility.
  */
 private[sql] trait SQLMetricParam[R <: SQLMetricValue[T], T] extends AccumulableParam[R, T] {
+
+  /**
+   * A function that defines how we aggregate the final accumulator results among all tasks,
+   * and represent it in string for a SQL physical operator.
+   */
+  val stringValue: Seq[T] => String
 
   def zero: R
 }
@@ -64,25 +71,11 @@ private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetr
 }
 
 /**
- * A wrapper of Int to avoid boxing and unboxing when using Accumulator
- */
-private[sql] class IntSQLMetricValue(private var _value: Int) extends SQLMetricValue[Int] {
-
-  def add(term: Int): IntSQLMetricValue = {
-    _value += term
-    this
-  }
-
-  // Although there is a boxing here, it's fine because it's only called in SQLListener
-  override def value: Int = _value
-}
-
-/**
  * A specialized long Accumulable to avoid boxing and unboxing when using Accumulator's
  * `+=` and `add`.
  */
-private[sql] class LongSQLMetric private[metric](name: String)
-  extends SQLMetric[LongSQLMetricValue, Long](name, LongSQLMetricParam) {
+private[sql] class LongSQLMetric private[metric](name: String, param: LongSQLMetricParam)
+  extends SQLMetric[LongSQLMetricValue, Long](name, param) {
 
   override def +=(term: Long): Unit = {
     localValue.add(term)
@@ -93,7 +86,8 @@ private[sql] class LongSQLMetric private[metric](name: String)
   }
 }
 
-private object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue, Long] {
+private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
+  extends SQLMetricParam[LongSQLMetricValue, Long] {
 
   override def addAccumulator(r: LongSQLMetricValue, t: Long): LongSQLMetricValue = r.add(t)
 
@@ -102,20 +96,56 @@ private object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue, Lon
 
   override def zero(initialValue: LongSQLMetricValue): LongSQLMetricValue = zero
 
-  override def zero: LongSQLMetricValue = new LongSQLMetricValue(0L)
+  override def zero: LongSQLMetricValue = new LongSQLMetricValue(initialValue)
 }
 
 private[sql] object SQLMetrics {
 
-  def createLongMetric(sc: SparkContext, name: String): LongSQLMetric = {
-    val acc = new LongSQLMetric(name)
+  private def createLongMetric(
+      sc: SparkContext,
+      name: String,
+      stringValue: Seq[Long] => String,
+      initialValue: Long): LongSQLMetric = {
+    val param = new LongSQLMetricParam(stringValue, initialValue)
+    val acc = new LongSQLMetric(name, param)
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
+  }
+
+  def createLongMetric(sc: SparkContext, name: String): LongSQLMetric = {
+    createLongMetric(sc, name, _.sum.toString, 0L)
+  }
+
+  /**
+   * Create a metric to report the size information (including total, min, med, max) like data size,
+   * spill size, etc.
+   */
+  def createSizeMetric(sc: SparkContext, name: String): LongSQLMetric = {
+    val stringValue = (values: Seq[Long]) => {
+      // This is a workaround for SPARK-11013.
+      // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
+      // it at the end of task and the value will be at least 0.
+      val validValues = values.filter(_ >= 0)
+      val Seq(sum, min, med, max) = {
+        val metric = if (validValues.length == 0) {
+          Seq.fill(4)(0L)
+        } else {
+          val sorted = validValues.sorted
+          Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+        }
+        metric.map(Utils.bytesToString)
+      }
+      s"\n$sum ($min, $med, $max)"
+    }
+    // The final result of this metric in physical operator UI may looks like:
+    // data size total (min, med, max):
+    // 100GB (100MB, 1GB, 10GB)
+    createLongMetric(sc, s"$name total (min, med, max)", stringValue, -1L)
   }
 
   /**
    * A metric that its value will be ignored. Use this one when we need a metric parameter but don't
    * care about the value.
    */
-  val nullLongMetric = new LongSQLMetric("null")
+  val nullLongMetric = new LongSQLMetric("null", new LongSQLMetricParam(_.sum.toString, 0L))
 }

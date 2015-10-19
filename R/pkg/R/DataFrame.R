@@ -1414,9 +1414,10 @@ setMethod("where",
 #' @param x A Spark DataFrame
 #' @param y A Spark DataFrame
 #' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
-#' Column expression. If joinExpr is omitted, join() wil perform a Cartesian join
+#' Column expression. If joinExpr is omitted, join() will perform a Cartesian join
 #' @param joinType The type of join to perform. The following join types are available:
-#' 'inner', 'outer', 'left_outer', 'right_outer', 'semijoin'. The default joinType is "inner".
+#' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
+#' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
 #' @return A DataFrame containing the result of the join operation.
 #' @rdname join
 #' @name join
@@ -1441,11 +1442,15 @@ setMethod("join",
               if (is.null(joinType)) {
                 sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
               } else {
-                if (joinType %in% c("inner", "outer", "left_outer", "right_outer", "semijoin")) {
+                if (joinType %in% c("inner", "outer", "full", "fullouter",
+                    "leftouter", "left_outer", "left",
+                    "rightouter", "right_outer", "right", "leftsemi")) {
+                  joinType <- gsub("_", "", joinType)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                       "'inner', 'outer', 'left_outer', 'right_outer', 'semijoin'")
+                      "'inner', 'outer', 'full', 'fullouter', 'leftouter', 'left_outer', 'left',
+                      'rightouter', 'right_outer', 'right', 'leftsemi'")
                 }
               }
             }
@@ -1826,17 +1831,15 @@ setMethod("fillna",
               if (length(colNames) == 0 || !all(colNames != "")) {
                 stop("value should be an a named list with each name being a column name.")
               }
-
-              # Convert to the named list to an environment to be passed to JVM
-              valueMap <- new.env()
-              for (col in colNames) {
-                # Check each item in the named list is of valid type
-                v <- value[[col]]
+              # Check each item in the named list is of valid type
+              lapply(value, function(v) {
                 if (!(class(v) %in% c("integer", "numeric", "character"))) {
                   stop("Each item in value should be an integer, numeric or charactor.")
                 }
-                valueMap[[col]] <- v
-              }
+              })
+
+              # Convert to the named list to an environment to be passed to JVM
+              valueMap <- convertNamedListToEnv(value)
 
               # When value is a named list, caller is expected not to pass in cols
               if (!is.null(cols)) {
@@ -1882,3 +1885,33 @@ setMethod("as.data.frame",
             collect(x)
           }
 )
+
+#' The specified DataFrame is attached to the R search path. This means that
+#' the DataFrame is searched by R when evaluating a variable, so columns in
+#' the DataFrame can be accessed by simply giving their names.
+#'
+#' @rdname attach
+#' @title Attach DataFrame to R search path
+#' @param what (DataFrame) The DataFrame to attach
+#' @param pos (integer) Specify position in search() where to attach.
+#' @param name (character) Name to use for the attached DataFrame. Names
+#'   starting with package: are reserved for library.
+#' @param warn.conflicts (logical) If TRUE, warnings are printed about conflicts
+#' from attaching the database, unless that DataFrame contains an object
+#' @examples
+#' \dontrun{
+#' attach(irisDf)
+#' summary(Sepal_Width)
+#' }
+#' @seealso \link{detach}
+setMethod("attach",
+          signature(what = "DataFrame"),
+          function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
+            cols <- columns(what)
+            stopifnot(length(cols) > 0)
+            newEnv <- new.env()
+            for (i in 1:length(cols)) {
+              assign(x = cols[i], value = what[, cols[i]], envir = newEnv)
+            }
+            attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
+          })
