@@ -21,6 +21,7 @@ import java.lang.{Long => JLong}
 import java.util
 
 import com.clearspring.analytics.hash.MurmurHash
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -252,6 +253,48 @@ case class Min(child: Expression) extends DeclarativeAggregate {
   }
 
   override val evaluateExpression = min
+}
+
+case class Range(child: Expression) extends DeclarativeAggregate {
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def nullable: Boolean = true
+
+  // Return data type.
+  override def dataType: DataType = child.dataType
+
+  // Expected input data type.
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  private val min = AttributeReference("min", child.dataType)()
+
+  private val max = AttributeReference("max", child.dataType)()
+
+  override val aggBufferAttributes = min :: max :: Nil
+
+  override val initialValues = Seq(
+    /* min = */ Literal.create(null, dataType),
+    /* max = */ Literal.create(null, dataType)
+  )
+
+  override val updateExpressions = Seq(
+    /* min = */ If(IsNull(child), min, If(IsNull(min), child, Least(Seq(min, child)))),
+    /* max = */ If(IsNull(child), max, If(IsNull(max), child, Greatest(Seq(max, child))))
+  )
+
+  override val mergeExpressions = {
+    val least = Least(Seq(min.left, min.right))
+    val greatest = Greatest(Seq(max.left, max.right))
+    Seq(
+      /* min = */ If(IsNull(min.right), min.left, If(IsNull(min.left), min.right, least)),
+      /* max = */ If(IsNull(max.right), max.left, If(IsNull(max.left), max.right, greatest))
+    )
+  }
+
+  override val evaluateExpression = max - min
+
+  override def prettyName: String = "range"
 }
 
 // Compute the sample standard deviation of a column

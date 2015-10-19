@@ -330,7 +330,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(1) :: Nil)
       // RANGE
       testCodeGen(
-        "SELECT value range(key) FROM testData3x GROUP BY value",
+        "SELECT value, range(key) FROM testData3x GROUP BY value",
         (1 to 100).map(i => Row(i.toString, 0)))
       testCodeGen(
         "SELECT range(key) FROM testData3x",
@@ -358,12 +358,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         """.stripMargin,
         (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
       testCodeGen(
-        "SELECT max(key), min(key), range(key), avg(key), count(key), count(distinct key) FROM testData3x",
-        Row(100, 1, 99, 50.5, 300, 100) :: Nil)
+        "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
+        Row(100, 1, 50.5, 300, 100) :: Nil)
       // Aggregate with Code generation handling all null values
       testCodeGen(
-        "SELECT  sum('a'), avg('a'), range('a'), stddev('a'), count(null) FROM testData",
-        Row(null, null, null, null, 0) :: Nil)
+        "SELECT  sum('a'), avg('a'), stddev('a'), count(null) FROM testData",
+        Row(null, null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)

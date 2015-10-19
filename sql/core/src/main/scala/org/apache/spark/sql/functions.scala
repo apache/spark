@@ -295,6 +295,14 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * Aggregate function: returns the range value of the column in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def range(e: Column): Column = Range(e.expr) 
+
+  /**
    * Aggregate function: returns the unbiased sample standard deviation
    * of the expression in a group.
    *
