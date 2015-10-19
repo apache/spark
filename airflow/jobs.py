@@ -561,6 +561,10 @@ class SchedulerJob(BaseJob):
                 except Exception as e:
                     logging.exception(e)
                 try:
+                    dagbag.kill_zombies()
+                except Exception as e:
+                    logging.exception(e)
+                try:
                     # We really just want the scheduler to never ever stop.
                     executor.heartbeat()
                     self.heartbeat()
