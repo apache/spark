@@ -448,7 +448,7 @@ private[spark] class TaskSetManager(
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
           val taskId = sched.newTaskId()
-          
+
           val executorManager = sched.sc.executorAllocationManager.getOrElse(null)
           if (executorManager != null) {
             if (!executorManager.isExecutorPendingToRemove(execId)) {
@@ -484,7 +484,6 @@ private[spark] class TaskSetManager(
               abort(s"$msg Exception during serialization: $e")
               throw new TaskNotSerializableException(e)
           }
-          
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
               !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true
