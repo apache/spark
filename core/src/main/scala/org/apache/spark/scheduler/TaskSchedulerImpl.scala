@@ -490,22 +490,21 @@ private[spark] class TaskSchedulerImpl(
     activeExecutorIds -= executorId
     val host = executorIdToHost(executorId)
     val execs = executorsByHost.getOrElse(host, new HashSet)
-
-    if (reason != LossReasonPending) {
-      execs -= executorId
-      if (execs.isEmpty) {
-        executorsByHost -= host
-        for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
-          hosts -= host
-          if (hosts.isEmpty) {
-            hostsByRack -= rack
-          }
+    execs -= executorId
+    if (execs.isEmpty) {
+      executorsByHost -= host
+      for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
+        hosts -= host
+        if (hosts.isEmpty) {
+          hostsByRack -= rack
         }
       }
     }
 
-    executorIdToHost -= executorId
-    rootPool.executorLost(executorId, host, reason)
+    if (reason != LossReasonPending) {
+      executorIdToHost -= executorId
+      rootPool.executorLost(executorId, host, reason)
+    }
   }
 
   def executorAdded(execId: String, host: String) {

@@ -799,28 +799,26 @@ private[spark] class TaskSetManager(
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
     // so we would need to rerun these tasks on other executors.
-    if (reason != LossReasonPending) {
-      if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {
-        for ((tid, info) <- taskInfos if info.executorId == execId) {
-          val index = taskInfos(tid).index
-          if (successful(index)) {
-            successful(index) = false
-            copiesRunning(index) -= 1
-            tasksSuccessful -= 1
-            addPendingTask(index)
-            // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
-            // stage finishes when a total of tasks.size tasks finish.
-            sched.dagScheduler.taskEnded(tasks(index), Resubmitted, null, null, info, null)
-          }
+    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {
+      for ((tid, info) <- taskInfos if info.executorId == execId) {
+        val index = taskInfos(tid).index
+        if (successful(index)) {
+          successful(index) = false
+          copiesRunning(index) -= 1
+          tasksSuccessful -= 1
+          addPendingTask(index)
+          // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
+          // stage finishes when a total of tasks.size tasks finish.
+          sched.dagScheduler.taskEnded(tasks(index), Resubmitted, null, null, info, null)
         }
       }
-      for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-        val isNormalExit: Boolean = reason match {
-          case exited: ExecutorExited => exited.isNormalExit
-          case _ => false
-        }
-        handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
+    }
+    for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
+      val isNormalExit: Boolean = reason match {
+        case exited: ExecutorExited => exited.isNormalExit
+        case _ => false
       }
+      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()

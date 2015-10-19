@@ -535,7 +535,7 @@ private[yarn] class YarnAllocator(
 
   private[yarn] def getNumUnexpectedContainerRelease = numUnexpectedContainerRelease
 
-  private[yarn] def getNumLossReasonRequests: Int = synchronized {
+  private[yarn] def getNumPendingLossReasonRequests: Int = synchronized {
     pendingLossReasonRequests.size
   }
 

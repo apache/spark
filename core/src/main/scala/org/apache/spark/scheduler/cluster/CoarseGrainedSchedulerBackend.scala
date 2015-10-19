@@ -73,9 +73,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The number of pending tasks which is locality required
   protected var localityAwareTasks = 0
 
-  // Executors that have been marked as disabled by the cluster manager, and are pending
-  // removal, so no tasks should be scheduled on them.
-  protected val disabledExecutors = new HashSet[String]
+  // Executors that have been lost, but for which we don't yet know the real exit reason.
+  protected val executorsPendingLossReason = new HashSet[String]
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -183,7 +182,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on all executors
     private def makeOffers() {
       // Filter out executors under killing
-      val activeExecutors = executorDataMap.filterKeys(isExecutorAlive)
+      val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
       val workOffers = activeExecutors.map { case (id, executorData) =>
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
@@ -199,7 +198,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
       // Filter out executors under killing
-      if (isExecutorAlive(executorId)) {
+      if (executorIsAlive(executorId)) {
         val executorData = executorDataMap(executorId)
         val workOffers = Seq(
           new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
@@ -207,8 +206,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
-    private def isExecutorAlive(executorId: String): Boolean = synchronized {
-      !executorsPendingToRemove.contains(executorId) && !disabledExecutors.contains(executorId)
+    private def executorIsAlive(executorId: String): Boolean = synchronized {
+      !executorsPendingToRemove.contains(executorId) &&
+        !executorsPendingLossReason.contains(executorId)
     }
 
     // Launch tasks returned by a set of resource offers
@@ -247,7 +247,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingToRemove -= executorId
-            disabledExecutors -= executorId
+            executorsPendingLossReason -= executorId
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
@@ -259,15 +259,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     /**
-     * Mark the given executor as disabled; disabled executors are as good as lost, except their
-     * tasks are not yet marked as failed.
+     * Stop making resource offers for the given executor. The executor is marked as lost with
+     * the loss reason still pending.
      *
      * @return Whether executor was alive.
      */
     protected def disableExecutor(executorId: String): Boolean = {
       val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
-        if (isExecutorAlive(executorId)) {
-          disabledExecutors += executorId
+        if (executorIsAlive(executorId)) {
+          executorsPendingLossReason += executorId
           true
         } else {
           false

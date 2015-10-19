@@ -77,7 +77,7 @@ private[spark] class ApplicationMaster(
   @volatile private var reporterThread: Thread = _
   @volatile private var allocator: YarnAllocator = _
 
-  // Lock for controlling the allocator (hearbeat) thread.
+  // Lock for controlling the allocator (heartbeat) thread.
   private val allocatorLock = new Object()
 
   // Steady state heartbeat interval. We want to be reasonably responsive without causing too many
@@ -374,7 +374,7 @@ private[spark] class ApplicationMaster(
             val numPendingAllocate = allocator.getNumPendingAllocate
             allocatorLock.synchronized {
               val sleepInterval =
-                if (numPendingAllocate > 0 || allocator.getNumLossReasonRequests > 0) {
+                if (numPendingAllocate > 0 || allocator.getNumPendingLossReasonRequests > 0) {
                   val currentAllocationInterval =
                     math.min(heartbeatInterval, nextAllocationInterval)
                   nextAllocationInterval = currentAllocationInterval * 2 // avoid overflow
