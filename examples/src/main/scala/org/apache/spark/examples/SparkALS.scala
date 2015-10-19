@@ -30,7 +30,6 @@ import org.apache.spark._
  */
 object SparkALS {
 
-// begin code
   // Parameters set through command line arguments
   var M = 0 // Number of movies
   var U = 0 // Number of users
@@ -86,8 +85,6 @@ object SparkALS {
         |for more conventional use.
       """.stripMargin)
   }
-
-  // end code
 
   def main(args: Array[String]) {
 
