@@ -73,7 +73,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   // Testing the Broadcast based join for cartesian join (cross join)
   // We assume that the Broadcast Join Threshold will works since the src is a small table
-    private val spark_10484_1 = """
+  private val spark_10484_1 = """
                                 | SELECT a.key, b.key
                                 | FROM src a LEFT JOIN src b WHERE a.key > b.key + 300
                                 | ORDER BY b.key, a.key
@@ -111,10 +111,10 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     spark_10484_4)
 
   test("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN") {
-    def assertBroadcastNestedLoopJoin(sqlText: String): Boolean = {
-      sql(sqlText).queryExecution.sparkPlan.collect {
+    def assertBroadcastNestedLoopJoin(sqlText: String): Unit = {
+      assert(sql(sqlText).queryExecution.sparkPlan.collect {
         case _: BroadcastNestedLoopJoin => 1
-      }.size > 0
+      }.nonEmpty)
     }
 
     assertBroadcastNestedLoopJoin(spark_10484_1)
