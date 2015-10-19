@@ -27,9 +27,10 @@ import sys
 import subprocess
 from collections import namedtuple
 
-from sparktestsupport import SPARK_HOME, USER_HOME
+from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 import sparktestsupport.modules as modules
+
 
 # -------------------------------------------------------------------------------------------------
 # Functions for traversing module dependency graph
@@ -130,19 +131,6 @@ def determine_tags_to_exclude(changed_modules):
 # Functions for working with subprocesses and shell tools
 # -------------------------------------------------------------------------------------------------
 
-def get_error_codes(err_code_file):
-    """Function to retrieve all block numbers from the `run-tests-codes.sh`
-    file to maintain backwards compatibility with the `run-tests-jenkins`
-    script"""
-
-    with open(err_code_file, 'r') as f:
-        err_codes = [e.split()[1].strip().split('=')
-                     for e in f if e.startswith("readonly")]
-        return dict(err_codes)
-
-
-ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh"))
-
 
 def determine_java_executable():
     """Will return the path of the java executable that will be used by Spark's
@@ -191,7 +179,7 @@ def determine_java_version(java_exe):
 
 
 def set_title_and_block(title, err_block):
-    os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
+    os.environ["CURRENT_BLOCK"] = str(ERROR_CODES[err_block])
     line_str = '=' * 72
 
     print('')
@@ -467,7 +455,7 @@ def main():
     rm_r(os.path.join(USER_HOME, ".ivy2", "local", "org.apache.spark"))
     rm_r(os.path.join(USER_HOME, ".ivy2", "cache", "org.apache.spark"))
 
-    os.environ["CURRENT_BLOCK"] = ERROR_CODES["BLOCK_GENERAL"]
+    os.environ["CURRENT_BLOCK"] = str(ERROR_CODES["BLOCK_GENERAL"])
 
     java_exe = determine_java_executable()
 
