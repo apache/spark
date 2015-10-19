@@ -34,4 +34,6 @@ Collate:
     'serialize.R'
     'sparkR.R'
     'stats.R'
+    'types.R'
     'utils.R'
+    'vector.R'
