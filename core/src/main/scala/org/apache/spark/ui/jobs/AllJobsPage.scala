@@ -293,9 +293,9 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             <li>
               <strong>Total Uptime:</strong>
               {
-                if (endTime < 0) {
+                if (endTime < 0 && parent.sc.isDefined) {
                   UIUtils.formatDuration(System.currentTimeMillis() - startTime)
-                } else {
+                } else if (endTime > 0) {
                   UIUtils.formatDuration(endTime - startTime)
                 }
               }
