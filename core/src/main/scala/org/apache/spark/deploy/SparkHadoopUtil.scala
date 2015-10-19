@@ -130,6 +130,21 @@ class SparkHadoopUtil extends Logging {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
 
+  def addCredentialsToCurrentUser(credentials: Credentials, hadoopConf: Configuration): Unit ={
+    UserGroupInformation.getCurrentUser.addCredentials(credentials)
+
+    // HACK:
+    // In HA mode, the function FileSystem.addDelegationTokens only returns a token for HA
+    // NameNode. HDFS Client will generate private tokens for each NameNode according to the
+    // token for HA NameNode and uses these private tokens to communicate with each NameNode.
+    // If spark only update token for HA NameNode, HDFS Client will use the old private tokens,
+    // which will cause token expired Error.
+    // So:
+    // We create a new HDFS Client, so that the new HDFS Client will generate and update the
+    // private tokens for each NameNode.
+    FileSystem.newInstance(hadoopConf).close()
+  }
+
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
    * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will

@@ -176,7 +176,7 @@ private[yarn] class AMDelegationTokenRenewer(
       }
     })
     // Add the temp credentials back to the original ones.
-    UserGroupInformation.getCurrentUser.addCredentials(tempCreds)
+    SparkHadoopUtil.get.addCredentialsToCurrentUser(tempCreds, hadoopConf)
     val remoteFs = FileSystem.get(freshHadoopConf)
     // If lastCredentialsFileSuffix is 0, then the AM is either started or restarted. If the AM
     // was restarted, then the lastCredentialsFileSuffix might be > 0, so find the newest file
