@@ -650,14 +650,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer1b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
         .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
 
-      var model1a0: LinearRegressionModel = null
-      var model1a1: LinearRegressionModel = null
-      var model1b: LinearRegressionModel = null
-
       // Normal optimizer is not supported with non-zero elasticnet parameter.
-      model1a0 = trainer1a.fit(data)
-      model1a1 = trainer1a.fit(weightedData)
-      model1b = trainer1b.fit(weightedData)
+      val model1a0 = trainer1a.fit(data)
+      val model1a1 = trainer1a.fit(weightedData)
+      val model1b = trainer1b.fit(weightedData)
 
       assert(model1a0.weights !~= model1a1.weights absTol 1E-3)
       assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
