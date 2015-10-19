@@ -64,6 +64,8 @@ We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.rec
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 
+Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.recommendation.ALS
 import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
@@ -117,7 +119,9 @@ All of MLlib's methods use Java-friendly types, so you can import and call them 
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
-that is equivalent to the provided example in Scala is given bellow:
+that is equivalent to the provided example in Scala is given below:
+
+Refer to the [`ALS` Java docs](api/java/org/apache/spark/mllib/recommendation/ALS.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -200,6 +204,8 @@ public class CollaborativeFiltering {
 In the following example we load rating data. Each row consists of a user, a product and a rating.
 We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
 recommendation by measuring the Mean Squared Error of rating prediction.
+
+Refer to the [`ALS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.recommendation.ALS) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.recommendation import ALS, MatrixFactorizationModel, Rating

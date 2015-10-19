@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution.local
 
-import java.util.Random
-
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
+
 
 /**
  * Sample the dataset.
@@ -51,18 +50,15 @@ case class SampleNode(
 
   override def open(): Unit = {
     child.open()
-    val (sampler, _seed) = if (withReplacement) {
-        val random = new Random(seed)
+    val sampler =
+      if (withReplacement) {
         // Disable gap sampling since the gap sampling method buffers two rows internally,
         // requiring us to copy the row, which is more expensive than the random number generator.
-        (new PoissonSampler[InternalRow](upperBound - lowerBound, useGapSamplingIfPossible = false),
-          // Use the seed for partition 0 like PartitionwiseSampledRDD to generate the same result
-          // of DataFrame
-          random.nextLong())
+        new PoissonSampler[InternalRow](upperBound - lowerBound, useGapSamplingIfPossible = false)
       } else {
-        (new BernoulliCellSampler[InternalRow](lowerBound, upperBound), seed)
+        new BernoulliCellSampler[InternalRow](lowerBound, upperBound)
       }
-    sampler.setSeed(_seed)
+    sampler.setSeed(seed)
     iterator = sampler.sample(child.asIterator)
   }
 

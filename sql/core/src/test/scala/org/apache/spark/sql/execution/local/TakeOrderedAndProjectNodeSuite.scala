@@ -17,38 +17,34 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrder}
+import scala.util.Random
+
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.SortOrder
+
 
 class TakeOrderedAndProjectNodeSuite extends LocalNodeTest {
 
-  import testImplicits._
-
-  private def columnToSortOrder(sortExprs: Column*): Seq[SortOrder] = {
-    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
-      col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
-      }
-    }
-    sortOrder
-  }
-
-  private def testTakeOrderedAndProjectNode(desc: Boolean): Unit = {
-    val testCaseName = if (desc) "desc" else "asc"
-    test(testCaseName) {
-      val input = (1 to 10).map(i => (i, i.toString)).toDF("key", "value")
-      val sortColumn = if (desc) input.col("key").desc else input.col("key")
-      checkAnswer(
-        input,
-        node => TakeOrderedAndProjectNode(conf, 5, columnToSortOrder(sortColumn), None, node),
-        input.sort(sortColumn).limit(5).collect()
-      )
+  private def testTakeOrderedAndProject(desc: Boolean): Unit = {
+    val limit = 10
+    val ascOrDesc = if (desc) "desc" else "asc"
+    test(ascOrDesc) {
+      val inputData = Random.shuffle((1 to 100).toList).map { i => (i, i) }.toArray
+      val inputNode = new DummyNode(kvIntAttributes, inputData)
+      val firstColumn = inputNode.output(0)
+      val sortDirection = if (desc) Descending else Ascending
+      val sortOrder = SortOrder(firstColumn, sortDirection)
+      val takeOrderAndProjectNode = new TakeOrderedAndProjectNode(
+        conf, limit, Seq(sortOrder), Some(Seq(firstColumn)), inputNode)
+      val expectedOutput = inputData
+        .map { case (k, _) => k }
+        .sortBy { k => k * (if (desc) -1 else 1) }
+        .take(limit)
+      val actualOutput = takeOrderAndProjectNode.collect().map { row => row.getInt(0) }
+      assert(actualOutput === expectedOutput)
     }
   }
 
-  testTakeOrderedAndProjectNode(desc = false)
-  testTakeOrderedAndProjectNode(desc = true)
+  testTakeOrderedAndProject(desc = false)
+  testTakeOrderedAndProject(desc = true)
 }

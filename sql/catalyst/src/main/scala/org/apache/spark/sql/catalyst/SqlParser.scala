@@ -37,9 +37,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
-class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
+object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
-  def parseExpression(input: String): Expression = {
+  def parseExpression(input: String): Expression = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(projection)(new lexical.Scanner(input)) match {
@@ -48,7 +48,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     }
   }
 
-  def parseTableIdentifier(input: String): TableIdentifier = {
+  def parseTableIdentifier(input: String): TableIdentifier = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(tableIdentifier)(new lexical.Scanner(input)) match {
@@ -170,7 +170,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     joinedRelation | relationFactor
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
-    ( rep1sep(ident, ".") ~ (opt(AS) ~> opt(ident)) ^^ {
+    ( tableIdentifier ~ (opt(AS) ~> opt(ident)) ^^ {
         case tableIdent ~ alias => UnresolvedRelation(tableIdent, alias)
       }
       | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }

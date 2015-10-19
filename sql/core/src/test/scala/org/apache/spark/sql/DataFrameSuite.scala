@@ -890,6 +890,24 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .collect()
   }
 
+  test("SPARK-10185: Read multiple Hadoop Filesystem paths and paths with a comma in it") {
+    withTempDir { dir =>
+      val df1 = Seq((1, 22)).toDF("a", "b")
+      val dir1 = new File(dir, "dir,1").getCanonicalPath
+      df1.write.format("json").save(dir1)
+
+      val df2 = Seq((2, 23)).toDF("a", "b")
+      val dir2 = new File(dir, "dir2").getCanonicalPath
+      df2.write.format("json").save(dir2)
+
+      checkAnswer(sqlContext.read.format("json").load(Array(dir1, dir2)),
+        Row(1, 22) :: Row(2, 23) :: Nil)
+
+      checkAnswer(sqlContext.read.format("json").load(dir1),
+        Row(1, 22) :: Nil)
+    }
+  }
+
   test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
     val df = Seq(1 -> 2).toDF("i", "j")
     val query = df.groupBy('i)
@@ -906,5 +924,55 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
       assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
     }
+  }
+
+  test("SPARK-10539: Project should not be pushed down through Intersect or Except") {
+    val df1 = (1 to 100).map(Tuple1.apply).toDF("i")
+    val df2 = (1 to 30).map(Tuple1.apply).toDF("i")
+    val intersect = df1.intersect(df2)
+    val except = df1.except(df2)
+    assert(intersect.count() === 30)
+    assert(except.count() === 70)
+  }
+
+  test("SPARK-10740: handle nondeterministic expressions correctly for set operations") {
+    val df1 = (1 to 20).map(Tuple1.apply).toDF("i")
+    val df2 = (1 to 10).map(Tuple1.apply).toDF("i")
+
+    // When generating expected results at here, we need to follow the implementation of
+    // Rand expression.
+    def expected(df: DataFrame): Seq[Row] = {
+      df.rdd.collectPartitions().zipWithIndex.flatMap {
+        case (data, index) =>
+          val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
+          data.filter(_.getInt(0) < rng.nextDouble() * 10)
+      }
+    }
+
+    val union = df1.unionAll(df2)
+    checkAnswer(
+      union.filter('i < rand(7) * 10),
+      expected(union)
+    )
+    checkAnswer(
+      union.select(rand(7)),
+      union.rdd.collectPartitions().zipWithIndex.flatMap {
+        case (data, index) =>
+          val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
+          data.map(_ => rng.nextDouble()).map(i => Row(i))
+      }
+    )
+
+    val intersect = df1.intersect(df2)
+    checkAnswer(
+      intersect.filter('i < rand(7) * 10),
+      expected(intersect)
+    )
+
+    val except = df1.except(df2)
+    checkAnswer(
+      except.filter('i < rand(7) * 10),
+      expected(except)
+    )
   }
 }

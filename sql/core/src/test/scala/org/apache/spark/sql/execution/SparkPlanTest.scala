@@ -238,14 +238,14 @@ object SparkPlanTest {
       outputPlan transform {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
-          plan.transformExpressions {
+          plan transformExpressions {
             case UnresolvedAttribute(Seq(u)) =>
               inputMap.getOrElse(u,
                 sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
           }
       }
     )
-    resolvedPlan.executeCollect().toSeq
+    resolvedPlan.executeCollectPublic().toSeq
   }
 }
 

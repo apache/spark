@@ -147,12 +147,12 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
       }.start()
     }
     sem.acquire(2)
+    throwable.foreach { t => throw improveStackTrace(t) }
     if (ThreadingSuiteState.failed.get()) {
       logError("Waited 1 second without seeing runningThreads = 4 (it was " +
                 ThreadingSuiteState.runningThreads.get() + "); failing test")
       fail("One or more threads didn't see runningThreads = 4")
     }
-    throwable.foreach { t => throw t }
   }
 
   test("set local properties in different thread") {
@@ -178,8 +178,8 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     threads.foreach(_.start())
 
     sem.acquire(5)
+    throwable.foreach { t => throw improveStackTrace(t) }
     assert(sc.getLocalProperty("test") === null)
-    throwable.foreach { t => throw t }
   }
 
   test("set and get local properties in parent-children thread") {
@@ -207,51 +207,41 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     threads.foreach(_.start())
 
     sem.acquire(5)
+    throwable.foreach { t => throw improveStackTrace(t) }
     assert(sc.getLocalProperty("test") === "parent")
     assert(sc.getLocalProperty("Foo") === null)
-    throwable.foreach { t => throw t }
   }
 
-  test("mutations to local properties should not affect submitted jobs (SPARK-6629)") {
-    val jobStarted = new Semaphore(0)
-    val jobEnded = new Semaphore(0)
-    @volatile var jobResult: JobResult = null
-
+  test("mutation in parent local property does not affect child (SPARK-10563)") {
     sc = new SparkContext("local", "test")
-    sc.setJobGroup("originalJobGroupId", "description")
-    sc.addSparkListener(new SparkListener {
-      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        jobStarted.release()
-      }
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        jobResult = jobEnd.jobResult
-        jobEnded.release()
-      }
-    })
-
-    // Create a new thread which will inherit the current thread's properties
-    val thread = new Thread() {
+    val originalTestValue: String = "original-value"
+    var threadTestValue: String = null
+    sc.setLocalProperty("test", originalTestValue)
+    var throwable: Option[Throwable] = None
+    val thread = new Thread {
       override def run(): Unit = {
-        assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "originalJobGroupId")
-        // Sleeps for a total of 10 seconds, but allows cancellation to interrupt the task
         try {
-          sc.parallelize(1 to 100).foreach { x =>
-            Thread.sleep(100)
-          }
+          threadTestValue = sc.getLocalProperty("test")
         } catch {
-          case s: SparkException => // ignored so that we don't print noise in test logs
+          case t: Throwable =>
+            throwable = Some(t)
         }
       }
     }
+    sc.setLocalProperty("test", "this-should-not-be-inherited")
     thread.start()
-    // Wait for the job to start, then mutate the original properties, which should have been
-    // inherited by the running job but hopefully defensively copied or snapshotted:
-    jobStarted.tryAcquire(10, TimeUnit.SECONDS)
-    sc.setJobGroup("modifiedJobGroupId", "description")
-    // Canceling the original job group should cancel the running job. In other words, the
-    // modification of the properties object should not affect the properties of running jobs
-    sc.cancelJobGroup("originalJobGroupId")
-    jobEnded.tryAcquire(10, TimeUnit.SECONDS)
-    assert(jobResult.isInstanceOf[JobFailed])
+    thread.join()
+    throwable.foreach { t => throw improveStackTrace(t) }
+    assert(threadTestValue === originalTestValue)
   }
+
+  /**
+   * Improve the stack trace of an error thrown from within a thread.
+   * Otherwise it's difficult to tell which line in the test the error came from.
+   */
+  private def improveStackTrace(t: Throwable): Throwable = {
+    t.setStackTrace(t.getStackTrace ++ Thread.currentThread.getStackTrace)
+    t
+  }
+
 }

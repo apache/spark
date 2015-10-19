@@ -39,7 +39,7 @@ import org.apache.parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetO
  *
  *   NEVER use [[DirectParquetOutputCommitter]] when appending data, because currently there's
  *   no safe way undo a failed appending job (that's why both `abortTask()` and `abortJob()` are
- *   left * empty).
+ *   left empty).
  */
 private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
   extends ParquetOutputCommitter(outputPath, context) {

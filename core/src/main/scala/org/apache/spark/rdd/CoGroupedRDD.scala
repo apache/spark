@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap, CompactBuffer}
+import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
 import org.apache.spark.serializer.Serializer
 
@@ -128,8 +128,6 @@ class CoGroupedRDD[K: ClassTag](
   override val partitioner: Some[Partitioner] = Some(part)
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Array[Iterable[_]])] = {
-    val sparkConf = SparkEnv.get.conf
-    val externalSorting = sparkConf.getBoolean("spark.shuffle.spill", true)
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = dependencies.length
 
@@ -150,34 +148,16 @@ class CoGroupedRDD[K: ClassTag](
         rddIterators += ((it, depNum))
     }
 
-    if (!externalSorting) {
-      val map = new AppendOnlyMap[K, CoGroupCombiner]
-      val update: (Boolean, CoGroupCombiner) => CoGroupCombiner = (hadVal, oldVal) => {
-        if (hadVal) oldVal else Array.fill(numRdds)(new CoGroup)
-      }
-      val getCombiner: K => CoGroupCombiner = key => {
-        map.changeValue(key, update)
-      }
-      rddIterators.foreach { case (it, depNum) =>
-        while (it.hasNext) {
-          val kv = it.next()
-          getCombiner(kv._1)(depNum) += kv._2
-        }
-      }
-      new InterruptibleIterator(context,
-        map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
-    } else {
-      val map = createExternalMap(numRdds)
-      for ((it, depNum) <- rddIterators) {
-        map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
-      }
-      context.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
-      context.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
-      context.internalMetricsToAccumulators(
-        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
-      new InterruptibleIterator(context,
-        map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
+    val map = createExternalMap(numRdds)
+    for ((it, depNum) <- rddIterators) {
+      map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
     }
+    context.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
+    context.internalMetricsToAccumulators(
+      InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
+    new InterruptibleIterator(context,
+      map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
   }
 
   private def createExternalMap(numRdds: Int)

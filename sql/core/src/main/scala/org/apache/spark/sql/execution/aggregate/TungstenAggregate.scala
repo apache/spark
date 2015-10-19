@@ -24,22 +24,34 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types.StructType
 
 case class TungstenAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+    nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression2],
+    completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
 
+  private[this] val aggregateBufferAttributes = {
+    (nonCompleteAggregateExpressions ++ completeAggregateExpressions)
+      .flatMap(_.aggregateFunction.aggBufferAttributes)
+  }
+
+  require(TungstenAggregate.supportsAggregate(groupingExpressions, aggregateBufferAttributes))
+
   override private[sql] lazy val metrics = Map(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   override def outputsUnsafeRows: Boolean = true
 
@@ -69,6 +81,8 @@ case class TungstenAggregate(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
+    val dataSize = longMetric("dataSize")
+    val spillSize = longMetric("spillSize")
 
     /**
      * Set up the underlying unsafe data structures used before computing the parent partition.
@@ -78,14 +92,18 @@ case class TungstenAggregate(
       new TungstenAggregationIterator(
         groupingExpressions,
         nonCompleteAggregateExpressions,
+        nonCompleteAggregateAttributes,
         completeAggregateExpressions,
+        completeAggregateAttributes,
         initialInputBufferOffset,
         resultExpressions,
         newMutableProjection,
         child.output,
         testFallbackStartsAt,
         numInputRows,
-        numOutputRows)
+        numOutputRows,
+        dataSize,
+        spillSize)
     }
 
     /** Compute a partition using the iterator already set up previously. */
@@ -134,5 +152,15 @@ case class TungstenAggregate(
         s"TungstenAggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
+  }
+}
+
+object TungstenAggregate {
+  def supportsAggregate(
+    groupingExpressions: Seq[Expression],
+    aggregateBufferAttributes: Seq[Attribute]): Boolean = {
+    val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
+    UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
+      UnsafeProjection.canSupport(groupingExpressions)
   }
 }

@@ -35,8 +35,75 @@ object MimaExcludes {
   def excludes(version: String) = version match {
     case v if v.startsWith("1.6") =>
       Seq(
-        MimaBuild.excludeSparkPackage("network")
-        )
+        MimaBuild.excludeSparkPackage("deploy"),
+        MimaBuild.excludeSparkPackage("network"),
+        // These are needed if checking against the sbt build, since they are part of
+        // the maven-generated artifacts in 1.3.
+        excludePackage("org.spark-project.jetty"),
+        MimaBuild.excludeSparkPackage("unused"),
+        // SQL execution is considered private.
+        excludePackage("org.apache.spark.sql.execution"),
+        // SQL columnar is considered private.
+        excludePackage("org.apache.spark.sql.columnar")
+      ) ++
+      MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
+      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++
+      Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticCostFun.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticAggregator.add"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticAggregator.count")
+      ) ++ Seq(
+        // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
+        // This class is marked as `private` but MiMa still seems to be confused by the change.
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.task"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$2"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.taskAttempt"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$3"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.shuffle.FileShuffleBlockResolver$ShuffleFileGroup")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.clearLastInstantiatedContext"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.setLastInstantiatedContext"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.sql.SQLContext$SQLSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.detachSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.tlSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.defaultSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.currentSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.openSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.setSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.createSession")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.SparkContext.preferredNodeLocationData_=")
+      )
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
@@ -196,6 +263,23 @@ object MimaExcludes {
         // SPARK-9704 Made ProbabilisticClassifier, Identifiable, VectorUDT public APIs
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "org.apache.spark.mllib.linalg.VectorUDT.serialize")
+      ) ++ Seq(
+        // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
+        // This class is marked as `private` but MiMa still seems to be confused by the change.
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.task"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$2"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.taskAttempt"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$3"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
       )
 
     case v if v.startsWith("1.4") =>

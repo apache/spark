@@ -693,7 +693,7 @@ class CheckpointTests(unittest.TestCase):
 
         # Verify that getActiveOrCreate() returns active context
         self.setupCalled = False
-        self.assertEquals(StreamingContext.getActiveOrCreate(self.cpd, setup), self.ssc)
+        self.assertEqual(StreamingContext.getActiveOrCreate(self.cpd, setup), self.ssc)
         self.assertFalse(self.setupCalled)
 
         # Verify that getActiveOrCreate() uses existing SparkContext

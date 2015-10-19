@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
@@ -31,38 +32,12 @@ import org.apache.spark.{SparkEnv, InternalAccumulator, TaskContext}
 // This file defines various sort operators.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-/**
- * Performs a sort on-heap.
- * @param global when true performs a global sort of all partitions by shuffling the data first
- *               if necessary.
- */
-case class Sort(
-    sortOrder: Seq[SortOrder],
-    global: Boolean,
-    child: SparkPlan)
-  extends UnaryNode {
-  override def requiredChildDistribution: Seq[Distribution] =
-    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
-
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
-    child.execute().mapPartitions( { iterator =>
-      val ordering = newOrdering(sortOrder, child.output)
-      iterator.map(_.copy()).toArray.sorted(ordering).iterator
-    }, preservesPartitioning = true)
-  }
-
-  override def output: Seq[Attribute] = child.output
-
-  override def outputOrdering: Seq[SortOrder] = sortOrder
-}
-
 /**
  * Performs a sort, spilling to disk as needed.
  * @param global when true performs a global sort of all partitions by shuffling the data first
  *               if necessary.
  */
-case class ExternalSort(
+case class Sort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan)
@@ -93,7 +68,7 @@ case class ExternalSort(
 }
 
 /**
- * Optimized version of [[ExternalSort]] that operates on binary data (implemented as part of
+ * Optimized version of [[Sort]] that operates on binary data (implemented as part of
  * Project Tungsten).
  *
  * @param global when true performs a global sort of all partitions by shuffling the data first
@@ -119,9 +94,16 @@ case class TungstenSort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  override private[sql] lazy val metrics = Map(
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+
   protected override def doExecute(): RDD[InternalRow] = {
     val schema = child.schema
     val childOutput = child.output
+
+    val dataSize = longMetric("dataSize")
+    val spillSize = longMetric("spillSize")
 
     /**
      * Set up the sorter in each partition before computing the parent partition.
@@ -157,7 +139,15 @@ case class TungstenSort(
         partitionIndex: Int,
         sorter: UnsafeExternalRowSorter,
         parentIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+      // Remember spill data size of this task before execute this operator so that we can
+      // figure out how many bytes we spilled for this operator.
+      val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
+
       val sortedIterator = sorter.sort(parentIterator.asInstanceOf[Iterator[UnsafeRow]])
+
+      dataSize += sorter.getPeakMemoryUsage
+      spillSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore
+
       taskContext.internalMetricsToAccumulators(
         InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
       sortedIterator

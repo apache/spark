@@ -27,6 +27,14 @@ import scala.collection.mutable.WrappedArray
  * Utility functions to serialize, deserialize objects to / from R
  */
 private[spark] object SerDe {
+  type ReadObject = (DataInputStream, Char) => Object
+  type WriteObject = (DataOutputStream, Object) => Boolean
+
+  var sqlSerDe: (ReadObject, WriteObject) = _
+
+  def registerSqlSerDe(sqlSerDe: (ReadObject, WriteObject)): Unit = {
+    this.sqlSerDe = sqlSerDe
+  }
 
   // Type mapping from R to Java
   //
@@ -63,11 +71,22 @@ private[spark] object SerDe {
       case 'c' => readString(dis)
       case 'e' => readMap(dis)
       case 'r' => readBytes(dis)
+      case 'a' => readArray(dis)
       case 'l' => readList(dis)
       case 'D' => readDate(dis)
       case 't' => readTime(dis)
       case 'j' => JVMObjectTracker.getObject(readString(dis))
-      case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
+      case _ =>
+        if (sqlSerDe == null || sqlSerDe._1 == null) {
+          throw new IllegalArgumentException (s"Invalid type $dataType")
+        } else {
+          val obj = (sqlSerDe._1)(dis, dataType)
+          if (obj == null) {
+            throw new IllegalArgumentException (s"Invalid type $dataType")
+          } else {
+            obj
+          }
+        }
     }
   }
 
@@ -141,7 +160,8 @@ private[spark] object SerDe {
     (0 until len).map(_ => readString(in)).toArray
   }
 
-  def readList(dis: DataInputStream): Array[_] = {
+  // All elements of an array must be of the same type
+  def readArray(dis: DataInputStream): Array[_] = {
     val arrType = readObjectType(dis)
     arrType match {
       case 'i' => readIntArr(dis)
@@ -150,26 +170,43 @@ private[spark] object SerDe {
       case 'b' => readBooleanArr(dis)
       case 'j' => readStringArr(dis).map(x => JVMObjectTracker.getObject(x))
       case 'r' => readBytesArr(dis)
-      case 'l' => {
+      case 'a' =>
+        val len = readInt(dis)
+        (0 until len).map(_ => readArray(dis)).toArray
+      case 'l' =>
         val len = readInt(dis)
         (0 until len).map(_ => readList(dis)).toArray
-      }
-      case _ => throw new IllegalArgumentException(s"Invalid array type $arrType")
+      case _ =>
+        if (sqlSerDe == null || sqlSerDe._1 == null) {
+          throw new IllegalArgumentException (s"Invalid array type $arrType")
+        } else {
+          val len = readInt(dis)
+          (0 until len).map { _ =>
+            val obj = (sqlSerDe._1)(dis, arrType)
+            if (obj == null) {
+              throw new IllegalArgumentException (s"Invalid array type $arrType")
+            } else {
+              obj
+            }
+          }.toArray
+        }
     }
+  }
+
+  // Each element of a list can be of different type. They are all represented
+  // as Object on JVM side
+  def readList(dis: DataInputStream): Array[Object] = {
+    val len = readInt(dis)
+    (0 until len).map(_ => readObject(dis)).toArray
   }
 
   def readMap(in: DataInputStream): java.util.Map[Object, Object] = {
     val len = readInt(in)
     if (len > 0) {
-      val keysType = readObjectType(in)
-      val keysLen = readInt(in)
-      val keys = (0 until keysLen).map(_ => readTypedObject(in, keysType))
+      // Keys is an array of String
+      val keys = readArray(in).asInstanceOf[Array[Object]]
+      val values = readList(in)
 
-      val valuesLen = readInt(in)
-      val values = (0 until valuesLen).map(_ => {
-        val valueType = readObjectType(in)
-        readTypedObject(in, valueType)
-      })
       keys.zip(values).toMap.asJava
     } else {
       new java.util.HashMap[Object, Object]()
@@ -209,9 +246,21 @@ private[spark] object SerDe {
       case "array" => dos.writeByte('a')
       // Array of objects
       case "list" => dos.writeByte('l')
+      case "map" => dos.writeByte('e')
       case "jobj" => dos.writeByte('j')
       case _ => throw new IllegalArgumentException(s"Invalid type $typeStr")
     }
+  }
+
+  private def writeKeyValue(dos: DataOutputStream, key: Object, value: Object): Unit = {
+    if (key == null) {
+      throw new IllegalArgumentException("Key in map can't be null.")
+    } else if (!key.isInstanceOf[String]) {
+      throw new IllegalArgumentException(s"Invalid map key type: ${key.getClass.getName}")
+    }
+
+    writeString(dos, key.asInstanceOf[String])
+    writeObject(dos, value)
   }
 
   def writeObject(dos: DataOutputStream, obj: Object): Unit = {
@@ -306,9 +355,30 @@ private[spark] object SerDe {
           writeInt(dos, v.length)
           v.foreach(elem => writeObject(dos, elem))
 
+        // Handle map
+        case v: java.util.Map[_, _] =>
+          writeType(dos, "map")
+          writeInt(dos, v.size)
+          val iter = v.entrySet.iterator
+          while(iter.hasNext) {
+            val entry = iter.next
+            val key = entry.getKey
+            val value = entry.getValue
+
+            writeKeyValue(dos, key.asInstanceOf[Object], value.asInstanceOf[Object])
+          }
+        case v: scala.collection.Map[_, _] =>
+          writeType(dos, "map")
+          writeInt(dos, v.size)
+          v.foreach { case (key, value) =>
+            writeKeyValue(dos, key.asInstanceOf[Object], value.asInstanceOf[Object])
+          }
+
         case _ =>
-          writeType(dos, "jobj")
-          writeJObj(dos, value)
+          if (sqlSerDe == null || sqlSerDe._2 == null || !(sqlSerDe._2)(dos, value)) {
+            writeType(dos, "jobj")
+            writeJObj(dos, value)
+          }
       }
     }
   }

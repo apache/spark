@@ -131,13 +131,57 @@ checkType <- function(type) {
   if (type %in% primtiveTypes) {
     return()
   } else {
-    m <- regexec("^array<(.*)>$", type)
-    matchedStrings <- regmatches(type, m)
-    if (length(matchedStrings[[1]]) >= 2) {
-      elemType <- matchedStrings[[1]][2]
-      checkType(elemType)
-      return()
-    }
+    # Check complex types
+    firstChar <- substr(type, 1, 1)
+    switch (firstChar,
+            a = {
+              # Array type
+              m <- regexec("^array<(.+)>$", type)
+              matchedStrings <- regmatches(type, m)
+              if (length(matchedStrings[[1]]) >= 2) {
+                elemType <- matchedStrings[[1]][2]
+                checkType(elemType)
+                return()
+              }
+            },
+            m = {
+              # Map type
+              m <- regexec("^map<(.+),(.+)>$", type)
+              matchedStrings <- regmatches(type, m)
+              if (length(matchedStrings[[1]]) >= 3) {
+                keyType <- matchedStrings[[1]][2]
+                if (keyType != "string" && keyType != "character") {
+                  stop("Key type in a map must be string or character")
+                }
+                valueType <- matchedStrings[[1]][3]
+                checkType(valueType)
+                return()
+              }
+            },
+            s = {
+              # Struct type
+              m <- regexec("^struct<(.+)>$", type)
+              matchedStrings <- regmatches(type, m)
+              if (length(matchedStrings[[1]]) >= 2) {
+                fieldsString <- matchedStrings[[1]][2]
+                # strsplit does not return the final empty string, so check if
+                # the final char is ","
+                if (substr(fieldsString, nchar(fieldsString), nchar(fieldsString)) != ",") {
+                  fields <- strsplit(fieldsString, ",")[[1]]
+                  for (field in fields) {
+                    m <- regexec("^(.+):(.+)$", field)
+                    matchedStrings <- regmatches(field, m)
+                    if (length(matchedStrings[[1]]) >= 3) {
+                      fieldType <- matchedStrings[[1]][3]
+                      checkType(fieldType)
+                    } else {
+                      break
+                    }
+                  }
+                  return()
+                }
+              }
+            })
   }
 
   stop(paste("Unsupported type for Dataframe:", type))
