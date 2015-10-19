@@ -325,15 +325,16 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
-    var failedExecutor: Option[(String, ExecutorLossReason)] = None
+    var failedExecutor: Option[String] = None
     synchronized {
       try {
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)
           if (activeExecutorIds.contains(execId)) {
-            failedExecutor = Some(execId ->
+            removeExecutor(execId,
               SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
+            failedExecutor = Some(execId)
           }
         }
         taskIdToTaskSetManager.get(tid) match {
@@ -361,8 +362,8 @@ private[spark] class TaskSchedulerImpl(
     }
     // Update the DAGScheduler without holding a lock on this, since that can deadlock
     if (failedExecutor.isDefined) {
-      val (execId, reason) = failedExecutor.get
-      removeExecutor(execId, reason)
+      dagScheduler.executorLost(failedExecutor.get)
+      backend.reviveOffers()
     }
   }
 
@@ -458,64 +459,53 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
-    removeExecutor(executorId, reason)
-  }
+    var failedExecutor: Option[String] = None
 
-  /** Remove all information related to the executor. */
-  private def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    val wasActive = synchronized {
-      if (activeExecutorIds.remove(executorId)) {
-        val host = executorIdToHost(executorId)
-        executorsByHost.get(host).foreach { execs =>
-          execs -= executorId
-          if (execs.isEmpty) {
-            executorsByHost -= host
-            for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
-              hosts -= host
-              if (hosts.isEmpty) {
-                hostsByRack -= rack
-              }
-            }
-          }
-        }
-        true
+    synchronized {
+      if (activeExecutorIds.contains(executorId)) {
+        val hostPort = executorIdToHost(executorId)
+        logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
+        removeExecutor(executorId, reason)
+        failedExecutor = Some(executorId)
       } else {
-        false
+         // We may get multiple executorLost() calls with different loss reasons. For example, one
+         // may be triggered by a dropped connection from the slave while another may be a report
+         // of executor termination from Mesos. We produce log messages for both so we eventually
+         // report the termination reason.
+         logError("Lost an executor " + executorId + " (already removed): " + reason)
       }
     }
-    if (wasActive) {
-      dagScheduler.executorLost(executorId)
+    // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
+    if (failedExecutor.isDefined) {
+      dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
-    synchronized {
-      val host = executorIdToHost.get(executorId)
-      host.foreach { h =>
-        rootPool.executorLost(executorId, h, reason)
-      }
+  }
 
-      reason match {
-        case LossReasonPending =>
-          // Do nothing else until the loss reason is known.
+  /**
+   * Remove an executor from all our data structures and mark it as lost. If the executor's loss
+   * reason is not yet known, do not yet remove its association with its host.
+   */
+  private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
+    activeExecutorIds -= executorId
+    val host = executorIdToHost(executorId)
+    val execs = executorsByHost.getOrElse(host, new HashSet)
 
-        case _ =>
-          host match {
-            case Some(host) =>
-              val msg = s"Lost executor $executorId on $host: $reason"
-              reason match {
-                case ExecutorExited(_, isNormalExit, _) if isNormalExit => logInfo(msg)
-                case _ => logError(msg)
-              }
-              executorIdToHost -= executorId
-
-            case None =>
-             // We may get multiple executorLost() calls with different loss reasons. For example,
-             // one may be triggered by a dropped connection from the slave while another may be a
-             // report of executor termination from Mesos. We produce log messages for both so we
-             // eventually report the termination reason.
-             logInfo(s"Lost an executor $executorId (already removed): $reason")
+    if (reason != LossReasonPending) {
+      execs -= executorId
+      if (execs.isEmpty) {
+        executorsByHost -= host
+        for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
+          hosts -= host
+          if (hosts.isEmpty) {
+            hostsByRack -= rack
           }
+        }
       }
     }
+
+    executorIdToHost -= executorId
+    rootPool.executorLost(executorId, host, reason)
   }
 
   def executorAdded(execId: String, host: String) {
