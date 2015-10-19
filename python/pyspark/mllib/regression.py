@@ -647,14 +647,14 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     of features must be constant. An initial weight
     vector must be provided.
 
-    :param stepSize:          Step size for each iteration of gradient descent.
-                              (default: 0.1)
-    :param numIterations:     Number of iterations run for each batch of data.
-                              (default: 50)
-    :param miniBatchFraction: Fraction of each batch of data to use for updates.
-                              (default: 1.0)
-    :param convergenceTol:    Value used to determine when to terminate iterations.
-                              (default: 0.001)
+    :param stepSize:
+      Step size for each iteration of gradient descent. (default: 0.1)
+    :param numIterations:
+      Number of iterations run for each batch of data. (default: 50)
+    :param miniBatchFraction:
+      Fraction of each batch of data to use for updates. (default: 1.0)
+    :param convergenceTol:
+      Value used to determine when to terminate iterations. (default: 0.001)
     """
     def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, convergenceTol=0.001):
         self.stepSize = stepSize
