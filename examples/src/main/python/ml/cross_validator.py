@@ -37,6 +37,7 @@ if __name__ == "__main__":
     sc = SparkContext(appName="CrossValidatorExample")
     sqlContext = SQLContext(sc)
 
+    # $example on$
     # Prepare training documents, which are labeled.
     LabeledDocument = Row("id", "text", "label")
     training = sc.parallelize([(0, "a b c d e spark", 1.0),
@@ -92,5 +93,6 @@ if __name__ == "__main__":
     selected = prediction.select("id", "text", "probability", "prediction")
     for row in selected.collect():
         print(row)
+    # $example off$
 
     sc.stop()

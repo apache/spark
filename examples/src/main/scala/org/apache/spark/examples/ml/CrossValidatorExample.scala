@@ -47,6 +47,7 @@ object CrossValidatorExample {
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
+    // $example on$
     // Prepare training documents, which are labeled.
     val training = sc.parallelize(Seq(
       LabeledDocument(0L, "a b c d e spark", 1.0),
@@ -107,6 +108,7 @@ object CrossValidatorExample {
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
       println(s"($id, $text) --> prob=$prob, prediction=$prediction")
     }
+    // $example off$
 
     sc.stop()
   }

@@ -57,6 +57,7 @@ public class JavaCrossValidatorExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
+    // $example on$
     // Prepare training documents, which are labeled.
     List<LabeledDocument> localTraining = Lists.newArrayList(
       new LabeledDocument(0L, "a b c d e spark", 1.0),
@@ -120,6 +121,7 @@ public class JavaCrossValidatorExample {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
+    // $example off$
 
     jsc.stop();
   }
