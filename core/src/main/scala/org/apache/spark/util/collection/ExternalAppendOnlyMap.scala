@@ -48,16 +48,6 @@ import org.apache.spark.executor.ShuffleWriteMetrics
  * However, if the spill threshold is too low, we spill frequently and incur unnecessary disk
  * writes. This may lead to a performance regression compared to the normal case of using the
  * non-spilling AppendOnlyMap.
- *
- * Two parameters control the memory threshold:
- *
- *   `spark.shuffle.memoryFraction` specifies the collective amount of memory used for storing
- *   these maps as a fraction of the executor's total memory. Since each concurrently running
- *   task maintains one map, the actual threshold for each map is this quantity divided by the
- *   number of running tasks.
- *
- *   `spark.shuffle.safetyFraction` specifies an additional margin of safety as a fraction of
- *   this threshold, in case map size estimation is not sufficiently accurate.
  */
 @DeveloperApi
 class ExternalAppendOnlyMap[K, V, C](
@@ -104,6 +94,12 @@ class ExternalAppendOnlyMap[K, V, C](
 
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
+
+  /**
+   * Number of files this map has spilled so far.
+   * Exposed for testing.
+   */
+  private[collection] def numSpills: Int = spilledMaps.size
 
   /**
    * Insert the given key and value into the map.
@@ -208,7 +204,9 @@ class ExternalAppendOnlyMap[K, V, C](
           writer.revertPartialWritesAndClose()
         }
         if (file.exists()) {
-          file.delete()
+          if (!file.delete()) {
+            logWarning(s"Error deleting ${file}")
+          }
         }
       }
     }
@@ -489,7 +487,9 @@ class ExternalAppendOnlyMap[K, V, C](
         fileStream = null
       }
       if (file.exists()) {
-        file.delete()
+        if (!file.delete()) {
+          logWarning(s"Error deleting ${file}")
+        }
       }
     }
 

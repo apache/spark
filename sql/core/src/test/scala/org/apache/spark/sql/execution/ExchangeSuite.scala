@@ -19,8 +19,11 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.test.SharedSQLContext
 
-class ExchangeSuite extends SparkPlanTest {
+class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
+  import testImplicits.localSeqToDataFrameHolder
+
   test("shuffling UnsafeRows in exchange") {
     val input = (1 to 1000).map(Tuple1.apply)
     checkAnswer(

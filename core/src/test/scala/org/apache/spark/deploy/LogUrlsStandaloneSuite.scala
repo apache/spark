@@ -19,7 +19,6 @@ package org.apache.spark.deploy
 
 import java.net.URL
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.io.Source
 

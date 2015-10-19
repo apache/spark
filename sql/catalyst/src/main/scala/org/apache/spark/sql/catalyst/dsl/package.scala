@@ -159,6 +159,9 @@ package object dsl {
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
     def abs(e: Expression): Expression = Abs(e)
+    def stddev(e: Expression): Expression = Stddev(e)
+    def stddev_pop(e: Expression): Expression = StddevPop(e)
+    def stddev_samp(e: Expression): Expression = StddevSamp(e)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
@@ -283,7 +286,8 @@ package object dsl {
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(
-          analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite, false)
+          analysis.UnresolvedRelation(TableIdentifier(tableName)),
+          Map.empty, logicalPlan, overwrite, false)
 
       def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer.execute(logicalPlan))
     }

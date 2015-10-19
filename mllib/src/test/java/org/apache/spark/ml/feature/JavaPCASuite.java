@@ -18,11 +18,11 @@
 package org.apache.spark.ml.feature;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 
 import scala.Tuple2;
 
-import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -78,7 +78,7 @@ public class JavaPCASuite implements Serializable {
 
   @Test
   public void testPCA() {
-    List<Vector> points = Lists.newArrayList(
+    List<Vector> points = Arrays.asList(
       Vectors.sparse(5, new int[]{1, 3}, new double[]{1.0, 7.0}),
       Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)

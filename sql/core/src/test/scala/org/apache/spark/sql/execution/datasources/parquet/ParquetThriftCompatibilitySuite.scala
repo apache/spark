@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.test.SharedSQLContext
 
-class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest {
+class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
   import ParquetCompatibilityTest._
-
-  override val sqlContext: SQLContext = TestSQLContext
 
   private val parquetFilePath =
     Thread.currentThread().getContextClassLoader.getResource("parquet-thrift-compat.snappy.parquet")
@@ -35,11 +33,9 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest {
        """.stripMargin)
 
     checkAnswer(sqlContext.read.parquet(parquetFilePath.toString), (0 until 10).map { i =>
-      def nullable[T <: AnyRef]: ( => T) => T = makeNullable[T](i)
-
       val suits = Array("SPADES", "HEARTS", "DIAMONDS", "CLUBS")
 
-      Row(
+      val nonNullablePrimitiveValues = Seq(
         i % 2 == 0,
         i.toByte,
         (i + 1).toShort,
@@ -52,18 +48,15 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest {
         s"val_$i",
         s"val_$i",
         // Thrift ENUM values are converted to Parquet binaries containing UTF-8 strings
-        suits(i % 4),
+        suits(i % 4))
 
-        nullable(i % 2 == 0: java.lang.Boolean),
-        nullable(i.toByte: java.lang.Byte),
-        nullable((i + 1).toShort: java.lang.Short),
-        nullable(i + 2: Integer),
-        nullable((i * 10).toLong: java.lang.Long),
-        nullable(i.toDouble + 0.2d: java.lang.Double),
-        nullable(s"val_$i"),
-        nullable(s"val_$i"),
-        nullable(suits(i % 4)),
+      val nullablePrimitiveValues = if (i % 3 == 0) {
+        Seq.fill(nonNullablePrimitiveValues.length)(null)
+      } else {
+        nonNullablePrimitiveValues
+      }
 
+      val complexValues = Seq(
         Seq.tabulate(3)(n => s"arr_${i + n}"),
         // Thrift `SET`s are converted to Parquet `LIST`s
         Seq(i),
@@ -73,6 +66,83 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest {
             Row(Seq.tabulate(3)(j => i + j + m), s"val_${i + m}")
           }
         }.toMap)
+
+      Row(nonNullablePrimitiveValues ++ nullablePrimitiveValues ++ complexValues: _*)
     })
+  }
+
+  test("SPARK-10136 list of primitive list") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      // This Parquet schema is translated from the following Thrift schema:
+      //
+      //   struct ListOfPrimitiveList {
+      //     1: list<list<i32>> f;
+      //   }
+      val schema =
+        s"""message ListOfPrimitiveList {
+           |  required group f (LIST) {
+           |    repeated group f_tuple (LIST) {
+           |      repeated int32 f_tuple_tuple;
+           |    }
+           |  }
+           |}
+         """.stripMargin
+
+      writeDirect(path, schema, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+            rc.group {
+              rc.field("f_tuple", 0) {
+                rc.group {
+                  rc.field("f_tuple_tuple", 0) {
+                    rc.addInteger(0)
+                    rc.addInteger(1)
+                  }
+                }
+
+                rc.group {
+                  rc.field("f_tuple_tuple", 0) {
+                    rc.addInteger(2)
+                    rc.addInteger(3)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+            rc.group {
+              rc.field("f_tuple", 0) {
+                rc.group {
+                  rc.field("f_tuple_tuple", 0) {
+                    rc.addInteger(4)
+                    rc.addInteger(5)
+                  }
+                }
+
+                rc.group {
+                  rc.field("f_tuple_tuple", 0) {
+                    rc.addInteger(6)
+                    rc.addInteger(7)
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+
+      logParquetSchema(path)
+
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Seq(
+          Row(Seq(Seq(0, 1), Seq(2, 3))),
+          Row(Seq(Seq(4, 5), Seq(6, 7)))))
+    }
   }
 }

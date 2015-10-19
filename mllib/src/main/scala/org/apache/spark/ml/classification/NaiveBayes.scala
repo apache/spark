@@ -18,11 +18,11 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
-import org.apache.spark.ml.param.{ParamMap, ParamValidators, Param, DoubleParam}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
-import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesModel}
+import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes, NaiveBayesModel => OldNaiveBayesModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
@@ -59,6 +59,7 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
 }
 
 /**
+ * :: Experimental ::
  * Naive Bayes Classifiers.
  * It supports both Multinomial NB
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
@@ -68,6 +69,7 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html]]).
  * The input feature values must be nonnegative.
  */
+@Experimental
 class NaiveBayes(override val uid: String)
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams {
@@ -101,11 +103,13 @@ class NaiveBayes(override val uid: String)
 }
 
 /**
+ * :: Experimental ::
  * Model produced by [[NaiveBayes]]
  * @param pi log of class priors, whose dimension is C (number of classes)
  * @param theta log of class conditional probabilities, whose dimension is C (number of classes)
  *              by D (number of features)
  */
+@Experimental
 class NaiveBayesModel private[ml] (
     override val uid: String,
     val pi: Vector,
@@ -132,6 +136,8 @@ class NaiveBayesModel private[ml] (
       // This should never happen.
       throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
+
+  override val numFeatures: Int = theta.numCols
 
   override val numClasses: Int = pi.size
 
@@ -194,7 +200,7 @@ class NaiveBayesModel private[ml] (
   }
 
   override def toString: String = {
-    s"NaiveBayesModel with ${pi.size} classes"
+    s"NaiveBayesModel (uid=$uid) with ${pi.size} classes"
   }
 
 }

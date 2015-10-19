@@ -36,9 +36,10 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType(d.precision, d.scale))
-    case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType(d.precision(), d.scale()))
-    case d: Decimal => Literal(d, DecimalType(d.precision, d.scale))
+    case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case d: java.math.BigDecimal =>
+      Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+    case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
@@ -96,12 +97,12 @@ case class Literal protected (value: Any, dataType: DataType)
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      s"final ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};"
+      s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};"
     } else {
       dataType match {
         case BooleanType =>
           ev.isNull = "false"
-          ev.primitive = value.toString
+          ev.value = value.toString
           ""
         case FloatType =>
           val v = value.asInstanceOf[Float]
@@ -109,7 +110,7 @@ case class Literal protected (value: Any, dataType: DataType)
             super.genCode(ctx, ev)
           } else {
             ev.isNull = "false"
-            ev.primitive = s"${value}f"
+            ev.value = s"${value}f"
             ""
           }
         case DoubleType =>
@@ -118,20 +119,20 @@ case class Literal protected (value: Any, dataType: DataType)
             super.genCode(ctx, ev)
           } else {
             ev.isNull = "false"
-            ev.primitive = s"${value}D"
+            ev.value = s"${value}D"
             ""
           }
         case ByteType | ShortType =>
           ev.isNull = "false"
-          ev.primitive = s"(${ctx.javaType(dataType)})$value"
+          ev.value = s"(${ctx.javaType(dataType)})$value"
           ""
         case IntegerType | DateType =>
           ev.isNull = "false"
-          ev.primitive = value.toString
+          ev.value = value.toString
           ""
         case TimestampType | LongType =>
           ev.isNull = "false"
-          ev.primitive = s"${value}L"
+          ev.value = s"${value}L"
           ""
         // eval() version may be faster for non-primitive types
         case other =>

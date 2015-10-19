@@ -26,8 +26,9 @@
  http://www.eclipse.org/paho/#getting-started
 
  and then run the example
-    `$ bin/spark-submit --jars external/mqtt-assembly/target/scala-*/\
-      spark-streaming-mqtt-assembly-*.jar examples/src/main/python/streaming/mqtt_wordcount.py \
+    `$ bin/spark-submit --jars \
+      external/mqtt-assembly/target/scala-*/spark-streaming-mqtt-assembly-*.jar \
+      examples/src/main/python/streaming/mqtt_wordcount.py \
       tcp://localhost:1883 foo`
 """
 

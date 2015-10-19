@@ -18,11 +18,12 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
 // please note that the META-INF/services had to be modified for the test directory for this to work
-class DDLSourceLoadSuite extends DataSourceTest {
+class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
 
   test("data sources with the same name") {
     intercept[RuntimeException] {

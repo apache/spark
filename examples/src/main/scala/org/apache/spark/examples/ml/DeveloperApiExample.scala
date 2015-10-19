@@ -172,6 +172,9 @@ private class MyLogisticRegressionModel(
   /** Number of classes the label can take.  2 indicates binary classification. */
   override val numClasses: Int = 2
 
+  /** Number of features the model was trained on. */
+  override val numFeatures: Int = weights.size
+
   /**
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
@@ -179,7 +182,7 @@ private class MyLogisticRegressionModel(
    * This is used for the default implementation of [[transform()]].
    */
   override def copy(extra: ParamMap): MyLogisticRegressionModel = {
-    copyValues(new MyLogisticRegressionModel(uid, weights), extra)
+    copyValues(new MyLogisticRegressionModel(uid, weights), extra).setParent(parent)
   }
 }
 // scalastyle:on println

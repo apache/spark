@@ -43,7 +43,7 @@ import org.apache.spark.util.Utils
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname collection_funcs Collection functions
- * @groupname Ungrouped Support functions for DataFrames.
+ * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
 @Experimental
@@ -293,6 +293,33 @@ object functions {
    * @since 1.3.0
    */
   def min(columnName: String): Column = min(Column(columnName))
+
+  /**
+   * Aggregate function: returns the unbiased sample standard deviation
+   * of the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev(e: Column): Column = Stddev(e.expr)
+
+  /**
+   * Aggregate function: returns the population standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_pop(e: Column): Column = StddevPop(e.expr)
+
+  /**
+   * Aggregate function: returns the unbiased sample standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_samp(e: Column): Column = StddevSamp(e.expr)
 
   /**
    * Aggregate function: returns the sum of all values in the expression.
@@ -796,7 +823,7 @@ object functions {
    *
    * @group normal_funcs
    */
-  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
+  def expr(expr: String): Column = Column(SqlParser.parseExpression(expr))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
@@ -1863,14 +1890,15 @@ object functions {
   def substring_index(str: Column, delim: String, count: Int): Column =
     SubstringIndex(str.expr, lit(delim).expr, lit(count).expr)
 
-  /* Translate any character in the src by a character in replaceString.
-  * The characters in replaceString is corresponding to the characters in matchingString.
-  * The translate will happen when any character in the string matching with the character
-  * in the matchingString.
-  *
-  * @group string_funcs
-  * @since 1.5.0
-  */
+  /**
+   * Translate any character in the src by a character in replaceString.
+   * The characters in replaceString is corresponding to the characters in matchingString.
+   * The translate will happen when any character in the string matching with the character
+   * in the matchingString.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
   def translate(src: Column, matchingString: String, replaceString: String): Column =
     StringTranslate(src.expr, lit(matchingString).expr, lit(replaceString).expr)
 

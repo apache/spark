@@ -94,7 +94,7 @@ private[spark] object ClosureCleaner extends Logging {
     if (cls.isPrimitive) {
       cls match {
         case java.lang.Boolean.TYPE => new java.lang.Boolean(false)
-        case java.lang.Character.TYPE => new java.lang.Character('\0')
+        case java.lang.Character.TYPE => new java.lang.Character('\u0000')
         case java.lang.Void.TYPE =>
           // This should not happen because `Foo(void x) {}` does not compile.
           throw new IllegalStateException("Unexpected void parameter in constructor")
@@ -181,7 +181,7 @@ private[spark] object ClosureCleaner extends Logging {
       return
     }
 
-    logDebug(s"+++ Cleaning closure $func (${func.getClass.getName}}) +++")
+    logDebug(s"+++ Cleaning closure $func (${func.getClass.getName}) +++")
 
     // A list of classes that represents closures enclosed in the given one
     val innerClasses = getInnerClosureClasses(func)

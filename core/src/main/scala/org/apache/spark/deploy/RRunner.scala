@@ -20,11 +20,12 @@ package org.apache.spark.deploy
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.api.r.{RBackend, RUtils}
+import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -68,7 +69,7 @@ object RRunner {
     if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
       val returnCode = try {
-        val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
+        val builder = new ProcessBuilder((Seq(rCommand, rFileNormalized) ++ otherArgs).asJava)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
         val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
@@ -84,12 +85,15 @@ object RRunner {
       } finally {
         sparkRBackend.close()
       }
-      System.exit(returnCode)
+      if (returnCode != 0) {
+        throw new SparkUserAppException(returnCode)
+      }
     } else {
+      val errorMessage = s"SparkR backend did not initialize in $backendTimeout seconds"
       // scalastyle:off println
-      System.err.println("SparkR backend did not initialize in " + backendTimeout + " seconds")
+      System.err.println(errorMessage)
       // scalastyle:on println
-      System.exit(-1)
+      throw new SparkException(errorMessage)
     }
   }
 }

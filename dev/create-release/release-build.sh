@@ -70,7 +70,7 @@ GIT_REF=${GIT_REF:-master}
 # Destination directory parent on remote server
 REMOTE_PARENT_DIR=${REMOTE_PARENT_DIR:-/home/$ASF_USERNAME/public_html}
 
-SSH="ssh -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
+SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
 GPG="gpg --no-tty --batch"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
@@ -99,6 +99,7 @@ fi
 DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 USER_HOST="$ASF_USERNAME@people.apache.org"
 
+git clean -d -f -x
 rm .gitignore
 rm -rf .git
 cd ..
@@ -140,8 +141,12 @@ if [[ "$1" == "package" ]]; then
 
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
-    ./make-distribution.sh --name $NAME --tgz $FLAGS -DzincPort=$ZINC_PORT 2>&1 > \
-      ../binary-release-$NAME.log
+
+    # Get maven home set by MVN
+    MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
+
+    ./make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
+      -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
     cd ..
     cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
 
@@ -225,9 +230,9 @@ if [[ "$1" == "publish-snapshot" ]]; then
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES \
     -Phive-thriftserver deploy
-  ./dev/change-scala-version.sh 2.10
+  ./dev/change-scala-version.sh 2.11
   $MVN -DzincPort=$ZINC_PORT -Dscala-2.11 --settings $tmp_settings \
-    -DskipTests $PUBLISH_PROFILES deploy
+    -DskipTests $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill

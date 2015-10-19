@@ -197,7 +197,11 @@ class KafkaRDD[
         .dropWhile(_.offset < requestOffset)
     }
 
-    override def close(): Unit = consumer.close()
+    override def close(): Unit = {
+      if (consumer != null) {
+        consumer.close()
+      }
+    }
 
     override def getNext(): R = {
       if (iter == null || !iter.hasNext) {

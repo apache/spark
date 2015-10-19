@@ -28,7 +28,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
  * Command builder for internal Spark classes.
- * <p/>
+ * <p>
  * This class handles building the command to launch all internal Spark classes except for
  * SparkSubmit (which is handled by {@link SparkSubmitCommandBuilder} class.
  */

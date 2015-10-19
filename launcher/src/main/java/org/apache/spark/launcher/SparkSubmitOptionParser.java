@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
 
 /**
  * Parser for spark-submit command line options.
- * <p/>
+ * <p>
  * This class encapsulates the parsing code for spark-submit command line options, so that there
  * is a single list of options that needs to be maintained (well, sort of, but it makes it harder
  * to break things).
@@ -80,10 +80,10 @@ class SparkSubmitOptionParser {
    * This is the canonical list of spark-submit options. Each entry in the array contains the
    * different aliases for the same option; the first element of each entry is the "official"
    * name of the option, passed to {@link #handle(String, String)}.
-   * <p/>
+   * <p>
    * Options not listed here nor in the "switch" list below will result in a call to
    * {@link $#handleUnknown(String)}.
-   * <p/>
+   * <p>
    * These two arrays are visible for tests.
    */
   final String[][] opts = {
@@ -130,7 +130,7 @@ class SparkSubmitOptionParser {
 
   /**
    * Parse a list of spark-submit command line options.
-   * <p/>
+   * <p>
    * See SparkSubmitArguments.scala for a more formal description of available options.
    *
    * @throws IllegalArgumentException If an error is found during parsing.

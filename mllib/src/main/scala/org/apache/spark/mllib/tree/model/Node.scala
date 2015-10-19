@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.Logging
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.linalg.Vector
@@ -39,16 +39,17 @@ import org.apache.spark.mllib.linalg.Vector
  * @param rightNode right child
  * @param stats information gain stats
  */
+@Since("1.0.0")
 @DeveloperApi
-class Node (
-    val id: Int,
-    var predict: Predict,
-    var impurity: Double,
-    var isLeaf: Boolean,
-    var split: Option[Split],
-    var leftNode: Option[Node],
-    var rightNode: Option[Node],
-    var stats: Option[InformationGainStats]) extends Serializable with Logging {
+class Node @Since("1.2.0") (
+    @Since("1.0.0") val id: Int,
+    @Since("1.0.0") var predict: Predict,
+    @Since("1.2.0") var impurity: Double,
+    @Since("1.0.0") var isLeaf: Boolean,
+    @Since("1.0.0") var split: Option[Split],
+    @Since("1.0.0") var leftNode: Option[Node],
+    @Since("1.0.0") var rightNode: Option[Node],
+    @Since("1.0.0") var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
   override def toString: String = {
     s"id = $id, isLeaf = $isLeaf, predict = $predict, impurity = $impurity, " +
@@ -59,6 +60,7 @@ class Node (
    * build the left node and right nodes if not leaf
    * @param nodes array of nodes
    */
+  @Since("1.0.0")
   @deprecated("build should no longer be used since trees are constructed on-the-fly in training",
     "1.2.0")
   def build(nodes: Array[Node]): Unit = {
@@ -80,6 +82,7 @@ class Node (
    * @param features feature value
    * @return predicted value
    */
+  @Since("1.1.0")
   def predict(features: Vector) : Double = {
     if (isLeaf) {
       predict.predict

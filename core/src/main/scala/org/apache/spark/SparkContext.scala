@@ -26,13 +26,14 @@ import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicInteger}
 import java.util.UUID.randomUUID
 
+import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
-import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -89,14 +90,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
   SparkContext.markPartiallyConstructed(this, allowMultipleContexts)
 
-  // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
-  // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
-  // contains a map from hostname to a list of input format splits on the host.
-  private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
-
   val startTime = System.currentTimeMillis()
 
-  private val stopped: AtomicBoolean = new AtomicBoolean(false)
+  private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
   private def assertNotStopped(): Unit = {
     if (stopped.get()) {
@@ -114,14 +110,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * :: DeveloperApi ::
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
-   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
-   * from a list of input files or InputFormats for the application.
+   * @param config a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
+   * @param preferredNodeLocationData not used. Left for backward compatibility.
    */
+  @deprecated("Passing in preferred locations has no effect at all, see SPARK-8949", "1.5.0")
   @DeveloperApi
   def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
     this(config)
-    this.preferredNodeLocationData = preferredNodeLocationData
+    logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
   }
 
   /**
@@ -143,7 +139,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes.
+   * @param preferredNodeLocationData not used. Left for backward compatibility.
    */
+  @deprecated("Passing in preferred locations has no effect at all, see SPARK-10921", "1.6.0")
   def this(
       master: String,
       appName: String,
@@ -153,7 +151,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) =
   {
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
-    this.preferredNodeLocationData = preferredNodeLocationData
+    if (preferredNodeLocationData.nonEmpty) {
+      logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
+    }
   }
 
   // NOTE: The below constructors could be consolidated using default arguments. Due to
@@ -167,7 +167,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param appName A name for your application, to display on the cluster web UI.
    */
   private[spark] def this(master: String, appName: String) =
-    this(master, appName, null, Nil, Map(), Map())
+    this(master, appName, null, Nil, Map())
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -177,7 +177,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param sparkHome Location where Spark is installed on cluster nodes.
    */
   private[spark] def this(master: String, appName: String, sparkHome: String) =
-    this(master, appName, sparkHome, Nil, Map(), Map())
+    this(master, appName, sparkHome, Nil, Map())
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -189,7 +189,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
-    this(master, appName, sparkHome, jars, Map(), Map())
+    this(master, appName, sparkHome, jars, Map())
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
@@ -255,6 +255,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   val tachyonFolderName = externalBlockStoreFolderName
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
+
+  /**
+   * @return true if context is stopped or in the midst of stopping.
+   */
+  def isStopped: Boolean = stopped.get()
 
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
@@ -338,8 +343,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
-  private val localProperties = new InheritableThreadLocal[Properties] {
-    override protected def childValue(parent: Properties): Properties = new Properties(parent)
+  protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
+    override protected def childValue(parent: Properties): Properties = {
+      // Note: make a clone such that changes in the parent properties aren't reflected in
+      // the those of the children threads, which has confusing semantics (SPARK-10563).
+      SerializationUtils.clone(parent).asInstanceOf[Properties]
+    }
     override protected def initialValue(): Properties = new Properties()
   }
 
@@ -507,6 +516,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
@@ -836,6 +846,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
    *       in a directory rather than `.../path/` or `.../path`
+   *
+   * @param path Directory to the input data files, the path can be comma separated paths as the
+   *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   def wholeTextFiles(
@@ -846,7 +859,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updateConf = job.getConfiguration
+    val updateConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
     new WholeTextFileRDD(
       this,
       classOf[WholeTextFileInputFormat],
@@ -884,6 +897,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred; very large files may cause bad performance.
    * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
    *       in a directory rather than `.../path/` or `.../path`
+   *
+   * @param path Directory to the input data files, the path can be comma separated paths as the
+   *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   @Experimental
@@ -895,7 +911,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updateConf = job.getConfiguration
+    val updateConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
     new BinaryFileRDD(
       this,
       classOf[StreamInputFormat],
@@ -913,8 +929,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * '''Note:''' We ensure that the byte array for each record in the resulting RDD
    * has the provided record length.
    *
-   * @param path Directory to the input data files
+   * @param path Directory to the input data files, the path can be comma separated paths as the
+   *             list of inputs.
    * @param recordLength The length at which to split the records
+   * @param conf Configuration for setting up the dataset.
+   *
    * @return An RDD of data with values, represented as byte arrays
    */
   @Experimental
@@ -1074,7 +1093,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updatedConf = job.getConfiguration
+    val updatedConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
 
@@ -1498,8 +1517,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   def getRDDStorageInfo: Array[RDDInfo] = {
+    getRDDStorageInfo(_ => true)
+  }
+
+  private[spark] def getRDDStorageInfo(filter: RDD[_] => Boolean): Array[RDDInfo] = {
     assertNotStopped()
-    val rddInfos = persistentRdds.values.map(RDDInfo.fromRdd).toArray
+    val rddInfos = persistentRdds.values.filter(filter).map(RDDInfo.fromRdd).toArray
     StorageUtils.updateRddInfo(rddInfos, getExecutorStorageStatus)
     rddInfos.filter(_.isCached)
   }
@@ -1528,7 +1551,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def getAllPools: Seq[Schedulable] = {
     assertNotStopped()
     // TODO(xiajunluan): We should take nested pools into account
-    taskScheduler.rootPool.schedulableQueue.toSeq
+    taskScheduler.rootPool.schedulableQueue.asScala.toSeq
   }
 
   /**
@@ -1572,11 +1595,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register an RDD to be persisted in memory and/or disk storage
    */
   private[spark] def persistRDD(rdd: RDD[_]) {
-    _executorAllocationManager.foreach { _ =>
-      logWarning(
-        s"Dynamic allocation currently does not support cached RDDs. Cached data for RDD " +
-        s"${rdd.id} will be lost when executors are removed.")
-    }
     persistentRdds(rdd.id) = rdd
   }
 
@@ -1728,6 +1746,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
       SparkEnv.set(null)
     }
+    // Unset YARN mode system env variable, to allow switching between cluster types.
+    System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
   }
@@ -1965,6 +1985,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       resultHandler,
       localProperties.get)
     new SimpleFutureAction(waiter, resultFunc)
+  }
+
+  /**
+   * Submit a map stage for execution. This is currently an internal API only, but might be
+   * promoted to DeveloperApi in the future.
+   */
+  private[spark] def submitMapStage[K, V, C](dependency: ShuffleDependency[K, V, C])
+      : SimpleFutureAction[MapOutputStatistics] = {
+    assertNotStopped()
+    val callSite = getCallSite()
+    var result: MapOutputStatistics = null
+    val waiter = dagScheduler.submitMapStage(
+      dependency,
+      (r: MapOutputStatistics) => { result = r },
+      callSite,
+      localProperties.get)
+    new SimpleFutureAction[MapOutputStatistics](waiter, result)
   }
 
   /**

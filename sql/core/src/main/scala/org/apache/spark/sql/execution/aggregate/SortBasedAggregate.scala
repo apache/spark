@@ -23,9 +23,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples, Distribution}
-import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, SparkPlan, UnaryNode}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.StructType
 
 case class SortBasedAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
@@ -79,18 +78,23 @@ case class SortBasedAggregate(
         // so return an empty iterator.
         Iterator[InternalRow]()
       } else {
-        val outputIter = SortBasedAggregationIterator.createFromInputIterator(
-          groupingExpressions,
+        val groupingKeyProjection = if (UnsafeProjection.canSupport(groupingExpressions)) {
+          UnsafeProjection.create(groupingExpressions, child.output)
+        } else {
+          newMutableProjection(groupingExpressions, child.output)()
+        }
+        val outputIter = new SortBasedAggregationIterator(
+          groupingKeyProjection,
+          groupingExpressions.map(_.toAttribute),
+          child.output,
+          iter,
           nonCompleteAggregateExpressions,
           nonCompleteAggregateAttributes,
           completeAggregateExpressions,
           completeAggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
-          newMutableProjection _,
-          newProjection _,
-          child.output,
-          iter,
+          newMutableProjection,
           outputsUnsafeRows,
           numInputRows,
           numOutputRows)
@@ -108,6 +112,10 @@ case class SortBasedAggregate(
 
   override def simpleString: String = {
     val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
-    s"""SortBasedAggregate ${groupingExpressions} ${allAggregateExpressions}"""
+
+    val keyString = groupingExpressions.mkString("[", ",", "]")
+    val functionString = allAggregateExpressions.mkString("[", ",", "]")
+    val outputString = output.mkString("[", ",", "]")
+    s"SortBasedAggregate(key=$keyString, functions=$functionString, output=$outputString)"
   }
 }

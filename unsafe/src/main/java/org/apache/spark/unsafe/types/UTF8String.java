@@ -18,8 +18,8 @@
 package org.apache.spark.unsafe.types;
 
 import javax.annotation.Nonnull;
-import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
@@ -38,12 +38,13 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
-public final class UTF8String implements Comparable<UTF8String>, Serializable {
+public final class UTF8String implements Comparable<UTF8String>, Externalizable {
 
+  // These are only updated by readExternal()
   @Nonnull
-  private final Object base;
-  private final long offset;
-  private final int numBytes;
+  private Object base;
+  private long offset;
+  private int numBytes;
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -90,11 +91,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Creates an UTF8String from given address (base and offset) and length.
    */
   public static UTF8String fromAddress(Object base, long offset, int numBytes) {
-    if (base != null) {
-      return new UTF8String(base, offset, numBytes);
-    } else {
-      return null;
-    }
+    return new UTF8String(base, offset, numBytes);
   }
 
   /**
@@ -127,6 +124,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     this.numBytes = numBytes;
   }
 
+  // for serialization
+  public UTF8String() {
+    this(null, 0, 0);
+  }
+
   /**
    * Writes the content of this string into a memory address, identified by an object and an offset.
    * The target memory address must already been allocated, and have enough space to hold all the
@@ -134,6 +136,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(base, offset, target, targetOffset, numBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert(buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + numBytes);
   }
 
   /**
@@ -978,4 +989,18 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
     return UTF8String.fromBytes(sx);
   }
+
+  public void writeExternal(ObjectOutput out) throws IOException {
+    byte[] bytes = getBytes();
+    out.writeInt(bytes.length);
+    out.write(bytes);
+  }
+
+  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+    offset = BYTE_ARRAY_OFFSET;
+    numBytes = in.readInt();
+    base = new byte[numBytes];
+    in.readFully((byte[]) base);
+  }
+
 }

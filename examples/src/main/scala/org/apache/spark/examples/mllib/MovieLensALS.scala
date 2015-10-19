@@ -55,7 +55,7 @@ object MovieLensALS {
     val parser = new OptionParser[Params]("MovieLensALS") {
       head("MovieLensALS: an example app for ALS on MovieLens data.")
       opt[Int]("rank")
-        .text(s"rank, default: ${defaultParams.rank}}")
+        .text(s"rank, default: ${defaultParams.rank}")
         .action((x, c) => c.copy(rank = x))
       opt[Int]("numIterations")
         .text(s"number of iterations, default: ${defaultParams.numIterations}")

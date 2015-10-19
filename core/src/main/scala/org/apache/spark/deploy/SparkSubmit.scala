@@ -39,8 +39,8 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
 
+import org.apache.spark.{SparkUserAppException, SPARK_VERSION}
 import org.apache.spark.api.r.RUtils
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
@@ -319,8 +319,8 @@ object SparkSubmit {
 
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
-      case (MESOS, CLUSTER) if args.isPython =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+      case (MESOS, CLUSTER) if args.isR =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for R " +
           "applications on Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
@@ -551,7 +551,15 @@ object SparkSubmit {
     if (isMesosCluster) {
       assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
       childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
-      childArgs += (args.primaryResource, args.mainClass)
+      if (args.isPython) {
+        // Second argument is main class
+        childArgs += (args.primaryResource, "")
+        if (args.pyFiles != null) {
+          sysProps("spark.submit.pyFiles") = args.pyFiles
+        }
+      } else {
+        childArgs += (args.primaryResource, args.mainClass)
+      }
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
@@ -672,7 +680,13 @@ object SparkSubmit {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        findCause(t) match {
+          case SparkUserAppException(exitCode) =>
+            System.exit(exitCode)
+
+          case t: Throwable =>
+            throw t
+        }
     }
   }
 

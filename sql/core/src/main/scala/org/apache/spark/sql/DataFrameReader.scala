@@ -19,7 +19,10 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
@@ -31,6 +34,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, Partition}
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 
 /**
  * :: Experimental ::
@@ -90,7 +94,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def options(options: java.util.Map[String, String]): DataFrameReader = {
-    this.options(scala.collection.JavaConversions.mapAsScalaMap(options))
+    this.options(options.asScala)
     this
   }
 
@@ -118,6 +122,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * Loads input in as a [[DataFrame]], for data sources that support multiple paths.
+   * Only works if the source is a HadoopFsRelationProvider.
+   *
+   * @since 1.6.0
+   */
+  def load(paths: Array[String]): DataFrame = {
+    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
   }
 
   /**
@@ -197,7 +211,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    val relation = JDBCRelation(url, table, parts, connectionProperties)(sqlContext)
+    val props = new Properties()
+    extraOptions.foreach { case (key, value) =>
+      props.put(key, value)
+    }
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    val relation = JDBCRelation(url, table, parts, props)(sqlContext)
     sqlContext.baseRelationToDataFrame(relation)
   }
 
@@ -279,7 +299,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    DataFrame(sqlContext, sqlContext.catalog.lookupRelation(Seq(tableName)))
+    DataFrame(sqlContext, sqlContext.catalog.lookupRelation(TableIdentifier(tableName)))
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////
