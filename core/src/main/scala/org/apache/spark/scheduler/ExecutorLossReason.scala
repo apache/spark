@@ -33,7 +33,10 @@ case class ExecutorExited(exitCode: Int, exitUnrelatedToRunningTasks: Boolean, r
 
 private[spark] object ExecutorExited {
   def apply(exitCode: Int, exitUnrelatedToRunningTasks: Boolean): ExecutorExited = {
-    ExecutorExited(exitCode, exitUnrelatedToRunningTasks, ExecutorExitCode.explainExitCode(exitCode))
+    ExecutorExited(
+      exitCode,
+      exitUnrelatedToRunningTasks,
+      ExecutorExitCode.explainExitCode(exitCode))
   }
 }
 
