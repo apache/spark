@@ -51,7 +51,10 @@ mysql = ['mysqlclient>=1.3.6']
 optional = ['librabbitmq>=1.6.1']
 oracle = ['cx_Oracle>=5.1.2']
 postgres = ['psycopg2>=2.6']
-s3 = ['boto>=2.36.0']
+s3 = [
+    'boto>=2.36.0',
+    'filechunkio>=1.6',
+]
 samba = ['pysmbclient>=0.1.3']
 slack = ['slackclient>=0.15']
 statsd = ['statsd>=3.0.1, <4.0']

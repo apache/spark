@@ -2,7 +2,6 @@ from future import standard_library
 standard_library.install_aliases()
 import logging
 import re
-from filechunkio import FileChunkIO
 import fnmatch
 import configparser
 import math
@@ -310,6 +309,7 @@ class S3Hook(BaseHook):
             raise ValueError("The key {key} already exists.".format(
                 **locals()))
         if multipart_bytes:
+            from filechunkio import FileChunkIO
             key_size = os.path.getsize(filename)
             mp = bucket.initiate_multipart_upload(key_name=key)
             total_chunks = int(math.ceil(key_size / multipart_bytes))
