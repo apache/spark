@@ -41,7 +41,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
   protected def create(columnTypes: Seq[DataType]): ColumnarIterator = {
     val ctx = newCodeGenContext()
-    val (creaters, accesses) = columnTypes.zipWithIndex.map { case (dt, index) =>
+    val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
       val accessorName = ctx.freshName("accessor")
       val accessorCls = dt match {
         case NullType => classOf[NullColumnAccessor].getName
@@ -92,7 +92,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private byte[][] buffers = null;
 
         private int currentRow = 0;
-        private int totalRows = 0;
+        private int numRowsInBatch = 0;
 
         private scala.collection.Iterator input = null;
         private MutableRow mutableRow = null;
@@ -117,7 +117,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         }
 
         public boolean hasNext() {
-          if (currentRow < totalRows) {
+          if (currentRow < numRowsInBatch) {
             return true;
           }
           if (!input.hasNext()) {
@@ -126,17 +126,17 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
           ${classOf[CachedBatch].getName} batch = (${classOf[CachedBatch].getName}) input.next();
           currentRow = 0;
-          totalRows = batch.count();
-          for (int i=0; i<columnIndexes.length; i++) {
+          numRowsInBatch = batch.numRows();
+          for (int i = 0; i < columnIndexes.length; i ++) {
             buffers[i] = batch.buffers()[columnIndexes[i]];
           }
-          ${creaters.mkString("\n")}
+          ${initializeAccessors.mkString("\n")}
 
           return hasNext();
         }
 
         public InternalRow next() {
-          ${accesses.mkString("\n")}
+          ${extractors.mkString("\n")}
           currentRow += 1;
           return mutableRow;
         }

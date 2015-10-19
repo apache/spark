@@ -31,6 +31,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A help class for fast reading Int/Long/Float/Double from ByteBuffer in native order.
+ *
+ * WARNNING: This only works with HeapByteBuffer
  */
 object ByteBufferHelper {
   def getInt(buffer: ByteBuffer): Int = {
@@ -360,7 +362,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 8) {
   }
 
   override def extract(buffer: ByteBuffer): UTF8String = {
-    val length = ByteBufferHelper.getInt(buffer)
+    val length = buffer.getInt()
     assert(buffer.hasArray)
     val base = buffer.array()
     val offset = buffer.arrayOffset()
@@ -426,7 +428,7 @@ private[sql] sealed abstract class ByteArrayColumnType[JvmType](val defaultSize:
   }
 
   override def extract(buffer: ByteBuffer): JvmType = {
-    val length = ByteBufferHelper.getInt(buffer)
+    val length = buffer.getInt()
     val bytes = new Array[Byte](length)
     buffer.get(bytes, 0, length)
     deserialize(bytes)

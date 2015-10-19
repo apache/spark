@@ -42,7 +42,14 @@ private[sql] object InMemoryRelation {
       tableName)()
 }
 
-private[sql] case class CachedBatch(count: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+/**
+ * CachedBatch is a cached batch of rows.
+ *
+ * @param numRows The total number of rows in this batch
+ * @param buffers The buffers for serialized columns
+ * @param stats The stat of columns
+ */
+private[sql] case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
