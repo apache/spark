@@ -19,6 +19,8 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Types
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.SqlIdentifierUtil._
 import org.apache.spark.sql.types._
 import org.apache.spark.annotation.DeveloperApi
 
@@ -63,6 +65,12 @@ abstract class JdbcDialect {
   def canHandle(url : String): Boolean
 
   /**
+   * Return the character used to frame delimited identifiers in this database.
+   * @return The delimited id character (usually ", sometimes `)
+   */
+  def quoteChar: Char = '"'
+
+  /**
    * Get the custom datatype mapping for the given jdbc meta information.
    * @param sqlType The sql type (see java.sql.Types)
    * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
@@ -86,19 +94,63 @@ abstract class JdbcDialect {
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
   def quoteIdentifier(colName: String): String = {
-    s""""$colName""""
+    quoteString(colName, quoteChar)
+  }
+
+  /**
+   * Get the SQL query that should be used to find if the given table exists.
+   * Call this method (and not tableExistsQuery) in order to verify
+   * that the table name is properly formed.
+   * @param table  The name of the table.
+   * @return The SQL query to use for checking the table.
+   * @throws org.apache.spark.SparkException On invalid table name.
+   */
+  final def getTableExistsQuery(table: String): String = {
+    vetSqlIdentifier(table)
+    tableExistsQuery(table)
   }
 
   /**
    * Get the SQL query that should be used to find if the given table exists. Dialects can
    * override this method to return a query that works best in a particular database.
+   * Don't expose this method outside this class and its subclasses.
+   * Other consumers should call getTableExistsQuery instead. That method
+   * verifies that the table name is properly formed.
    * @param table  The name of the table.
    * @return The SQL query to use for checking the table.
    */
-  def getTableExistsQuery(table: String): String = {
+  protected def tableExistsQuery(table: String): String = {
     s"SELECT * FROM $table WHERE 1=0"
   }
 
+  /** Vet a user-supplied object id of the form
+    * [[catalog.]schema.]objectName
+    * by parsing it into a (catalog, schema, objectName)
+    * triple. The catalog and schema names may be empty. Raises
+    * a SparkException if the user-supplied id is malformed,
+    * e.g., is a string like "foo; drop database finance;"
+    * intended for a SQL injection attack.
+    *
+    * @param rawId The user-supplied object id (name).
+    * @throws org.apache.spark.SparkException On invalid ids.
+    */
+  def vetSqlIdentifier(rawId: String) {
+
+    // It's ok to assume that the database uppercases unquoted
+    // identifiers. That's because we aren't actually returning the
+    // parsed result to the user. The case-sensitivity of SQL
+    // identifiers is a tricky topic. See, for instance:
+    // https://github.com/ontop/ontop/wiki/Case-sensitivity-for-SQL-identifiers
+    val parsed : Array[String] = parseMultiPartSQLIdentifier(rawId,
+      quoteChar, true)
+
+    parsed.length match {
+      case 1 => (null, null, parsed(0))
+      case 2 => (null, parsed(0), parsed(1))
+      case 3 => (parsed(0), parsed(1), parsed(2))
+      case _ => throw new SparkException("Unparsable object id: " + rawId)
+    }
+  }
 }
 
 /**
@@ -152,6 +204,12 @@ object JdbcDialects {
       case _ => new AggregatedDialect(matchingDialects)
     }
   }
+
+  /**
+   * Get all dialects (useful for testing purposes).
+   */
+  private[sql] def getAllDialects(): List[JdbcDialect] = dialects
+
 }
 
 /**
@@ -217,7 +275,7 @@ case object PostgresDialect extends JdbcDialect {
     case _ => None
   }
 
-  override def getTableExistsQuery(table: String): String = {
+  override protected def tableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"
   }
 
@@ -230,6 +288,7 @@ case object PostgresDialect extends JdbcDialect {
 @DeveloperApi
 case object MySQLDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = url.startsWith("jdbc:mysql")
+  override def quoteChar: Char = '`'
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
@@ -242,11 +301,7 @@ case object MySQLDialect extends JdbcDialect {
     } else None
   }
 
-  override def quoteIdentifier(colName: String): String = {
-    s"`$colName`"
-  }
-
-  override def getTableExistsQuery(table: String): String = {
+  override protected def tableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"
   }
 }

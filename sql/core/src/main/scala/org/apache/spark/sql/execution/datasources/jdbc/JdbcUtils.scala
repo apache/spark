@@ -23,7 +23,7 @@ import java.util.Properties
 import scala.util.Try
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -54,14 +54,20 @@ object JdbcUtils extends Logging {
   /**
    * Drops a table from the JDBC database.
    */
-  def dropTable(conn: Connection, table: String): Unit = {
+  def dropTable(conn: Connection, dialect: JdbcDialect, table: String): Unit = {
+    dialect.vetSqlIdentifier(table)
     conn.prepareStatement(s"DROP TABLE $table").executeUpdate()
   }
 
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
-  def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
+  def insertStatement(
+      conn: Connection,
+      dialect: JdbcDialect,
+      table: String,
+      rddSchema: StructType): PreparedStatement = {
+    dialect.vetSqlIdentifier(table)
     val sql = new StringBuilder(s"INSERT INTO $table VALUES (")
     var fieldsLeft = rddSchema.fields.length
     while (fieldsLeft > 0) {
@@ -88,6 +94,7 @@ object JdbcUtils extends Logging {
    */
   def savePartition(
       getConnection: () => Connection,
+      dialect: JdbcDialect,
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
@@ -97,7 +104,7 @@ object JdbcUtils extends Logging {
     var committed = false
     try {
       conn.setAutoCommit(false) // Everything in the same db transaction.
-      val stmt = insertStatement(conn, table, rddSchema)
+      val stmt = insertStatement(conn, dialect, table, rddSchema)
       try {
         var rowCount = 0
         while (iterator.hasNext) {
@@ -225,8 +232,10 @@ object JdbcUtils extends Logging {
     val driver: String = DriverRegistry.getDriverClassName(url)
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
+    val jdbcDialect = JdbcDialects.get(url)
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize)
+      savePartition(getConnection, jdbcDialect, table, iterator,
+        rddSchema, nullTypes, batchSize)
     }
   }
 

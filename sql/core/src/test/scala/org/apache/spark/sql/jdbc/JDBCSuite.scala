@@ -25,6 +25,7 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.SparkException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -484,4 +485,59 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)
   }
+
+  /**
+   * Verify that the JdbcDialect rejects an illegal name.
+   * @param dialect The JdbcDialect.
+   * @param tableName A bad table name.
+   */
+  def badNameVetter(dialect: JdbcDialect, tableName: String) {
+    val badTableName = tableName.replace( '"', dialect.quoteChar)
+    val dialectName = dialect.getClass.getName
+    try {
+      dialect.vetSqlIdentifier(badTableName)
+      fail(dialectName + " should have rejected " + badTableName)
+    } catch {
+      case exc: SparkException => {
+        val expectedMessage = "Error parsing SQL identifier: " + badTableName
+        assert(expectedMessage == exc.getMessage)
+      }
+      case obj: Throwable => {
+        val badResponse = obj.toString
+        fail("Unexpected vetting failure when dialect " + dialectName +
+          " vets table name " + badTableName + ": " + badResponse)
+      }
+    }
+  }
+
+  test("verify that JDBC dialects vet table names") {
+    val badNames =
+      """bad"name""" ::
+      """foo; drop database finance;""" ::
+      Nil
+    val allDialects = JdbcDialects.getAllDialects()
+    for ( d <- allDialects; b <- badNames ) badNameVetter(d, b)
+
+    val goodNames =
+      """foo.bar""" ::
+      """"foo".bar""" ::
+      """"foo"."bar"""" ::
+      """foo."bar"""" ::
+      """"foo.bar"""" ::
+      Nil
+    for ( d <- allDialects; g <- goodNames ) {
+      val goodTableName = g.replace( '"', d.quoteChar)
+      try {
+        d.getTableExistsQuery(goodTableName)
+      } catch {
+        case obj: Throwable => {
+          val errorMessage = "Dang. " + d.getClass.getName +
+              " couldn't handle " +
+              goodTableName + ": " + obj.toString
+          fail(errorMessage)
+        }
+      }
+    }
+  }
+
 }
