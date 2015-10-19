@@ -300,7 +300,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def range(e: Column): Column = Range(e.expr) 
+  def range(e: Column): Column = Range(e.expr)
 
   /**
    * Aggregate function: returns the unbiased sample standard deviation

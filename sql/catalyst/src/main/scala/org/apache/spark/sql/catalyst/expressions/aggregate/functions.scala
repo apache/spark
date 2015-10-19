@@ -265,7 +265,7 @@ case class Range(child: Expression) extends DeclarativeAggregate {
   override def dataType: DataType = child.dataType
 
   // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
 
   private val min = AttributeReference("min", child.dataType)()
 
