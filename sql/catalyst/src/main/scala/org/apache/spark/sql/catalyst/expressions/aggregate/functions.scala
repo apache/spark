@@ -811,8 +811,6 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  def cloneBufferAttributes: Seq[Attribute] = aggBufferAttributes.map(_.newInstance())
-
   /**
    * The number of central moments to store in the buffer
    */
@@ -837,10 +835,10 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
    * Update the central moments buffer.
    */
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val v = child.eval(input)
+    val v = Cast(child, DoubleType).eval(input)
     if (v != null) {
       val updateValue = v match {
-        case d: java.lang.Number => d.doubleValue()
+        case d: Double => d
         case _ => 0.0
       }
       val currentM0 = buffer.getDouble(mutableAggBufferOffset)
@@ -1031,7 +1029,7 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
   override def prettyName: String = "variance_pop"
 
-  val maxMoment = 2
+  protected val maxMoment = 2
 
   override def eval(buffer: InternalRow): Any = {
     // var_pop = M2 / M0

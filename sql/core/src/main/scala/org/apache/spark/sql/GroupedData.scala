@@ -268,6 +268,7 @@ class GroupedData protected[sql](
   }
 
   /**
+   * Compute the kurtosis for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the kurtosis values for them.
    *
