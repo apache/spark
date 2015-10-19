@@ -181,19 +181,4 @@ public class UnsafeRowWriter {
     // move the cursor forward.
     holder.cursor += 16;
   }
-
-
-
-  // If this struct is already an UnsafeRow, we don't need to go through all fields, we can
-  // directly write it.
-  public static void directWrite(BufferHolder holder, UnsafeRow input) {
-    // No need to zero-out the bytes as UnsafeRow is word aligned for sure.
-    final int numBytes = input.getSizeInBytes();
-    // grow the global buffer before writing data.
-    holder.grow(numBytes);
-    // Write the bytes to the variable length portion.
-    input.writeToMemory(holder.buffer, holder.cursor);
-    // move the cursor forward.
-    holder.cursor += numBytes;
-  }
 }

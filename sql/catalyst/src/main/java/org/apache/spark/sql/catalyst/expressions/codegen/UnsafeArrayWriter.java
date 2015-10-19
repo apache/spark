@@ -30,17 +30,19 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class UnsafeArrayWriter {
 
   private BufferHolder holder;
+
   // The offset of the global buffer where we start to write this array.
   private int startingOffset;
 
   public void initialize(BufferHolder holder, int numElements, int fixedElementSize) {
-    // We need 4 bytes each element to store offset.
-    final int fixedSize = 4 * numElements;
+    // We need 4 bytes to store numElements and 4 bytes each element to store offset.
+    final int fixedSize = 4 + 4 * numElements;
 
     this.holder = holder;
     this.startingOffset = holder.cursor;
 
     holder.grow(fixedSize);
+    Platform.putInt(holder.buffer, holder.cursor, numElements);
     holder.cursor += fixedSize;
 
     // Grows the global buffer ahead for fixed size data.
@@ -48,7 +50,7 @@ public class UnsafeArrayWriter {
   }
 
   private long getElementOffset(int ordinal) {
-    return startingOffset + 4 * ordinal;
+    return startingOffset + 4 + 4 * ordinal;
   }
 
   public void setNullAt(int ordinal) {
@@ -131,21 +133,5 @@ public class UnsafeArrayWriter {
 
     // move the cursor forward.
     holder.cursor += 16;
-  }
-
-
-
-  // If this array is already an UnsafeArray, we don't need to go through all elements, we can
-  // directly write it.
-  public static void directWrite(BufferHolder holder, UnsafeArrayData input) {
-    final int numBytes = input.getSizeInBytes();
-
-    // grow the global buffer before writing data.
-    holder.grow(numBytes);
-
-    // Writes the array content to the variable length portion.
-    input.writeToMemory(holder.buffer, holder.cursor);
-
-    holder.cursor += numBytes;
   }
 }

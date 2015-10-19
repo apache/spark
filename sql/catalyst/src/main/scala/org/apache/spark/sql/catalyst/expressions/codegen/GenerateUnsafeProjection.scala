@@ -62,7 +62,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     s"""
       if ($input instanceof UnsafeRow) {
-        $rowWriterClass.directWrite($bufferHolder, (UnsafeRow) $input);
+        ${writeUnsafeData(ctx, s"((UnsafeRow) $input)", bufferHolder)}
       } else {
         ${writeExpressionsToBuffer(ctx, input, fieldEvals, fieldTypes, bufferHolder)}
       }
@@ -164,8 +164,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodeGenContext,
       input: String,
       elementType: DataType,
-      bufferHolder: String,
-      needHeader: Boolean = true): String = {
+      bufferHolder: String): String = {
     val arrayWriter = ctx.freshName("arrayWriter")
     ctx.addMutableState(arrayWriterClass, arrayWriter,
       s"this.$arrayWriter = new $arrayWriterClass();")
@@ -227,21 +226,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
-    val writeHeader = if (needHeader) {
-      // If header is required, we need to write the number of elements into first 4 bytes.
-      s"""
-        $bufferHolder.grow(4);
-        Platform.putInt($bufferHolder.buffer, $bufferHolder.cursor, $numElements);
-        $bufferHolder.cursor += 4;
-      """
-    } else ""
-
     s"""
-      final int $numElements = $input.numElements();
-      $writeHeader
       if ($input instanceof UnsafeArrayData) {
-        $arrayWriterClass.directWrite($bufferHolder, (UnsafeArrayData) $input);
+        ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
       } else {
+        final int $numElements = $input.numElements();
         $arrayWriter.initialize($bufferHolder, $numElements, $fixedElementSize);
 
         for (int $index = 0; $index < $numElements; $index++) {
@@ -270,23 +259,40 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     // Writes out unsafe map according to the format described in `UnsafeMapData`.
     s"""
-      final ArrayData $keys = $input.keyArray();
-      final ArrayData $values = $input.valueArray();
+      if ($input instanceof UnsafeMapData) {
+        ${writeUnsafeData(ctx, s"((UnsafeMapData) $input)", bufferHolder)}
+      } else {
+        final ArrayData $keys = $input.keyArray();
+        final ArrayData $values = $input.valueArray();
 
-      $bufferHolder.grow(8);
+        // preserve 4 bytes to write the key array numBytes later.
+        $bufferHolder.grow(4);
+        $bufferHolder.cursor += 4;
 
-      // Write the numElements into first 4 bytes.
-      Platform.putInt($bufferHolder.buffer, $bufferHolder.cursor, $keys.numElements());
+        // Remember the current cursor so that we can write numBytes of key array later.
+        final int $tmpCursor = $bufferHolder.cursor;
 
-      $bufferHolder.cursor += 8;
-      // Remember the current cursor so that we can write numBytes of key array later.
-      final int $tmpCursor = $bufferHolder.cursor;
+        ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
+        // Write the numBytes of key array into the first 4 bytes.
+        Platform.putInt($bufferHolder.buffer, $tmpCursor - 4, $bufferHolder.cursor - $tmpCursor);
 
-      ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder, needHeader = false)}
-      // Write the numBytes of key array into second 4 bytes.
-      Platform.putInt($bufferHolder.buffer, $tmpCursor - 4, $bufferHolder.cursor - $tmpCursor);
+        ${writeArrayToBuffer(ctx, values, valueType, bufferHolder)}
+      }
+    """
+  }
 
-      ${writeArrayToBuffer(ctx, values, valueType, bufferHolder, needHeader = false)}
+  /**
+   * If the input is already in unsafe format, we don't need to go through all elements/fields,
+   * we can directly write it.
+   */
+  private def writeUnsafeData(ctx: CodeGenContext, input: String, bufferHolder: String) = {
+    val sizeInBytes = ctx.freshName("sizeInBytes")
+    s"""
+      final int $sizeInBytes = $input.getSizeInBytes();
+      // grow the global buffer before writing data.
+      $bufferHolder.grow($sizeInBytes);
+      $input.writeToMemory($bufferHolder.buffer, $bufferHolder.cursor);
+      $bufferHolder.cursor += $sizeInBytes;
     """
   }
 

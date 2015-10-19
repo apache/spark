@@ -73,7 +73,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(COMPACT_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
     checkActualSize(LARGE_DECIMAL(20, 10), Decimal(0, 20, 10), 5)
     checkActualSize(ARRAY_TYPE, Array[Any](1), 16)
-    checkActualSize(MAP_TYPE, Map(1 -> "a"), 25)
+    checkActualSize(MAP_TYPE, Map(1 -> "a"), 29)
     checkActualSize(STRUCT_TYPE, Row("hello"), 28)
   }
 
