@@ -22,4 +22,12 @@ SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 # disable randomized hash for string in Python 3.3+
 export PYTHONHASHSEED=0
 
-exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"
+if [ -f "$SPARK_HOME/RELEASE" ]; then
+  STARSCREAM_ASSEMBLY_DIR="$SPARK_HOME/lib"
+else
+  STARSCREAM_ASSEMBLY_DIR="$SPARK_HOME/external/starscream-assembly/target"
+fi
+
+ASSEMBLY_JAR="$(ls -1 "$STARSCREAM_ASSEMBLY_DIR" | grep "^starscream-assembly.*\.jar$" || true)"
+
+exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit --jars "${STARSCREAM_ASSEMBLY_DIR}/${ASSEMBLY_JAR}" "$@"
