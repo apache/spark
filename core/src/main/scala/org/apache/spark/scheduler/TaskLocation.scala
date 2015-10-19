@@ -64,7 +64,7 @@ private[spark] object TaskLocation {
    */
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
-    if (hstr.equals(str)) { // not a in memory location
+    if (hstr.equals(str)) {
       new HostTaskLocation(str)
     } else {
       new HDFSCacheTaskLocation(hstr)
