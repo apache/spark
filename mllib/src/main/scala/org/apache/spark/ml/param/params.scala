@@ -599,7 +599,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets a parameter (by name) in the embedded param map.
    */
-  final def set(param: String, value: Any): this.type = {
+  private[ml] final def set(param: String, value: Any): this.type = {
     set(getParam(param), value)
   }
 
