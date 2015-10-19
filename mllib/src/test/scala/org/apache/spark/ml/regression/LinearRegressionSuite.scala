@@ -18,8 +18,6 @@
 package org.apache.spark.ml.regression
 
 import scala.util.Random
-import scala.util.control.Breaks.break
-import scala.util.control.Breaks.breakable
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
@@ -182,52 +180,50 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression with intercept with L1 regularization") {
-    breakable {
-      Seq("auto", "l-bfgs", "normal").foreach { solver =>
-        val trainer1 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
-          .setSolver(solver)
-        val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
-          .setSolver(solver).setStandardization(false)
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      val trainer1 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+        .setSolver(solver)
+      val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+        .setSolver(solver).setStandardization(false)
 
-        var model1: LinearRegressionModel = null
-        var model2: LinearRegressionModel = null
+      var model1: LinearRegressionModel = null
+      var model2: LinearRegressionModel = null
 
-        // Normal optimizer is not supported with only L1 regularization case.
-        if (solver == "normal") {
-          intercept[IllegalArgumentException] {
+      // Normal optimizer is not supported with only L1 regularization case.
+      if (solver == "normal") {
+        intercept[IllegalArgumentException] {
             trainer1.fit(dataset)
             trainer2.fit(dataset)
           }
-          break
-        } else {
-          model1 = trainer1.fit(dataset)
-          model2 = trainer2.fit(dataset)
-        }
+      } else {
+        model1 = trainer1.fit(dataset)
+        model2 = trainer2.fit(dataset)
+
 
         /*
-         weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57))
-         > weights
-          3 x 1 sparse Matrix of class "dgCMatrix"
-                                   s0
-         (Intercept)         6.24300
-         as.numeric.data.V2. 4.024821
-         as.numeric.data.V3. 6.679841
-       */
+           weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57))
+           > weights
+            3 x 1 sparse Matrix of class "dgCMatrix"
+                                    s0
+           (Intercept)         6.24300
+           as.numeric.data.V2. 4.024821
+           as.numeric.data.V3. 6.679841
+         */
         val interceptR1 = 6.24300
         val weightsR1 = Vectors.dense(4.024821, 6.679841)
         assert(model1.intercept ~== interceptR1 relTol 1E-3)
         assert(model1.weights ~= weightsR1 relTol 1E-3)
 
         /*
-         weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
-           standardize=FALSE))
-         > weights
-          3 x 1 sparse Matrix of class "dgCMatrix"
-                                  s0
-         (Intercept)         6.416948
-         as.numeric.data.V2. 3.893869
-         as.numeric.data.V3. 6.724286
-       */
+           weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
+             standardize=FALSE))
+           > weights
+            3 x 1 sparse Matrix of class "dgCMatrix"
+                                    s0
+           (Intercept)         6.416948
+           as.numeric.data.V2. 3.893869
+           as.numeric.data.V3. 6.724286
+         */
         val interceptR2 = 6.416948
         val weightsR2 = Vectors.dense(3.893869, 6.724286)
 
@@ -245,38 +241,35 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression without intercept with L1 regularization") {
-    breakable {
-      Seq("auto", "l-bfgs", "normal").foreach { solver =>
-        val trainer1 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
-          .setFitIntercept(false).setSolver(solver)
-        val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
-          .setFitIntercept(false).setStandardization(false).setSolver(solver)
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      val trainer1 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+        .setFitIntercept(false).setSolver(solver)
+      val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+        .setFitIntercept(false).setStandardization(false).setSolver(solver)
 
-        var model1: LinearRegressionModel = null
-        var model2: LinearRegressionModel = null
+      var model1: LinearRegressionModel = null
+      var model2: LinearRegressionModel = null
 
-        // Normal optimizer is not supported with only L1 regularization case.
-        if (solver == "normal") {
-          intercept[IllegalArgumentException] {
+      // Normal optimizer is not supported with only L1 regularization case.
+      if (solver == "normal") {
+        intercept[IllegalArgumentException] {
             trainer1.fit(dataset)
             trainer2.fit(dataset)
           }
-          break
-        } else {
-          model1 = trainer1.fit(dataset)
-          model2 = trainer2.fit(dataset)
-        }
+      } else {
+        model1 = trainer1.fit(dataset)
+        model2 = trainer2.fit(dataset)
 
         /*
-         weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
-           intercept=FALSE))
-         > weights
-          3 x 1 sparse Matrix of class "dgCMatrix"
-                                   s0
-         (Intercept)          .
-         as.numeric.data.V2. 6.299752
-         as.numeric.data.V3. 4.772913
-       */
+           weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
+             intercept=FALSE))
+           > weights
+            3 x 1 sparse Matrix of class "dgCMatrix"
+                                     s0
+           (Intercept)          .
+           as.numeric.data.V2. 6.299752
+           as.numeric.data.V3. 4.772913
+         */
         val interceptR1 = 0.0
         val weightsR1 = Vectors.dense(6.299752, 4.772913)
 
@@ -284,15 +277,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model1.weights ~= weightsR1 relTol 1E-3)
 
         /*
-         weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
-           intercept=FALSE, standardize=FALSE))
-         > weights
-          3 x 1 sparse Matrix of class "dgCMatrix"
-                                   s0
-         (Intercept)         .
-         as.numeric.data.V2. 6.232193
-         as.numeric.data.V3. 4.764229
-       */
+           weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
+             intercept=FALSE, standardize=FALSE))
+           > weights
+            3 x 1 sparse Matrix of class "dgCMatrix"
+                                     s0
+           (Intercept)         .
+           as.numeric.data.V2. 6.232193
+           as.numeric.data.V3. 4.764229
+         */
         val interceptR2 = 0.0
         val weightsR2 = Vectors.dense(6.232193, 4.764229)
 
@@ -409,37 +402,34 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression with intercept with ElasticNet regularization") {
-    breakable {
-      Seq("auto", "l-bfgs", "normal").foreach { solver =>
-        val trainer1 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
-          .setSolver(solver)
-        val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
-          .setStandardization(false).setSolver(solver)
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      val trainer1 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+        .setSolver(solver)
+      val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+        .setStandardization(false).setSolver(solver)
 
-        var model1: LinearRegressionModel = null
-        var model2: LinearRegressionModel = null
+      var model1: LinearRegressionModel = null
+      var model2: LinearRegressionModel = null
 
-        // Normal optimizer is not supported with non-zero elasticnet parameter.
-        if (solver == "normal") {
-          intercept[IllegalArgumentException] {
+      // Normal optimizer is not supported with non-zero elasticnet parameter.
+      if (solver == "normal") {
+        intercept[IllegalArgumentException] {
             trainer1.fit(dataset)
             trainer2.fit(dataset)
           }
-          break
-        } else {
-          model1 = trainer1.fit(dataset)
-          model2 = trainer2.fit(dataset)
-        }
+      } else {
+        model1 = trainer1.fit(dataset)
+        model2 = trainer2.fit(dataset)
 
         /*
-         weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6))
-         > weights
-          3 x 1 sparse Matrix of class "dgCMatrix"
-                                   s0
-         (Intercept)         6.324108
-         as.numeric.data.V2. 3.168435
-         as.numeric.data.V3. 5.200403
-       */
+           weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6))
+           > weights
+            3 x 1 sparse Matrix of class "dgCMatrix"
+                                     s0
+           (Intercept)         6.324108
+           as.numeric.data.V2. 3.168435
+           as.numeric.data.V3. 5.200403
+         */
         val interceptR1 = 5.696056
         val weightsR1 = Vectors.dense(3.670489, 6.001122)
 
@@ -447,15 +437,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model1.weights ~= weightsR1 relTol 1E-3)
 
         /*
-         weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
-           standardize=FALSE))
-         > weights
-          3 x 1 sparse Matrix of class "dgCMatrix"
-                                   s0
-         (Intercept)         6.114723
-         as.numeric.data.V2. 3.409937
-         as.numeric.data.V3. 6.146531
-       */
+           weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
+             standardize=FALSE))
+           > weights
+            3 x 1 sparse Matrix of class "dgCMatrix"
+                                     s0
+           (Intercept)         6.114723
+           as.numeric.data.V2. 3.409937
+           as.numeric.data.V3. 6.146531
+         */
         val interceptR2 = 6.114723
         val weightsR2 = Vectors.dense(3.409937, 6.146531)
 
@@ -473,38 +463,35 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression without intercept with ElasticNet regularization") {
-    breakable {
-      Seq("auto", "l-bfgs", "normal").foreach { solver =>
-        val trainer1 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
-          .setFitIntercept(false).setSolver(solver)
-        val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
-          .setFitIntercept(false).setStandardization(false).setSolver(solver)
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      val trainer1 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+        .setFitIntercept(false).setSolver(solver)
+      val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+        .setFitIntercept(false).setStandardization(false).setSolver(solver)
 
-        var model1: LinearRegressionModel = null
-        var model2: LinearRegressionModel = null
+      var model1: LinearRegressionModel = null
+      var model2: LinearRegressionModel = null
 
-        // Normal optimizer is not supported with non-zero elasticnet parameter.
-        if (solver == "normal") {
-          intercept[IllegalArgumentException] {
+      // Normal optimizer is not supported with non-zero elasticnet parameter.
+      if (solver == "normal") {
+        intercept[IllegalArgumentException] {
             trainer1.fit(dataset)
             trainer2.fit(dataset)
           }
-          break
-        } else {
-          model1 = trainer1.fit(dataset)
-          model2 = trainer2.fit(dataset)
-        }
+      } else {
+        model1 = trainer1.fit(dataset)
+        model2 = trainer2.fit(dataset)
 
         /*
-         weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
-           intercept=FALSE))
-         > weights
-          3 x 1 sparse Matrix of class "dgCMatrix"
-                                    s0
-         (Intercept)         .
-         as.numeric.dataM.V2. 5.673348
-         as.numeric.dataM.V3. 4.322251
-       */
+           weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
+             intercept=FALSE))
+           > weights
+            3 x 1 sparse Matrix of class "dgCMatrix"
+                                      s0
+           (Intercept)         .
+           as.numeric.dataM.V2. 5.673348
+           as.numeric.dataM.V3. 4.322251
+         */
         val interceptR1 = 0.0
         val weightsR1 = Vectors.dense(5.673348, 4.322251)
 
@@ -512,15 +499,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model1.weights ~= weightsR1 relTol 1E-3)
 
         /*
-         weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
-           intercept=FALSE, standardize=FALSE))
-         > weights
-          3 x 1 sparse Matrix of class "dgCMatrix"
-                                   s0
-         (Intercept)         .
-         as.numeric.data.V2. 5.477988
-         as.numeric.data.V3. 4.297622
-       */
+           weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
+             intercept=FALSE, standardize=FALSE))
+           > weights
+            3 x 1 sparse Matrix of class "dgCMatrix"
+                                     s0
+           (Intercept)         .
+           as.numeric.data.V2. 5.477988
+           as.numeric.data.V3. 4.297622
+         */
         val interceptR2 = 0.0
         val weightsR2 = Vectors.dense(5.477988, 4.297622)
 
@@ -617,120 +604,97 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("linear regression with weighted samples"){
-    breakable {
-      Seq("auto", "l-bfgs", "normal").foreach { solver =>
-        val (data, weightedData) = {
-          val activeData = LinearDataGenerator.generateLinearInput(
-            6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
+  test("linear regression with weighted samples") {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      val (data, weightedData) = {
+        val activeData = LinearDataGenerator.generateLinearInput(
+          6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
 
-          val rnd = new Random(8392)
-          val signedData = activeData.map { case p: LabeledPoint =>
-            (rnd.nextGaussian() > 0.0, p)
-          }
-
-          val data1 = signedData.flatMap {
-            case (true, p) => Iterator(p, p)
-            case (false, p) => Iterator(p)
-          }
-
-          val weightedSignedData = signedData.flatMap {
-            case (true, LabeledPoint(label, features)) =>
-              Iterator(
-                Instance(label, weight = 1.2, features),
-                Instance(label, weight = 0.8, features)
-              )
-            case (false, LabeledPoint(label, features)) =>
-              Iterator(
-                Instance(label, weight = 0.3, features),
-                Instance(label, weight = 0.1, features),
-                Instance(label, weight = 0.6, features)
-              )
-          }
-
-          val noiseData = LinearDataGenerator.generateLinearInput(
-            2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
-          val weightedNoiseData = noiseData.map {
-            case LabeledPoint(label, features) => Instance(label, weight = 0, features)
-          }
-          val data2 = weightedSignedData ++ weightedNoiseData
-
-          (sqlContext.createDataFrame(sc.parallelize(data1, 4)),
-            sqlContext.createDataFrame(sc.parallelize(data2, 4)))
+        val rnd = new Random(8392)
+        val signedData = activeData.map { case p: LabeledPoint =>
+          (rnd.nextGaussian() > 0.0, p)
         }
 
-        val trainer1a = (new LinearRegression).setFitIntercept(true)
-          .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true).setSolver(solver)
-        val trainer1b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
-          .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true).setSolver(solver)
-
-        var model1a0: LinearRegressionModel = null
-        var model1a1: LinearRegressionModel = null
-        var model1b: LinearRegressionModel = null
-
-        // Normal optimizer is not supported with non-zero elasticnet parameter.
-        if (solver == "normal") {
-          intercept[IllegalArgumentException] {
-            trainer1a.fit(dataset)
-            trainer1a.fit(weightedData)
-            trainer1b.fit(weightedData)
-          }
-          break
-        } else {
-          model1a0 = trainer1a.fit(data)
-          model1a1 = trainer1a.fit(weightedData)
-          model1b = trainer1b.fit(weightedData)
+        val data1 = signedData.flatMap {
+          case (true, p) => Iterator(p, p)
+          case (false, p) => Iterator(p)
         }
 
-        assert(model1a0.weights !~= model1a1.weights absTol 1E-3)
-        assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
-        assert(model1a0.weights ~== model1b.weights absTol 1E-3)
-        assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
+        val weightedSignedData = signedData.flatMap {
+          case (true, LabeledPoint(label, features)) =>
+            Iterator(
+              Instance(label, weight = 1.2, features),
+              Instance(label, weight = 0.8, features)
+            )
+          case (false, LabeledPoint(label, features)) =>
+            Iterator(
+              Instance(label, weight = 0.3, features),
+              Instance(label, weight = 0.1, features),
+              Instance(label, weight = 0.6, features)
+            )
+        }
 
-        val trainer2a = (new LinearRegression).setFitIntercept(true)
-          .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false).setSolver(solver)
-        val trainer2b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
-          .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false).setSolver(solver)
-        val model2a0 = trainer2a.fit(data)
-        val model2a1 = trainer2a.fit(weightedData)
-        val model2b = trainer2b.fit(weightedData)
-        assert(model2a0.weights !~= model2a1.weights absTol 1E-3)
-        assert(model2a0.intercept !~= model2a1.intercept absTol 1E-3)
-        assert(model2a0.weights ~== model2b.weights absTol 1E-3)
-        assert(model2a0.intercept ~== model2b.intercept absTol 1E-3)
+        val noiseData = LinearDataGenerator.generateLinearInput(
+          2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
+        val weightedNoiseData = noiseData.map {
+          case LabeledPoint(label, features) => Instance(label, weight = 0, features)
+        }
+        val data2 = weightedSignedData ++ weightedNoiseData
 
-        val trainer3a = (new LinearRegression).setFitIntercept(false)
-          .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true).setSolver(solver)
-        val trainer3b = (new LinearRegression).setFitIntercept(false).setWeightCol("weight")
-          .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true).setSolver(solver)
-        val model3a0 = trainer3a.fit(data)
-        val model3a1 = trainer3a.fit(weightedData)
-        val model3b = trainer3b.fit(weightedData)
-        assert(model3a0.weights !~= model3a1.weights absTol 1E-3)
-        assert(model3a0.weights ~== model3b.weights absTol 1E-3)
-
-        val trainer4a = (new LinearRegression).setFitIntercept(false)
-          .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false).setSolver(solver)
-        val trainer4b = (new LinearRegression).setFitIntercept(false).setWeightCol("weight")
-          .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false).setSolver(solver)
-        val model4a0 = trainer4a.fit(data)
-        val model4a1 = trainer4a.fit(weightedData)
-        val model4b = trainer4b.fit(weightedData)
-        assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
-        assert(model4a0.weights ~== model4b.weights absTol 1E-3)
+        (sqlContext.createDataFrame(sc.parallelize(data1, 4)),
+          sqlContext.createDataFrame(sc.parallelize(data2, 4)))
       }
+
+      val trainer1a = (new LinearRegression).setFitIntercept(true)
+        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
+      val trainer1b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
+        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
+
+      var model1a0: LinearRegressionModel = null
+      var model1a1: LinearRegressionModel = null
+      var model1b: LinearRegressionModel = null
+
+      // Normal optimizer is not supported with non-zero elasticnet parameter.
+      model1a0 = trainer1a.fit(data)
+      model1a1 = trainer1a.fit(weightedData)
+      model1b = trainer1b.fit(weightedData)
+
+      assert(model1a0.weights !~= model1a1.weights absTol 1E-3)
+      assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
+      assert(model1a0.weights ~== model1b.weights absTol 1E-3)
+      assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
+
+      val trainer2a = (new LinearRegression).setFitIntercept(true)
+        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(false).setSolver(solver)
+      val trainer2b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
+        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(false).setSolver(solver)
+      val model2a0 = trainer2a.fit(data)
+      val model2a1 = trainer2a.fit(weightedData)
+      val model2b = trainer2b.fit(weightedData)
+      assert(model2a0.weights !~= model2a1.weights absTol 1E-3)
+      assert(model2a0.intercept !~= model2a1.intercept absTol 1E-3)
+      assert(model2a0.weights ~== model2b.weights absTol 1E-3)
+      assert(model2a0.intercept ~== model2b.intercept absTol 1E-3)
+
+      val trainer3a = (new LinearRegression).setFitIntercept(false)
+        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
+      val trainer3b = (new LinearRegression).setFitIntercept(false).setWeightCol("weight")
+        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
+      val model3a0 = trainer3a.fit(data)
+      val model3a1 = trainer3a.fit(weightedData)
+      val model3b = trainer3b.fit(weightedData)
+      assert(model3a0.weights !~= model3a1.weights absTol 1E-3)
+      assert(model3a0.weights ~== model3b.weights absTol 1E-3)
+
+      val trainer4a = (new LinearRegression).setFitIntercept(false)
+        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(false).setSolver(solver)
+      val trainer4b = (new LinearRegression).setFitIntercept(false).setWeightCol("weight")
+        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(false).setSolver(solver)
+      val model4a0 = trainer4a.fit(data)
+      val model4a1 = trainer4a.fit(weightedData)
+      val model4b = trainer4b.fit(weightedData)
+      assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
+      assert(model4a0.weights ~== model4b.weights absTol 1E-3)
     }
-  }
-
-  test("LBFGS and normal optimizer should not have diffs") {
-    val trainerWithLBFGS = (new LinearRegression).setElasticNetParam(0.0).setRegParam(0.23)
-      .setSolver("l-bfgs").setFitIntercept(true)
-    val trainerWithNormal = (new LinearRegression).setElasticNetParam(0.0).setRegParam(0.23)
-      .setSolver("normal").setFitIntercept(true)
-    val modelByLBFGS = trainerWithLBFGS.fit(dataset)
-    val modelByNormal = trainerWithNormal.fit(dataset)
-
-    assert(modelByLBFGS.weights ~== modelByNormal.weights absTol 1E-3)
-    assert(modelByLBFGS.intercept ~== modelByNormal.intercept absTol 1E-3)
   }
 }
