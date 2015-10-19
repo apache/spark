@@ -150,6 +150,18 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
   /**
+   * The classLoader used to store all user-added jars through "ADD JAR" command.
+   * This classLoader is a special URLClassLoader that exposes its addURL method.
+   * So, when we add jar, we can add this new jar directly through the addURL method
+   * instead of stacking a new URLClassLoader on top of it.
+   */
+  @transient
+  protected[hive] val libraryClassLoader: NonClosableMutableURLClassLoader = {
+    val baseClassLoader = Utils.getContextOrSparkClassLoader
+    new NonClosableMutableURLClassLoader(baseClassLoader)
+  }
+
+  /**
    * The copy of the hive client that is used for execution.  Currently this must always be
    * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
    * client is used for execution related tasks like registering temporary functions or ensuring
