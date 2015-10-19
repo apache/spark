@@ -340,14 +340,6 @@ private[spark] class Client(
           "for alternatives.")
     }
 
-    // Uploading $SPARK_CONF_DIR/log4j.properties file to the distributed cache to make sure that
-    // the executors will use the latest configurations instead of the default values. This is
-    // required when user changes log4j.properties directly to set the log configurations. If
-    // configuration file is provided through --files then executors will be taking configurations
-    // from --files instead of $SPARK_CONF_DIR/log4j.properties.
-    val log4jConf = oldLog4jConf.orElse(
-      Option(Utils.getContextOrSparkClassLoader.getResource("/log4j.properties")).map(_.toString))
-
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
       if (distributedUris.contains(uriStr)) {
@@ -423,7 +415,7 @@ private[spark] class Client(
     List(
       (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR),
       (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
-      ("log4j.properties", log4jConf.orNull, null)
+      ("log4j.properties", oldLog4jConf.orNull, null)
     ).foreach { case (destName, path, confKey) =>
       if (path != null && !path.trim().isEmpty()) {
         val (isLocal, localizedPath) = distribute(path, destName = Some(destName))
@@ -505,6 +497,20 @@ private[spark] class Client(
    */
   private def createConfArchive(): File = {
     val hadoopConfFiles = new HashMap[String, File]()
+
+    // Uploading $SPARK_CONF_DIR/log4j.properties file to the distributed cache to make sure that
+    // the executors will use the latest configurations instead of the default values. This is
+    // required when user changes log4j.properties directly to set the log configurations. If
+    // configuration file is provided through --files then executors will be taking configurations
+    // from --files instead of $SPARK_CONF_DIR/log4j.properties.
+    Option(Utils.getContextOrSparkClassLoader.getResource("log4j.properties"))
+      .map(_.getPath).map(path => {
+      val file = new File(path)
+      if(file.isFile && file.canRead) {
+        hadoopConfFiles(file.getName) = file
+      }
+    })
+
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
