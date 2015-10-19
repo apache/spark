@@ -21,6 +21,7 @@ import java.net.URLEncoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable
 import scala.collection.mutable.HashSet
 import scala.xml.{Elem, Node, Unparsed}
 
@@ -122,12 +123,34 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
       val hasAccumulators = externalAccumulables.size > 0
 
+      val tasksLocality = new mutable.HashMap[String, Long]
+      if (stageData.taskData.size > 0) {
+        for ((key, value) <- stageData.taskData) {
+          val locality = value.taskInfo.taskLocality.toString;
+          if (tasksLocality.contains(locality)) {
+            val count: Long = tasksLocality.get(locality).get + 1;
+            tasksLocality.put(locality, count);
+          } else {
+            tasksLocality.put(locality, 1);
+          }
+        }
+      }
+      var localityLevels: String = "";
+      for ((key, value) <- tasksLocality) {
+        localityLevels = localityLevels.concat(key)
+          .concat("(").concat(value.toString).concat(")").concat(" ")
+      }
+
       val summary =
         <div>
           <ul class="unstyled">
             <li>
               <strong>Total Time Across All Tasks: </strong>
               {UIUtils.formatDuration(stageData.executorRunTime)}
+            </li>
+            <li>
+              <strong>Locality Level Summary: </strong>
+              {localityLevels}
             </li>
             {if (stageData.hasInput) {
               <li>

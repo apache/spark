@@ -43,7 +43,6 @@ private[ui] class StageTableBase(
     <th>Submitted</th>
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
-    <th>Locality Levels</th>
     <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
     <th><span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output</span></th>
     <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
@@ -129,7 +128,6 @@ private[ui] class StageTableBase(
     <td></td> ++ // Submitted
     <td></td> ++ // Duration
     <td></td> ++ // Tasks: Succeeded/Total
-    <td></td> ++ // Locality Levels
     <td></td> ++ // Input
     <td></td> ++ // Output
     <td></td> ++ // Shuffle Read
@@ -152,25 +150,6 @@ private[ui] class StageTableBase(
       if (finishTime > t) finishTime - t else System.currentTimeMillis - t
     }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
-
-    val tasksLocality = new HashMap[String, Long]
-
-    if (stageData.taskData.size > 0) {
-      for ((key, value) <- stageData.taskData) {
-        val locality = value.taskInfo.taskLocality.toString;
-        if (tasksLocality.contains(locality)) {
-          val count: Long = tasksLocality.get(locality).get + 1;
-          tasksLocality.put(locality, count);
-        } else {
-          tasksLocality.put(locality, 1);
-        }
-      }
-    }
-    var localityLevels: String = "";
-    for ((key, value) <- tasksLocality) {
-      localityLevels = localityLevels.concat(key)
-        .concat("(").concat(value.toString).concat(")").concat(" ")
-    }
 
     val inputRead = stageData.inputBytes
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
@@ -206,7 +185,6 @@ private[ui] class StageTableBase(
         completed = stageData.completedIndices.size, failed = stageData.numFailedTasks,
         skipped = 0, total = s.numTasks)}
     </td>
-    <td>{localityLevels}</td>
     <td sorttable_customkey={inputRead.toString}>{inputReadWithUnit}</td>
     <td sorttable_customkey={outputWrite.toString}>{outputWriteWithUnit}</td>
     <td sorttable_customkey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
