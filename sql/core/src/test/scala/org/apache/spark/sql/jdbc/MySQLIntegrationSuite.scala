@@ -24,7 +24,9 @@ import java.util.Properties
 class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
   val db = new DatabaseOnDocker {
     val imageName = "mysql:latest"
-    val env = Seq("MYSQL_ROOT_PASSWORD=rootpass")
+    val env = Map(
+      "MYSQL_ROOT_PASSWORD" -> "rootpass"
+    )
     lazy val jdbcUrl = s"jdbc:mysql://$ip:3306/mysql?user=root&password=rootpass"
   }
 

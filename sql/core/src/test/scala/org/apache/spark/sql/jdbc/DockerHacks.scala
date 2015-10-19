@@ -36,9 +36,9 @@ abstract class DatabaseOnDocker {
   def imageName: String
 
   /**
-   * A Seq of environment variables in the form of VAR=value
+   * Environment variables to set inside of the Docker container while lauching it.
    */
-  def env: Seq[String]
+  def env: Map[String, String]
 
   /**
    * jdbcUrl should be a lazy val or a function since `ip` it relies on is only available after
@@ -55,7 +55,8 @@ abstract class DatabaseOnDocker {
     while (true) {
       try {
         val config = ContainerConfig.builder()
-          .image(imageName).env(env.asJava)
+          .image(imageName)
+          .env(env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
           .build()
         containerId = docker.createContainer(config).id
         docker.startContainer(containerId)

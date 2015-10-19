@@ -23,7 +23,9 @@ import java.util.Properties
 class PostgresIntegrationSuite extends DatabaseIntegrationSuite {
   val db = new DatabaseOnDocker {
     val imageName = "postgres:latest"
-    val env = Seq("POSTGRES_PASSWORD=rootpass")
+    val env = Map(
+      "POSTGRES_PASSWORD" -> "rootpass"
+    )
     lazy val jdbcUrl = s"jdbc:postgresql://$ip:5432/postgres?user=postgres&password=rootpass"
   }
 
