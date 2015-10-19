@@ -8,8 +8,7 @@ import subprocess
 from tempfile import NamedTemporaryFile
 
 
-from thrift.transport import TSocket
-from thrift.transport import TTransport
+from thrift.transport import TSocket, TTransport
 from thrift.protocol import TBinaryProtocol
 from hive_service import ThriftHive
 import pyhs2
@@ -375,6 +374,23 @@ class HiveMetastoreHook(BaseHook):
                 "value for")
 
         return max([p[field] for p in parts])
+
+
+    def table_exists(self, table_name, db='default'):
+        '''
+        Check if table exists
+
+        >>> hh = HiveMetastoreHook()
+        >>> hh.table_exists(db='airflow', table_name='static_babynames')
+        True
+        >>> hh.table_exists(db='airflow', table_name='does_not_exist')
+        False
+        '''
+        try:
+            t = self.get_table(table_name, db)
+            return True
+        except Exception as e:
+            return False
 
 
 class HiveServer2Hook(BaseHook):
