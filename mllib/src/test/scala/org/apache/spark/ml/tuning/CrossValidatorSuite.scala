@@ -69,7 +69,7 @@ class CrossValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
 
-    val trainer = new LinearRegression
+    val trainer = new LinearRegression().setSolver("l-bfgs")
     val lrParamMaps = new ParamGridBuilder()
       .addGrid(trainer.regParam, Array(1000.0, 0.001))
       .addGrid(trainer.maxIter, Array(0, 10))

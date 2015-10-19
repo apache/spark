@@ -61,6 +61,7 @@ public class JavaLinearRegressionSuite implements Serializable {
   public void linearRegressionDefaultParams() {
     LinearRegression lr = new LinearRegression();
     assertEquals("label", lr.getLabelCol());
+    assertEquals("auto", lr.getSolver());
     LinearRegressionModel model = lr.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
     DataFrame predictions = jsql.sql("SELECT label, prediction FROM prediction");
@@ -75,7 +76,7 @@ public class JavaLinearRegressionSuite implements Serializable {
     // Set params, train, and check as many params as we can.
     LinearRegression lr = new LinearRegression()
         .setMaxIter(10)
-        .setRegParam(1.0);
+        .setRegParam(1.0).setSolver("l-bfgs");
     LinearRegressionModel model = lr.fit(dataset);
     LinearRegression parent = (LinearRegression) model.parent();
     assertEquals(10, parent.getMaxIter());

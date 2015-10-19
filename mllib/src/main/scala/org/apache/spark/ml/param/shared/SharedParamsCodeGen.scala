@@ -73,7 +73,9 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"),
       ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization."),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
-        "all instance weights as 1.0."))
+        "all instance weights as 1.0."),
+      ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +
+        "empty, default value is 'auto'.", Some("\"auto\"")))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
