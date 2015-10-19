@@ -255,7 +255,6 @@ private[spark] class ApplicationMaster(
       driverRef,
       yarnConf,
       _sparkConf,
-      if (sc != null) sc.preferredNodeLocationData else Map(),
       uiAddress,
       historyAddress,
       securityMgr)
