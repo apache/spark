@@ -44,15 +44,18 @@ public class UnsafeMapData extends MapData {
   public long getBaseOffset() { return baseOffset; }
   public int getSizeInBytes() { return sizeInBytes; }
 
-  private UnsafeArrayData keys;
-  private UnsafeArrayData values;
+  private final UnsafeArrayData keys;
+  private final UnsafeArrayData values;
 
   /**
    * Construct a new UnsafeMapData. The resulting UnsafeMapData won't be usable until
    * `pointTo()` has been called, since the value returned by this constructor is equivalent
    * to a null pointer.
    */
-  public UnsafeMapData() { }
+  public UnsafeMapData() {
+    keys = new UnsafeArrayData();
+    values = new UnsafeArrayData();
+  }
 
   /**
    * Update this UnsafeMapData to point to different backing data.
@@ -68,16 +71,11 @@ public class UnsafeMapData extends MapData {
     assert keyArraySize >= 0 : "keyArraySize (" + keyArraySize + ") should >= 0";
     assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
 
-    final UnsafeArrayData keyArray = new UnsafeArrayData();
-    keyArray.pointTo(baseObject, baseOffset + 4, keyArraySize);
+    keys.pointTo(baseObject, baseOffset + 4, keyArraySize);
+    values.pointTo(baseObject, baseOffset + 4 + keyArraySize, valueArraySize);
 
-    final UnsafeArrayData valueArray = new UnsafeArrayData();
-    valueArray.pointTo(baseObject, baseOffset + 4 + keyArraySize, valueArraySize);
+    assert keys.numElements() == values.numElements();
 
-    assert keyArray.numElements() == valueArray.numElements();
-
-    this.keys = keyArray;
-    this.values = valueArray;
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
