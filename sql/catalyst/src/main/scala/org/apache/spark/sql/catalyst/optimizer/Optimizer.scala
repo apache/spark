@@ -46,6 +46,7 @@ object DefaultOptimizer extends Optimizer {
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
+      PushPredicateThroughAggregate,
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
@@ -671,6 +672,20 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
       } else {
         filter
       }
+  }
+}
+
+/**
+ * Push [[Filter]] operators through [[Aggregate]] operators in case predicate's
+ * refrence attributes are subset of groupBy attribute set.
+ */
+object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case filter @ Filter(condition,
+    aggregate @ Aggregate(groupingExpressions, aggregateExpressions, child))
+        if (filter.condition.references -- AttributeSet(groupingExpressions)).isEmpty =>
+        Aggregate(groupingExpressions, aggregateExpressions, Filter(condition, child))
   }
 }
 
