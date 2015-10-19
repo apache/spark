@@ -127,19 +127,17 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = true)
 
-        case expressions.ApproxCountDistinct(child, rsd) => {
+        case expressions.ApproxCountDistinct(child, rsd) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.HyperLogLogPlusPlus(child, rsd),
             mode = aggregate.Complete,
             isDistinct = false)
-        }
 
-        case expressions.Variance(child) => {
+        case expressions.Variance(child) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.Variance(child),
             mode = aggregate.Complete,
             isDistinct = false)
-        }
 
         case expressions.VariancePop(child) =>
           aggregate.AggregateExpression2(

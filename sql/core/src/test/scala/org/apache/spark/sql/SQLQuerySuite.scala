@@ -329,24 +329,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       testCodeGen(
         "SELECT min(key) FROM testData3x",
         Row(1) :: Nil)
-//      // STDDEV
-//      testCodeGen(
-//        "SELECT a, stddev(b), stddev_pop(b) FROM testData2 GROUP BY a",
-//        (1 to 3).map(i => Row(i, math.sqrt(0.5), math.sqrt(0.25))))
-//      // SKEWNESS
-//      testCodeGen(
-//        "SELECT a, skewness(b) FROM testData2 GROUP BY a",
-//        (1 to 3).map(i => Row(i, 0.0)))
-//      testCodeGen(
-//        "SELECT skewness(b) FROM testData2",
-//        Row(0.0) :: Nil)
-//      // KURTOSIS
-//      testCodeGen(
-//        "SELECT a, kurtosis(b) FROM testData2 GROUP BY a",
-//        (1 to 3).map(i => Row(i, -2.0)))
-//      testCodeGen(
-//        "SELECT kurtosis(b) FROM testData2",
-//        Row(-2.0) :: Nil)
       // Some combinations.
       testCodeGen(
         """

@@ -167,7 +167,7 @@ abstract class MutableRow extends InternalRow {
 
   // default implementation (slow)
   def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
-  def setByte(i: Int, value: Byte): Unit = {  (i, value) }
+  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
   def setShort(i: Int, value: Short): Unit = { update(i, value) }
   def setInt(i: Int, value: Int): Unit = { update(i, value) }
   def setLong(i: Int, value: Long): Unit = { update(i, value) }

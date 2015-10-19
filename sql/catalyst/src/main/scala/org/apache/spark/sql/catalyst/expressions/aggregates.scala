@@ -1055,26 +1055,11 @@ case class Skewness(child: Expression) extends CentralMomentAgg1(child) {
 }
 
 // placeholder
-case class MySkewness(child: Expression) extends CentralMomentAgg1(child) {
+case class Variance(child: Expression) extends CentralMomentAgg1(child) {
 
-  override def prettyName: String = "skewness"
-
-  override def toString: String = s"SKEWNESS($child)"
-}
-
-// placeholder
-//case class Variance(child: Expression) extends CentralMomentAgg1(child) {
-//
-//  override def prettyName: String = "variance"
-//
-//  override def toString: String = s"VARIANCE($child)"
-//}
-
-// Compute the sample standard deviation of a column
-case class Variance(child: Expression) extends StddevAgg1(child) {
+  override def prettyName: String = "variance"
 
   override def toString: String = s"VARIANCE($child)"
-  override def isSample: Boolean = true
 }
 
 // placeholder
@@ -1091,12 +1076,4 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg1(child) {
   override def prettyName: String = "variance_samp"
 
   override def toString: String = s"VAR_SAMP($child)"
-}
-
-// placeholder
-case class MyKurtosis(child: Expression) extends CentralMomentAgg1(child) {
-
-  override def prettyName: String = "kurtosis"
-
-  override def toString: String = s"KURTOSIS($child)"
 }
