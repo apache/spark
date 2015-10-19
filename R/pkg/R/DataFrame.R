@@ -2102,7 +2102,6 @@ setMethod("as.data.frame",
               stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
             }
             collect(x)
-<<<<<<< HEAD
           })
 
 #' The specified DataFrame is attached to the R search path. This means that
