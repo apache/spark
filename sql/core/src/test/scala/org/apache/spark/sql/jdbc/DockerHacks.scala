@@ -20,18 +20,18 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.MutableList
+import scala.util.control.NonFatal
 
 import com.spotify.docker.client.messages.ContainerConfig
 import com.spotify.docker.client._
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSQLContext
-import org.scalatest.BeforeAndAfterAll
 
 abstract class DatabaseOnDocker {
   /**
-   * The docker image to be pulled
+   * The docker image to be pulled.
    */
   def imageName: String
 
@@ -123,9 +123,19 @@ abstract class DatabaseIntegrationSuite extends SparkFunSuite
 
   override def beforeAll() {
     super.beforeAll()
-    db.start()
-    waitForDatabase(db.ip, 60000)
-    setupDatabase(db.ip)
+    try {
+      db.start()
+      waitForDatabase(db.ip, 60000)
+      setupDatabase(db.ip)
+    } catch {
+      case NonFatal(e) =>
+        try {
+          afterAll()
+        } finally {
+          throw e
+        }
+     }
+
   }
 
   override def afterAll() {
