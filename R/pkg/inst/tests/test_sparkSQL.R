@@ -1086,20 +1086,20 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(names(joined5), c("age", "name", "name", "test"))
   expect_equal(count(joined5), 3)
   expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[1]))
-  
+
   joined6 <- join(df, df2, df$name == df2$name, "inner")
   expect_equal(names(joined6), c("age", "name", "name", "test"))
   expect_equal(count(joined6), 3)
-  
+
   joined7 <- join(df, df2, df$name == df2$name, "leftsemi")
   expect_equal(names(joined7), c("age", "name"))
   expect_equal(count(joined7), 3)
-  
+
   joined8 <- join(df, df2, df$name == df2$name, "left_outer")
   expect_equal(names(joined8), c("age", "name", "name", "test"))
   expect_equal(count(joined8), 3)
   expect_true(is.na(collect(orderBy(joined8, joined8$age))$age[1]))
-  
+
   joined9 <- join(df, df2, df$name == df2$name, "right_outer")
   expect_equal(names(joined9), c("age", "name", "name", "test"))
   expect_equal(count(joined9), 4)
@@ -1119,6 +1119,11 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(count(merged), 3)
   expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
   expect_equal(collect(orderBy(merged, merged$"name-Y"))$"name-X"[3], "Michael")
+
+  merged <- merge(df, df2, by = "name", all = T, sort = T)
+  expect_equal(count(merged), 4)
+  expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name_y"))$"name_x"[1], "Andy")
 })
 
 test_that("toJSON() returns an RDD of the correct values", {

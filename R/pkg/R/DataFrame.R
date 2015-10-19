@@ -1490,16 +1490,14 @@ setMethod("join",
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.y = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE, all.y = TRUE)
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all = TRUE, sort = FALSE)
+#' merge(df1, df2, by = "col1", all = TRUE, suffixes = c("-X", "-Y"))
 #' }
 setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y, by = intersect(names(x), names(y)), by.x = NULL, by.y = NULL,
                    all = FALSE, all.x = FALSE, all.y = FALSE,
                    sort = TRUE, suffixes = c("_x","_y"), ... ) {
-
-            if (missing(x) | missing(y)) {
-              stop("x and y has to be specified")
-            }
 
             if (length(suffixes) != 2) {
               stop("suffixes must have length 2")
@@ -1530,8 +1528,8 @@ setMethod("merge",
             }
 
             # sets alias for making colnames unique in dataframes 'x' and 'y'
-            colsX <- generateAliasesForIntersectedCols(x, names(x), by, suffixes[1])
-            colsY <- generateAliasesForIntersectedCols(y, names(y), by, suffixes[2])
+            colsX <- generateAliasesForIntersectedCols(x, by, suffixes[1])
+            colsY <- generateAliasesForIntersectedCols(y, by, suffixes[2])
 
             # selects columns with their aliases from dataframes
             # in case same column names are present in both data frames
@@ -1580,18 +1578,21 @@ setMethod("merge",
 #' The name of the alias column is formed by concatanating the original column name and a suffix.
 #'
 #' @param x a DataFrame on which the
-#' @param allColNames a list of column names
 #' @param intersectedColNames a list of intersected column names
 #' @param suffix a suffix for the column name
 #' @return list of columns
 #'
-generateAliasesForIntersectedCols <- function (x, allColNames, intersectedColNames, suffix) {
+generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
+  allColNames <- names(x)
   # sets alias for making colnames unique in dataframe 'x'
-  cols <- lapply(seq_len(length(allColNames)), function(i) {
-    colName <- allColNames[[i]]
+  cols <- lapply(allColNames, function(colName) {
     col <- getColumn(x, colName)
-    if (allColNames[i] %in% intersectedColNames) {
+    if (colName %in% intersectedColNames) {
       newJoin <- paste(colName, suffix, sep = "")
+      if (newJoin %in% allColNames){
+        stop ("The following column name: '", newJoin, "' occurs more than once in the dataframe.
+          Please use different suffixes for the intersected columns.")
+      }
       col <- alias(col, newJoin)
     }
     col
