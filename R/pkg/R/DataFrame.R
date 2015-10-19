@@ -1495,8 +1495,8 @@ setMethod("join",
 #' }
 setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
-          function(x, y, by = intersect(names(x), names(y)), by.x = NULL, by.y = NULL,
-                   all = FALSE, all.x = FALSE, all.y = FALSE,
+          function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
+                   all = FALSE, all.x = all, all.y = all,
                    sort = TRUE, suffixes = c("_x","_y"), ... ) {
 
             if (length(suffixes) != 2) {
@@ -1507,7 +1507,7 @@ setMethod("merge",
             # default join type is inner, according to R it should be natural but since it
             # is not supported in spark inner join is used
             joinType <- "inner"
-            if (all | (all.x & all.y)) {
+            if (all || (all.x && all.y)) {
               joinType <- "outer"
             } else if (all.x) {
               joinType <- "left_outer"
@@ -1516,15 +1516,17 @@ setMethod("merge",
             }
 
             # join expression is based on by.x, by.y if both by.x and by.y are not missing
-            # and by if by.x or by.y are missing or have different lengths
-            if (length(by.x) > 0 & length(by.x) == length(by.y)) {
+            # or on by, if by.x or by.y are missing or have different lengths
+            if (length(by.x) > 0 && length(by.x) == length(by.y)) {
               joinX <- by.x
               joinY <- by.y
             } else if (length(by) > 0) {
               joinX <- by
               joinY <- by
             } else {
-              stop("The intersection of dataframes is empty")
+              # if by or both by.x and by.y have length 0, use Cartesian Product
+              joinRes <- join(x, y)
+              return (joinRes)
             }
 
             # sets alias for making colnames unique in dataframes 'x' and 'y'
@@ -1553,19 +1555,11 @@ setMethod("merge",
               colX == colY
             })
 
-            # concatanates join columns together with '&'
-            for (i in 1:length(joinColumns)) {
-              if (i == 1) {
-                joinExpr <- joinColumns[[i]]
-              } else {
-                joinExpr <- joinExpr & joinColumns[[i]]
-              }
-            }
-
+            joinExpr <- Reduce("&", joinColumns)
             joinRes <- join(xsel, ysel, joinExpr, joinType)
 
             # sorts the result by 'by' columns if sort = TRUE
-            if (sort & length(by) > 0) {
+            if (sort && length(by) > 0) {
               colNameWithSuffix <- paste(by, suffixes[2], sep = "")
               joinRes <- do.call("arrange", c(joinRes, colNameWithSuffix, decreasing = FALSE))
             }
