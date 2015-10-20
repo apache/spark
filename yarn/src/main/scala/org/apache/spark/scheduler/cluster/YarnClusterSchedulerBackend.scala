@@ -22,6 +22,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
+import org.apache.spark.deploy.yarn.ApplicationMaster
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
@@ -29,10 +30,20 @@ private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
   extends YarnSchedulerBackend(scheduler, sc) {
+  private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
 
   override def start() {
     super.start()
     totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sc.conf)
+    val attemptId = ApplicationMaster.getAttemptId
+    val binding = SchedulerExtensionServiceBinding(sc, attemptId.getApplicationId(),
+      Some(attemptId))
+    services.start(binding)
+  }
+
+  override def stop(): Unit = {
+    super.stop()
+    services.stop()
   }
 
   override def applicationId(): String =
