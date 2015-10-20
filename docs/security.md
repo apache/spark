@@ -23,9 +23,16 @@ If your applications are using event logging, the directory where the event logs
 
 ## Encryption
 
-Spark supports SSL for Akka and HTTP (for broadcast and file server) protocols. However SSL is not supported yet for WebUI and block transfer service.
+Spark supports SSL for Akka and HTTP (for broadcast and file server) protocols. SASL encryption is
+supported for the block transfer service. Encryption is not yet supported for the WebUI.
 
-Connection encryption (SSL) configuration is organized hierarchically. The user can configure the default SSL settings which will be used for all the supported communication protocols unless they are overwritten by protocol-specific settings. This way the user can easily provide the common settings for all the protocols without disabling the ability to configure each one individually. The common SSL settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at `spark.ssl.akka` and HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`. The full breakdown can be found on the [configuration page](configuration.html).
+Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
+files, cached data, and other application files. If encrypting this data is desired, a workaround is
+to configure your cluster manager to store application data on encrypted disks.
+
+### SSL Configuration
+
+Configuration for SSL is organized hierarchically. The user can configure the default SSL settings which will be used for all the supported communication protocols unless they are overwritten by protocol-specific settings. This way the user can easily provide the common settings for all the protocols without disabling the ability to configure each one individually. The common SSL settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at `spark.ssl.akka` and HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`. The full breakdown can be found on the [configuration page](configuration.html).
 
 SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
 
@@ -46,6 +53,17 @@ follows:
 * Export the public key of the key pair to a file on each node
 * Import all exported public keys into a single trust-store
 * Distribute the trust-store over the nodes
+
+### Configuring SASL Encryption
+
+SASL encryption is currently supported for the block transfer service when authentication
+(`spark.authenticate`) is enabled. To enable SASL encryption for an application, set
+`spark.authenticate.enableSaslEncryption` to `true` in the application's configuration.
+
+When using an external shuffle service, it's possible to disable unencrypted connections by setting
+`spark.network.sasl.serverAlwaysEncrypt` to `true` in the shuffle service's configuration. If that
+option is enabled, applications that are not set up to use SASL encryption will fail to connect to
+the shuffle service.
 
 ## Configuring Ports for Network Security
 

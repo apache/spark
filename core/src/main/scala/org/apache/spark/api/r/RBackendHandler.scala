@@ -125,10 +125,11 @@ private[r] class RBackendHandler(server: RBackend)
       val methods = cls.getMethods
       val selectedMethods = methods.filter(m => m.getName == methodName)
       if (selectedMethods.length > 0) {
-        val methods = selectedMethods.filter { x =>
-          matchMethod(numArgs, args, x.getParameterTypes)
-        }
-        if (methods.isEmpty) {
+        val index = findMatchedSignature(
+          selectedMethods.map(_.getParameterTypes),
+          args)
+
+        if (index.isEmpty) {
           logWarning(s"cannot find matching method ${cls}.$methodName. "
             + s"Candidates are:")
           selectedMethods.foreach { method =>
@@ -136,18 +137,29 @@ private[r] class RBackendHandler(server: RBackend)
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
-        val ret = methods.head.invoke(obj, args : _*)
+
+        val ret = selectedMethods(index.get).invoke(obj, args : _*)
 
         // Write status bit
         writeInt(dos, 0)
         writeObject(dos, ret.asInstanceOf[AnyRef])
       } else if (methodName == "<init>") {
         // methodName should be "<init>" for constructor
-        val ctor = cls.getConstructors.filter { x =>
-          matchMethod(numArgs, args, x.getParameterTypes)
-        }.head
+        val ctors = cls.getConstructors
+        val index = findMatchedSignature(
+          ctors.map(_.getParameterTypes),
+          args)
 
-        val obj = ctor.newInstance(args : _*)
+        if (index.isEmpty) {
+          logWarning(s"cannot find matching constructor for ${cls}. "
+            + s"Candidates are:")
+          ctors.foreach { ctor =>
+            logWarning(s"$cls(${ctor.getParameterTypes.mkString(",")})")
+          }
+          throw new Exception(s"No matched constructor found for $cls")
+        }
+
+        val obj = ctors(index.get).newInstance(args : _*)
 
         writeInt(dos, 0)
         writeObject(dos, obj.asInstanceOf[AnyRef])
@@ -166,40 +178,79 @@ private[r] class RBackendHandler(server: RBackend)
 
   // Read a number of arguments from the data input stream
   def readArgs(numArgs: Int, dis: DataInputStream): Array[java.lang.Object] = {
-    (0 until numArgs).map { arg =>
+    (0 until numArgs).map { _ =>
       readObject(dis)
     }.toArray
   }
 
-  // Checks if the arguments passed in args matches the parameter types.
-  // NOTE: Currently we do exact match. We may add type conversions later.
-  def matchMethod(
-      numArgs: Int,
-      args: Array[java.lang.Object],
-      parameterTypes: Array[Class[_]]): Boolean = {
-    if (parameterTypes.length != numArgs) {
-      return false
-    }
+  // Find a matching method signature in an array of signatures of constructors
+  // or methods of the same name according to the passed arguments. Arguments
+  // may be converted in order to match a signature.
+  //
+  // Note that in Java reflection, constructors and normal methods are of different
+  // classes, and share no parent class that provides methods for reflection uses.
+  // There is no unified way to handle them in this function. So an array of signatures
+  // is passed in instead of an array of candidate constructors or methods.
+  //
+  // Returns an Option[Int] which is the index of the matched signature in the array.
+  def findMatchedSignature(
+      parameterTypesOfMethods: Array[Array[Class[_]]],
+      args: Array[Object]): Option[Int] = {
+    val numArgs = args.length
 
-    for (i <- 0 to numArgs - 1) {
-      val parameterType = parameterTypes(i)
-      var parameterWrapperType = parameterType
+    for (index <- 0 until parameterTypesOfMethods.length) {
+      val parameterTypes = parameterTypesOfMethods(index)
 
-      // Convert native parameters to Object types as args is Array[Object] here
-      if (parameterType.isPrimitive) {
-        parameterWrapperType = parameterType match {
-          case java.lang.Integer.TYPE => classOf[java.lang.Integer]
-          case java.lang.Long.TYPE => classOf[java.lang.Integer]
-          case java.lang.Double.TYPE => classOf[java.lang.Double]
-          case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
-          case _ => parameterType
+      if (parameterTypes.length == numArgs) {
+        var argMatched = true
+        var i = 0
+        while (i < numArgs && argMatched) {
+          val parameterType = parameterTypes(i)
+
+          if (parameterType == classOf[Seq[Any]] && args(i).getClass.isArray) {
+            // The case that the parameter type is a Scala Seq and the argument
+            // is a Java array is considered matching. The array will be converted
+            // to a Seq later if this method is matched.
+          } else {
+            var parameterWrapperType = parameterType
+
+            // Convert native parameters to Object types as args is Array[Object] here
+            if (parameterType.isPrimitive) {
+              parameterWrapperType = parameterType match {
+                case java.lang.Integer.TYPE => classOf[java.lang.Integer]
+                case java.lang.Long.TYPE => classOf[java.lang.Integer]
+                case java.lang.Double.TYPE => classOf[java.lang.Double]
+                case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
+                case _ => parameterType
+              }
+            }
+            if (!parameterWrapperType.isInstance(args(i))) {
+              argMatched = false
+            }
+          }
+
+          i = i + 1
+        }
+
+        if (argMatched) {
+          // For now, we return the first matching method.
+          // TODO: find best method in matching methods.
+
+          // Convert args if needed
+          val parameterTypes = parameterTypesOfMethods(index)
+
+          (0 until numArgs).map { i =>
+            if (parameterTypes(i) == classOf[Seq[Any]] && args(i).getClass.isArray) {
+              // Convert a Java array to scala Seq
+              args(i) = args(i).asInstanceOf[Array[_]].toSeq
+            }
+          }
+
+          return Some(index)
         }
       }
-      if (!parameterWrapperType.isInstance(args(i))) {
-        return false
-      }
     }
-    true
+    None
   }
 }
 

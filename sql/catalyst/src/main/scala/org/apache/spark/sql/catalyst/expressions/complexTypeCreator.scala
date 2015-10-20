@@ -48,21 +48,22 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val arrayClass = classOf[GenericArrayData].getName
+    val values = ctx.freshName("values")
     s"""
       final boolean ${ev.isNull} = false;
-      final Object[] values = new Object[${children.size}];
+      final Object[] $values = new Object[${children.size}];
     """ +
       children.zipWithIndex.map { case (e, i) =>
         val eval = e.gen(ctx)
         eval.code + s"""
           if (${eval.isNull}) {
-            values[$i] = null;
+            $values[$i] = null;
           } else {
-            values[$i] = ${eval.primitive};
+            $values[$i] = ${eval.value};
           }
          """
       }.mkString("\n") +
-      s"final ${ctx.javaType(dataType)} ${ev.primitive} = new $arrayClass(values);"
+      s"final ArrayData ${ev.value} = new $arrayClass($values);"
   }
 
   override def prettyName: String = "array"
@@ -94,21 +95,23 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val rowClass = classOf[GenericMutableRow].getName
+    val rowClass = classOf[GenericInternalRow].getName
+    val values = ctx.freshName("values")
     s"""
       boolean ${ev.isNull} = false;
-      final $rowClass ${ev.primitive} = new $rowClass(${children.size});
+      final Object[] $values = new Object[${children.size}];
     """ +
       children.zipWithIndex.map { case (e, i) =>
         val eval = e.gen(ctx)
         eval.code + s"""
           if (${eval.isNull}) {
-            ${ev.primitive}.update($i, null);
+            $values[$i] = null;
           } else {
-            ${ev.primitive}.update($i, ${eval.primitive});
+            $values[$i] = ${eval.value};
           }
          """
-      }.mkString("\n")
+      }.mkString("\n") +
+      s"final InternalRow ${ev.value} = new $rowClass($values);"
   }
 
   override def prettyName: String = "struct"
@@ -161,21 +164,23 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val rowClass = classOf[GenericMutableRow].getName
+    val rowClass = classOf[GenericInternalRow].getName
+    val values = ctx.freshName("values")
     s"""
       boolean ${ev.isNull} = false;
-      final $rowClass ${ev.primitive} = new $rowClass(${valExprs.size});
+      final Object[] $values = new Object[${valExprs.size}];
     """ +
       valExprs.zipWithIndex.map { case (e, i) =>
         val eval = e.gen(ctx)
         eval.code + s"""
           if (${eval.isNull}) {
-            ${ev.primitive}.update($i, null);
+            $values[$i] = null;
           } else {
-            ${ev.primitive}.update($i, ${eval.primitive});
+            $values[$i] = ${eval.value};
           }
          """
-      }.mkString("\n")
+      }.mkString("\n") +
+      s"final InternalRow ${ev.value} = new $rowClass($values);"
   }
 
   override def prettyName: String = "named_struct"
@@ -213,7 +218,7 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, children)
     ev.isNull = eval.isNull
-    ev.primitive = eval.primitive
+    ev.value = eval.value
     eval.code
   }
 
@@ -253,7 +258,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
     ev.isNull = eval.isNull
-    ev.primitive = eval.primitive
+    ev.value = eval.value
     eval.code
   }
 

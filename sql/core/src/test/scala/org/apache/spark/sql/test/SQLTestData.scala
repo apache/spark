@@ -24,11 +24,11 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SQLImplicits}
  * A collection of sample data used in SQL tests.
  */
 private[sql] trait SQLTestData { self =>
-  protected def _sqlContext: SQLContext
+  protected def sqlContext: SQLContext
 
   // Helper object to import SQL implicits without a concrete SQLContext
   private object internalImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self._sqlContext
+    protected override def _sqlContext: SQLContext = self.sqlContext
   }
 
   import internalImplicits._
@@ -37,21 +37,21 @@ private[sql] trait SQLTestData { self =>
   // Note: all test data should be lazy because the SQLContext is not set up yet.
 
   protected lazy val emptyTestData: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       Seq.empty[Int].map(i => TestData(i, i.toString))).toDF()
     df.registerTempTable("emptyTestData")
     df
   }
 
   protected lazy val testData: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       (1 to 100).map(i => TestData(i, i.toString))).toDF()
     df.registerTempTable("testData")
     df
   }
 
   protected lazy val testData2: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       TestData2(1, 1) ::
       TestData2(1, 2) ::
       TestData2(2, 1) ::
@@ -63,7 +63,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val testData3: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       TestData3(1, None) ::
       TestData3(2, Some(2)) :: Nil).toDF()
     df.registerTempTable("testData3")
@@ -71,14 +71,14 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val negativeData: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       (1 to 100).map(i => TestData(-i, (-i).toString))).toDF()
     df.registerTempTable("negativeData")
     df
   }
 
   protected lazy val largeAndSmallInts: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       LargeAndSmallInts(2147483644, 1) ::
       LargeAndSmallInts(1, 2) ::
       LargeAndSmallInts(2147483645, 1) ::
@@ -90,7 +90,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val decimalData: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       DecimalData(1, 1) ::
       DecimalData(1, 2) ::
       DecimalData(2, 1) ::
@@ -102,7 +102,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val binaryData: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       BinaryData("12".getBytes, 1) ::
       BinaryData("22".getBytes, 5) ::
       BinaryData("122".getBytes, 3) ::
@@ -113,7 +113,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val upperCaseData: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       UpperCaseData(1, "A") ::
       UpperCaseData(2, "B") ::
       UpperCaseData(3, "C") ::
@@ -125,7 +125,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val lowerCaseData: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       LowerCaseData(1, "a") ::
       LowerCaseData(2, "b") ::
       LowerCaseData(3, "c") ::
@@ -135,7 +135,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val arrayData: RDD[ArrayData] = {
-    val rdd = _sqlContext.sparkContext.parallelize(
+    val rdd = sqlContext.sparkContext.parallelize(
       ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3))) ::
       ArrayData(Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
     rdd.toDF().registerTempTable("arrayData")
@@ -143,7 +143,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val mapData: RDD[MapData] = {
-    val rdd = _sqlContext.sparkContext.parallelize(
+    val rdd = sqlContext.sparkContext.parallelize(
       MapData(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
       MapData(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
       MapData(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
@@ -154,13 +154,13 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val repeatedData: RDD[StringData] = {
-    val rdd = _sqlContext.sparkContext.parallelize(List.fill(2)(StringData("test")))
+    val rdd = sqlContext.sparkContext.parallelize(List.fill(2)(StringData("test")))
     rdd.toDF().registerTempTable("repeatedData")
     rdd
   }
 
   protected lazy val nullableRepeatedData: RDD[StringData] = {
-    val rdd = _sqlContext.sparkContext.parallelize(
+    val rdd = sqlContext.sparkContext.parallelize(
       List.fill(2)(StringData(null)) ++
       List.fill(2)(StringData("test")))
     rdd.toDF().registerTempTable("nullableRepeatedData")
@@ -168,7 +168,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val nullInts: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       NullInts(1) ::
       NullInts(2) ::
       NullInts(3) ::
@@ -178,7 +178,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val allNulls: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       NullInts(null) ::
       NullInts(null) ::
       NullInts(null) ::
@@ -188,7 +188,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val nullStrings: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       NullStrings(1, "abc") ::
       NullStrings(2, "ABC") ::
       NullStrings(3, null) :: Nil).toDF()
@@ -197,13 +197,13 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val tableName: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(TableName("test") :: Nil).toDF()
+    val df = sqlContext.sparkContext.parallelize(TableName("test") :: Nil).toDF()
     df.registerTempTable("tableName")
     df
   }
 
   protected lazy val unparsedStrings: RDD[String] = {
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       "1, A1, true, null" ::
       "2, B2, false, null" ::
       "3, C3, true, null" ::
@@ -212,13 +212,13 @@ private[sql] trait SQLTestData { self =>
 
   // An RDD with 4 elements and 8 partitions
   protected lazy val withEmptyParts: RDD[IntField] = {
-    val rdd = _sqlContext.sparkContext.parallelize((1 to 4).map(IntField), 8)
+    val rdd = sqlContext.sparkContext.parallelize((1 to 4).map(IntField), 8)
     rdd.toDF().registerTempTable("withEmptyParts")
     rdd
   }
 
   protected lazy val person: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       Person(0, "mike", 30) ::
       Person(1, "jim", 20) :: Nil).toDF()
     df.registerTempTable("person")
@@ -226,7 +226,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val salary: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       Salary(0, 2000.0) ::
       Salary(1, 1000.0) :: Nil).toDF()
     df.registerTempTable("salary")
@@ -234,7 +234,7 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val complexData: DataFrame = {
-    val df = _sqlContext.sparkContext.parallelize(
+    val df = sqlContext.sparkContext.parallelize(
       ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1, 1, 1), true) ::
       ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2, 2, 2), false) ::
       Nil).toDF()
@@ -246,7 +246,7 @@ private[sql] trait SQLTestData { self =>
    * Initialize all test data such that all temp tables are properly registered.
    */
   def loadTestData(): Unit = {
-    assert(_sqlContext != null, "attempted to initialize test data before SQLContext.")
+    assert(sqlContext != null, "attempted to initialize test data before SQLContext.")
     emptyTestData
     testData
     testData2

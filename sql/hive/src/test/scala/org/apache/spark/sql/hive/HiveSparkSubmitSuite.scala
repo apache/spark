@@ -29,7 +29,8 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{SQLContext, QueryTest}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.sql.types.DecimalType
@@ -107,6 +108,16 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-11009 fix wrong result of Window function in cluster mode") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SPARK_11009.getClass.getName.stripSuffix("$"),
+      "--name", "SparkSQLConfTest",
+      "--master", "local-cluster[2,1,1024]",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -139,7 +150,7 @@ class HiveSparkSubmitSuite
     new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      val exitCode = failAfter(180.seconds) { process.waitFor() }
+      val exitCode = failAfter(300.seconds) { process.waitFor() }
       if (exitCode != 0) {
         // include logs in output. Note that logging is async and may not have completed
         // at the time this exception is raised
@@ -173,6 +184,7 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
+    conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -264,6 +276,7 @@ object SparkSQLConfTest extends Logging {
       // For this simple test, we do not really clone this object.
       override def clone: SparkConf = this
     }
+    conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     // Run a simple command to make sure all lazy vals in hiveContext get instantiated.
@@ -272,19 +285,23 @@ object SparkSQLConfTest extends Logging {
   }
 }
 
-object SPARK_9757 extends QueryTest with Logging {
+object SPARK_9757 extends QueryTest {
+  import org.apache.spark.sql.functions._
+
+  protected var sqlContext: SQLContext = _
+
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
-        .set("spark.sql.hive.metastore.jars", "maven"))
+        .set("spark.sql.hive.metastore.jars", "maven")
+        .set("spark.ui.enabled", "false"))
 
     val hiveContext = new TestHiveContext(sparkContext)
+    sqlContext = hiveContext
     import hiveContext.implicits._
-
-    import org.apache.spark.sql.functions._
 
     val dir = Utils.createTempDir()
     dir.delete()
@@ -310,6 +327,36 @@ object SPARK_9757 extends QueryTest with Logging {
     } finally {
       dir.delete()
       hiveContext.sql("DROP TABLE t")
+      sparkContext.stop()
+    }
+  }
+}
+
+object SPARK_11009 extends QueryTest {
+  import org.apache.spark.sql.functions._
+
+  protected var sqlContext: SQLContext = _
+
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+
+    val sparkContext = new SparkContext(
+      new SparkConf()
+        .set("spark.ui.enabled", "false")
+        .set("spark.sql.shuffle.partitions", "100"))
+
+    val hiveContext = new TestHiveContext(sparkContext)
+    sqlContext = hiveContext
+
+    try {
+      val df = sqlContext.range(1 << 20)
+      val df2 = df.select((df("id") % 1000).alias("A"), (df("id") / 1000).alias("B"))
+      val ws = Window.partitionBy(df2("A")).orderBy(df2("B"))
+      val df3 = df2.select(df2("A"), df2("B"), rowNumber().over(ws).alias("rn")).filter("rn < 0")
+      if (df3.rdd.count() != 0) {
+        throw new Exception("df3 should have 0 output row.")
+      }
+    } finally {
       sparkContext.stop()
     }
   }

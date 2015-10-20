@@ -115,9 +115,18 @@ class SaslRpcHandler extends RpcHandler {
 
   @Override
   public void connectionTerminated(TransportClient client) {
-    if (saslServer != null) {
-      saslServer.dispose();
+    try {
+      delegate.connectionTerminated(client);
+    } finally {
+      if (saslServer != null) {
+        saslServer.dispose();
+      }
     }
+  }
+
+  @Override
+  public void exceptionCaught(Throwable cause, TransportClient client) {
+    delegate.exceptionCaught(cause, client);
   }
 
 }

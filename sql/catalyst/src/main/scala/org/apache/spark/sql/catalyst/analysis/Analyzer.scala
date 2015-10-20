@@ -105,7 +105,7 @@ class Analyzer(
         // here use the CTE definition first, check table name only and ignore database name
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
         case u : UnresolvedRelation =>
-          val substituted = cteRelations.get(u.tableIdentifier.last).map { relation =>
+          val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
             val withAlias = u.alias.map(Subquery(_, relation))
             withAlias.getOrElse(relation)
           }
@@ -257,7 +257,7 @@ class Analyzer(
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"no such table ${u.tableName}")
+          u.failAnalysis(s"Table Not Found: ${u.tableName}")
       }
     }
 
@@ -377,6 +377,22 @@ class Analyzer(
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
         val newOrdering = resolveSortOrders(ordering, child, throws = false)
         Sort(newOrdering, global, child)
+
+      // A special case for Generate, because the output of Generate should not be resolved by
+      // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
+      case g @ Generate(generator, join, outer, qualifier, output, child)
+        if child.resolved && !generator.resolved =>
+        val newG = generator transformUp {
+          case u @ UnresolvedAttribute(nameParts) =>
+            withPosition(u) { child.resolve(nameParts, resolver).getOrElse(u) }
+          case UnresolvedExtractValue(child, fieldExpr) =>
+            ExtractValue(child, fieldExpr, resolver)
+        }
+        if (newG.fastEquals(generator)) {
+          g
+        } else {
+          Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
+        }
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
@@ -537,7 +553,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case filter @ Filter(havingCondition,
              aggregate @ Aggregate(grouping, originalAggExprs, child))
-          if aggregate.resolved && !filter.resolved =>
+          if aggregate.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
         val aggregatedCondition =
@@ -561,7 +577,7 @@ class Analyzer(
         }
 
       case sort @ Sort(sortOrder, global, aggregate: Aggregate)
-        if aggregate.resolved && !sort.resolved =>
+        if aggregate.resolved =>
 
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
@@ -598,9 +614,15 @@ class Analyzer(
               }
           }
 
-          Project(aggregate.output,
-            Sort(evaluatedOrderings, global,
-              aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+          // Since we don't rely on sort.resolved as the stop condition for this rule,
+          // we need to check this and prevent applying this rule multiple times
+          if (sortOrder == evaluatedOrderings) {
+            sort
+          } else {
+            Project(aggregate.output,
+              Sort(evaluatedOrderings, global,
+                aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+          }
         } catch {
           // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
           // just return the original plan.
@@ -809,6 +831,10 @@ class Analyzer(
             val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
             extractedExprBuffer += withName
             withName.toAttribute
+
+          // Extracts other attributes
+          case attr: Attribute => extractExpr(attr)
+
         }.asInstanceOf[NamedExpression]
       }
 

@@ -49,6 +49,7 @@ final class VectorSlicer(override val uid: String)
   /**
    * An array of indices to select features from a vector column.
    * There can be no overlap with [[names]].
+   * Default: Empty array
    * @group param
    */
   val indices = new IntArrayParam(this, "indices",
@@ -67,6 +68,7 @@ final class VectorSlicer(override val uid: String)
    * An array of feature names to select features from a vector column.
    * These names must be specified by ML [[org.apache.spark.ml.attribute.Attribute]]s.
    * There can be no overlap with [[indices]].
+   * Default: Empty Array
    * @group param
    */
   val names = new StringArrayParam(this, "names",

@@ -211,11 +211,15 @@ private[sql] class ParquetRelation(
   override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    val conf = ContextUtil.getConfiguration(job)
+    val conf = {
+      // scalastyle:off jobcontext
+      ContextUtil.getConfiguration(job)
+      // scalastyle:on jobcontext
+    }
 
     // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
-    val committerClassname = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
-    if (committerClassname == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
+    val committerClassName = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
+    if (committerClassName == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
       conf.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
         classOf[DirectParquetOutputCommitter].getCanonicalName)
     }
@@ -244,18 +248,22 @@ private[sql] class ParquetRelation(
     // bundled with `ParquetOutputFormat[Row]`.
     job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
 
-    // TODO There's no need to use two kinds of WriteSupport
-    // We should unify them. `SpecificMutableRow` can process both atomic (primitive) types and
-    // complex types.
-    val writeSupportClass =
-      if (dataSchema.map(_.dataType).forall(ParquetTypesConverter.isPrimitiveType)) {
-        classOf[MutableRowWriteSupport]
-      } else {
-        classOf[RowWriteSupport]
-      }
+    ParquetOutputFormat.setWriteSupportClass(job, classOf[CatalystWriteSupport])
+    CatalystWriteSupport.setSchema(dataSchema, conf)
 
-    ParquetOutputFormat.setWriteSupportClass(job, writeSupportClass)
-    RowWriteSupport.setSchema(dataSchema.toAttributes, conf)
+    // Sets flags for `CatalystSchemaConverter` (which converts Catalyst schema to Parquet schema)
+    // and `CatalystWriteSupport` (writing actual rows to Parquet files).
+    conf.set(
+      SQLConf.PARQUET_BINARY_AS_STRING.key,
+      sqlContext.conf.isParquetBinaryAsString.toString)
+
+    conf.set(
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+      sqlContext.conf.isParquetINT96AsTimestamp.toString)
+
+    conf.set(
+      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
+      sqlContext.conf.writeLegacyParquetFormat.toString)
 
     // Sets compression scheme
     conf.set(
@@ -283,7 +291,6 @@ private[sql] class ParquetRelation(
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
-    val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
 
     // Parquet row group size. We will use this value as the value for
     // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
@@ -300,8 +307,7 @@ private[sql] class ParquetRelation(
         useMetadataCache,
         parquetFilterPushDown,
         assumeBinaryIsString,
-        assumeInt96IsTimestamp,
-        followParquetFormatSpec) _
+        assumeInt96IsTimestamp) _
 
     // Create the function to set input paths at the driver side.
     val setInputPaths =
@@ -526,9 +532,8 @@ private[sql] object ParquetRelation extends Logging {
       useMetadataCache: Boolean,
       parquetFilterPushDown: Boolean,
       assumeBinaryIsString: Boolean,
-      assumeInt96IsTimestamp: Boolean,
-      followParquetFormatSpec: Boolean)(job: Job): Unit = {
-    val conf = job.getConfiguration
+      assumeInt96IsTimestamp: Boolean)(job: Job): Unit = {
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
     conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
 
     // Try to push down filters when filter push-down is enabled.
@@ -548,16 +553,15 @@ private[sql] object ParquetRelation extends Logging {
     })
 
     conf.set(
-      RowWriteSupport.SPARK_ROW_SCHEMA,
+      CatalystWriteSupport.SPARK_ROW_SCHEMA,
       CatalystSchemaConverter.checkFieldNames(dataSchema).json)
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
 
-    // Sets flags for Parquet schema conversion
+    // Sets flags for `CatalystSchemaConverter`
     conf.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING.key, assumeBinaryIsString)
     conf.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key, assumeInt96IsTimestamp)
-    conf.setBoolean(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key, followParquetFormatSpec)
 
     overrideMinSplitSize(parquetBlockSize, conf)
   }
@@ -572,7 +576,7 @@ private[sql] object ParquetRelation extends Logging {
       FileInputFormat.setInputPaths(job, inputFiles.map(_.getPath): _*)
     }
 
-    overrideMinSplitSize(parquetBlockSize, job.getConfiguration)
+    overrideMinSplitSize(parquetBlockSize, SparkHadoopUtil.get.getConfigurationFromJobContext(job))
   }
 
   private[parquet] def readSchema(
@@ -582,7 +586,7 @@ private[sql] object ParquetRelation extends Logging {
       val converter = new CatalystSchemaConverter(
         sqlContext.conf.isParquetBinaryAsString,
         sqlContext.conf.isParquetBinaryAsString,
-        sqlContext.conf.followParquetFormatSpec)
+        sqlContext.conf.writeLegacyParquetFormat)
 
       converter.convert(schema)
     }
@@ -716,7 +720,7 @@ private[sql] object ParquetRelation extends Logging {
       filesToTouch: Seq[FileStatus], sqlContext: SQLContext): Option[StructType] = {
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
-    val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
+    val writeLegacyParquetFormat = sqlContext.conf.writeLegacyParquetFormat
     val serializedConf = new SerializableConfiguration(sqlContext.sparkContext.hadoopConfiguration)
 
     // !! HACK ALERT !!
@@ -756,7 +760,7 @@ private[sql] object ParquetRelation extends Logging {
             new CatalystSchemaConverter(
               assumeBinaryIsString = assumeBinaryIsString,
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-              followParquetFormatSpec = followParquetFormatSpec)
+              writeLegacyParquetFormat = writeLegacyParquetFormat)
 
           footers.map { footer =>
             ParquetRelation.readSchemaFromFooter(footer, converter)

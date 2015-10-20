@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.random
 
-import scala.math
+import org.apache.commons.math3.special.Gamma
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.StatCounter
@@ -134,6 +134,20 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
         // var of gamma = shape * scale^2
         val expectedStd = math.sqrt(shape * scale * scale)
         distributionChecks(gamma, expectedMean, expectedStd, 0.1)
+    }
+  }
+
+  test("WeibullGenerator") {
+    List((1.0, 2.0), (2.0, 3.0), (2.5, 3.5), (10.4, 2.222)).map {
+      case (alpha: Double, beta: Double) =>
+        val weibull = new WeibullGenerator(alpha, beta)
+        apiChecks(weibull)
+
+        val expectedMean = math.exp(Gamma.logGamma(1 + (1 / alpha))) * beta
+        val expectedVariance = math.exp(
+          Gamma.logGamma(1 + (2 / alpha))) * beta * beta - expectedMean * expectedMean
+        val expectedStd = math.sqrt(expectedVariance)
+        distributionChecks(weibull, expectedMean, expectedStd, 0.1)
     }
   }
 }

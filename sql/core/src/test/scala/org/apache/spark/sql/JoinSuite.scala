@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -31,7 +32,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
-    val planned = ctx.planner.EquiJoinSelection(join)
+    val planned = sqlContext.planner.EquiJoinSelection(join)
     assert(planned.size === 1)
   }
 
@@ -59,7 +60,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("join operator selection") {
-    ctx.cacheManager.clearCache()
+    sqlContext.cacheManager.clearCache()
 
     Seq(
       ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
@@ -83,7 +84,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData full outer join testData2 ON key = a",
-        classOf[ShuffledHashOuterJoin]),
+        classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
         classOf[BroadcastNestedLoopJoin]),
       ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
@@ -118,7 +119,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("broadcasted hash join operator selection") {
-    ctx.cacheManager.clearCache()
+    sqlContext.cacheManager.clearCache()
     sql("CACHE TABLE testData")
     for (sortMergeJoinEnabled <- Seq(true, false)) {
       withClue(s"sortMergeJoinEnabled=$sortMergeJoinEnabled") {
@@ -138,7 +139,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("broadcasted hash outer join operator selection") {
-    ctx.cacheManager.clearCache()
+    sqlContext.cacheManager.clearCache()
     sql("CACHE TABLE testData")
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
       Seq(
@@ -167,7 +168,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
-    val planned = ctx.planner.EquiJoinSelection(join)
+    val planned = sqlContext.planner.EquiJoinSelection(join)
     assert(planned.size === 1)
   }
 
@@ -359,8 +360,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     upperCaseData.where('N <= 4).registerTempTable("left")
     upperCaseData.where('N >= 3).registerTempTable("right")
 
-    val left = UnresolvedRelation(Seq("left"), None)
-    val right = UnresolvedRelation(Seq("right"), None)
+    val left = UnresolvedRelation(TableIdentifier("left"), None)
+    val right = UnresolvedRelation(TableIdentifier("right"), None)
 
     checkAnswer(
       left.join(right, $"left.N" === $"right.N", "full"),
@@ -442,7 +443,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("broadcasted left semi join operator selection") {
-    ctx.cacheManager.clearCache()
+    sqlContext.cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {

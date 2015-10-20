@@ -124,6 +124,9 @@ class GroupedData protected[sql](
       case "avg" | "average" | "mean" => Average
       case "max" => Max
       case "min" => Min
+      case "stddev" => Stddev
+      case "stddev_pop" => StddevPop
+      case "stddev_samp" => StddevSamp
       case "sum" => Sum
       case "count" | "size" =>
         // Turn count(*) into count(1)
@@ -281,6 +284,42 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Min)
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Stddev)
+  }
+
+  /**
+   * Compute the population standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev_pop(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(StddevPop)
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the stddev for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def stddev_samp(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(StddevSamp)
   }
 
   /**

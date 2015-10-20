@@ -81,25 +81,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       .orNull
     // If dynamic allocation is enabled, start at the configured initial number of executors.
     // Default to minExecutors if no initialExecutors is set.
-    if (isDynamicAllocationEnabled) {
-      val minExecutorsConf = "spark.dynamicAllocation.minExecutors"
-      val initialExecutorsConf = "spark.dynamicAllocation.initialExecutors"
-      val maxExecutorsConf = "spark.dynamicAllocation.maxExecutors"
-      val minNumExecutors = sparkConf.getInt(minExecutorsConf, 0)
-      val initialNumExecutors = sparkConf.getInt(initialExecutorsConf, minNumExecutors)
-      val maxNumExecutors = sparkConf.getInt(maxExecutorsConf, Integer.MAX_VALUE)
-
-      // If defined, initial executors must be between min and max
-      if (initialNumExecutors < minNumExecutors || initialNumExecutors > maxNumExecutors) {
-        throw new IllegalArgumentException(
-          s"$initialExecutorsConf must be between $minExecutorsConf and $maxNumExecutors!")
-      }
-
-      numExecutors = initialNumExecutors
-    } else {
-      val numExecutorsConf = "spark.executor.instances"
-      numExecutors = sparkConf.getInt(numExecutorsConf, numExecutors)
-    }
+    numExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
     principal = Option(principal)
       .orElse(sparkConf.getOption("spark.yarn.principal"))
       .orNull
