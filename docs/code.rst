@@ -160,6 +160,7 @@ Hooks
 .. automodule:: airflow.hooks
     :show-inheritance:
     :members:
+        DbApiHook,
         HiveCliHook,
         HiveMetastoreHook,
         HiveServer2Hook,
