@@ -35,6 +35,23 @@ getInternalType <- function(x) {
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
          stop(paste("Unsupported type for SparkDataFrame:", class(x))))
+#' Temporary function to reroute old S3 Method call to new
+#' We need to check the class of x to ensure it is SQLContext before dispatching
+dispatchFunc <- function(newFuncSig, x, ...) {
+  funcName <- as.character(sys.call(sys.parent())[[1]])
+  f <- get(paste0(funcName, ".default"))
+  # Strip sqlContext from list of parameters and then pass the rest along.
+  # In the following, if '&' is used instead of '&&', it warns about
+  # "the condition has length > 1 and only the first element will be used"
+  if (class(x) == "jobj" &&
+      getClassName.jobj(x) == "org.apache.spark.sql.SQLContext") {
+    .Deprecated(newFuncSig, old = paste0(funcName, "(sqlContext...)"))
+    f(...)
+  } else {
+    f(x, ...)
+  }
+}
+
 #' return the SQL Context
 getSqlContext <- function() {
   if (exists(".sparkRHivesc", envir = .sparkREnv)) {
@@ -99,12 +116,12 @@ infer_type <- function(x) {
 #' }
 
 # TODO(davies): support sampling and infer type from NA
-createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0) {
-  sqlContext <- getSqlContext()
-  createDataFrame(sqlContext, data, schema, samplingRatio)
+createDataFrame <- function(x, ...) {
+  dispatchFunc("createDataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
 }
 
-createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
+createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
+  sqlContext <- getSqlContext()
   if (is.data.frame(data)) {
       # get the names of columns, they will be put into RDD
       if (is.null(schema)) {
@@ -181,8 +198,8 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
-as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
-  createDataFrame(sqlContext, data, schema, samplingRatio)
+as.DataFrame <- function(data, schema = NULL, samplingRatio = 1.0) {
+  createDataFrame(data, schema, samplingRatio)
 }
 
 #' toDF
@@ -234,15 +251,15 @@ read.json <- function(sqlContext, path) {
   sdf <- callJMethod(read, "json", paths)
   dataFrame(sdf)
 
-jsonFile <- function(path) {
-  sqlContext <- getSqlContext()
-  jsonFile(sqlContext, path)
-}
-
 #' @rdname read.json
 #' @name jsonFile
 #' @export
-jsonFile <- function(sqlContext, path) {
+jsonFile <- function(x, ...) {
+  dispatchFunc("jsonFile(path)", x, ...)
+}
+
+jsonFile.default <- function(path) {
+  sqlContext <- getSqlContext()
   .Deprecated("read.json")
   read.json(sqlContext, path)
 }
@@ -266,6 +283,7 @@ jsonFile <- function(sqlContext, path) {
 #' df <- jsonRDD(sqlContext, rdd)
 #'}
 
+# TODO: remove - this method is no longer exported
 # TODO: support schema
 jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
   .Deprecated("read.json")
@@ -302,10 +320,12 @@ read.parquet <- function(sqlContext, path) {
 #' @name parquetFile
 #' @export
 # TODO: Implement saveasParquetFile and write examples for both
-parquetFile <- function(...) {
+parquetFile <- function(x, ...) {
+  dispatchFunc("parquetFile(...)", x, ...)
+}
+
+parquetFile.default <- function(...) {
   sqlContext <- getSqlContext()
-  parquetFile(sqlContext, ...)
-parquetFile <- function(sqlContext, ...) {
   .Deprecated("read.parquet")
   read.parquet(sqlContext, unlist(list(...)))
 }
@@ -356,14 +376,14 @@ read.text <- function(sqlContext, path) {
 #' new_df <- sql(sqlContext, "SELECT * FROM table")
 #' }
 
-sql <- function(sqlQuery) {
-  sqlContext <- getSqlContext()
-  sql(sqlContext, sqlQuery)
+sql <- function(x, ...) {
+  dispatchFunc("sql(sqlQuery)", x, ...)
 }
 
-sql <- function(sqlContext, sqlQuery) {
- sdf <- callJMethod(sqlContext, "sql", sqlQuery)
- dataFrame(sdf)
+sql.default <- function(sqlQuery) {
+  sqlContext <- getSqlContext()
+  sdf <- callJMethod(sqlContext, "sql", sqlQuery)
+  dataFrame(sdf)
 }
 
 #' Create a SparkDataFrame from a SparkSQL Table
@@ -407,12 +427,12 @@ tableToDF <- function(sqlContext, tableName) {
 #' tables(sqlContext, "hive")
 #' }
 
-tables <- function(databaseName = NULL) {
-  sqlContext <- getSqlContext()
-  tables(sqlContext, databaseName)
+tables <- function(x, ...) {
+  dispatchFunc("tables(databaseName = NULL)", x, ...)
 }
 
-tables <- function(sqlContext, databaseName = NULL) {
+tables.default <- function(databaseName = NULL) {
+  sqlContext <- getSqlContext()
   jdf <- if (is.null(databaseName)) {
     callJMethod(sqlContext, "tables")
   } else {
@@ -437,12 +457,12 @@ tables <- function(sqlContext, databaseName = NULL) {
 #' tableNames(sqlContext, "hive")
 #' }
 
-tableNames <- function(databaseName = NULL) {
-  sqlContext <- getSqlContext()
-  tableNames(sqlContext, databaseName)
+tableNames <- function(x, ...) {
+  dispatchFunc("tableNames(databaseName = NULL)", x, ...)
 }
 
-tableNames <- function(sqlContext, databaseName = NULL) {
+tableNames.default <- function(databaseName = NULL) {
+  sqlContext <- getSqlContext()
   if (is.null(databaseName)) {
     callJMethod(sqlContext, "tableNames")
   } else {
@@ -469,12 +489,12 @@ tableNames <- function(sqlContext, databaseName = NULL) {
 #' cacheTable(sqlContext, "table")
 #' }
 
-cacheTable <- function(tableName) {
-  sqlContext <- getSqlContext()
-  cacheTable(sqlContext, tableName)
+cacheTable <- function(x, ...) {
+  dispatchFunc("cacheTable(tableName)", x, ...)
 }
 
-cacheTable <- function(sqlContext, tableName) {
+cacheTable.default <- function(tableName) {
+  sqlContext <- getSqlContext()
   callJMethod(sqlContext, "cacheTable", tableName)
 }
 
@@ -496,12 +516,12 @@ cacheTable <- function(sqlContext, tableName) {
 #' uncacheTable(sqlContext, "table")
 #' }
 
-uncacheTable <- function(tableName) {
-  sqlContext <- getSqlContext()
-  uncacheTable(sqlContext, tableName)
+uncacheTable <- function(x, ...) {
+  dispatchFunc("uncacheTable(tableName)", x, ...)
 }
 
-uncacheTable <- function(sqlContext, tableName) {
+uncacheTable.default <- function(tableName) {
+  sqlContext <- getSqlContext()
   callJMethod(sqlContext, "uncacheTable", tableName)
 }
 
@@ -515,12 +535,12 @@ uncacheTable <- function(sqlContext, tableName) {
 #' clearCache(sqlContext)
 #' }
 
-clearCache <- function() {
-  sqlContext <- getSqlContext()
-  callJMethod(sqlContext, "clearCache")
+clearCache <- function(x, ...) {
+  dispatchFunc("clearCache()", x, ...)
 }
 
-clearCache <- function(sqlContext) {
+clearCache.default <- function() {
+  sqlContext <- getSqlContext()
   callJMethod(sqlContext, "clearCache")
 }
 
@@ -540,12 +560,12 @@ clearCache <- function(sqlContext) {
 #' dropTempTable(sqlContext, "table")
 #' }
 
-dropTempTable <- function(tableName) {
-  sqlContext <- getSqlContext()
-  dropTempTable(sqlContext, tableName)
+dropTempTable <- function(x, ...) {
+  dispatchFunc("dropTempTable(tableName)", x, ...)
 }
 
-dropTempTable <- function(sqlContext, tableName) {
+dropTempTable.default <- function(tableName) {
+  sqlContext <- getSqlContext()
   if (class(tableName) != "character") {
     stop("tableName must be a string.")
   }
@@ -579,12 +599,12 @@ dropTempTable <- function(sqlContext, tableName) {
 #' df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema = "true")
 #' }
 
-read.df <- function(path = NULL, source = NULL, schema = NULL, ...) {
-  sqlContext <- getSqlContext()
-  read.df(sqlContext, path, source, schema, ...)
+read.df <- function(x, ...) {
+  dispatchFunc("read.df(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
 }
 
-read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
+read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
+  sqlContext <- getSqlContext()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
@@ -605,12 +625,12 @@ read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) 
 
 #' @aliases read.df
 #' @name loadDF
-loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
-  read.df(path, source, schema, ...)
+loadDF <- function(x, ...) {
+  dispatchFunc("loadDF(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
 }
 
-loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
-  read.df(sqlContext, path, source, schema, ...)
+loadDF.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
+  read.df(path, source, schema, ...)
 }
 
 #' Create an external table
@@ -635,12 +655,12 @@ loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
 #' df <- sparkRSQL.createExternalTable(sqlContext, "myjson", path="path/to/json", source="json")
 #' }
 
-createExternalTable <- function(tableName, path = NULL, source = NULL, ...) {
-  sqlContext <- getSqlContext()
-  createExternalTable(sqlContext, tableName, path, source)
+createExternalTable <- function(x, ...) {
+  dispatchFunc("createExternalTable(tableName, path = NULL, source = NULL, ...)", x, ...)
 }
 
-createExternalTable <- function(sqlContext, tableName, path = NULL, source = NULL, ...) {
+createExternalTable.default <- function(tableName, path = NULL, source = NULL, ...) {
+  sqlContext <- getSqlContext()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
