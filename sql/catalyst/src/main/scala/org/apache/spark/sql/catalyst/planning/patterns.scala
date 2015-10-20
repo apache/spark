@@ -160,6 +160,9 @@ object PartialAggregation {
 
 /**
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
+ *
+ * Null-safe equality will be transformed into equality as joining key (replace null with default
+ * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */

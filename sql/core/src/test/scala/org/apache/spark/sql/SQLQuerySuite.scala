@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.joins.CartesianProduct
+import org.apache.spark.sql.execution.joins.{SortMergeJoin, CartesianProduct}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -857,6 +857,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       case cp: CartesianProduct => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
+    val smj = df.queryExecution.executedPlan.collect {
+      case smj: SortMergeJoin => smj
+    }
+    assert(smj.size > 0, "should use SortMergeJoin")
     checkAnswer(df, Row(100) :: Nil)
   }
 

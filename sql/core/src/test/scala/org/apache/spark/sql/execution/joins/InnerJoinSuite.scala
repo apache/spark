@@ -213,18 +213,16 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   {
-    lazy val left = myTestData.where("a = 1")
-    lazy val right = myTestData.where("a = 1")
+    lazy val left = Seq((1, Some(0)), (2, None)).toDF("a", "b")
+    lazy val right = Seq((1, Some(0)), (2, None)).toDF("a", "b")
     testInnerJoin(
       "inner join, null safe",
       left,
       right,
-      () => (left.col("a") <=> right.col("a")).expr,
+      () => (left.col("b") <=> right.col("b")).expr,
       Seq(
-        (1, 1, 1, 1),
-        (1, 1, 1, 2),
-        (1, 2, 1, 1),
-        (1, 2, 1, 2)
+        (1, 0, 1, 0),
+        (2, null, 2, null)
       )
     )
   }
