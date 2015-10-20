@@ -432,6 +432,16 @@ private[spark] object SQLConf {
   val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
     defaultValue = Some(true), doc = "<TODO>")
 
+  val AGGREGATION_HASH_INIT_SIZE = intConf(
+    "spark.sql.aggregation.hash.initSize",
+    defaultValue = Some(16384),
+    doc = "initialize size of hash for (partial or full) aggregation")
+
+  val PARTIAL_AGGREGATION_MAX_ENTRY = intConf(
+    "spark.sql.partialAggregation.maxEntry",
+    defaultValue = Some(-1),
+    doc = "maximum size of hash for partial aggregation. -1 for unlimited, which is default")
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -539,6 +549,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+
+  private[spark] def aggregationHashInitSize: Int = getConf(AGGREGATION_HASH_INIT_SIZE)
+
+  private[spark] def partialAggregationMaxEntry: Int = getConf(PARTIAL_AGGREGATION_MAX_ENTRY)
 
   /** ********************** SQLConf functionality methods ************ */
 
