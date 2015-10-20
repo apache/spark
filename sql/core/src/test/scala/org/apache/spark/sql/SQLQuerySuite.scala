@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.joins.{SortMergeJoin, CartesianProduct}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -848,6 +849,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row (4, "D", 4, "D") ::
       Row(null, null, 5, "E") ::
       Row(null, null, 6, "F") :: Nil)
+  }
+
+  test("SPARK-11111 null-safe join should not use cartesian product") {
+    val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
+    val cp = df.queryExecution.executedPlan.collect {
+      case cp: CartesianProduct => cp
+    }
+    assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
+    val smj = df.queryExecution.executedPlan.collect {
+      case smj: SortMergeJoin => smj
+    }
+    assert(smj.size > 0, "should use SortMergeJoin")
+    checkAnswer(df, Row(100) :: Nil)
   }
 
   test("SPARK-3349 partitioning after limit") {
