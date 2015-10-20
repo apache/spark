@@ -74,7 +74,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
         " Shuffle will continue to spill to disk when necessary.")
   }
 
+  /**
+   * A mapping from shuffle ids to the number of mappers producing output for those shuffles.
+   */
   private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
+
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
   /**
@@ -168,8 +172,9 @@ private[spark] object SortShuffleManager extends Logging {
 
   /**
    * The maximum number of shuffle output partitions that SortShuffleManager supports when
-   *
-   */
+   * buffering map outputs in a serialized form. This is an extreme defensive programming measure,
+   * since it's extremely unlikely that a single shuffle produces over 16 million output partitions.
+   * */
   val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE =
     PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
 

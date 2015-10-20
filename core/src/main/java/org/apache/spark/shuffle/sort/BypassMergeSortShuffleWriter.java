@@ -21,12 +21,15 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import javax.annotation.Nullable;
 
+import scala.None$;
 import scala.Option;
 import scala.Product2;
 import scala.Tuple2;
 import scala.collection.Iterator;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,8 +47,6 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
-
-import javax.annotation.Nullable;
 
 /**
  * This class implements sort-based shuffle's hash-style shuffle fallback path. This write path
@@ -160,11 +161,16 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
-  // Exposed for testing
+  @VisibleForTesting
   long[] getPartitionLengths() {
     return partitionLengths;
   }
 
+  /**
+   * Concatenate all of the per-partition files into a single combined file.
+   *
+   * @return array of lengths, in bytes, of each partition of the file (used by map output tracker).
+   */
   private long[] writePartitionedFile(File outputFile) throws IOException {
     // Track location of the partition starts in the output file
     final long[] lengths = new long[numPartitions];
@@ -202,7 +208,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public Option<MapStatus> stop(boolean success) {
     if (stopping) {
-      return Option.apply(null);
+      return None$.empty();
     } else {
       stopping = true;
       if (success) {
@@ -226,7 +232,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           }
         }
         shuffleBlockResolver.removeDataByMap(shuffleId, mapId);
-        return Option.apply(null);
+        return None$.empty();
       }
     }
   }
