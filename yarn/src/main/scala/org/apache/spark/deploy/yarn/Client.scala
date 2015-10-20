@@ -504,8 +504,8 @@ private[spark] class Client(
     // configuration file is provided through --files then executors will be taking configurations
     // from --files instead of $SPARK_CONF_DIR/log4j.properties.
     val log4jFileName = "log4j.properties"
-    Option(Utils.getContextOrSparkClassLoader.getResource(log4jFileName)).foreach {
-      url => if (url.getProtocol == "file") {
+    Option(Utils.getContextOrSparkClassLoader.getResource(log4jFileName)).foreach { url =>
+      if (url.getProtocol == "file") {
         hadoopConfFiles(log4jFileName) = new File(url.getPath)
       }
     }
