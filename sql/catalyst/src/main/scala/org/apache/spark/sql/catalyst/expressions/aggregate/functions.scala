@@ -327,6 +327,149 @@ case class Min(child: Expression) extends DeclarativeAggregate {
   override val evaluateExpression = min
 }
 
+// Compute the sample standard deviation of a column
+case class Stddev(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = true
+  override def prettyName: String = "stddev"
+}
+
+// Compute the population standard deviation of a column
+case class StddevPop(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = false
+  override def prettyName: String = "stddev_pop"
+}
+
+// Compute the sample standard deviation of a column
+case class StddevSamp(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = true
+  override def prettyName: String = "stddev_samp"
+}
+
+// Compute standard deviation based on online algorithm specified here:
+// http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def nullable: Boolean = true
+
+  def isSample: Boolean
+
+  // Return data type.
+  override def dataType: DataType = resultType
+
+  // Expected input data type.
+  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression1) to the
+  // new version at planning time (after analysis phase). For now, NullType is added at here
+  // to make it resolved when we have cases like `select stddev(null)`.
+  // We can use our analyzer to cast NullType to the default data type of the NumericType once
+  // we remove the old aggregate functions. Then, we will not need NullType at here.
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+
+  private val resultType = DoubleType
+
+  private val preCount = AttributeReference("preCount", resultType)()
+  private val currentCount = AttributeReference("currentCount", resultType)()
+  private val preAvg = AttributeReference("preAvg", resultType)()
+  private val currentAvg = AttributeReference("currentAvg", resultType)()
+  private val currentMk = AttributeReference("currentMk", resultType)()
+
+  override val aggBufferAttributes = preCount :: currentCount :: preAvg ::
+    currentAvg :: currentMk :: Nil
+
+  override val initialValues = Seq(
+    /* preCount = */ Cast(Literal(0), resultType),
+    /* currentCount = */ Cast(Literal(0), resultType),
+    /* preAvg = */ Cast(Literal(0), resultType),
+    /* currentAvg = */ Cast(Literal(0), resultType),
+    /* currentMk = */ Cast(Literal(0), resultType)
+  )
+
+  override val updateExpressions = {
+
+    // update average
+    // avg = avg + (value - avg)/count
+    def avgAdd: Expression = {
+      currentAvg + ((Cast(child, resultType) - currentAvg) / currentCount)
+    }
+
+    // update sum of square of difference from mean
+    // Mk = Mk + (value - preAvg) * (value - updatedAvg)
+    def mkAdd: Expression = {
+      val delta1 = Cast(child, resultType) - preAvg
+      val delta2 = Cast(child, resultType) - currentAvg
+      currentMk + (delta1 * delta2)
+    }
+
+    Seq(
+      /* preCount = */ If(IsNull(child), preCount, currentCount),
+      /* currentCount = */ If(IsNull(child), currentCount,
+        Add(currentCount, Cast(Literal(1), resultType))),
+      /* preAvg = */ If(IsNull(child), preAvg, currentAvg),
+      /* currentAvg = */ If(IsNull(child), currentAvg, avgAdd),
+      /* currentMk = */ If(IsNull(child), currentMk, mkAdd)
+    )
+  }
+
+  override val mergeExpressions = {
+
+    // count merge
+    def countMerge: Expression = {
+      currentCount.left + currentCount.right
+    }
+
+    // average merge
+    def avgMerge: Expression = {
+      ((currentAvg.left * preCount) + (currentAvg.right * currentCount.right)) /
+        (preCount + currentCount.right)
+    }
+
+    // update sum of square differences
+    def mkMerge: Expression = {
+      val avgDelta = currentAvg.right - preAvg
+      val mkDelta = (avgDelta * avgDelta) * (preCount * currentCount.right) /
+        (preCount + currentCount.right)
+
+      currentMk.left + currentMk.right + mkDelta
+    }
+
+    Seq(
+      /* preCount = */ If(IsNull(currentCount.left),
+        Cast(Literal(0), resultType), currentCount.left),
+      /* currentCount = */ If(IsNull(currentCount.left), currentCount.right,
+        If(IsNull(currentCount.right), currentCount.left, countMerge)),
+      /* preAvg = */ If(IsNull(currentAvg.left), Cast(Literal(0), resultType), currentAvg.left),
+      /* currentAvg = */ If(IsNull(currentAvg.left), currentAvg.right,
+        If(IsNull(currentAvg.right), currentAvg.left, avgMerge)),
+      /* currentMk = */ If(IsNull(currentMk.left), currentMk.right,
+        If(IsNull(currentMk.right), currentMk.left, mkMerge))
+    )
+  }
+
+  override val evaluateExpression = {
+    // when currentCount == 0, return null
+    // when currentCount == 1, return 0
+    // when currentCount >1
+    // stddev_samp = sqrt (currentMk/(currentCount -1))
+    // stddev_pop = sqrt (currentMk/currentCount)
+    val varCol = {
+      if (isSample) {
+        currentMk / Cast((currentCount - Cast(Literal(1), resultType)), resultType)
+      }
+      else {
+        currentMk / currentCount
+      }
+    }
+
+    If(EqualTo(currentCount, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+      If(EqualTo(currentCount, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+        Cast(Sqrt(varCol), resultType)))
+  }
+}
+
 case class Sum(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
@@ -788,6 +931,23 @@ object HyperLogLogPlusPlus {
   // scalastyle:on
 }
 
+/**
+ * A central moment is the expected value of a specified power of the deviation of a random
+ * variable from the mean. Central moments are often used to characterize the properties of about
+ * the shape of a distribution.
+ *
+ * This class implements online, one-pass algorithms for computing the central moments of a set of
+ * points.
+ *
+ * References:
+ *  - Xiangrui Meng.  "Simpler Online Updates for Arbitrary-Order Central Moments."
+ *      2015. http://arxiv.org/abs/1510.04923
+ *
+ * @see [[https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
+ *     Algorithms for calculating variance (Wikipedia)]]
+ *
+ * @param child to compute central moments of.
+ */
 abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate with Serializable {
 
   /**
@@ -820,6 +980,11 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
     AttributeReference(s"M$i", DoubleType)()
   }
 
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
   /**
    * Initialize all moments to zero
    */
@@ -831,6 +996,11 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
     }
   }
 
+  private[this] var delta = 0.0
+  private[this] var deltaN = 0.0
+  private[this] var delta2 = 0.0
+  private[this] var deltaN2 = 0.0
+
   /**
    * Update the central moments buffer.
    */
@@ -841,248 +1011,288 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
         case d: Double => d
         case _ => 0.0
       }
-      val currentM0 = buffer.getDouble(mutableAggBufferOffset)
-      val currentM1 = buffer.getDouble(mutableAggBufferOffset + 1)
-      val currentM2 = buffer.getDouble(mutableAggBufferOffset + 2)
-      val currentM3 = buffer.getDouble(mutableAggBufferOffset + 3)
-      val currentM4 = buffer.getDouble(mutableAggBufferOffset + 4)
+      var n = buffer.getDouble(mutableAggBufferOffset)
+      var mean = buffer.getDouble(mutableAggBufferOffset + 1)
+      var M2 = 0.0
+      var M3 = 0.0
+      var M4 = 0.0
 
-      val updateM0 = currentM0 + 1.0
-      val delta = updateValue - currentM1
-      val deltaN = delta / updateM0
+      n += 1.0
+      delta = updateValue - mean
+      deltaN = delta / n
+      mean += deltaN
+      buffer.setDouble(mutableAggBufferOffset, n)
+      buffer.setDouble(mutableAggBufferOffset + 1, mean)
 
-      val updateM1 = currentM1 + delta / updateM0
-      val updateM2 = if (maxMoment >= 2) {
-        currentM2 + delta * (delta - deltaN)
-      } else {
-        0.0
+      if (maxMoment >= 2) {
+        M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+        M2 += delta * (delta - deltaN)
+        buffer.setDouble(mutableAggBufferOffset + 2, M2)
       }
-      val delta2 = delta * delta
-      val deltaN2 = deltaN * deltaN
-      val updateM3 = if (maxMoment >= 3) {
-        currentM3 - 3.0 * deltaN * updateM2 + delta * (delta2 - deltaN2)
-      } else {
-        0.0
+
+      if (maxMoment >= 3) {
+        delta2 = delta * delta
+        deltaN2 = deltaN * deltaN
+        M3 = buffer.getDouble(mutableAggBufferOffset + 3)
+        println(M3)
+        M3 += -3.0 * deltaN * M2 + delta * (delta2 - deltaN2)
+        println(M3)
+        buffer.setDouble(mutableAggBufferOffset + 3, M3)
       }
-      val updateM4 = if (maxMoment >= 4) {
-        currentM4 - 4.0 * deltaN * updateM3 - 6.0 * deltaN2 * updateM2 +
+
+      if (maxMoment >= 4) {
+        M4 = buffer.getDouble(mutableAggBufferOffset + 4)
+        M4 += -4.0 * deltaN * M3 - 6.0 * deltaN2 * M2 +
           delta * (delta * delta2 - deltaN * deltaN2)
-      } else {
-        0.0
+        buffer.setDouble(mutableAggBufferOffset + 4, M4)
       }
-
-      buffer.setDouble(mutableAggBufferOffset, updateM0)
-      buffer.setDouble(mutableAggBufferOffset + 1, updateM1)
-      buffer.setDouble(mutableAggBufferOffset + 2, updateM2)
-      buffer.setDouble(mutableAggBufferOffset + 3, updateM3)
-      buffer.setDouble(mutableAggBufferOffset + 4, updateM4)
     }
   }
 
   /** Merge two central moment buffers. */
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val zeroMoment1 = buffer1.getDouble(mutableAggBufferOffset)
-    val zeroMoment2 = buffer2.getDouble(inputAggBufferOffset)
-    val firstMoment1 = buffer1.getDouble(mutableAggBufferOffset + 1)
-    val firstMoment2 = buffer2.getDouble(inputAggBufferOffset + 1)
-    val secondMoment1 = buffer1.getDouble(mutableAggBufferOffset + 2)
-    val secondMoment2 = buffer2.getDouble(inputAggBufferOffset + 2)
-    val thirdMoment1 = buffer1.getDouble(mutableAggBufferOffset + 3)
-    val thirdMoment2 = buffer2.getDouble(inputAggBufferOffset + 3)
-    val fourthMoment1 = buffer1.getDouble(mutableAggBufferOffset + 4)
-    val fourthMoment2 = buffer2.getDouble(inputAggBufferOffset + 4)
+    val n1 = buffer1.getDouble(mutableAggBufferOffset)
+    val n2 = buffer2.getDouble(inputAggBufferOffset)
+    val mean1 = buffer1.getDouble(mutableAggBufferOffset + 1)
+    val mean2 = buffer2.getDouble(inputAggBufferOffset + 1)
 
-    val zeroMoment = zeroMoment1 + zeroMoment2
-    val delta = firstMoment2 - firstMoment1
-    val deltaN = delta / zeroMoment
+    var secondMoment1 = 0.0
+    var secondMoment2 = 0.0
+    var secondMoment = 0.0
 
-    val firstMoment = firstMoment1 + deltaN * zeroMoment2
+    var thirdMoment1 = 0.0
+    var thirdMoment2 = 0.0
+    var thirdMoment = 0.0
 
-    val secondMoment = if (maxMoment >= 2) {
-      secondMoment1 + secondMoment2 + delta * deltaN * zeroMoment1 * zeroMoment2
-    } else {
-      0.0
+    var fourthMoment1 = 0.0
+    var fourthMoment2 = 0.0
+    var fourthMoment = 0.0
+
+    val n = n1 + n2
+    delta = mean2 - mean1
+    deltaN = delta / n
+    val mean = mean1 + deltaN * n2
+
+    buffer1.setDouble(mutableAggBufferOffset, n)
+    buffer1.setDouble(mutableAggBufferOffset + 1, mean)
+
+    if (maxMoment >= 2) {
+      secondMoment1 = buffer1.getDouble(mutableAggBufferOffset + 2)
+      secondMoment2 = buffer2.getDouble(inputAggBufferOffset + 2)
+      secondMoment = secondMoment1 + secondMoment2 + delta * deltaN * n1 * n2
+      buffer1.setDouble(mutableAggBufferOffset + 2, secondMoment)
     }
 
-    val thirdMoment = if (maxMoment >= 3) {
-      thirdMoment1 + thirdMoment2 + deltaN * deltaN * delta * zeroMoment1 * zeroMoment2 *
-        (zeroMoment1 - zeroMoment2) + 3.0 * deltaN *
-        (zeroMoment1 * secondMoment2 - zeroMoment2 * secondMoment1)
-    } else {
-      0.0
+
+    if (maxMoment >= 3) {
+      thirdMoment1 = buffer1.getDouble(mutableAggBufferOffset + 3)
+      thirdMoment2 = buffer2.getDouble(inputAggBufferOffset + 3)
+      thirdMoment = thirdMoment1 + thirdMoment2 + deltaN * deltaN * delta * n1 * n2 *
+        (n1 - n2) + 3.0 * deltaN * (n1 * secondMoment2 - n2 * secondMoment1)
+      buffer1.setDouble(mutableAggBufferOffset + 3, thirdMoment)
     }
 
-    val fourthMoment = if (maxMoment >= 4) {
-      fourthMoment1 + fourthMoment2 + deltaN * deltaN * deltaN * delta * zeroMoment1 *
-        zeroMoment2 * (zeroMoment1 * zeroMoment1 - zeroMoment1 * zeroMoment2 +
-          zeroMoment2 * zeroMoment2) + deltaN * deltaN * 6.0 *
-        (zeroMoment1 * zeroMoment1 * secondMoment2 + zeroMoment2 * zeroMoment2 * secondMoment1) +
-        4.0 * deltaN * (zeroMoment1 * thirdMoment2 - zeroMoment2 * thirdMoment1)
-    } else {
-      0.0
+    if (maxMoment >= 4) {
+      fourthMoment1 = buffer1.getDouble(mutableAggBufferOffset + 4)
+      fourthMoment2 = buffer2.getDouble(inputAggBufferOffset + 4)
+      fourthMoment = fourthMoment1 + fourthMoment2 + deltaN * deltaN * deltaN * delta * n1 *
+        n2 * (n1 * n1 - n1 * n2 + n2 * n2) + deltaN * deltaN * 6.0 *
+        (n1 * n1 * secondMoment2 + n2 * n2 * secondMoment1) +
+        4.0 * deltaN * (n1 * thirdMoment2 - n2 * thirdMoment1)
+      buffer1.setDouble(mutableAggBufferOffset + 4, fourthMoment)
     }
+  }
 
-    buffer1.setDouble(mutableAggBufferOffset, zeroMoment)
-    buffer1.setDouble(mutableAggBufferOffset + 1, firstMoment)
-    buffer1.setDouble(mutableAggBufferOffset + 2, secondMoment)
-    buffer1.setDouble(mutableAggBufferOffset + 3, thirdMoment)
-    buffer1.setDouble(mutableAggBufferOffset + 4, fourthMoment)
+  def eval(buffer: InternalRow): Any = this match {
+    case _: VariancePop =>
+      // stddev = M2 / (M0 - 1)
+      val M0 = buffer.getDouble(mutableAggBufferOffset)
+      val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+
+      if (M0 == 0.0) {
+        Double.NaN
+      } else {
+        M2 / M0
+      }
+    case _: VarianceSamp =>
+      // stddev = M2 / (M0 - 1)
+      val M0 = buffer.getDouble(mutableAggBufferOffset)
+      val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+
+      if (M0 == 0.0) {
+        Double.NaN
+      } else {
+        M2 / (M0 - 1.0)
+      }
+    case _: Variance =>
+      // stddev = M2 / (M0 - 1)
+      val M0 = buffer.getDouble(mutableAggBufferOffset)
+      val M1 = buffer.getDouble(mutableAggBufferOffset + 1)
+      val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+
+      if (M0 == 0.0) {
+        Double.NaN
+      } else {
+        M2 / (M0 - 1.0)
+      }
+    case _: Skewness =>
+      // skewness = sqrt(M0) * M3 / sqrt(M2^3)
+      val M0 = buffer.getDouble(mutableAggBufferOffset)
+      val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+      val M3 = buffer.getDouble(mutableAggBufferOffset + 3)
+
+      if (M0 == 0.0 || M2 == 0.0) {
+        Double.NaN
+      } else {
+        math.sqrt(M0) * M3 / math.sqrt(M2 * M2 * M2)
+      }
+    case _: Kurtosis =>
+      // kurtosis = M0 * M4 / M2^2 - 3.0
+      // NOTE: this is the formula for excess kurtosis, which is default for R and NumPy
+      val M0 = buffer.getDouble(mutableAggBufferOffset)
+      val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+      val M4 = buffer.getDouble(mutableAggBufferOffset + 4)
+
+      if (M0 == 0.0 || M2 == 0.0) {
+        Double.NaN
+      } else {
+        M0 * M4 / (M2 * M2) - 3.0
+      }
+    case _ => 0.0
   }
 }
 
-case class Stddev(child: Expression) extends CentralMomentAgg(child) {
+case class Variance(child: Expression, mutableAggBufferOffset: Int = 0,
+                    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
 
-  override def prettyName: String = "stddev"
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-  protected val maxMoment = 2
-
-  def eval(buffer: InternalRow): Any = {
-    // stddev = sqrt(M2 / (M0 - 1))
-    val M0 = buffer.getDouble(mutableAggBufferOffset)
-    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
-
-    if (M0 == 0.0) {
-      0.0
-    } else {
-      math.sqrt(M2 / (M0 - 1.0))
-    }
-  }
-}
-
-case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
-
-  override def prettyName: String = "stddev_samp"
-
-  protected val maxMoment = 2
-
-  override def eval(buffer: InternalRow): Any = {
-    // stddev_samp = sqrt(M2 / (M0 - 1))
-    val M0 = buffer.getDouble(mutableAggBufferOffset)
-    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
-
-    if (M0 == 0.0) {
-      0.0
-    } else {
-      math.sqrt(M2 / (M0 - 1.0))
-    }
-  }
-}
-
-case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
-
-  override def prettyName: String = "stddev_pop"
-
-  val maxMoment = 2
-
-  override def eval(buffer: InternalRow): Any = {
-    // stddev_pop = sqrt(M2 / M0)
-    val M0 = buffer.getDouble(mutableAggBufferOffset)
-    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
-
-    if (M0 == 0.0) {
-      0.0
-    } else {
-      math.sqrt(M2 / M0)
-    }
-  }
-}
-
-case class Variance(child: Expression) extends CentralMomentAgg(child) {
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def prettyName: String = "variance"
 
   protected val maxMoment = 2
 
-  override def eval(buffer: InternalRow): Any = {
-    // stddev = M2 / (M0 - 1)
-    val M0 = buffer.getDouble(mutableAggBufferOffset)
-    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
-
-    if (M0 == 0.0) {
-      0.0
-    } else {
-      M2 / (M0 - 1.0)
-    }
-  }
+//  override def eval(buffer: InternalRow): Any = {
+//    // stddev = M2 / (M0 - 1)
+//    val M0 = buffer.getDouble(mutableAggBufferOffset)
+//    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+//
+//    if (M0 == 0.0) {
+//      0.0
+//    } else {
+//      M2 / (M0 - 1.0)
+//    }
+//  }
 }
 
-case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
+case class VarianceSamp(child: Expression, mutableAggBufferOffset: Int = 0,
+                        inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def prettyName: String = "variance_samp"
 
   protected val maxMoment = 2
 
-  override def eval(buffer: InternalRow): Any = {
-    // var_samp = M2 / (M0 - 1)
-    val M0 = buffer.getDouble(mutableAggBufferOffset)
-    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
-
-    if (M0 == 0.0) {
-      0.0
-    } else {
-      M2 / (M0 - 1.0)
-    }
-  }
+//  override def eval(buffer: InternalRow): Any = {
+//    // var_samp = M2 / (M0 - 1)
+//    val M0 = buffer.getDouble(mutableAggBufferOffset)
+//    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+//
+//    if (M0 == 0.0) {
+//      0.0
+//    } else {
+//      M2 / (M0 - 1.0)
+//    }
+//  }
 }
 
-case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
+case class VariancePop(child: Expression, mutableAggBufferOffset: Int = 0,
+                       inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def prettyName: String = "variance_pop"
 
   protected val maxMoment = 2
 
-  override def eval(buffer: InternalRow): Any = {
-    // var_pop = M2 / M0
-    val M0 = buffer.getDouble(mutableAggBufferOffset)
-    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
-
-    if (M0 == 0.0) {
-      0.0
-    } else {
-      M2 / M0
-    }
-  }
+//  override def eval(buffer: InternalRow): Any = {
+//    // var_pop = M2 / M0
+//    val M0 = buffer.getDouble(mutableAggBufferOffset)
+//    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+//
+//    if (M0 == 0.0) {
+//      0.0
+//    } else {
+//      M2 / M0
+//    }
+//  }
 }
 
-case class Skewness(child: Expression) extends CentralMomentAgg(child) {
+case class Skewness(child: Expression, mutableAggBufferOffset: Int = 0,
+                    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def prettyName: String = "skewness"
 
   protected val maxMoment = 3
 
-  override def eval(buffer: InternalRow): Any = {
-    // skewness = sqrt(M0) * M3 / sqrt(M2^3)
-    val M0 = buffer.getDouble(mutableAggBufferOffset)
-    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
-    val M3 = buffer.getDouble(mutableAggBufferOffset + 3)
-
-    if (M0 == 0.0 || M2 == 0.0) {
-      0.0
-    } else {
-      math.sqrt(M0) * M3 / math.sqrt(M2 * M2 * M2)
-    }
-  }
+//  override def eval(buffer: InternalRow): Any = {
+//    // skewness = sqrt(M0) * M3 / sqrt(M2^3)
+//    val M0 = buffer.getDouble(mutableAggBufferOffset)
+//    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+//    val M3 = buffer.getDouble(mutableAggBufferOffset + 3)
+//
+//    if (M0 == 0.0 || M2 == 0.0) {
+//      0.0
+//    } else {
+//      math.sqrt(M0) * M3 / math.sqrt(M2 * M2 * M2)
+//    }
+//  }
 }
 
-case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
+case class Kurtosis(child: Expression, mutableAggBufferOffset: Int = 0,
+                    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def prettyName: String = "kurtosis"
 
   protected val maxMoment = 4
 
-  override def eval(buffer: InternalRow): Any = {
-    // kurtosis = M0 * M4 / M2^2 - 3.0
-    // NOTE: this is the formula for excess kurtosis, which is default for R and NumPy
-    val M0 = buffer.getDouble(mutableAggBufferOffset)
-    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
-    val M4 = buffer.getDouble(mutableAggBufferOffset + 4)
-
-    if (M0 == 0.0) {
-      0.0
-    } else if (M2 == 0.0) {
-      -3.0
-    } else {
-      M0 * M4 / (M2 * M2) - 3.0
-    }
-  }
+//  override def eval(buffer: InternalRow): Any = {
+//    // kurtosis = M0 * M4 / M2^2 - 3.0
+//    // NOTE: this is the formula for excess kurtosis, which is default for R and NumPy
+//    val M0 = buffer.getDouble(mutableAggBufferOffset)
+//    val M2 = buffer.getDouble(mutableAggBufferOffset + 2)
+//    val M4 = buffer.getDouble(mutableAggBufferOffset + 4)
+//
+//    if (M0 == 0.0) {
+//      0.0
+//    } else if (M2 == 0.0) {
+//      -3.0
+//    } else {
+//      M0 * M4 / (M2 * M2) - 3.0
+//    }
+//  }
 }
