@@ -1008,9 +1008,9 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           "pyspark.zip not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.9-src.zip")
         require(py4jFile.exists(),
-          "py4j-0.8.2.1-src.zip not found; cannot run pyspark application in YARN mode.")
+          "py4j-0.9-src.zip not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
   }
@@ -1327,11 +1327,8 @@ object Client extends Logging {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
       try {
-        val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
-        val hive = hiveClass.getMethod("get").invoke(null)
-
-        val hiveConf = hiveClass.getMethod("getConf").invoke(hive)
         val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
+        val hiveConf = hiveConfClass.newInstance()
 
         val hiveConfGet = (param: String) => Option(hiveConfClass
           .getMethod("get", classOf[java.lang.String])
@@ -1341,6 +1338,9 @@ object Client extends Logging {
 
         // Check for local metastore
         if (metastore_uri != None && metastore_uri.get.toString.size > 0) {
+          val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
+          val hive = hiveClass.getMethod("get").invoke(null, hiveConf.asInstanceOf[Object])
+
           val metastore_kerberos_principal_conf_var = mirror.classLoader
             .loadClass("org.apache.hadoop.hive.conf.HiveConf$ConfVars")
             .getField("METASTORE_KERBEROS_PRINCIPAL").get("varname").toString
