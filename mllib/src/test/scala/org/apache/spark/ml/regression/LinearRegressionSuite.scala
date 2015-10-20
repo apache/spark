@@ -65,7 +65,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val featureSize = 4100
     datasetWithBigFeature = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        0.0, Seq.fill(featureSize)(r.nextDouble).toArray, Seq.fill(featureSize)(r.nextDouble).toArray,
+        0.0, Seq.fill(featureSize)(r.nextDouble).toArray,
+        Seq.fill(featureSize)(r.nextDouble).toArray,
         Seq.fill(featureSize)(r.nextDouble).toArray, 200, seed, 0.1
       ), 2))
   }
