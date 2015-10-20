@@ -43,4 +43,11 @@ class RateLimiterSuite extends SparkFunSuite {
     rateLimiter.updateRate(105)
     assert(rateLimiter.getCurrentLimit === 100)
   }
+
+  test("rate limiter does not update on receiving an update of 0") {
+    val conf = new SparkConf().set("spark.streaming.receiver.maxRate", "100")
+    val rateLimiter = new RateLimiter(conf){}
+    rateLimiter.updateRate(0)
+    assert(rateLimiter.getCurrentLimit === 100)
+  }
 }
