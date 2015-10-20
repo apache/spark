@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, SimpleAnalyzer}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
@@ -35,14 +35,18 @@ import org.apache.spark.sql.types.{ObjectType, StructType}
 object ProductEncoder {
   def apply[T <: Product : TypeTag]: ClassEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
-    val schema = ScalaReflection.schemaFor[T].dataType.asInstanceOf[StructType]
     val mirror = typeTag[T].mirror
     val cls = mirror.runtimeClass(typeTag[T].tpe)
 
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val extractExpressions = ScalaReflection.extractorsFor[T](inputObject)
+    val extractExpression = ScalaReflection.extractorsFor[T](inputObject)
     val constructExpression = ScalaReflection.constructorFor[T]
-    new ClassEncoder[T](schema, extractExpressions, constructExpression, ClassTag[T](cls))
+
+    new ClassEncoder[T](
+      extractExpression.dataType,
+      extractExpression.flatten,
+      constructExpression,
+      ClassTag[T](cls))
   }
 }
 
@@ -52,18 +56,23 @@ object ProductEncoder {
  * @param schema The schema after converting `T` to a Spark SQL row.
  * @param extractExpressions A set of expressions, one for each top-level field that can be used to
  *                           extract the values from a raw object.
- * @param clsTag A classtag for `T`.
+ * @param constructExpression An expression that can be used to construct a new instance of `T`
+ *                            given an input row.
+ * @param clsTag A [[ClassTag]] for `T`.
  */
 case class ClassEncoder[T](
     schema: StructType,
-    extractExpressions: Seq[Expression],
+    extractExpressions: Seq[NamedExpression],
     constructExpression: Expression,
     clsTag: ClassTag[T])
   extends Encoder[T] {
 
-  private val extractProjection = GenerateUnsafeProjection.generate(extractExpressions)
+  @transient
+  private lazy val extractProjection =
+    GenerateUnsafeProjection.generate(extractExpressions)
   private val inputRow = new GenericMutableRow(1)
 
+  @transient
   private lazy val constructProjection = GenerateSafeProjection.generate(constructExpression :: Nil)
   private val dataType = ObjectType(clsTag.runtimeClass)
 
@@ -76,6 +85,15 @@ case class ClassEncoder[T](
     constructProjection(row).get(0, dataType).asInstanceOf[T]
   }
 
+  override def rebind(oldSchema: Seq[Attribute], newSchema: Seq[Attribute]): ClassEncoder[T] = {
+    val positionToAttribute = AttributeMap.toIndex(oldSchema)
+    val attributeToNewPosition = AttributeMap.byIndex(newSchema)
+    copy(constructExpression = constructExpression transform {
+      case r: BoundReference =>
+        r.copy(ordinal = attributeToNewPosition(positionToAttribute(r.ordinal)))
+    })
+  }
+
   override def bind(schema: Seq[Attribute]): ClassEncoder[T] = {
     val plan = Project(Alias(constructExpression, "object")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
@@ -84,4 +102,27 @@ case class ClassEncoder[T](
 
     copy(constructExpression = boundExpression)
   }
+
+  override def bindOrdinals(schema: Seq[Attribute]): ClassEncoder[T] = {
+    var remaining = schema
+    copy(constructExpression = constructExpression transform {
+      case u: UnresolvedAttribute =>
+        var pos = remaining.head
+        remaining = remaining.drop(1)
+        pos
+    })
+  }
+
+  protected val attrs = extractExpressions.map(_.collect {
+    case a: Attribute => s"#${a.exprId}"
+    case b: BoundReference => s"[${b.ordinal}]"
+  }.headOption.getOrElse(""))
+
+
+  protected val schemaString =
+    schema
+      .zip(attrs)
+      .map { case(f, a) => s"${f.name}$a: ${f.dataType.simpleString}"}.mkString(", ")
+
+  override def toString: String = s"class[$schemaString]"
 }

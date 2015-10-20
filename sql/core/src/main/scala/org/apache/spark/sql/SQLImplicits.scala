@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.encoders._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -32,6 +36,16 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 private[sql] abstract class SQLImplicits {
   protected def _sqlContext: SQLContext
+
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ProductEncoder[T]
+
+  implicit def newIntEncoder: Encoder[Int] = new IntEncoder()
+  implicit def newLongEncoder: Encoder[Long] = new LongEncoder()
+  implicit def newStringEncoder: Encoder[String] = new StringEncoder()
+
+  implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
+    DatasetHolder(_sqlContext.createDataset(s))
+  }
 
   /**
    * An implicit conversion that turns a Scala `Symbol` into a [[Column]].

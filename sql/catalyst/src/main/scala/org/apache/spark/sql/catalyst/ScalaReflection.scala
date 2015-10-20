@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.encoders.J
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -411,9 +412,9 @@ trait ScalaReflection {
   }
 
   /** Returns expressions for extracting all the fields from the given type. */
-  def extractorsFor[T : TypeTag](inputObject: Expression): Seq[Expression] = {
+  def extractorsFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
     ScalaReflectionLock.synchronized {
-      extractorFor(inputObject, typeTag[T].tpe).asInstanceOf[CreateStruct].children
+      extractorFor(inputObject, typeTag[T].tpe).asInstanceOf[CreateNamedStruct]
     }
   }
 
@@ -478,6 +479,17 @@ trait ScalaReflection {
                 extractorFor(unwrapped, optType))
           }
 
+        case t if t <:< localTypeOf[J[_, _]] =>
+          val TypeRef(_, _, Seq(leftType, rightType)) = t
+          val l = extractorFor(Invoke(inputObject, "left", dataTypeFor(leftType)), leftType)
+          val r = extractorFor(Invoke(inputObject, "right", dataTypeFor(rightType)), rightType)
+
+          def asSeq(e: Expression) = e match {
+            case c: CreateNamedStruct => c.children
+            case other => expressions.Literal("col") :: other :: Nil
+          }
+          CreateNamedStruct(asSeq(l) ++ asSeq(r))
+
         case t if t <:< localTypeOf[Product] =>
           val formalTypeArgs = t.typeSymbol.asClass.typeParams
           val TypeRef(_, _, actualTypeArgs) = t
@@ -497,11 +509,11 @@ trait ScalaReflection {
             }
           }
 
-          CreateStruct(params.head.map { p =>
+          CreateNamedStruct(params.head.flatMap { p =>
             val fieldName = p.name.toString
             val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
-            extractorFor(fieldValue, fieldType)
+            expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType) :: Nil
           })
 
         case t if t <:< localTypeOf[Array[_]] =>

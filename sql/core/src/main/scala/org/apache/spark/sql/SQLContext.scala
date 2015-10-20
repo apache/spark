@@ -21,6 +21,8 @@ import java.beans.{BeanInfo, Introspector}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
+import org.apache.spark.sql.catalyst.encoders.Encoder
+
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
@@ -387,6 +389,10 @@ class SQLContext private[sql](
       def $(args: Any*): ColumnName = {
         new ColumnName(sc.s(args: _*))
       }
+
+      def e[T : Encoder](args: Any*): TypedColumn[T] = {
+        new TypedColumn[T](SqlParser.parseExpression(sc.s(args: _*)))
+      }
     }
   }
   // scalastyle:on
@@ -485,6 +491,16 @@ class SQLContext private[sql](
     }
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
     DataFrame(this, logicalPlan)
+  }
+
+
+  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
+    val enc = implicitly[Encoder[T]]
+    val attributes = enc.schema.toAttributes
+    val encoded = data.map(d => enc.toRow(d).copy())
+    val plan = new LocalRelation(attributes, encoded)
+
+    new Dataset[T](this, plan)
   }
 
   /**

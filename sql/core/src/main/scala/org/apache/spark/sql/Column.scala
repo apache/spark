@@ -36,6 +36,10 @@ private[sql] object Column {
   def unapply(col: Column): Option[Expression] = Some(col.expr)
 }
 
+/**
+ * A [[Column]] where a type hint has been given for the expected return type.
+ */
+class TypedColumn[T](expr: Expression) extends Column(expr)
 
 /**
  * :: Experimental ::
@@ -68,6 +72,13 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   override def hashCode: Int = this.expr.hashCode
+
+  /**
+   * Provides a type hint about the expected return value of this column.  This information can
+   * be used by operations such as `select` on a [[Dataset]] to automatically convert the
+   * results into the correct JVM types.
+   */
+  def as[T]: TypedColumn[T] = new TypedColumn[T](expr)
 
   /**
    * Extracts a value or values from a complex type.

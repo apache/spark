@@ -46,13 +46,28 @@ trait Encoder[T] {
 
   /**
    * Returns an object of type `T`, extracting the required values from the provided row.  Note that
-   * you must bind` and encoder to a specific schema before you can call this function.
+   * you must `bind` and encoder to a specific schema before you can call this function.
    */
   def fromRow(row: InternalRow): T
 
   /**
    * Returns a new copy of this encoder, where the expressions used by `fromRow` are bound to the
-   * given schema
+   * given schema.
    */
   def bind(schema: Seq[Attribute]): Encoder[T]
+
+
+  /**
+   * Binds this encoder to the given schema positionally.  This means that the first reference to
+   * input is mapped to `schema(0)`, and so on for each element.
+   */
+  def bindOrdinals(schema: Seq[Attribute]): Encoder[T]
+
+  /**
+   * Given an encoder that has already been bound to a given schema, returns a new encoder that
+   * where the positions are mapped from `oldSchema` to `newSchema`.  This can be used, for example,
+   * when you are trying to use an encoder on grouping keys that were orriginally part of a larger
+   * row, but now you have projected out only the key expressions.
+   */
+  def rebind(oldSchema: Seq[Attribute], newSchema: Seq[Attribute]): Encoder[T]
 }
