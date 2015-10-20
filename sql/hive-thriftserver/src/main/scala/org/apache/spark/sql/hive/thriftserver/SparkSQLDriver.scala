@@ -65,7 +65,7 @@ private[hive] class SparkSQLDriver(
     } catch {
       case cause: Throwable =>
         logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null)
+        new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)
     }
   }
 

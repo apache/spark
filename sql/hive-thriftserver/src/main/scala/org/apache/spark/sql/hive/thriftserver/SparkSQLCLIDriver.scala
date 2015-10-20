@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.thriftserver
 import java.io._
 import java.util.{ArrayList => JArrayList, Locale}
 
+import org.apache.spark.sql.AnalysisException
+
 import scala.collection.JavaConverters._
 
 import jline.console.ConsoleReader
@@ -308,7 +310,15 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           ret = rc.getResponseCode
           if (ret != 0) {
-            console.printError(rc.getErrorMessage())
+            // For analysis exception, only the error is printed out to the console.
+            rc.getException() match {
+              case e : AnalysisException =>
+                console.printError(
+                  s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}""")
+              case _ => {
+                console.printError(rc.getErrorMessage())
+              }
+            }
             driver.close()
             return ret
           }
