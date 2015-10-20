@@ -67,7 +67,7 @@ class XORShiftRandomSuite extends SparkFunSuite with Matchers {
   }
 
   test ("hashSeed has random bits throughout") {
-    val totalBitCount = (0 until 10).map{seed =>
+    val totalBitCount = (0 until 10).map { seed =>
       val hashed = XORShiftRandom.hashSeed(seed)
       val bitCount = java.lang.Long.bitCount(hashed)
       // make sure we have roughly equal numbers of 0s and 1s.  Mostly just check that we
