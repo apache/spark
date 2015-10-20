@@ -264,6 +264,7 @@ object SparkSubmit {
           "Could not load YARN classes. " +
           "This copy of Spark may not have been compiled with YARN support.")
       }
+      System.setProperty("SPARK_YARN_MODE", "true")
     }
 
     // Update args.deployMode if it is null. It will be passed down as a Spark property later.
