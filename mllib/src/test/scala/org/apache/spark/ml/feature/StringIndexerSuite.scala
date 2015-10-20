@@ -30,8 +30,8 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
-    val model = new StringIndexerModel("indexer", Array("a", "b"))
-    val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
+    val model = new StringIndexerModel("indexer", Array(Array("a", "b")))
+    val modelWithoutUid = new StringIndexerModel(Array(Array("a", "b")))
     ParamsSuite.checkParams(model)
     ParamsSuite.checkParams(modelWithoutUid)
   }
@@ -57,6 +57,29 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     // a -> 0, b -> 2, c -> 1
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
+  }
+
+  test("StringIndexer with multiple columns") {
+    val data = sc.parallelize(Seq((0, "a", "m"), (1, "b", "m"), (2, "c", "m"),
+      (3, "a", "n"), (4, "a", "n"), (5, "c", "p")), 2)
+    val df = sqlContext.createDataFrame(data).toDF("id", "label1", "label2")
+    val indexer = new StringIndexer()
+      .setInputCols(Array("label1", "label2"))
+      .setOutputCols(Array("labelIndex1", "labelIndex2"))
+      .fit(df)
+
+    val transformed = indexer.transform(df)
+    val attrs = transformed.schema
+      .filter{ x => Seq("labelIndex1", "labelIndex2").contains(x.name) }
+      .map(Attribute.fromStructField(_).asInstanceOf[NominalAttribute])
+    assert(attrs(0).values.get === Array("a", "c", "b"))
+    assert(attrs(1).values.get === Array("m", "n", "p"))
+    val output = transformed.select("id", "labelIndex1", "labelIndex2").map { r =>
+      (r.getInt(0), r.getDouble(1), r.getDouble(2))
+    }.collect().toSet
+    val expected = Set((0, 0.0, 0.0), (1, 2.0, 0.0), (2, 1.0, 0.0),
+      (3, 0.0, 1.0), (4, 0.0, 1.0), (5, 1.0, 2.0))
+    assert(output == expected)
   }
 
   test("StringIndexerUnseen") {
@@ -110,7 +133,7 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("StringIndexerModel should keep silent if the input column does not exist.") {
-    val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
+    val indexerModel = new StringIndexerModel("indexer", Array(Array("a", "b", "c")))
       .setInputCol("label")
       .setOutputCol("labelIndex")
     val df = sqlContext.range(0L, 10L)
@@ -160,7 +183,7 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val idx2str = new IndexToString()
       .setInputCol("labelIndex")
       .setOutputCol("sameLabel")
-      .setLabels(indexer.labels)
+      .setLabels(indexer.labels(0))
     idx2str.transform(transformed).select("label", "sameLabel").collect().foreach {
       case Row(a: String, b: String) =>
         assert(a === b)
@@ -172,5 +195,18 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val inSchema = StructType(Seq(StructField("input", DoubleType)))
     val outSchema = idxToStr.transformSchema(inSchema)
     assert(outSchema("output").dataType === StringType)
+  }
+
+  test("StringIndexer params inconsistent check") {
+    val data = sc.parallelize(Seq((0, "a", "d"), (1, "b", "e"), (2, "c", "f")), 2)
+    val df = sqlContext.createDataFrame(data).toDF("id", "col1", "col2")
+    val indexer = new StringIndexer()
+      .setInputCol("id")
+      .setInputCols(Array("col1", "col2"))
+      .setOutputCols(Array("colIndex1", "colIndex2"))
+
+    intercept[IllegalArgumentException] {
+      indexer.validateParams()
+    }
   }
 }
