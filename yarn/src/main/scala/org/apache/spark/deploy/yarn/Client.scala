@@ -1027,6 +1027,8 @@ object Client extends Logging {
 
     // Set an env variable indicating we are running in YARN mode.
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
+    // This should have been set by spark-submit, but there are code paths that may not go
+    // through spark-submit.
     System.setProperty("SPARK_YARN_MODE", "true")
     val sparkConf = new SparkConf
 

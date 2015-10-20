@@ -430,6 +430,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _conf.set("spark.externalBlockStore.folderName", externalBlockStoreFolderName)
 
+    // This should have been set by spark-submit, but there are code paths that may not go
+    // through spark-submit.
     if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
