@@ -419,6 +419,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private var _partitionSpec: PartitionSpec = _
 
   private class FileStatusCache {
+    @transient
+    var sourcePath = Seq.empty[Path]  // just an advisory information
     var leafFiles = mutable.Map.empty[Path, FileStatus]
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
@@ -433,7 +435,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
           logInfo(s"Listing $qualified on driver")
-          Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+          Try(fs.listStatus(qualified)).getOrElse(Array.empty[FileStatus])
         }.filterNot { status =>
           val name = status.getPath.getName
           name.toLowerCase == "_temporary" || name.startsWith(".")
@@ -450,11 +452,13 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }
 
     def refresh(): Unit = {
+      val sources = paths.map(new Path(_))
       val files = listLeafFiles(paths)
 
       leafFiles.clear()
       leafDirToChildrenFiles.clear()
 
+      sourcePath = sources
       leafFiles ++= files.map(f => f.getPath -> f).toMap
       leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
     }
@@ -468,6 +472,10 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   protected def cachedLeafStatuses(): Set[FileStatus] = {
     fileStatusCache.leafFiles.values.toSet
+  }
+
+  protected def cachedSourcePaths(): Array[Path] = {
+    fileStatusCache.sourcePath.toArray
   }
 
   final private[sql] def partitionSpec: PartitionSpec = {

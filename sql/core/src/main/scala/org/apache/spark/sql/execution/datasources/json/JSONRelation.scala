@@ -29,7 +29,6 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.Logging
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
@@ -38,8 +37,6 @@ import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
-import org.apache.spark.util.SerializableConfiguration
-
 
 class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
@@ -83,8 +80,10 @@ private[sql] class JSONRelation(
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
     val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
-    val paths = inputPaths.map(_.getPath)
-
+    var paths = inputPaths.map(_.getPath)
+    if (paths.isEmpty) {
+      paths = cachedSourcePaths()   // try with original sources
+    }
     if (paths.nonEmpty) {
       FileInputFormat.setInputPaths(job, paths: _*)
     }
