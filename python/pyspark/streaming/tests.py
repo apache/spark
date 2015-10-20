@@ -43,6 +43,7 @@ from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPar
 from pyspark.streaming.flume import FlumeUtils
 from pyspark.streaming.mqtt import MQTTUtils
 from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
+from pyspark.streaming.listener import StreamingListener
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -72,7 +73,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         if self.ssc is not None:
             self.ssc.stop(False)
         # Clean up in the JVM just in case there has been some issues in Python API
-        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+        jStreamingContextOption = StreamingContext.getActive()._jvm.SparkContext.get()
         if jStreamingContextOption.nonEmpty():
             jStreamingContextOption.get().stop(False)
 
@@ -390,6 +391,63 @@ class BasicOperationTests(PySparkStreamingTestCase):
         expected = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
         expected = [[('k', v)] for v in expected]
         self._test_func(input, func, expected)
+
+
+class StreamingListenerTests(PySparkStreamingTestCase):
+
+    class BatchInfoCollector(StreamingListener):
+
+        def __init__(self):
+            super(StreamingListener, self).__init__()
+            self.batchInfosCompleted = []
+            self.batchInfosStarted = []
+            self.batchInfosSubmitted = []
+
+        def onBatchSubmitted(self, batchSubmitted):
+            self.batchInfosSubmitted.append(self.getEventInfo(batchSubmitted))
+
+        def onBatchStarted(self, batchStarted):
+            self.batchInfosStarted.append(self.getEventInfo(batchStarted))
+
+        def onBatchCompleted(self, batchCompleted):
+            self.batchInfosCompleted.append(self.getEventInfo(batchCompleted))
+
+    def test_batch_info_reports(self):
+        batch_collector = self.BatchInfoCollector()
+        self.ssc.addStreamingListener(batch_collector)
+        input = [[1], [2], [3], [4]]
+
+        def func(dstream):
+            return dstream.map(int)
+        expected = [[1], [2], [3], [4]]
+        self._test_func(input, func, expected)
+
+        batchInfosSubmitted = batch_collector.batchInfosSubmitted
+        self.assertEqual(len(batchInfosSubmitted), 4)
+
+        for info in batchInfosSubmitted:
+            self.assertEqual(info.schedulingDelay().getClass().getSimpleName(), u'None$')
+            self.assertEqual(info.processingDelay().getClass().getSimpleName(), u'None$')
+            self.assertEqual(info.totalDelay().getClass().getSimpleName(), u'None$')
+
+        batchInfosStarted = batch_collector.batchInfosStarted
+        self.assertEqual(len(batchInfosStarted), 4)
+        for info in batchInfosStarted:
+            self.assertNotEqual(info.schedulingDelay().getClass().getSimpleName(), u'None$')
+            self.assertGreaterEqual(info.schedulingDelay().get(), 0L)
+            self.assertEqual(info.processingDelay().getClass().getSimpleName(), u'None$')
+            self.assertEqual(info.totalDelay().getClass().getSimpleName(), u'None$')
+
+        batchInfosCompleted = batch_collector.batchInfosCompleted
+        self.assertEqual(len(batchInfosCompleted), 4)
+
+        for info in batchInfosCompleted:
+            self.assertNotEqual(info.schedulingDelay().getClass().getSimpleName(), u'None$')
+            self.assertNotEqual(info.processingDelay().getClass().getSimpleName(), u'None$')
+            self.assertNotEqual(info.totalDelay().getClass().getSimpleName(), u'None$')
+            self.assertGreaterEqual(info.schedulingDelay().get(), 0L)
+            self.assertGreaterEqual(info.processingDelay().get(), 0L)
+            self.assertGreaterEqual(info.totalDelay().get(), 0L)
 
 
 class WindowFunctionTests(PySparkStreamingTestCase):
@@ -1275,7 +1333,8 @@ if __name__ == "__main__":
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
-                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests, MQTTStreamTests]
+                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests, MQTTStreamTests,
+                 StreamingListenerTests]
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)
