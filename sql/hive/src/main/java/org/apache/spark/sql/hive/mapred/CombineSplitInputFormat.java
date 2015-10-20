@@ -36,8 +36,8 @@ public class CombineSplitInputFormat<K, V> implements InputFormat<K, V> {
   }
 
   /**
-   * Create a single split from the list of blocks specified in validBlocks
-   * Add this new split into splitList.
+   * Create a combine split from the list of splits
+   * Add this new combine split into splitList.
    */
   private void addCreatedSplit(List<CombineSplit> splitList,
                                long totalLen,
@@ -72,12 +72,6 @@ public class CombineSplitInputFormat<K, V> implements InputFormat<K, V> {
       String node = entry.getKey();
       List<InputSplit> splitsPerNode = entry.getValue();
       for (InputSplit split: splitsPerNode) {
-        if (splitSize != 0 && currentSplitSize > splitSize) {
-          addCreatedSplit(combineSparkSplits,
-            currentSplitSize, Collections.singleton(node), oneCombinedSplits);
-          currentSplitSize = 0;
-          oneCombinedSplits.clear();
-        }
         // this split has been combined
         if (!splitsSet.contains(split)) {
           continue;
@@ -85,6 +79,13 @@ public class CombineSplitInputFormat<K, V> implements InputFormat<K, V> {
           currentSplitSize += split.getLength();
           oneCombinedSplits.add(split);
           splitsSet.remove(split);
+        }
+        if (splitSize != 0 && currentSplitSize > splitSize) {
+          // TODO: optimize this by providing the second/third preference locations
+          addCreatedSplit(combineSparkSplits,
+            currentSplitSize, Collections.singleton(node), oneCombinedSplits);
+          currentSplitSize = 0;
+          oneCombinedSplits.clear();
         }
       }
       // populate the remaining splits into one combined split

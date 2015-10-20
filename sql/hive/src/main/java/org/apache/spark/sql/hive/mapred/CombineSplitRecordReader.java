@@ -39,7 +39,7 @@ public class CombineSplitRecordReader<K, V> implements RecordReader<K, V> {
   protected FileSystem fs;
 
   protected int idx;
-  protected long progress;
+  protected long progressedBytes;
   protected RecordReader<K, V> curReader;
 
   @Override
@@ -64,7 +64,7 @@ public class CombineSplitRecordReader<K, V> implements RecordReader<K, V> {
    * return the amount of data processed
    */
   public long getPos() throws IOException {
-    return progress;
+    return progressedBytes + curReader.getPos();
   }
 
   public void close() throws IOException {
@@ -78,7 +78,7 @@ public class CombineSplitRecordReader<K, V> implements RecordReader<K, V> {
    * return progress based on the amount of data processed so far.
    */
   public float getProgress() throws IOException {
-    return Math.min(1.0f,  progress/(float)(split.getLength()));
+    return Math.min(1.0f,  progressedBytes /(float)(split.getLength()));
   }
   private InputFormat<K, V> inputFormat;
   /**
@@ -92,7 +92,7 @@ public class CombineSplitRecordReader<K, V> implements RecordReader<K, V> {
     this.jc = job;
     this.idx = 0;
     this.curReader = null;
-    this.progress = 0;
+    this.progressedBytes = 0;
     this.inputFormat = inputFormat;
     initNextRecordReader();
   }
@@ -106,7 +106,7 @@ public class CombineSplitRecordReader<K, V> implements RecordReader<K, V> {
       curReader.close();
       curReader = null;
       if (idx > 0) {
-        progress += split.getSplit(idx-1).getLength(); // done processing so far
+        progressedBytes += split.getSplit(idx-1).getLength(); // done processing so far
       }
     }
 

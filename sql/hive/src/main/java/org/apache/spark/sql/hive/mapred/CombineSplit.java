@@ -59,13 +59,15 @@ public class CombineSplit implements InputSplit {
 
   @Override
   public void write(DataOutput out) throws IOException {
+    // We only process combination within a single table partition,
+    // so all of the class name of the splits should be identical.
+    out.writeUTF(splits[0].getClass().getCanonicalName());
     out.writeLong(totalLen);
     out.writeInt(locations.length);
     for (String location : locations) {
       out.writeUTF(location);
     }
     out.writeInt(splits.length);
-    out.writeUTF(splits[0].getClass().getCanonicalName());
     for (InputSplit split : splits) {
       split.write(out);
     }
@@ -73,13 +75,13 @@ public class CombineSplit implements InputSplit {
 
   @Override
   public void readFields(DataInput in) throws IOException {
+    String className = in.readUTF();
     this.totalLen = in.readLong();
     this.locations = new String[in.readInt()];
     for (int i = 0; i < locations.length; i++) {
       locations[i] = in.readUTF();
     }
     splits = new InputSplit[in.readInt()];
-    String className = in.readUTF();
     Class<? extends Writable> clazz = null;
     try {
       clazz = (Class<? extends Writable>) Class.forName(className);
