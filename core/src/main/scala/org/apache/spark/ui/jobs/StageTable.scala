@@ -145,9 +145,20 @@ private[ui] class StageTableBase(
       case None => "Unknown"
     }
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis)
-    val duration = s.submissionTime.map { t =>
-      if (finishTime > t) finishTime - t else System.currentTimeMillis - t
-    }
+    val taskLaunchTimes = stageData.taskData.values
+        .filter(_.taskInfo.launchTime != 0)
+        .map(_.taskInfo.launchTime)
+    val duration : Option[Long] =
+      if (taskLaunchTimes.nonEmpty) {
+        val startTime = taskLaunchTimes.min
+        if (finishTime > startTime) {
+          Option[Long](finishTime - startTime)
+        } else {
+          Option[Long](System.currentTimeMillis() - startTime)
+        }
+      } else {
+        None
+      }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
 
     val inputRead = stageData.inputBytes
