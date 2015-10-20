@@ -78,7 +78,7 @@ class AnalysisSuite extends AnalysisTest {
 
   test("resolve relations") {
     assertAnalysisError(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table Not Found: tAbLe"))
+      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table not found: tAbLe"))
 
     checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
 
