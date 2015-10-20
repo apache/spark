@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql
 
-
-import org.apache.spark.sql.catalyst.encoders.J
-
 import scala.language.postfixOps
 
-import org.apache.spark.sql.aggregators._
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class IntClass(value: Int)
@@ -91,24 +87,6 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     assert(ds.fold(0)(_ + _) == 6)
   }
 
-  test("join, expression condition") {
-    val ds1 = Seq(1, 2, 3).toDS().as("l")
-    val ds2 = Seq(1L, 2L, 3L).toDS().as("r")
-
-    checkAnswer(
-      ds1.join(ds2, $"l.value" === ($"r.value" - 1)),
-      J(1, 2L), J(2, 3L))
-  }
-
-  test("join, key function") {
-    val ds1 = Seq(1, 2, 3).toDS().as("l")
-    val ds2 = Seq(1L, 2L, 3L).toDS().as("r")
-
-    checkAnswer(
-      ds1.join(ds2, (_: Int).toLong, (_: Long) - 1),
-      J(1, 2L), J(2, 3L))
-  }
-
   test("groupBy function, keys") {
     val ds = Seq(1, 2, 3, 4, 5).toDS()
     val grouped = ds.groupBy(_ % 2)
@@ -128,35 +106,5 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       agged,
       ("even", 5), ("odd", 6))
-  }
-
-  test("groupBy function, join") {
-    val ds1 = Seq(1, 2, 3).toDS()
-    val ds2 = Seq(1L, 2L, 3L).toDS()
-
-    val g1 = ds1.groupBy(_.toLong)
-    val g2 = ds2.groupBy(_ - 1)
-
-    checkAnswer(
-      g1.join(g2),
-      J(1, 2L), J(2, 3L))
-  }
-
-  test("groupBy function, agg count") {
-    val ds = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11).toDS()
-    val grouped = ds.groupBy(_ % 2)
-    val agged = grouped.agg(countItems)
-    checkAnswer(
-      agged,
-      J(0, 5L), J(1, 6L))
-  }
-
-  test("groupBy function, agg sum") {
-    val ds = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11).toDS()
-    val grouped = ds.groupBy(_ % 2)
-    val agged= grouped.agg(sumOf)
-    checkAnswer(
-      agged,
-      J(0, 30), J(1, 36))
   }
 }

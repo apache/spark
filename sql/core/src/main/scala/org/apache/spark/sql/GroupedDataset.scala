@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.aggregators.UserAggregator
-import org.apache.spark.sql.catalyst.encoders.{Tuple3Encoder, JoinedEncoder, J, Encoder}
-import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Attribute}
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.encoders.Encoder
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 
@@ -67,67 +65,4 @@ class GroupedDataset[K, T] private[sql](
       sqlContext,
       MapGroups(f, groupingAttributes, logicalPlan))
   }
-
-  def agg[B1 : Encoder, C1 : Encoder](agg: UserAggregator[T, B1, C1]): Dataset[J[K, C1]] = {
-    val boundAggregator =
-      BoundAggregator[T, B1, C1](
-        agg, implicitly[Encoder[T]], implicitly[Encoder[B1]], implicitly[Encoder[C1]])
-    val output =
-      implicitly[Encoder[K]].schema.toAttributes ++ implicitly[Encoder[C1]].schema.toAttributes
-
-    implicit val j = new JoinedEncoder(implicitly[Encoder[K]], implicitly[Encoder[C1]])
-    new Dataset[J[K, C1]](
-      sqlContext,
-      ApplyAggregators(
-        boundAggregator :: Nil,
-        groupingAttributes,
-        output,
-        logicalPlan))
-  }
-
-  def agg[B1 : Encoder, C1 : Encoder, B2 : Encoder, C2 : Encoder](
-      agg1: UserAggregator[T, B1, C1], agg2: UserAggregator[T, B2, C2]): Dataset[(K, C1, C2)] = {
-    val boundAggregator1 =
-      BoundAggregator[T, B1, C1](
-        agg1, implicitly[Encoder[T]], implicitly[Encoder[B1]], implicitly[Encoder[C1]])
-    val boundAggregator2 =
-      BoundAggregator[T, B2, C2](
-        agg2, implicitly[Encoder[T]], implicitly[Encoder[B2]], implicitly[Encoder[C2]])
-
-    val output =
-      implicitly[Encoder[K]].schema.toAttributes ++
-        implicitly[Encoder[C1]].schema.toAttributes ++
-        implicitly[Encoder[C2]].schema.toAttributes
-
-    implicit val j = new Tuple3Encoder(
-      implicitly[Encoder[K]], implicitly[Encoder[C1]], implicitly[Encoder[C2]])
-    new Dataset[(K, C1, C2)](
-      sqlContext,
-      ApplyAggregators(
-        boundAggregator1 :: boundAggregator2 :: Nil,
-        groupingAttributes,
-        output,
-        logicalPlan))
-  }
-
-  def join[U](other: GroupedDataset[K, U]): Dataset[J[T, U]] = {
-    assert(groupingAttributes.size == other.groupingAttributes.size)
-    val condition = groupingAttributes.zip(other.groupingAttributes).map {
-      case (l, r) => EqualTo(l, r)
-    }.reduceOption(And)
-
-    // TODO: This fails for self joins probably.
-    implicit val joinedEncoder = new JoinedEncoder(tEncoder, other.tEncoder)
-    new Dataset[J[T, U]](
-      sqlContext,
-      Project(dataAttributes ++ other.dataAttributes,
-        Join(logicalPlan, other.logicalPlan, Inner, condition)))
-  }
-
-  def cogroup[U, V: Encoder](
-      other: GroupedDataset[K, U])(
-      f: (K, Iterator[T], Iterator[U]) => Iterator[V]): Dataset[V] = ???
-
-
-  def countByKey: Dataset[(K, Long)] = ???
 }

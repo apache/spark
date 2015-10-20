@@ -17,14 +17,10 @@
 
 package org.apache.spark.sql
 
-import java.util.{Iterator => JIterator}
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.aggregators._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
@@ -276,46 +272,6 @@ class Dataset[T] private[sql](
         Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Alias(c3.expr, "_3")() :: Nil,
         logicalPlan))
   }
-
-  /* ******* *
-   *  Joins  *
-   * ******* */
-
-  private implicit def joinEncoder[L : Encoder, R : Encoder]: Encoder[J[L, R]] = {
-    new JoinedEncoder(implicitly[Encoder[L]], implicitly[Encoder[R]])
-  }
-
-  def join[U : Encoder](other: Dataset[U]): Dataset[J[T, U]] =
-    withPlan[J[T, U]](other)(Join(_, _, Inner, None))
-
-  // TODO: Do we want this?  The syntax is pretty ugly caller side...
-  def join[U : Encoder, K : Encoder](
-      other: Dataset[U],
-      leftKey: T => K,
-      rightKey: U => K): Dataset[J[T, U]] = {
-
-    withPlan[J[T, U]](other) { (left, right) =>
-      val leftWithKey = AppendColumn(leftKey, left)
-      val rightWithKey = AppendColumn(rightKey, right)
-      val condition = leftWithKey.newColumns.zip(rightWithKey.newColumns).map {
-        case (l, r) => EqualTo(l, r)
-      }.reduceLeftOption(And)
-
-      // Analyze eagerly to handle self joins.
-      val joined =
-        sqlContext.executePlan(Join(leftWithKey, rightWithKey, Inner, condition)).analyzed
-
-      // Output is: |left|leftKey|right|rightKey|
-      // Desired output: |left|right|
-      val leftOutput = joined.output.take(this.schema.size)
-      val rightOutput = joined.output.drop(leftWithKey.output.size).take(other.schema.size)
-
-      Project(leftOutput ++ rightOutput, joined)
-    }
-  }
-
-  def join[U : Encoder](other: Dataset[U], condition: Column): Dataset[J[T, U]] =
-    withPlan[J[T, U]](other)(Join(_, _, Inner, Some(condition.expr)))
 
   /* **************** *
    *  Set operations  *

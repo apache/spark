@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.encoders.J
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -478,17 +477,6 @@ trait ScalaReflection {
                 expressions.Literal.create(null, schemaFor(optType).dataType),
                 extractorFor(unwrapped, optType))
           }
-
-        case t if t <:< localTypeOf[J[_, _]] =>
-          val TypeRef(_, _, Seq(leftType, rightType)) = t
-          val l = extractorFor(Invoke(inputObject, "left", dataTypeFor(leftType)), leftType)
-          val r = extractorFor(Invoke(inputObject, "right", dataTypeFor(rightType)), rightType)
-
-          def asSeq(e: Expression) = e match {
-            case c: CreateNamedStruct => c.children
-            case other => expressions.Literal("col") :: other :: Nil
-          }
-          CreateNamedStruct(asSeq(l) ++ asSeq(r))
 
         case t if t <:< localTypeOf[Product] =>
           val formalTypeArgs = t.typeSymbol.asClass.typeParams

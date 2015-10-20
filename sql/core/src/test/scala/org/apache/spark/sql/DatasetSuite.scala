@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql
 
-
-import org.apache.spark.sql.catalyst.encoders.J
-
 import scala.language.postfixOps
 
-import org.apache.spark.sql.aggregators._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -114,23 +110,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.fold(("", 0))((a, b) =>("sum", a._2 + b._2)) == ("sum", 6))
   }
 
-  test("join, expression condition") {
-    val ds1 = Seq(ClassData("a", 1) , ClassData("b", 2)).toDS()
-    val ds2 = Seq(("a", 1) , ("b", 2)).toDS()
-
-    checkAnswer(
-      ds1.join(ds2, $"_1" === $"a"),
-      J(ClassData("a", 1), ("a", 1)), J(ClassData("b", 2), ("b", 2)))
-  }
-
-  test("join, key function") {
-    val ds = Seq(("a", 1) , ("b", 2)).toDS()
-
-    checkAnswer(
-      ds.join(ds, (d: (String, Int)) => (1, d._2), (d: (String, Int)) => (1, d._2)),
-      J(("a", 1), ("a", 1)), J(("b", 2), ("b", 2)))
-  }
-
   test("groupBy function, keys") {
     val ds = Seq(("a", 1), ("b", 1)).toDS()
     val grouped = ds.groupBy(v => (1, v._2))
@@ -149,32 +128,5 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
-  }
-
-  test("groupBy function, join") {
-    val ds1 = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    val ds2 = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-
-    val g1 = ds1.groupBy(r => r._2)
-    val g2 = ds2.groupBy(r => r._2 - 1)
-
-    checkAnswer(
-      g1.join(g2),
-      J(("a", 1), ("b", 2)), J(("b", 2), ("c", 3))
-    )
-  }
-
-  test("groupBy function, sumOf field") {
-    val ds1 = Seq(("a", 1), ("a", 2), ("b", 4)).toDS()
-    checkAnswer(
-      ds1.groupBy(_._1).agg(sumOf(_._2)),
-      J("a", 3), J("b", 4))
-  }
-
-  test("groupBy function, sumOf 2 fields") {
-    val ds1 = Seq(("a", 1), ("a", 2), ("b", 4)).toDS()
-    checkAnswer(
-      ds1.groupBy(_._1).agg(sumOf(_._2), sumOf(_._2 + 1)),
-      ("a", 3, 5), ("b", 4, 5))
   }
 }

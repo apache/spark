@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.aggregators.UserAggregator
 import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
@@ -514,33 +513,3 @@ case class MapGroups[K, T, U](
   override def missingInput: AttributeSet = AttributeSet.empty
 }
 
-/**
- * Colocates all data in `left` and `right` that share the same value for a given grouping `key`.
- */
-case class Cogroup[K, T1, T2, U](
-    func: (K, Iterator[T1], Iterator[T2]) => Iterator[U],
-    kEncoder: Encoder[K],
-    t1Encoder: Encoder[T1],
-    t2Encoder: Encoder[T2],
-    uEncoder: Encoder[U],
-    output: Seq[Attribute],
-    left: LogicalPlan,
-    right: LogicalPlan) extends BinaryNode {
-
-  override def missingInput: AttributeSet = AttributeSet.empty
-}
-
-case class BoundAggregator[A, B, C](
-    aggregator: UserAggregator[A, B, C],
-    aEncoder: Encoder[A],
-    bEncoder: Encoder[B],
-    cEncoder: Encoder[C])
-
-case class ApplyAggregators[T, U](
-    aggregators: Seq[BoundAggregator[_, _, _]],
-    groupingAttributes: Seq[Attribute],
-    output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-
-  override def missingInput: AttributeSet = AttributeSet.empty
-}

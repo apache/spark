@@ -19,15 +19,12 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.aggregators.UserAggregator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.catalyst.plans.logical.BoundAggregator
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.{StructType, StructField}
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.{HashPartitioner, SparkEnv}
@@ -389,64 +386,6 @@ case class MapGroups[K, T, U](
           groupKeyEncoder.fromRow(key),
           rowIter.map(tEncoder.fromRow))
         result.map(uEncoder.toRow)
-      }
-    }
-  }
-}
-
-/**
- * Sorts the input data and then applys the aggregator to each group.  The output is the group
- * key followed by each aggregator result.
- */
-case class ApplyAggregators[K](
-    aggregators: Seq[BoundAggregator[Any, Any, Any]],
-    groupingAttributes: Seq[Attribute],
-    output: Seq[Attribute],
-    child: SparkPlan) extends UnaryNode {
-
-  override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(groupingAttributes) :: Nil
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitions { iter =>
-      val grouped = GroupedIterator(iter, groupingAttributes, child.output)
-      val keySchema = groupingAttributes.toStructType
-
-      val values = new Array[Any](aggregators.size)
-      val outputRow = new Array[InternalRow](aggregators.size)
-      grouped.map { case (key, rowIter) =>
-        var i = 0
-        while (i < aggregators.length) {
-          values(i) = null
-          i += 1
-        }
-
-        rowIter.foreach { row =>
-          var i = 0
-          while (i < aggregators.length) {
-            val agg = aggregators(i)
-
-            val newValue = agg.aggregator.prepare(agg.aEncoder.fromRow(row))
-            if (values(i) == null) {
-              values(i) = newValue
-            } else {
-              values(i) = agg.aggregator.reduce(values(i), newValue)
-            }
-            i += 1
-          }
-        }
-
-        var j = 0
-        while (j < aggregators.length) {
-          val agg = aggregators(j)
-          outputRow(j) = agg.cEncoder.toRow(agg.aggregator.present(values(j)))
-          j += 1
-        }
-        // TODO: This is not very efficient...
-        (key +: outputRow).reduce(new JoinedRow(_, _))
       }
     }
   }
