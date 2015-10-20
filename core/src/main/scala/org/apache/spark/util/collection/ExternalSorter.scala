@@ -29,7 +29,6 @@ import com.google.common.io.ByteStreams
 import org.apache.spark._
 import org.apache.spark.serializer._
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.shuffle.sort.SortShuffleWriter
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
@@ -101,13 +100,6 @@ private[spark] class ExternalSorter[K, V, C](
   private val shouldPartition = numPartitions > 1
   private def getPartition(key: K): Int = {
     if (shouldPartition) partitioner.get.getPartition(key) else 0
-  }
-
-  // Since SPARK-7855, bypassMergeSort optimization is no longer performed as part of this class.
-  // As a sanity check, make sure that we're not handling a shuffle which should use that path.
-  if (SortShuffleWriter.shouldBypassMergeSort(conf, numPartitions, aggregator, ordering)) {
-    throw new IllegalArgumentException("ExternalSorter should not be used to handle "
-      + " a sort that the BypassMergeSortShuffleWriter should handle")
   }
 
   private val blockManager = SparkEnv.get.blockManager
