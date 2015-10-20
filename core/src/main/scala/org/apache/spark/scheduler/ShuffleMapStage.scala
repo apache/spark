@@ -49,7 +49,8 @@ private[spark] class ShuffleMapStage(
   var mapStageJobs: List[ActiveJob] = Nil
 
   /**
-   * Number of partitions that have shuffle outputs. When this reaches [[numPartitions]], this map stage is ready.
+   * Number of partitions that have shuffle outputs.
+   * When this reaches [[numPartitions]], this map stage is ready.
    * This should be kept consistent as `outputLocs.filter(!_.isEmpty).size`.
    */
   var numAvailableOutputs: Int = 0
@@ -61,8 +62,9 @@ private[spark] class ShuffleMapStage(
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
 
   /**
-   * List of [[MapStatus]] for each partition. The index of the array is the map partition id, and each value in
-   * the array is the list of possible [[MapStatus]] for a partition (a single task might run multiple times).
+   * List of [[MapStatus]] for each partition. The index of the array is the map partition id,
+   * and each value in the array is the list of possible [[MapStatus]] for a partition
+   * (a single task might run multiple times).
    */
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 
