@@ -29,78 +29,68 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("basic example") {
-    """
-      |class A {
+    """class A {
       |blahblah;
-      |}
-    """.stripMargin
+      |}""".stripMargin
   }{
     """
-      |class A {
-      |  blahblah;
-      |}
+      |/* 001 */ class A {
+      |/* 002 */   blahblah;
+      |/* 003 */ }
     """.stripMargin
   }
 
   testCase("nested example") {
-    """
-      |class A {
+    """class A {
       | if (c) {
       |duh;
       |}
-      |}
-    """.stripMargin
+      |}""".stripMargin
   } {
     """
-      |class A {
-      |  if (c) {
-      |    duh;
-      |  }
-      |}
+      |/* 001 */ class A {
+      |/* 002 */   if (c) {
+      |/* 003 */     duh;
+      |/* 004 */   }
+      |/* 005 */ }
     """.stripMargin
   }
 
   testCase("single line") {
-    """
-      |class A {
+    """class A {
       | if (c) {duh;}
-      |}
-    """.stripMargin
+      |}""".stripMargin
   }{
     """
-      |class A {
-      |  if (c) {duh;}
-      |}
+      |/* 001 */ class A {
+      |/* 002 */   if (c) {duh;}
+      |/* 003 */ }
     """.stripMargin
   }
 
   testCase("if else on the same line") {
-    """
-      |class A {
+    """class A {
       | if (c) {duh;} else {boo;}
-      |}
-    """.stripMargin
+      |}""".stripMargin
   }{
     """
-      |class A {
-      |  if (c) {duh;} else {boo;}
-      |}
+      |/* 001 */ class A {
+      |/* 002 */   if (c) {duh;} else {boo;}
+      |/* 003 */ }
     """.stripMargin
   }
 
   testCase("function calls") {
-    """
-      |foo(
+    """foo(
       |a,
       |b,
-      |c)
-    """.stripMargin
+      |c)""".stripMargin
   }{
     """
-      |foo(
-      |  a,
-      |  b,
-      |  c)
+      |/* 001 */ foo(
+      |/* 002 */   a,
+      |/* 003 */   b,
+      |/* 004 */   c)
     """.stripMargin
   }
 }
