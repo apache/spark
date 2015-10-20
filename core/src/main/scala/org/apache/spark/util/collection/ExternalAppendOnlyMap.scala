@@ -96,6 +96,12 @@ class ExternalAppendOnlyMap[K, V, C](
   private val ser = serializer.newInstance()
 
   /**
+   * Number of files this map has spilled so far.
+   * Exposed for testing.
+   */
+  private[collection] def numSpills: Int = spilledMaps.size
+
+  /**
    * Insert the given key and value into the map.
    */
   def insert(key: K, value: V): Unit = {

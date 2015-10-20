@@ -482,12 +482,14 @@ private[sql] case class STRUCT(dataType: StructType) extends ColumnType[UnsafeRo
   override def extract(buffer: ByteBuffer): UnsafeRow = {
     val sizeInBytes = buffer.getInt()
     assert(buffer.hasArray)
-    val base = buffer.array()
-    val offset = buffer.arrayOffset()
     val cursor = buffer.position()
     buffer.position(cursor + sizeInBytes)
     val unsafeRow = new UnsafeRow
-    unsafeRow.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numOfFields, sizeInBytes)
+    unsafeRow.pointTo(
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
+      numOfFields,
+      sizeInBytes)
     unsafeRow
   }
 
@@ -508,12 +510,11 @@ private[sql] case class ARRAY(dataType: ArrayType) extends ColumnType[UnsafeArra
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeArray = getField(row, ordinal)
-    4 + 4 + unsafeArray.getSizeInBytes
+    4 + unsafeArray.getSizeInBytes
   }
 
   override def append(value: UnsafeArrayData, buffer: ByteBuffer): Unit = {
-    buffer.putInt(4 + value.getSizeInBytes)
-    buffer.putInt(value.numElements())
+    buffer.putInt(value.getSizeInBytes)
     value.writeTo(buffer)
   }
 
@@ -522,10 +523,12 @@ private[sql] case class ARRAY(dataType: ArrayType) extends ColumnType[UnsafeArra
     assert(buffer.hasArray)
     val cursor = buffer.position()
     buffer.position(cursor + numBytes)
-    UnsafeReaders.readArray(
+    val array = new UnsafeArrayData
+    array.pointTo(
       buffer.array(),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
       numBytes)
+    array
   }
 
   override def clone(v: UnsafeArrayData): UnsafeArrayData = v.copy()
@@ -545,15 +548,12 @@ private[sql] case class MAP(dataType: MapType) extends ColumnType[UnsafeMapData]
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeMap = getField(row, ordinal)
-    12 + unsafeMap.keyArray().getSizeInBytes + unsafeMap.valueArray().getSizeInBytes
+    4 + unsafeMap.getSizeInBytes
   }
 
   override def append(value: UnsafeMapData, buffer: ByteBuffer): Unit = {
-    buffer.putInt(8 + value.keyArray().getSizeInBytes + value.valueArray().getSizeInBytes)
-    buffer.putInt(value.numElements())
-    buffer.putInt(value.keyArray().getSizeInBytes)
-    value.keyArray().writeTo(buffer)
-    value.valueArray().writeTo(buffer)
+    buffer.putInt(value.getSizeInBytes)
+    value.writeTo(buffer)
   }
 
   override def extract(buffer: ByteBuffer): UnsafeMapData = {
@@ -561,10 +561,12 @@ private[sql] case class MAP(dataType: MapType) extends ColumnType[UnsafeMapData]
     assert(buffer.hasArray)
     val cursor = buffer.position()
     buffer.position(cursor + numBytes)
-    UnsafeReaders.readMap(
+    val map = new UnsafeMapData
+    map.pointTo(
       buffer.array(),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
       numBytes)
+    map
   }
 
   override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()

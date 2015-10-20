@@ -62,9 +62,12 @@ class PySparkStreamingTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
         # Clean up in the JVM just in case there has been some issues in Python API
-        jSparkContextOption = SparkContext._jvm.SparkContext.get()
-        if jSparkContextOption.nonEmpty():
-            jSparkContextOption.get().stop()
+        try:
+            jSparkContextOption = SparkContext._jvm.SparkContext.get()
+            if jSparkContextOption.nonEmpty():
+                jSparkContextOption.get().stop()
+        except:
+            pass
 
     def setUp(self):
         self.ssc = StreamingContext(self.sc, self.duration)
@@ -73,9 +76,12 @@ class PySparkStreamingTestCase(unittest.TestCase):
         if self.ssc is not None:
             self.ssc.stop(False)
         # Clean up in the JVM just in case there has been some issues in Python API
-        jStreamingContextOption = StreamingContext.getActive()._jvm.SparkContext.get()
-        if jStreamingContextOption.nonEmpty():
-            jStreamingContextOption.get().stop(False)
+        try:
+            jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+            if jStreamingContextOption.nonEmpty():
+                jStreamingContextOption.get().stop(False)
+        except:
+            pass
 
     def wait_for(self, result, n):
         start_time = time.time()
@@ -434,7 +440,7 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         self.assertEqual(len(batchInfosStarted), 4)
         for info in batchInfosStarted:
             self.assertNotEqual(info.schedulingDelay().getClass().getSimpleName(), u'None$')
-            self.assertGreaterEqual(info.schedulingDelay().get(), 0L)
+            self.assertGreaterEqual(info.schedulingDelay().get(), 0)
             self.assertEqual(info.processingDelay().getClass().getSimpleName(), u'None$')
             self.assertEqual(info.totalDelay().getClass().getSimpleName(), u'None$')
 
@@ -445,9 +451,9 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.assertNotEqual(info.schedulingDelay().getClass().getSimpleName(), u'None$')
             self.assertNotEqual(info.processingDelay().getClass().getSimpleName(), u'None$')
             self.assertNotEqual(info.totalDelay().getClass().getSimpleName(), u'None$')
-            self.assertGreaterEqual(info.schedulingDelay().get(), 0L)
-            self.assertGreaterEqual(info.processingDelay().get(), 0L)
-            self.assertGreaterEqual(info.totalDelay().get(), 0L)
+            self.assertGreaterEqual(info.schedulingDelay().get(), 0)
+            self.assertGreaterEqual(info.processingDelay().get(), 0)
+            self.assertGreaterEqual(info.totalDelay().get(), 0)
 
 
 class WindowFunctionTests(PySparkStreamingTestCase):
