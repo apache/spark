@@ -1883,8 +1883,7 @@ setMethod("as.data.frame",
               stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
             }
             collect(x)
-          }
-)
+          })
 
 #' The specified DataFrame is attached to the R search path. This means that
 #' the DataFrame is searched by R when evaluating a variable, so columns in
@@ -1914,4 +1913,30 @@ setMethod("attach",
               assign(x = cols[i], value = what[, cols[i]], envir = newEnv)
             }
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
+          })
+
+#' Returns the column types of a DataFrame.
+#' 
+#' @name coltypes
+#' @title Get column types of a DataFrame
+#' @param x (DataFrame)
+#' @return value (character) A character vector with the column types of the given DataFrame
+#' @rdname coltypes
+setMethod("coltypes",
+          signature(x = "DataFrame"),
+          function(x) {
+            # Get the data types of the DataFrame by invoking dtypes() function.
+            # Some post-processing is needed.
+            types <- as.character(t(as.data.frame(dtypes(x))[2, ]))
+            
+            # Map Spark data types into R's data types
+            rTypes <- as.character(DATA_TYPES[types])
+            
+            # Find which types could not be mapped
+            naIndices <- which(is.na(rTypes))
+            
+            # Assign the original scala data types to the unmatched ones
+            rTypes[naIndices] <- types[naIndices]
+            
+            rTypes
           })

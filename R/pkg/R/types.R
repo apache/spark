@@ -39,29 +39,3 @@ COMPLEX_TYPES <- c("map"=NA, "array"=NA, "struct"=NA)
 
 # The full list of data types.
 DATA_TYPES <- c(PRIMITIVE_TYPES, COMPLEX_TYPES)
-
-#' Returns the column types of a DataFrame.
-#' 
-#' @name coltypes
-#' @title Get column types of a DataFrame
-#' @param x (DataFrame)
-#' @return value (character) A character vector with the column types of the given DataFrame
-#' @rdname coltypes
-setMethod("coltypes",
-          signature(x = "DataFrame"),
-          function(x) {
-            # Get the data types of the DataFrame by invoking dtypes() function.
-            # Some post-processing is needed.
-            types <- as.character(t(as.data.frame(dtypes(x))[2, ]))
-
-            # Map Spark data types into R's data types
-            rTypes <- as.character(DATA_TYPES[types])
-
-            # Find which types could not be mapped
-            naIndices <- which(is.na(rTypes))
-
-            # Assign the original scala data types to the unmatched ones
-            rTypes[naIndices] <- types[naIndices]
-
-            rTypes
-          })
