@@ -593,9 +593,11 @@ class HiveContext private[hive](
   }
 
   protected[hive] def runSqlHive(sql: String): Seq[String] = {
-    if (sql.toLowerCase.contains("create temporary function")) {
+    val normalized = sql.trim.toLowerCase
+    if (normalized.contains("create temporary function") ||
+      normalized.contains("create temporary macro")) {
       executionHive.runSqlHive(sql)
-    } else if (sql.trim.toLowerCase.startsWith("set")) {
+    } else if (normalized.startsWith("set")) {
       metadataHive.runSqlHive(sql)
       executionHive.runSqlHive(sql)
     } else {
