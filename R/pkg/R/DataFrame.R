@@ -2178,18 +2178,18 @@ setMethod("coltypes",
                             "boolean"="logical"
             )
 
-            # Get the data types of the DataFrame by invoking dtypes() function.
+                        # Get the data types of the DataFrame by invoking dtypes() function.
             # Some post-processing is needed.
             types <- as.character(t(as.data.frame(dtypes(x))[2, ]))
-
+            
             # Map Spark data types into R's data types
             rTypes <- as.character(DATA_TYPES[types])
-
+            
             # Find which types could not be mapped
             naIndices <- which(is.na(rTypes))
-
+            
             # Assign the original scala data types to the unmatched ones
             rTypes[naIndices] <- types[naIndices]
-
+            
             rTypes
           })
