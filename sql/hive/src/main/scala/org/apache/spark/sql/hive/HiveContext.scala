@@ -89,9 +89,9 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
 class HiveContext private[hive](
     sc: SparkContext,
     cacheManager: CacheManager,
-    @transient listener: SQLListener,
-    @transient execHive: ClientWrapper,
-    @transient metaHive: ClientInterface,
+    listener: SQLListener,
+    @transient private val execHive: ClientWrapper,
+    @transient private val metaHive: ClientInterface,
     isRootContext: Boolean)
   extends SQLContext(sc, cacheManager, listener, isRootContext) with Logging {
   self =>
