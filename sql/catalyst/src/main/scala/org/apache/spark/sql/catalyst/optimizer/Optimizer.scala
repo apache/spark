@@ -732,7 +732,7 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes [[UnaryPositive]] identify function and [[PromotePrecision]] wrapper.
+ * Removes nodes that are not necessary.
  */
 object RemoveDispensable extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
