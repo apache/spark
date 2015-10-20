@@ -679,4 +679,22 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, originalQuery.analyze)
   }
+
+  test("aggregate: push down filters partially which are subset of group by expressions") {
+    val originalQuery = testRelation
+                        .select('a, 'b)
+                        .groupBy('a)('a, Count('b) as 'c)
+                        .where('c === 2L && 'a === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+                        .select('a, 'b)
+                        .where('a === 3)
+                        .groupBy('a)('a, Count('b) as 'c)
+                        .where('c === 2L)
+                        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }
