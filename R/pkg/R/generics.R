@@ -1013,4 +1013,4 @@ setGeneric("attach")
 
 #' @rdname coltypes
 #' @export
-setGeneric("coltypes", function(x) standardGeneric("coltypes"))
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
