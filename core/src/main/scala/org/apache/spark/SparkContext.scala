@@ -90,11 +90,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
   SparkContext.markPartiallyConstructed(this, allowMultipleContexts)
 
-  // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
-  // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
-  // contains a map from hostname to a list of input format splits on the host.
-  private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
-
   val startTime = System.currentTimeMillis()
 
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
@@ -116,16 +111,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
    * @param config a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
-   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
-   * from a list of input files or InputFormats for the application.
+   * @param preferredNodeLocationData not used. Left for backward compatibility.
    */
   @deprecated("Passing in preferred locations has no effect at all, see SPARK-8949", "1.5.0")
   @DeveloperApi
   def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
     this(config)
     logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
-    this.preferredNodeLocationData = preferredNodeLocationData
   }
 
   /**
@@ -147,10 +139,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes.
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
-   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
-   * from a list of input files or InputFormats for the application.
+   * @param preferredNodeLocationData not used. Left for backward compatibility.
    */
+  @deprecated("Passing in preferred locations has no effect at all, see SPARK-10921", "1.6.0")
   def this(
       master: String,
       appName: String,
@@ -163,7 +154,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (preferredNodeLocationData.nonEmpty) {
       logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
     }
-    this.preferredNodeLocationData = preferredNodeLocationData
   }
 
   // NOTE: The below constructors could be consolidated using default arguments. Due to
@@ -177,7 +167,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param appName A name for your application, to display on the cluster web UI.
    */
   private[spark] def this(master: String, appName: String) =
-    this(master, appName, null, Nil, Map(), Map())
+    this(master, appName, null, Nil, Map())
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -187,7 +177,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param sparkHome Location where Spark is installed on cluster nodes.
    */
   private[spark] def this(master: String, appName: String, sparkHome: String) =
-    this(master, appName, sparkHome, Nil, Map(), Map())
+    this(master, appName, sparkHome, Nil, Map())
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -199,7 +189,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
-    this(master, appName, sparkHome, jars, Map(), Map())
+    this(master, appName, sparkHome, jars, Map())
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")

@@ -28,6 +28,38 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 
+
+/**
+ * A help class for fast reading Int/Long/Float/Double from ByteBuffer in native order.
+ *
+ * WARNNING: This only works with HeapByteBuffer
+ */
+object ByteBufferHelper {
+  def getInt(buffer: ByteBuffer): Int = {
+    val pos = buffer.position()
+    buffer.position(pos + 4)
+    Platform.getInt(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
+  def getLong(buffer: ByteBuffer): Long = {
+    val pos = buffer.position()
+    buffer.position(pos + 8)
+    Platform.getLong(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
+  def getFloat(buffer: ByteBuffer): Float = {
+    val pos = buffer.position()
+    buffer.position(pos + 4)
+    Platform.getFloat(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
+  def getDouble(buffer: ByteBuffer): Double = {
+    val pos = buffer.position()
+    buffer.position(pos + 8)
+    Platform.getDouble(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+}
+
 /**
  * An abstract class that represents type of a column. Used to append/extract Java objects into/from
  * the underlying [[ByteBuffer]] of a column.
@@ -134,11 +166,11 @@ private[sql] object INT extends NativeColumnType(IntegerType, 4) {
   }
 
   override def extract(buffer: ByteBuffer): Int = {
-    buffer.getInt()
+    ByteBufferHelper.getInt(buffer)
   }
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
-    row.setInt(ordinal, buffer.getInt())
+    row.setInt(ordinal, ByteBufferHelper.getInt(buffer))
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Int): Unit = {
@@ -163,11 +195,11 @@ private[sql] object LONG extends NativeColumnType(LongType, 8) {
   }
 
   override def extract(buffer: ByteBuffer): Long = {
-    buffer.getLong()
+    ByteBufferHelper.getLong(buffer)
   }
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
-    row.setLong(ordinal, buffer.getLong())
+    row.setLong(ordinal, ByteBufferHelper.getLong(buffer))
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Long): Unit = {
@@ -191,11 +223,11 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 4) {
   }
 
   override def extract(buffer: ByteBuffer): Float = {
-    buffer.getFloat()
+    ByteBufferHelper.getFloat(buffer)
   }
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
-    row.setFloat(ordinal, buffer.getFloat())
+    row.setFloat(ordinal, ByteBufferHelper.getFloat(buffer))
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Float): Unit = {
@@ -219,11 +251,11 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 8) {
   }
 
   override def extract(buffer: ByteBuffer): Double = {
-    buffer.getDouble()
+    ByteBufferHelper.getDouble(buffer)
   }
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
-    row.setDouble(ordinal, buffer.getDouble())
+    row.setDouble(ordinal, ByteBufferHelper.getDouble(buffer))
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Double): Unit = {
@@ -358,7 +390,7 @@ private[sql] case class COMPACT_DECIMAL(precision: Int, scale: Int)
   extends NativeColumnType(DecimalType(precision, scale), 8) {
 
   override def extract(buffer: ByteBuffer): Decimal = {
-    Decimal(buffer.getLong(), precision, scale)
+    Decimal(ByteBufferHelper.getLong(buffer), precision, scale)
   }
 
   override def append(v: Decimal, buffer: ByteBuffer): Unit = {
@@ -480,14 +512,16 @@ private[sql] case class STRUCT(dataType: StructType) extends ColumnType[UnsafeRo
   }
 
   override def extract(buffer: ByteBuffer): UnsafeRow = {
-    val sizeInBytes = buffer.getInt()
+    val sizeInBytes = ByteBufferHelper.getInt(buffer)
     assert(buffer.hasArray)
-    val base = buffer.array()
-    val offset = buffer.arrayOffset()
     val cursor = buffer.position()
     buffer.position(cursor + sizeInBytes)
     val unsafeRow = new UnsafeRow
-    unsafeRow.pointTo(base, Platform.BYTE_ARRAY_OFFSET + offset + cursor, numOfFields, sizeInBytes)
+    unsafeRow.pointTo(
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
+      numOfFields,
+      sizeInBytes)
     unsafeRow
   }
 
@@ -508,12 +542,11 @@ private[sql] case class ARRAY(dataType: ArrayType) extends ColumnType[UnsafeArra
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeArray = getField(row, ordinal)
-    4 + 4 + unsafeArray.getSizeInBytes
+    4 + unsafeArray.getSizeInBytes
   }
 
   override def append(value: UnsafeArrayData, buffer: ByteBuffer): Unit = {
-    buffer.putInt(4 + value.getSizeInBytes)
-    buffer.putInt(value.numElements())
+    buffer.putInt(value.getSizeInBytes)
     value.writeTo(buffer)
   }
 
@@ -522,10 +555,12 @@ private[sql] case class ARRAY(dataType: ArrayType) extends ColumnType[UnsafeArra
     assert(buffer.hasArray)
     val cursor = buffer.position()
     buffer.position(cursor + numBytes)
-    UnsafeReaders.readArray(
+    val array = new UnsafeArrayData
+    array.pointTo(
       buffer.array(),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
       numBytes)
+    array
   }
 
   override def clone(v: UnsafeArrayData): UnsafeArrayData = v.copy()
@@ -545,15 +580,12 @@ private[sql] case class MAP(dataType: MapType) extends ColumnType[UnsafeMapData]
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeMap = getField(row, ordinal)
-    12 + unsafeMap.keyArray().getSizeInBytes + unsafeMap.valueArray().getSizeInBytes
+    4 + unsafeMap.getSizeInBytes
   }
 
   override def append(value: UnsafeMapData, buffer: ByteBuffer): Unit = {
-    buffer.putInt(8 + value.keyArray().getSizeInBytes + value.valueArray().getSizeInBytes)
-    buffer.putInt(value.numElements())
-    buffer.putInt(value.keyArray().getSizeInBytes)
-    value.keyArray().writeTo(buffer)
-    value.valueArray().writeTo(buffer)
+    buffer.putInt(value.getSizeInBytes)
+    value.writeTo(buffer)
   }
 
   override def extract(buffer: ByteBuffer): UnsafeMapData = {
@@ -561,10 +593,12 @@ private[sql] case class MAP(dataType: MapType) extends ColumnType[UnsafeMapData]
     assert(buffer.hasArray)
     val cursor = buffer.position()
     buffer.position(cursor + numBytes)
-    UnsafeReaders.readMap(
+    val map = new UnsafeMapData
+    map.pointTo(
       buffer.array(),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
       numBytes)
+    map
   }
 
   override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()

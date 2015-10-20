@@ -101,6 +101,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.sql.SQLContext.createSession")
       ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.SparkContext.preferredNodeLocationData_=")
+      ) ++ Seq(
         // SPARK-10708: Consolidate sort shuffle implementations
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.util.collection.OrderedInputStream"),

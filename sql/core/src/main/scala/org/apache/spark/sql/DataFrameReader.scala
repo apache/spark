@@ -22,6 +22,7 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
@@ -121,6 +122,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * Loads input in as a [[DataFrame]], for data sources that support multiple paths.
+   * Only works if the source is a HadoopFsRelationProvider.
+   *
+   * @since 1.6.0
+   */
+  def load(paths: Array[String]): DataFrame = {
+    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
   }
 
   /**

@@ -271,7 +271,7 @@ case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().map(_.copy()).coalesce(numPartitions, shuffle = false)
+    child.execute().coalesce(numPartitions, shuffle = false)
   }
 
   override def canProcessUnsafeRows: Boolean = true
