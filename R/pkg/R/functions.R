@@ -30,7 +30,7 @@ NULL
 #' @examples
 #' \dontrun{
 #' lit(df$name)
-#' select(df, lit("x")
+#' select(df, lit("x"))
 #' select(df, lit("2015-01-01"))
 #'}
 setMethod("lit", signature("ANY"),
