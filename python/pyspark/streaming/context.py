@@ -84,9 +84,11 @@ class StreamingContext(object):
         if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
             gw.callback_server_parameters.eager_load = True
             gw.callback_server_parameters.daemonize = True
+            gw.callback_server_parameters.daemonize_connections = True
             gw.callback_server_parameters.port = 0
             gw.start_callback_server(gw.callback_server_parameters)
-            gw._callback_server.port = gw._callback_server.server_socket.getsockname()[1]
+            cbport = gw._callback_server.server_socket.getsockname()[1]
+            gw._callback_server.port = cbport
             # gateway with real port
             gw._python_proxy_port = gw._callback_server.port
             # get the GatewayServer object in JVM by ID
