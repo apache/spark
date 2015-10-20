@@ -117,9 +117,10 @@ private[hive] object HiveShim {
    * Detail discussion can be found at https://github.com/apache/spark/pull/3640
    *
    * @param functionClassName UDF class name
+   * @param instance optional UDF instance which contains additional information (for macro)
    */
   private[hive] case class HiveFunctionWrapper(var functionClassName: String,
-    var instance: AnyRef = null) extends java.io.Externalizable with Logging {
+    private var instance: AnyRef = null) extends java.io.Externalizable {
 
     // for Serialization
     def this() = this(null)

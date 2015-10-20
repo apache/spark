@@ -593,13 +593,12 @@ class HiveContext private[hive](
     )
   }
 
-  @transient
-  private lazy val matcher = Pattern.compile(
-    ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL).matcher("")
+  private def functionOrMacroDDLPattern(command: String) = Pattern.compile(
+    ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL).matcher(command)
 
   protected[hive] def runSqlHive(sql: String): Seq[String] = {
     val command = sql.trim.toLowerCase
-    if (matcher.reset(command).matches()) {
+    if (functionOrMacroDDLPattern(command).matches()) {
       executionHive.runSqlHive(sql)
     } else if (command.startsWith("set")) {
       metadataHive.runSqlHive(sql)
