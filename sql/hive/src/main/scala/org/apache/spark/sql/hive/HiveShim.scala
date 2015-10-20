@@ -31,7 +31,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.exec.Utilities
+import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
@@ -195,8 +195,14 @@ private[hive] object HiveShim {
       if (instance != null) {
         instance.asInstanceOf[UDFType]
       } else {
-        Utils.getContextOrSparkClassLoader
+        val func = Utils.getContextOrSparkClassLoader
           .loadClass(functionClassName).newInstance.asInstanceOf[UDFType]
+        if (!func.isInstanceOf[UDF]) {
+          // We cache the function if it's no the Simple UDF,
+          // as we always have to create new instance for Simple UDF
+          instance = func
+        }
+        func
       }
     }
   }
