@@ -1927,7 +1927,7 @@ setMethod("coltypes",
           function(x) {
             # Get the data types of the DataFrame by invoking dtypes() function.
             # Some post-processing is needed.
-            types <- as.character(t(as.data.frame(dtypes(x))[2, ]))
+            types <- as.character(t(as.data.frame(dtypes(x))[2,]))
             
             # Map Spark data types into R's data types
             rTypes <- as.character(DATA_TYPES[types])
