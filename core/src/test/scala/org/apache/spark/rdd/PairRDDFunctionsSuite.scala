@@ -588,7 +588,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       }
       val stdev = if (withReplacement) math.sqrt(expected) else math.sqrt(expected * p * (1 - p))
       // Very forgiving margin since we're dealing with very small sample sizes most of the time
-      math.abs(actual - expected) <= 6 * stdev
+      math.abs(actual - expected) <= 6 * stdev + 2
     }
 
     def testSampleExact(stratifiedData: RDD[(String, Int)],
