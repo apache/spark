@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.Command
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.expressions.{Literal, GreaterThan, Not, Attribute}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, LogicalPlan, Command}
 
 private[sql] case class TestCommand(cmd: String) extends LogicalPlan with Command {
   override def output: Seq[Attribute] = Seq.empty
@@ -49,7 +49,7 @@ private[sql] class CaseInsensitiveTestParser extends AbstractSparkSQLParser {
     }
 }
 
-class SqlParserSuite extends SparkFunSuite {
+class SqlParserSuite extends PlanTest {
 
   test("test long keyword") {
     val parser = new SuperLongKeywordTestParser
@@ -62,5 +62,16 @@ class SqlParserSuite extends SparkFunSuite {
     assert(TestCommand("NotRealCommand") === parser.parse("EXECUTE NotRealCommand"))
     assert(TestCommand("NotRealCommand") === parser.parse("execute NotRealCommand"))
     assert(TestCommand("NotRealCommand") === parser.parse("exEcute NotRealCommand"))
+  }
+
+  test("test NOT operator with comparison operations") {
+    val parsed = SqlParser.parse("SELECT NOT TRUE > TRUE")
+    val expected = Project(
+      UnresolvedAlias(
+        Not(
+          GreaterThan(Literal(true), Literal(true)))
+      ) :: Nil,
+      OneRowRelation)
+    comparePlans(parsed, expected)
   }
 }
