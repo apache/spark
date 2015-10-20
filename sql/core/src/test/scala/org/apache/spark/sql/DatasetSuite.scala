@@ -107,7 +107,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("fold") {
     val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
-    assert(ds.fold(("", 0))((a, b) =>("sum", a._2 + b._2)) == ("sum", 6))
+    assert(ds.fold(("", 0))((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
   }
 
   test("groupBy function, keys") {
