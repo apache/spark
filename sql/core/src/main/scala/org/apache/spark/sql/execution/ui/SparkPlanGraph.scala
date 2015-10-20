@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.sql.SparkPlanInfo
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
+import org.apache.spark.sql.execution.metric.{LongSQLMetricParam, SQLMetricParam, SQLMetricValue}
 
 /**
  * A graph used for storing information of an executionPlan of DataFrame.
@@ -48,27 +50,29 @@ private[sql] object SparkPlanGraph {
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
    */
-  def apply(plan: SparkPlan): SparkPlanGraph = {
+  def apply(planInfo: SparkPlanInfo): SparkPlanGraph = {
     val nodeIdGenerator = new AtomicLong(0)
     val nodes = mutable.ArrayBuffer[SparkPlanGraphNode]()
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
-    buildSparkPlanGraphNode(plan, nodeIdGenerator, nodes, edges)
+    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges)
     new SparkPlanGraph(nodes, edges)
   }
 
   private def buildSparkPlanGraphNode(
-      plan: SparkPlan,
+      planInfo: SparkPlanInfo,
       nodeIdGenerator: AtomicLong,
       nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
-    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      SQLPlanMetric(metric.name.getOrElse(key), metric.id,
-        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
+    //TODO correct the metric Param
+    val metrics = planInfo.metrics.map { metric =>
+      SQLPlanMetric(metric.name, metric.accumulatorId,
+        LongSQLMetricParam.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
+      // metric.metricParam.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
     }
     val node = SparkPlanGraphNode(
-      nodeIdGenerator.getAndIncrement(), plan.nodeName, plan.simpleString, metrics)
+      nodeIdGenerator.getAndIncrement(), planInfo.nodeName, planInfo.simpleString, metrics)
     nodes += node
-    val childrenNodes = plan.children.map(
+    val childrenNodes = planInfo.children.map(
       child => buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges))
     for (child <- childrenNodes) {
       edges += SparkPlanGraphEdge(child.id, node.id)

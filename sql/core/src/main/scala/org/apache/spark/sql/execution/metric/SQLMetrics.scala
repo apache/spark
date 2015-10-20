@@ -91,7 +91,21 @@ private[sql] class LongSQLMetric private[metric](name: String, param: LongSQLMet
   }
 }
 
-private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
+private[sql] object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue, Long] {
+
+  val stringValue : Seq[Long] => String = _.sum.toString
+
+  override def addAccumulator(r: LongSQLMetricValue, t: Long): LongSQLMetricValue = r.add(t)
+
+  override def addInPlace(r1: LongSQLMetricValue, r2: LongSQLMetricValue): LongSQLMetricValue =
+    r1.add(r2.value)
+
+  override def zero(initialValue: LongSQLMetricValue): LongSQLMetricValue = zero
+
+  override def zero: LongSQLMetricValue = new LongSQLMetricValue(0L)
+}
+
+private[sql] class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
   extends SQLMetricParam[LongSQLMetricValue, Long] {
 
   override def addAccumulator(r: LongSQLMetricValue, t: Long): LongSQLMetricValue = r.add(t)

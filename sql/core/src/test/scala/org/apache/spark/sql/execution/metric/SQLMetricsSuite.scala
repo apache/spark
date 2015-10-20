@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.metric
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
+import org.apache.spark.sql.execution.SparkPlanInfo
+
 import scala.collection.mutable
 
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
@@ -84,7 +86,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     if (jobs.size == expectedNumOfJobs) {
       // If we can track all jobs, check the metric values
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
-      val actualMetrics = SparkPlanGraph(df.queryExecution.executedPlan).nodes.filter { node =>
+      val actualMetrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
+        df.queryExecution.executedPlan)).nodes.filter { node =>
         expectedMetrics.contains(node.id)
       }.map { node =>
         val nodeMetrics = node.metrics.map { metric =>

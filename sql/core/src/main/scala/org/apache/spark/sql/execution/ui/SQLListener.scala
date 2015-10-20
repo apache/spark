@@ -25,18 +25,6 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 
-private[sql] case class SparkListenerSQLExecutionStart(
-    executionId: Long,
-    description: String,
-    details: String,
-    physicalPlanDescription: String,
-    physicalPlanGraph: SparkPlanGraph,
-    time: Long)
-  extends SparkListenerEvent
-
-private[sql] case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
-  extends SparkListenerEvent
-
 private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
   private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
@@ -208,7 +196,8 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
       case executionStart: SparkListenerSQLExecutionStart =>
-        val sqlPlanMetrics = executionStart.physicalPlanGraph.nodes.flatMap { node =>
+        val physicalPlanGraph = SparkPlanGraph(executionStart.sparkPlanInfo)
+        val sqlPlanMetrics = physicalPlanGraph.nodes.flatMap { node =>
           node.metrics.map(metric => metric.accumulatorId -> metric)
         }
         val executionUIData = new SQLExecutionUIData(
@@ -216,7 +205,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
           executionStart.description,
           executionStart.details,
           executionStart.physicalPlanDescription,
-          executionStart.physicalPlanGraph,
+          physicalPlanGraph,
           sqlPlanMetrics.toMap,
           executionStart.time)
         synchronized {

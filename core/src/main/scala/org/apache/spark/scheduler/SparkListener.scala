@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import org.apache.spark.sql.SparkPlanInfo
+
 import scala.collection.Map
 import scala.collection.mutable
 
@@ -30,7 +32,7 @@ import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.util.{Distribution, Utils}
 
 @DeveloperApi
-trait SparkListenerEvent
+sealed trait SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
@@ -123,6 +125,20 @@ case class SparkListenerApplicationStart(
 
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerSQLExecutionStart(
+    executionId: Long,
+    description: String,
+    details: String,
+    physicalPlanDescription: String,
+    sparkPlanInfo: SparkPlanInfo,
+    time: Long)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
+  extends SparkListenerEvent
 
 /**
  * An internal class that describes the metadata of an event log.
@@ -227,7 +243,7 @@ trait SparkListener {
   /**
    * Called when other events like SQL-specific events are posted.
    */
-  def onOtherEvent(event: SparkListenerEvent) {}
+  def onOtherEvent(event: SparkListenerEvent) { }
 }
 
 /**
