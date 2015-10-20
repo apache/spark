@@ -268,7 +268,7 @@ class Analyzer(
         try {
           getTable(u)
         } catch {
-          case _: AnalysisException =>
+          case _: AnalysisException if u.tableIdentifier.database.isDefined =>
             // delay the exception into CheckAnalysis, then it could be resolved as data source.
             u
         }

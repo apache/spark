@@ -191,10 +191,9 @@ class SQLContext private[sql](
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
-        new ResolveDataSource(self) ::
         ExtractPythonUDFs ::
         PreInsertCastAndRename ::
-        Nil
+        (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(
         datasources.PreWriteCheck(catalog)

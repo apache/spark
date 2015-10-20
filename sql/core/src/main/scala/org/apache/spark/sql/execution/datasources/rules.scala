@@ -26,7 +26,7 @@ import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation, InsertableR
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
 
 /**
- * Replaces [[UnresolvedDataSource]]s with [[ResolvedDataSource]].
+ * Try to replaces [[UnresolvedRelation]]s with [[ResolvedDataSource]].
  */
 private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -41,9 +41,10 @@ private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[Logica
         val plan = LogicalRelation(resolved.relation)
         u.alias.map(a => Subquery(u.alias.get, plan)).getOrElse(plan)
       } catch {
-        case e: AnalysisException =>
-          // delay the exception until CheckAnalysis
-          u
+        case e: ClassNotFoundException => u
+        case e: Exception =>
+          // the provider is valid, but failed to create a logical plan
+          u.failAnalysis(e.getMessage)
       }
   }
 }

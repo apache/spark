@@ -1793,6 +1793,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql(s"select a.id from json.`${f.getCanonicalPath}` as a"),
         df)
     })
+
+    val e1 = intercept[AnalysisException] {
+      sql("select * from in_valid_table")
+    }
+    assert(e1.message.contains("Table Not Found"))
+
+    val e2 = intercept[AnalysisException] {
+      sql("select * from no_db.no_table")
+    }
+    assert(e2.message.contains("Table Not Found"))
+
+    val e3 = intercept[AnalysisException] {
+      sql("select * from json.invalid_file")
+    }
+    assert(e3.message.contains("No input paths specified"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
