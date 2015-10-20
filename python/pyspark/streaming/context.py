@@ -32,48 +32,6 @@ from pyspark.streaming.util import TransformFunction, TransformFunctionSerialize
 __all__ = ["StreamingContext"]
 
 
-def _daemonize_callback_server():
-    """
-    Hack Py4J to daemonize callback server
-
-    The thread of callback server has daemon=False, it will block the driver
-    from exiting if it's not shutdown. The following code replace `start()`
-    of CallbackServer with a new version, which set daemon=True for this
-    thread.
-
-    Also, it will update the port number (0) with real port
-    """
-    # TODO: create a patch for Py4J
-    import socket
-    import py4j.java_gateway
-    logger = py4j.java_gateway.logger
-    from py4j.java_gateway import Py4JNetworkError
-    from threading import Thread
-
-    def start(self):
-        """Starts the CallbackServer. This method should be called by the
-        client instead of run()."""
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
-                                      1)
-        try:
-            self.server_socket.bind((self.address, self.port))
-            if not self.port:
-                # update port with real port
-                self.port = self.server_socket.getsockname()[1]
-        except Exception as e:
-            msg = 'An error occurred while trying to start the callback server: %s' % e
-            logger.exception(msg)
-            raise Py4JNetworkError(msg)
-
-        # Maybe thread needs to be cleanup up?
-        self.thread = Thread(target=self.run)
-        self.thread.daemon = True
-        self.thread.start()
-
-    py4j.java_gateway.CallbackServer.start = start
-
-
 class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext
@@ -123,10 +81,14 @@ class StreamingContext(object):
 
         # start callback server
         # getattr will fallback to JVM, so we cannot test by hasattr()
-        if "_callback_server" not in gw.__dict__:
-            _daemonize_callback_server()
-            # use random port
-            gw._start_callback_server(0)
+        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
+            gw.callback_server_parameters.eager_load = True
+            gw.callback_server_parameters.daemonize = True
+            gw.callback_server_parameters.daemonize_connections = True
+            gw.callback_server_parameters.port = 0
+            gw.start_callback_server(gw.callback_server_parameters)
+            cbport = gw._callback_server.server_socket.getsockname()[1]
+            gw._callback_server.port = cbport
             # gateway with real port
             gw._python_proxy_port = gw._callback_server.port
             # get the GatewayServer object in JVM by ID
