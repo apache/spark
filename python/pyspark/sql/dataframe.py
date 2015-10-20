@@ -203,7 +203,7 @@ class DataFrame(object):
          |-- name: string (nullable = true)
         <BLANKLINE>
         """
-        print(self._jdf.schema().treeString())
+        self._jdf.printSchema()
 
     @since(1.3)
     def explain(self, extended=False):
@@ -224,10 +224,7 @@ class DataFrame(object):
         == Physical Plan ==
         ...
         """
-        if extended:
-            print(self._jdf.queryExecution().toString())
-        else:
-            print(self._jdf.queryExecution().executedPlan().toString())
+        self._jdf.explain(extended)
 
     @since(1.3)
     def isLocal(self):
@@ -253,7 +250,7 @@ class DataFrame(object):
         |  5|  Bob|
         +---+-----+
         """
-        print(self._jdf.showString(n, truncate))
+        self._jdf.show(n, truncate)
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
