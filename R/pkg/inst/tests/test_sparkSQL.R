@@ -1124,6 +1124,21 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(count(merged), 4)
   expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
   expect_equal(collect(orderBy(merged, merged$"name_y"))$"name_x"[1], "Andy")
+
+  merged <- merge(df, df2, by = NULL)
+  expect_equal(count(merged), 12)
+  expect_equal(names(merged), c("age", "name", "name", "test"))
+
+  mockLines3 <- c("{\"name\":\"Michael\", \"name_y\":\"Michael\", \"test\": \"yes\"}",
+                  "{\"name\":\"Andy\", \"name_y\":\"Andy\", \"test\": \"no\"}",
+                  "{\"name\":\"Justin\", \"name_y\":\"Justin\", \"test\": \"yes\"}",
+                  "{\"name\":\"Bob\", \"name_y\":\"Bob\", \"test\": \"yes\"}")
+  jsonPath3 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines3, jsonPath3)
+  df3 <- jsonFile(sqlContext, jsonPath3)
+  expect_error(merge(df, df3),
+               paste("The following column name: name_y occurs more than once in the 'DataFrame'.",
+                     "Please use different suffixes for the intersected columns.", sep = ""))
 })
 
 test_that("toJSON() returns an RDD of the correct values", {

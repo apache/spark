@@ -1584,8 +1584,8 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
     if (colName %in% intersectedColNames) {
       newJoin <- paste(colName, suffix, sep = "")
       if (newJoin %in% allColNames){
-        stop ("The following column name: '", newJoin, "' occurs more than once in the dataframe.
-          Please use different suffixes for the intersected columns.")
+        stop ("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
+          "Please use different suffixes for the intersected columns.")
       }
       col <- alias(col, newJoin)
     }
