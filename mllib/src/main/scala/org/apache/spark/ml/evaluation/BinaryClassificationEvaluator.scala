@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
@@ -30,10 +30,12 @@ import org.apache.spark.sql.types.DoubleType
  * :: Experimental ::
  * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
  */
+@Since("1.2.0")
 @Experimental
-class BinaryClassificationEvaluator(override val uid: String)
+class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Evaluator with HasRawPredictionCol with HasLabelCol {
 
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("binEval"))
 
   /**
@@ -41,6 +43,7 @@ class BinaryClassificationEvaluator(override val uid: String)
    * Default: areaUnderROC
    * @group param
    */
+  @Since("1.2.0")
   val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(Array("areaUnderROC", "areaUnderPR"))
     new Param(
@@ -48,12 +51,15 @@ class BinaryClassificationEvaluator(override val uid: String)
   }
 
   /** @group getParam */
+  @Since("1.2.0")
   def getMetricName: String = $(metricName)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
 
   /**
@@ -61,13 +67,16 @@ class BinaryClassificationEvaluator(override val uid: String)
    * @deprecated use [[setRawPredictionCol()]] instead
    */
   @deprecated("use setRawPredictionCol instead", "1.5.0")
+  @Since("1.2.0")
   def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   setDefault(metricName -> "areaUnderROC")
 
+  @Since("1.2.0")
   override def evaluate(dataset: DataFrame): Double = {
     val schema = dataset.schema
     SchemaUtils.checkColumnType(schema, $(rawPredictionCol), new VectorUDT)
@@ -87,10 +96,12 @@ class BinaryClassificationEvaluator(override val uid: String)
     metric
   }
 
+  @Since("1.5.0")
   override def isLargerBetter: Boolean = $(metricName) match {
     case "areaUnderROC" => true
     case "areaUnderPR" => true
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)
 }
