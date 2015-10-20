@@ -677,14 +677,14 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
 
 /**
  * Push [[Filter]] operators through [[Aggregate]] operators. Parts of the predicate that reference
- * attributes which are subset of group by attribute set of [[Aggregate]] will be pushed beneath, 
+ * attributes which are subset of group by attribute set of [[Aggregate]] will be pushed beneath,
  * and the rest should remain above.
  */
 object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition,
-    aggregate @ Aggregate(groupingExpressions, aggregateExpressions, grandChild)) =>
+        aggregate @ Aggregate(groupingExpressions, aggregateExpressions, grandChild)) =>
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
         conjunct => conjunct.references subsetOf AttributeSet(groupingExpressions)
       }
