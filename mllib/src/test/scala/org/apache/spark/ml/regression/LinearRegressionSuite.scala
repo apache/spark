@@ -34,6 +34,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   private val seed: Int = 42
   @transient var dataset: DataFrame = _
   @transient var datasetWithoutIntercept: DataFrame = _
+  @transient var datasetWithBigFeature: DataFrame = _
 
   /*
      In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
@@ -59,6 +60,14 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     datasetWithoutIntercept = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         0.0, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, seed, 0.1), 2))
+
+    val r = new Random(seed)
+    val featureSize = 4100
+    datasetWithBigFeature = sqlContext.createDataFrame(
+      sc.parallelize(LinearDataGenerator.generateLinearInput(
+        0.0, Seq.fill(featureSize)(r.nextDouble).toArray, Seq.fill(featureSize)(r.nextDouble).toArray,
+        Seq.fill(featureSize)(r.nextDouble).toArray, 200, seed, 0.1
+      ), 2))
   }
 
   test("params") {
@@ -186,9 +195,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
         .setSolver(solver).setStandardization(false)
 
-      var model1: LinearRegressionModel = null
-      var model2: LinearRegressionModel = null
-
       // Normal optimizer is not supported with only L1 regularization case.
       if (solver == "normal") {
         intercept[IllegalArgumentException] {
@@ -196,9 +202,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             trainer2.fit(dataset)
           }
       } else {
-        model1 = trainer1.fit(dataset)
-        model2 = trainer2.fit(dataset)
-
+        val model1 = trainer1.fit(dataset)
+        val model2 = trainer2.fit(dataset)
 
         /*
            weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57))
@@ -247,9 +252,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
         .setFitIntercept(false).setStandardization(false).setSolver(solver)
 
-      var model1: LinearRegressionModel = null
-      var model2: LinearRegressionModel = null
-
       // Normal optimizer is not supported with only L1 regularization case.
       if (solver == "normal") {
         intercept[IllegalArgumentException] {
@@ -257,8 +259,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             trainer2.fit(dataset)
           }
       } else {
-        model1 = trainer1.fit(dataset)
-        model2 = trainer2.fit(dataset)
+        val model1 = trainer1.fit(dataset)
+        val model2 = trainer2.fit(dataset)
 
         /*
            weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
@@ -408,9 +410,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
         .setStandardization(false).setSolver(solver)
 
-      var model1: LinearRegressionModel = null
-      var model2: LinearRegressionModel = null
-
       // Normal optimizer is not supported with non-zero elasticnet parameter.
       if (solver == "normal") {
         intercept[IllegalArgumentException] {
@@ -418,8 +417,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             trainer2.fit(dataset)
           }
       } else {
-        model1 = trainer1.fit(dataset)
-        model2 = trainer2.fit(dataset)
+        val model1 = trainer1.fit(dataset)
+        val model2 = trainer2.fit(dataset)
 
         /*
            weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6))
@@ -469,9 +468,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
         .setFitIntercept(false).setStandardization(false).setSolver(solver)
 
-      var model1: LinearRegressionModel = null
-      var model2: LinearRegressionModel = null
-
       // Normal optimizer is not supported with non-zero elasticnet parameter.
       if (solver == "normal") {
         intercept[IllegalArgumentException] {
@@ -479,8 +475,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             trainer2.fit(dataset)
           }
       } else {
-        model1 = trainer1.fit(dataset)
-        model2 = trainer2.fit(dataset)
+        val model1 = trainer1.fit(dataset)
+        val model2 = trainer2.fit(dataset)
 
         /*
            weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
@@ -530,7 +526,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val model = trainer.fit(dataset)
       val trainerNoPredictionCol = trainer.setPredictionCol("")
       val modelNoPredictionCol = trainerNoPredictionCol.fit(dataset)
-
 
       // Training results for the model should be available
       assert(model.hasSummary)
@@ -585,6 +580,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             .objectiveHistory
             .sliding(2)
             .forall(x => x(0) >= x(1)))
+      } else {
+        // To clalify that the normal solver is used here.
+        assert(model.summary.objectiveHistory.length == 1)
+        assert(model.summary.objectiveHistory(0) == 0.0)
       }
     }
   }
@@ -692,5 +691,19 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
       assert(model4a0.weights ~== model4b.weights absTol 1E-3)
     }
+  }
+
+  test("linear regression model with l-bfgs with big feature datasets") {
+    val trainer = new LinearRegression().setSolver("auto")
+    val model = trainer.fit(datasetWithBigFeature)
+
+    // Training results for the model should be available
+    assert(model.hasSummary)
+    // When LBFGS is used as optimizer, objective history can be restored.
+    assert(
+      model.summary
+        .objectiveHistory
+        .sliding(2)
+        .forall(x => x(0) >= x(1)))
   }
 }
