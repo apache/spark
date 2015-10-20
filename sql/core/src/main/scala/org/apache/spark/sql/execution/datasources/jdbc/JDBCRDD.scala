@@ -137,7 +137,7 @@ private[sql] object JDBCRDD extends Logging {
           val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
           val metadata = new MetadataBuilder().putString("name", columnName)
           val columnType =
-            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+            dialect.getCatalystType(dataType, typeName, fieldSize, fieldScale, metadata).getOrElse(
               getCatalystType(dataType, fieldSize, fieldScale, isSigned))
           fields(i) = StructField(columnName, columnType, nullable, metadata.build())
           i = i + 1

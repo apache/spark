@@ -437,7 +437,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     val agg = new AggregatedDialect(List(new JdbcDialect {
       override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
       override def getCatalystType(
-          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+          sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] =
         if (sqlType % 2 == 0) {
           Some(LongType)
         } else {
@@ -446,8 +446,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
-    assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
-    assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+    assert(agg.getCatalystType(0, "", 1, 0, null) === Some(LongType))
+    assert(agg.getCatalystType(1, "", 1, 0, null) === Some(StringType))
   }
 
   test("DB2Dialect type mapping") {
@@ -458,8 +458,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
 
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
-    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
-    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, 0, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, 0, null) === Some(StringType))
   }
 
   test("DerbyDialect jdbc type mapping") {

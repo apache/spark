@@ -72,7 +72,7 @@ abstract class JdbcDialect {
    *         or null if the default type mapping should be used.
    */
   def getCatalystType(
-    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+    sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] = None
 
   /**
    * Retrieve the jdbc / sql type for a given datatype.
@@ -188,8 +188,8 @@ class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
     dialects.map(_.canHandle(url)).reduce(_ && _)
 
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md)).headOption
+      sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] = {
+    dialects.flatMap(_.getCatalystType(sqlType, typeName, size, scale, md)).headOption
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = {
@@ -214,7 +214,7 @@ case object NoopDialect extends JdbcDialect {
 case object PostgresDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
       Some(BinaryType)
     } else if (sqlType == Types.OTHER && typeName.equals("cidr")) {
@@ -227,16 +227,19 @@ case object PostgresDialect extends JdbcDialect {
       Some(StringType)
     } else if (sqlType == Types.ARRAY) {
       typeName match {
-        case "_bit" => Some(ArrayType(BinaryType))
-        case "_int1" => Some(ArrayType(ByteType))
+        case "_bit" | "_bool" => Some(ArrayType(BooleanType))
         case "_int2" => Some(ArrayType(ShortType))
         case "_int4" => Some(ArrayType(IntegerType))
-        case "_int8" => Some(ArrayType(LongType))
+        case "_int8" | "_oid" => Some(ArrayType(LongType))
         case "_float4" => Some(ArrayType(FloatType))
-        case "_float8" => Some(ArrayType(DoubleType))
-        case "_text" | "_char" | "_varchar" => Some(ArrayType(StringType))
-        case "_timestamp" | "timestamptz" => Some(ArrayType(TimestampType))
+        case "_money" | "_float8" => Some(ArrayType(DoubleType))
+        case "_text" | "_varchar" | "_char" | "_bpchar" | "_name" => Some(ArrayType(StringType))
+        case "_bytea" => Some(ArrayType(BinaryType))
+        case "_timestamp" | "timestamptz" | "time" | "timetz" => Some(ArrayType(TimestampType))
         case "_date" => Some(ArrayType(DateType))
+        case "_numeric"
+          if size != 0 || scale != 0 => Some(ArrayType(DecimalType(size, scale)))
+        case "_numeric" => Some(ArrayType(DecimalType.SYSTEM_DEFAULT))
         case _ => throw new IllegalArgumentException(s"Unhandled postgres array type $typeName")
       }
     } else None
@@ -270,7 +273,7 @@ case object PostgresDialect extends JdbcDialect {
 case object MySQLDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = url.startsWith("jdbc:mysql")
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
       // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
       // byte arrays instead of longs.
@@ -315,7 +318,7 @@ case object DB2Dialect extends JdbcDialect {
 case object MsSqlServerDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] = {
     if (typeName.contains("datetimeoffset")) {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
       Some(StringType)
@@ -337,7 +340,7 @@ case object MsSqlServerDialect extends JdbcDialect {
 case object DerbyDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:derby")
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) Option(FloatType) else None
   }
 
