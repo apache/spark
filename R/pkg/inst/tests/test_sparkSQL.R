@@ -291,6 +291,14 @@ test_that("create DataFrame with complex types", {
   expect_equal(s$b, 3L)
 })
 
+test_that("create DataFrame from a data.frame with complex types", {
+  ldf <- data.frame(row.names=1:2)
+  ldf$a_list <- list(list(1, 2), list(3, 4))
+  sdf <- createDataFrame(sqlContext, ldf)
+
+  expect_equivalent(ldf, collect(sdf))
+})
+
 # For test map type and struct type in DataFrame
 mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
                       "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",

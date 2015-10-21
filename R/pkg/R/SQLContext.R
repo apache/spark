@@ -17,27 +17,33 @@
 
 # SQLcontext.R: SQLContext-driven functions
 
+
+# Map top level R type to SQL type
+getInternalType <- function(x) {
+  # class of POSIXlt is c("POSIXlt" "POSIXt")
+  switch(class(x)[[1]],
+         integer = "integer",
+         character = "string",
+         logical = "boolean",
+         double = "double",
+         numeric = "double",
+         raw = "binary",
+         list = "array",
+         struct = "struct",
+         environment = "map",
+         Date = "date",
+         POSIXlt = "timestamp",
+         POSIXct = "timestamp",
+         stop(paste("Unsupported type for DataFrame:", class(x))))
+}
+
 #' infer the SQL type
 infer_type <- function(x) {
   if (is.null(x)) {
     stop("can not infer type from NULL")
   }
 
-  # class of POSIXlt is c("POSIXlt" "POSIXt")
-  type <- switch(class(x)[[1]],
-                 integer = "integer",
-                 character = "string",
-                 logical = "boolean",
-                 double = "double",
-                 numeric = "double",
-                 raw = "binary",
-                 list = "array",
-                 struct = "struct",
-                 environment = "map",
-                 Date = "date",
-                 POSIXlt = "timestamp",
-                 POSIXct = "timestamp",
-                 stop(paste("Unsupported type for DataFrame:", class(x))))
+  type <- getInternalType(x)
 
   if (type == "map") {
     stopifnot(length(x) > 0)
@@ -90,18 +96,25 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
       if (is.null(schema)) {
         schema <- names(data)
       }
-      # get rid of factor type and adjust for lists
+
+      # get rid of factor type
       cleanCols <- function(x) {
         if (is.factor(x)) {
           as.character(x)
-        } else if(is.list(x) && !is.environment(x)) {
-          lapply(x, list)
         } else {
           x
         }
       }
+
+      # drop factors and wrap lists
+      data <- setNames(lapply(data, cleanCols), NULL)
+
+      # check if all columns have supported type
+      lapply(data, getInternalType)
+
+      # convert to rows
       args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
-      data <- do.call(mapply, append(args, setNames(lapply(data, cleanCols), NULL)))
+      data <- do.call(mapply, append(args, data))
   }
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlContext)
