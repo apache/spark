@@ -19,20 +19,19 @@ package org.apache.spark.sql.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 
 /**
  * A stackable trait used for building byte buffer for a column containing null values.  Memory
  * layout of the final byte buffer is:
  * {{{
- *    .----------------------- Column type ID (4 bytes)
- *    |   .------------------- Null count N (4 bytes)
- *    |   |   .--------------- Null positions (4 x N bytes, empty if null count is zero)
- *    |   |   |     .--------- Non-null elements
- *    V   V   V     V
- *   +---+---+-----+---------+
- *   |   |   | ... | ... ... |
- *   +---+---+-----+---------+
+ *    .------------------- Null count N (4 bytes)
+ *    |   .--------------- Null positions (4 x N bytes, empty if null count is zero)
+ *    |   |     .--------- Non-null elements
+ *    V   V     V
+ *   +---+-----+---------+
+ *   |   | ... | ... ... |
+ *   +---+-----+---------+
  * }}}
  */
 private[sql] trait NullableColumnBuilder extends ColumnBuilder {
@@ -52,7 +51,7 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
     super.initialize(initialSize, columnName, useCompression)
   }
 
-  abstract override def appendFrom(row: Row, ordinal: Int): Unit = {
+  abstract override def appendFrom(row: InternalRow, ordinal: Int): Unit = {
     columnStats.gatherStats(row, ordinal)
     if (row.isNullAt(ordinal)) {
       nulls = ColumnBuilder.ensureFreeSpace(nulls, 4)
@@ -66,16 +65,14 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
 
   abstract override def build(): ByteBuffer = {
     val nonNulls = super.build()
-    val typeId = nonNulls.getInt()
     val nullDataLen = nulls.position()
 
     nulls.limit(nullDataLen)
     nulls.rewind()
 
     val buffer = ByteBuffer
-      .allocate(4 + 4 + nullDataLen + nonNulls.remaining())
+      .allocate(4 + nullDataLen + nonNulls.remaining())
       .order(ByteOrder.nativeOrder())
-      .putInt(typeId)
       .putInt(nullCount)
       .put(nulls)
       .put(nonNulls)

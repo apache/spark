@@ -19,6 +19,7 @@
 An example of how to use DataFrame as a dataset for ML. Run with::
     bin/spark-submit examples/src/main/python/mllib/dataset_example.py
 """
+from __future__ import print_function
 
 import os
 import sys
@@ -32,31 +33,31 @@ from pyspark.mllib.stat import Statistics
 
 
 def summarize(dataset):
-    print "schema: %s" % dataset.schema().json()
+    print("schema: %s" % dataset.schema().json())
     labels = dataset.map(lambda r: r.label)
-    print "label average: %f" % labels.mean()
+    print("label average: %f" % labels.mean())
     features = dataset.map(lambda r: r.features)
     summary = Statistics.colStats(features)
-    print "features average: %r" % summary.mean()
+    print("features average: %r" % summary.mean())
 
 if __name__ == "__main__":
     if len(sys.argv) > 2:
-        print >> sys.stderr, "Usage: dataset_example.py <libsvm file>"
+        print("Usage: dataset_example.py <libsvm file>", file=sys.stderr)
         exit(-1)
     sc = SparkContext(appName="DatasetExample")
-    sqlCtx = SQLContext(sc)
+    sqlContext = SQLContext(sc)
     if len(sys.argv) == 2:
         input = sys.argv[1]
     else:
         input = "data/mllib/sample_libsvm_data.txt"
     points = MLUtils.loadLibSVMFile(sc, input)
-    dataset0 = sqlCtx.inferSchema(points).setName("dataset0").cache()
+    dataset0 = sqlContext.inferSchema(points).setName("dataset0").cache()
     summarize(dataset0)
     tempdir = tempfile.NamedTemporaryFile(delete=False).name
     os.unlink(tempdir)
-    print "Save dataset as a Parquet file to %s." % tempdir
+    print("Save dataset as a Parquet file to %s." % tempdir)
     dataset0.saveAsParquetFile(tempdir)
-    print "Load it back and summarize it again."
-    dataset1 = sqlCtx.parquetFile(tempdir).setName("dataset1").cache()
+    print("Load it back and summarize it again.")
+    dataset1 = sqlContext.parquetFile(tempdir).setName("dataset1").cache()
     summarize(dataset1)
     shutil.rmtree(tempdir)

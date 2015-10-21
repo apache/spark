@@ -56,7 +56,8 @@ class JobGeneratorSuite extends TestSuiteBase {
   // 4. allow subsequent batches to be generated (to allow premature deletion of 3rd batch metadata)
   // 5. verify whether 3rd batch's block metadata still exists
   //
-  test("SPARK-6222: Do not clear received block data too soon") {
+  // TODO: SPARK-7420 enable this test
+  ignore("SPARK-6222: Do not clear received block data too soon") {
     import JobGeneratorSuite._
     val checkpointDir = Utils.createTempDir()
     val testConf = conf
@@ -76,7 +77,6 @@ class JobGeneratorSuite extends TestSuiteBase {
         if (time.milliseconds == longBatchTime) {
           while (waitLatch.getCount() > 0) {
             waitLatch.await()
-            println("Await over")
           }
         }
       })
@@ -90,7 +90,7 @@ class JobGeneratorSuite extends TestSuiteBase {
       val receiverTracker = ssc.scheduler.receiverTracker
 
       // Get the blocks belonging to a batch
-      def getBlocksOfBatch(batchTime: Long) = {
+      def getBlocksOfBatch(batchTime: Long): Seq[ReceivedBlockInfo] = {
         receiverTracker.getBlocksOfBatchAndStream(Time(batchTime), inputStream.id)
       }
 

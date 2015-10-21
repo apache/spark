@@ -19,7 +19,6 @@ package org.apache.spark.deploy.yarn
 
 import java.net.URI
 
-import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
 import org.mockito.Mockito.when
 
@@ -36,16 +35,18 @@ import org.apache.hadoop.yarn.util.{Records, ConverterUtils}
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Map
 
+import org.apache.spark.SparkFunSuite
 
-class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
+
+class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar {
 
   class MockClientDistributedCacheManager extends ClientDistributedCacheManager {
-    override def getVisibility(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): 
+    override def getVisibility(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]):
         LocalResourceVisibility = {
       LocalResourceVisibility.PRIVATE
     }
   }
-  
+
   test("test getFileStatus empty") {
     val distMgr = new ClientDistributedCacheManager()
     val fs = mock[FileSystem]
@@ -60,7 +61,7 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
     val distMgr = new ClientDistributedCacheManager()
     val fs = mock[FileSystem]
     val uri = new URI("/tmp/testing")
-    val realFileStatus = new FileStatus(10, false, 1, 1024, 10, 10, null, "testOwner", 
+    val realFileStatus = new FileStatus(10, false, 1, 1024, 10, 10, null, "testOwner",
       null, new Path("/tmp/testing"))
     when(fs.getFileStatus(new Path(uri))).thenReturn(new FileStatus())
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus](uri -> realFileStatus)
@@ -77,7 +78,7 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
     when(fs.getFileStatus(destPath)).thenReturn(new FileStatus())
 
-    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, "link", 
+    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, "link",
       statCache, false)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
@@ -100,11 +101,11 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
     assert(env.get("SPARK_YARN_CACHE_ARCHIVES_VISIBILITIES") === None)
 
     // add another one and verify both there and order correct
-    val realFileStatus = new FileStatus(20, false, 1, 1024, 10, 30, null, "testOwner", 
+    val realFileStatus = new FileStatus(20, false, 1, 1024, 10, 30, null, "testOwner",
       null, new Path("/tmp/testing2"))
     val destPath2 = new Path("file:///foo.invalid.com:8080/tmp/testing2")
     when(fs.getFileStatus(destPath2)).thenReturn(realFileStatus)
-    distMgr.addResource(fs, conf, destPath2, localResources, LocalResourceType.FILE, "link2", 
+    distMgr.addResource(fs, conf, destPath2, localResources, LocalResourceType.FILE, "link2",
       statCache, false)
     val resource2 = localResources("link2")
     assert(resource2.getVisibility() === LocalResourceVisibility.PRIVATE)
@@ -116,7 +117,7 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
     val env2 = new HashMap[String, String]()
     distMgr.setDistFilesEnv(env2)
     val timestamps = env2("SPARK_YARN_CACHE_FILES_TIME_STAMPS").split(',')
-    val files = env2("SPARK_YARN_CACHE_FILES").split(',') 
+    val files = env2("SPARK_YARN_CACHE_FILES").split(',')
     val sizes = env2("SPARK_YARN_CACHE_FILES_FILE_SIZES").split(',')
     val visibilities = env2("SPARK_YARN_CACHE_FILES_VISIBILITIES") .split(',')
     assert(files(0) === "file:/foo.invalid.com:8080/tmp/testing#link")
@@ -140,7 +141,7 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
     when(fs.getFileStatus(destPath)).thenReturn(new FileStatus())
 
     intercept[Exception] {
-      distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, null, 
+      distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, null,
         statCache, false)
     }
     assert(localResources.get("link") === None)
@@ -154,11 +155,11 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
     val destPath = new Path("file:///foo.invalid.com:8080/tmp/testing")
     val localResources = HashMap[String, LocalResource]()
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
-    val realFileStatus = new FileStatus(20, false, 1, 1024, 10, 30, null, "testOwner", 
+    val realFileStatus = new FileStatus(20, false, 1, 1024, 10, 30, null, "testOwner",
       null, new Path("/tmp/testing"))
     when(fs.getFileStatus(destPath)).thenReturn(realFileStatus)
 
-    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.ARCHIVE, "link", 
+    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.ARCHIVE, "link",
       statCache, true)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
@@ -188,11 +189,11 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
     val destPath = new Path("file:///foo.invalid.com:8080/tmp/testing")
     val localResources = HashMap[String, LocalResource]()
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
-    val realFileStatus = new FileStatus(20, false, 1, 1024, 10, 30, null, "testOwner", 
+    val realFileStatus = new FileStatus(20, false, 1, 1024, 10, 30, null, "testOwner",
       null, new Path("/tmp/testing"))
     when(fs.getFileStatus(destPath)).thenReturn(realFileStatus)
 
-    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.ARCHIVE, "link", 
+    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.ARCHIVE, "link",
       statCache, false)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)

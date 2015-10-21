@@ -19,7 +19,7 @@ package org.apache.spark.sql.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.columnar.ColumnBuilder._
 import org.apache.spark.sql.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
 import org.apache.spark.sql.types._
@@ -33,7 +33,7 @@ private[sql] trait ColumnBuilder {
   /**
    * Appends `row(ordinal)` to the column builder.
    */
-  def appendFrom(row: Row, ordinal: Int)
+  def appendFrom(row: InternalRow, ordinal: Int)
 
   /**
    * Column statistics information
@@ -46,9 +46,9 @@ private[sql] trait ColumnBuilder {
   def build(): ByteBuffer
 }
 
-private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
+private[sql] class BasicColumnBuilder[JvmType](
     val columnStats: ColumnStats,
-    val columnType: ColumnType[T, JvmType])
+    val columnType: ColumnType[JvmType])
   extends ColumnBuilder {
 
   protected var columnName: String = _
@@ -63,12 +63,11 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
     val size = if (initialSize == 0) DEFAULT_INITIAL_BUFFER_SIZE else initialSize
     this.columnName = columnName
 
-    // Reserves 4 bytes for column type ID
-    buffer = ByteBuffer.allocate(4 + size * columnType.defaultSize)
-    buffer.order(ByteOrder.nativeOrder()).putInt(columnType.typeId)
+    buffer = ByteBuffer.allocate(size * columnType.defaultSize)
+    buffer.order(ByteOrder.nativeOrder())
   }
 
-  override def appendFrom(row: Row, ordinal: Int): Unit = {
+  override def appendFrom(row: InternalRow, ordinal: Int): Unit = {
     buffer = ensureFreeSpace(buffer, columnType.actualSize(row, ordinal))
     columnType.append(row, ordinal, buffer)
   }
@@ -78,53 +77,56 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
   }
 }
 
-private[sql] abstract class ComplexColumnBuilder[T <: DataType, JvmType](
-    columnStats: ColumnStats,
-    columnType: ColumnType[T, JvmType])
-  extends BasicColumnBuilder[T, JvmType](columnStats, columnType)
+private[sql] class NullColumnBuilder
+  extends BasicColumnBuilder[Any](new ObjectColumnStats(NullType), NULL)
   with NullableColumnBuilder
 
-private[sql] abstract class NativeColumnBuilder[T <: NativeType](
+private[sql] abstract class ComplexColumnBuilder[JvmType](
+    columnStats: ColumnStats,
+    columnType: ColumnType[JvmType])
+  extends BasicColumnBuilder[JvmType](columnStats, columnType)
+  with NullableColumnBuilder
+
+private[sql] abstract class NativeColumnBuilder[T <: AtomicType](
     override val columnStats: ColumnStats,
     override val columnType: NativeColumnType[T])
-  extends BasicColumnBuilder[T, T#JvmType](columnStats, columnType)
+  extends BasicColumnBuilder[T#InternalType](columnStats, columnType)
   with NullableColumnBuilder
   with AllCompressionSchemes
   with CompressibleColumnBuilder[T]
 
 private[sql] class BooleanColumnBuilder extends NativeColumnBuilder(new BooleanColumnStats, BOOLEAN)
 
-private[sql] class IntColumnBuilder extends NativeColumnBuilder(new IntColumnStats, INT)
+private[sql] class ByteColumnBuilder extends NativeColumnBuilder(new ByteColumnStats, BYTE)
 
 private[sql] class ShortColumnBuilder extends NativeColumnBuilder(new ShortColumnStats, SHORT)
 
+private[sql] class IntColumnBuilder extends NativeColumnBuilder(new IntColumnStats, INT)
+
 private[sql] class LongColumnBuilder extends NativeColumnBuilder(new LongColumnStats, LONG)
-
-private[sql] class ByteColumnBuilder extends NativeColumnBuilder(new ByteColumnStats, BYTE)
-
-private[sql] class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleColumnStats, DOUBLE)
 
 private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColumnStats, FLOAT)
 
-private[sql] class FixedDecimalColumnBuilder(
-    precision: Int,
-    scale: Int)
-  extends NativeColumnBuilder(
-    new FixedDecimalColumnStats,
-    FIXED_DECIMAL(precision, scale))
+private[sql] class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleColumnStats, DOUBLE)
 
 private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
-private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
-
-private[sql] class TimestampColumnBuilder
-  extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
-
 private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
 
-// TODO (lian) Add support for array, struct and map
-private[sql] class GenericColumnBuilder
-  extends ComplexColumnBuilder(new GenericColumnStats, GENERIC)
+private[sql] class CompactDecimalColumnBuilder(dataType: DecimalType)
+  extends NativeColumnBuilder(new DecimalColumnStats(dataType), COMPACT_DECIMAL(dataType))
+
+private[sql] class DecimalColumnBuilder(dataType: DecimalType)
+  extends ComplexColumnBuilder(new DecimalColumnStats(dataType), LARGE_DECIMAL(dataType))
+
+private[sql] class StructColumnBuilder(dataType: StructType)
+  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), STRUCT(dataType))
+
+private[sql] class ArrayColumnBuilder(dataType: ArrayType)
+  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), ARRAY(dataType))
+
+private[sql] class MapColumnBuilder(dataType: MapType)
+  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), MAP(dataType))
 
 private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
@@ -151,19 +153,26 @@ private[sql] object ColumnBuilder {
       columnName: String = "",
       useCompression: Boolean = false): ColumnBuilder = {
     val builder: ColumnBuilder = dataType match {
-      case IntegerType => new IntColumnBuilder
-      case LongType => new LongColumnBuilder
-      case DoubleType => new DoubleColumnBuilder
+      case NullType => new NullColumnBuilder
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
+      case IntegerType | DateType => new IntColumnBuilder
+      case LongType | TimestampType => new LongColumnBuilder
+      case FloatType => new FloatColumnBuilder
+      case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder
       case BinaryType => new BinaryColumnBuilder
-      case DateType => new DateColumnBuilder
-      case TimestampType => new TimestampColumnBuilder
-      case DecimalType.Fixed(precision, scale) if precision < 19 =>
-        new FixedDecimalColumnBuilder(precision, scale)
-      case _ => new GenericColumnBuilder
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+        new CompactDecimalColumnBuilder(dt)
+      case dt: DecimalType => new DecimalColumnBuilder(dt)
+      case struct: StructType => new StructColumnBuilder(struct)
+      case array: ArrayType => new ArrayColumnBuilder(array)
+      case map: MapType => new MapColumnBuilder(map)
+      case udt: UserDefinedType[_] =>
+        return apply(udt.sqlType, initialSize, columnName, useCompression)
+      case other =>
+        throw new Exception(s"not suppported type: $other")
     }
 
     builder.initialize(initialSize, columnName, useCompression)

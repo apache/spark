@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -22,7 +23,7 @@ import org.apache.spark.SparkContext._
 
 /**
  * Executes a roll up-style query against Apache logs.
- *  
+ *
  * Usage: LogQuery [logFile]
  */
 object LogQuery {
@@ -83,3 +84,4 @@ object LogQuery {
     sc.stop()
   }
 }
+// scalastyle:on println

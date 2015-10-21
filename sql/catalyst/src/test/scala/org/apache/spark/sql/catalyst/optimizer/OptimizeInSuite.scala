@@ -43,31 +43,41 @@ class OptimizeInSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  test("OptimizedIn test: In clause optimized to InSet") {
+  test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1),Literal(2))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
         .analyze
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery)
+  }
+
+  test("OptimizedIn test: In clause optimized to InSet when more than 10 items") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), (1 to 11).map(Literal(_))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(InSet(UnresolvedAttribute("a"), HashSet[Any]()+1+2))
+        .where(InSet(UnresolvedAttribute("a"), (1 to 11).toSet))
         .analyze
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("OptimizedIn test: In clause not optimized in case filter has attributes") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1),Literal(2), UnresolvedAttribute("b"))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
         .analyze
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1),Literal(2), UnresolvedAttribute("b"))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
         .analyze
 
     comparePlans(optimized, correctAnswer)

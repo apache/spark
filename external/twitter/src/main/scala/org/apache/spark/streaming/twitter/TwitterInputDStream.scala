@@ -39,7 +39,7 @@ import org.apache.spark.streaming.receiver.Receiver
 */
 private[streaming]
 class TwitterInputDStream(
-    @transient ssc_ : StreamingContext,
+    ssc_ : StreamingContext,
     twitterAuth: Option[Authorization],
     filters: Seq[String],
     storageLevel: StorageLevel

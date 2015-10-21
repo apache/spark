@@ -17,10 +17,10 @@
 
 package org.apache.spark.mllib.tree.loss
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
-import org.apache.spark.rdd.RDD
+
 
 /**
  * :: DeveloperApi ::
@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
  *   (y - F(x))**2
  * where y is the label and F(x) is the model prediction for features x.
  */
+@Since("1.2.0")
 @DeveloperApi
 object SquaredError extends Loss {
 
@@ -37,19 +38,17 @@ object SquaredError extends Loss {
    * Method to calculate the gradients for the gradient boosting calculation for least
    * squares error calculation.
    * The gradient with respect to F(x) is: - 2 (y - F(x))
-   * @param model Ensemble model
-   * @param point Instance of the training dataset
+   * @param prediction Predicted label.
+   * @param label True label.
    * @return Loss gradient
    */
-  override def gradient(
-    model: TreeEnsembleModel,
-    point: LabeledPoint): Double = {
-    2.0 * (model.predict(point.features) - point.label)
+  @Since("1.2.0")
+  override def gradient(prediction: Double, label: Double): Double = {
+    - 2.0 * (label - prediction)
   }
 
-  override def computeError(prediction: Double, label: Double): Double = {
-    val err = prediction - label
+  override private[mllib] def computeError(prediction: Double, label: Double): Double = {
+    val err = label - prediction
     err * err
   }
-
 }

@@ -25,8 +25,7 @@ set FWDIR=%~dp0..\
 rem Export this as SPARK_HOME
 set SPARK_HOME=%FWDIR%
 
-rem Load environment variables from conf\spark-env.cmd, if it exists
-if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
+call %SPARK_HOME%\bin\load-spark-env.cmd
 
 rem Test that an argument was given
 if not "x%1"=="x" goto arg_given

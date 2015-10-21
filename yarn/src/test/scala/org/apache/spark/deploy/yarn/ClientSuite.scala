@@ -20,25 +20,28 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URI
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{HashMap => MutableHashMap}
+import scala.reflect.ClassTag
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse
 import org.apache.hadoop.yarn.api.records._
+import org.apache.hadoop.yarn.client.api.YarnClientApplication
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.Records
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{ HashMap => MutableHashMap }
-import scala.reflect.ClassTag
-import scala.util.Try
-
-import org.apache.spark.{SparkException, SparkConf}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     System.setProperty("SPARK_YARN_MODE", "true")
@@ -93,7 +96,7 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
-    Client.populateClasspath(args, conf, sparkConf, env)
+    Client.populateClasspath(args, conf, sparkConf, env, true)
 
     val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
@@ -104,13 +107,16 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
         cp should not contain (uri.getPath())
       }
     })
-    if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
-      cp should contain("{{PWD}}")
-    } else if (Utils.isWindows) {
-      cp should contain("%PWD%")
-    } else {
-      cp should contain(Environment.PWD.$())
-    }
+    val pwdVar =
+      if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
+        "{{PWD}}"
+      } else if (Utils.isWindows) {
+        "%PWD%"
+      } else {
+        Environment.PWD.$()
+      }
+    cp should contain(pwdVar)
+    cp should contain (s"$pwdVar${Path.SEPARATOR}${Client.LOCALIZED_CONF_DIR}")
     cp should not contain (Client.SPARK_JAR)
     cp should not contain (Client.APP_JAR)
   }
@@ -126,7 +132,7 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
     val tempDir = Utils.createTempDir()
     try {
-      client.prepareLocalResources(tempDir.getAbsolutePath())
+      client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
       sparkConf.getOption(Client.CONF_SPARK_USER_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
@@ -148,55 +154,56 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     }
   }
 
-  test("check access nns empty") {
+  test("Cluster path translation") {
+    val conf = new Configuration()
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set())
+      .set(Client.CONF_SPARK_JAR, "local:/localPath/spark.jar")
+      .set("spark.yarn.config.gatewayPath", "/localPath")
+      .set("spark.yarn.config.replacementPath", "/remotePath")
+
+    Client.getClusterPath(sparkConf, "/localPath") should be ("/remotePath")
+    Client.getClusterPath(sparkConf, "/localPath/1:/localPath/2") should be (
+      "/remotePath/1:/remotePath/2")
+
+    val env = new MutableHashMap[String, String]()
+    Client.populateClasspath(null, conf, sparkConf, env, false,
+      extraClassPath = Some("/localPath/my1.jar"))
+    val cp = classpath(env)
+    cp should contain ("/remotePath/spark.jar")
+    cp should contain ("/remotePath/my1.jar")
   }
 
-  test("check access nns unset") {
+  test("configuration and args propagate through createApplicationSubmissionContext") {
+    val conf = new Configuration()
+    // When parsing tags, duplicates and leading/trailing whitespace should be removed.
+    // Spaces between non-comma strings should be preserved as single tags. Empty strings may or
+    // may not be removed depending on the version of Hadoop being used.
     val sparkConf = new SparkConf()
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set())
-  }
+      .set(Client.CONF_SPARK_YARN_APPLICATION_TAGS, ",tag1, dup,tag2 , ,multi word , dup")
+      .set("spark.yarn.maxAppAttempts", "42")
+    val args = new ClientArguments(Array(
+      "--name", "foo-test-app",
+      "--queue", "staging-queue"), sparkConf)
 
-  test("check access nns") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032")))
-  }
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
 
-  test("check access nns space") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032, ")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032")))
-  }
+    val client = new Client(args, conf, sparkConf)
+    client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
 
-  test("check access two nns") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032,hdfs://nn2:8032")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032"), new Path("hdfs://nn2:8032")))
-  }
-
-  test("check token renewer") {
-    val hadoopConf = new Configuration()
-    hadoopConf.set("yarn.resourcemanager.address", "myrm:8033")
-    hadoopConf.set("yarn.resourcemanager.principal", "yarn/myrm:8032@SPARKTEST.COM")
-    val renewer = Client.getTokenRenewer(hadoopConf)
-    renewer should be ("yarn/myrm:8032@SPARKTEST.COM")
-  }
-
-  test("check token renewer default") {
-    val hadoopConf = new Configuration()
-    val caught =
-      intercept[SparkException] {
-        Client.getTokenRenewer(hadoopConf)
-      }
-    assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
+    appContext.getApplicationName should be ("foo-test-app")
+    appContext.getQueue should be ("staging-queue")
+    appContext.getAMContainerSpec should be (containerLaunchContext)
+    appContext.getApplicationType should be ("SPARK")
+    appContext.getClass.getMethods.filter(_.getName.equals("getApplicationTags")).foreach{ method =>
+      val tags = method.invoke(appContext).asInstanceOf[java.util.Set[String]]
+      tags should contain allOf ("tag1", "dup", "tag2", "multi word")
+      tags.asScala.filter(_.nonEmpty).size should be (4)
+    }
+    appContext.getMaxAppAttempts should be (42)
   }
 
   object Fixtures {
@@ -232,19 +239,26 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     testCode(conf)
   }
 
-  def newEnv = MutableHashMap[String, String]()
+  def newEnv: MutableHashMap[String, String] = MutableHashMap[String, String]()
 
-  def classpath(env: MutableHashMap[String, String]) = env(Environment.CLASSPATH.name).split(":|;|<CPS>")
+  def classpath(env: MutableHashMap[String, String]): Array[String] =
+    env(Environment.CLASSPATH.name).split(":|;|<CPS>")
 
-  def flatten(a: Option[Seq[String]], b: Option[Seq[String]]) = (a ++ b).flatten.toArray
+  def flatten(a: Option[Seq[String]], b: Option[Seq[String]]): Array[String] =
+    (a ++ b).flatten.toArray
 
-  def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B =
-    Try(clazz.getField(field)).map(_.get(null).asInstanceOf[A]).toOption.map(mapTo).getOrElse(defaults)
+  def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B = {
+    Try(clazz.getField(field))
+      .map(_.get(null).asInstanceOf[A])
+      .toOption
+      .map(mapTo)
+      .getOrElse(defaults)
+  }
 
   def getFieldValue2[A: ClassTag, A1: ClassTag, B](
         clazz: Class[_],
         field: String,
-        defaults: => B)(mapTo:  A => B)(mapTo1: A1 => B) : B = {
+        defaults: => B)(mapTo: A => B)(mapTo1: A1 => B): B = {
     Try(clazz.getField(field)).map(_.get(null)).map {
       case v: A => mapTo(v)
       case v1: A1 => mapTo1(v1)

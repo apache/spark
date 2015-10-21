@@ -19,19 +19,19 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-import org.apache.hadoop.fs.{FileUtil, Path}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SecurityManager}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.util.{Clock, SystemClock}
+import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.util.{Utils, Clock, SystemClock}
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -43,8 +43,9 @@ private[deploy] class DriverRunner(
     val workDir: File,
     val sparkHome: File,
     val driverDesc: DriverDescription,
-    val worker: ActorRef,
-    val workerUrl: String)
+    val worker: RpcEndpointRef,
+    val workerUrl: String,
+    val securityManager: SecurityManager)
   extends Logging {
 
   @volatile private var process: Option[Process] = None
@@ -84,8 +85,8 @@ private[deploy] class DriverRunner(
           }
 
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, driverDesc.mem,
-            sparkHome.getAbsolutePath, substituteVariables)
+          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
+            driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
           launchDriver(builder, driverDir, driverDesc.supervise)
         }
         catch {
@@ -106,7 +107,7 @@ private[deploy] class DriverRunner(
 
         finalState = Some(state)
 
-        worker ! DriverStateChanged(driverId, state, finalException)
+        worker.send(DriverStateChanged(driverId, state, finalException))
       }
     }.start()
   }
@@ -136,12 +137,9 @@ private[deploy] class DriverRunner(
    * Will throw an exception if there are errors downloading the jar.
    */
   private def downloadUserJar(driverDir: File): String = {
-
     val jarPath = new Path(driverDesc.jarUrl)
 
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val jarFileSystem = jarPath.getFileSystem(hadoopConf)
-
     val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
     val localJarFile = new File(driverDir, jarFileName)
@@ -149,7 +147,14 @@ private[deploy] class DriverRunner(
 
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
-      FileUtil.copy(jarFileSystem, jarPath, destPath, false, hadoopConf)
+      Utils.fetchFile(
+        driverDesc.jarUrl,
+        driverDir,
+        conf,
+        securityManager,
+        hadoopConf,
+        System.currentTimeMillis(),
+        useCache = false)
     }
 
     if (!localJarFile.exists()) { // Verify copy succeeded
@@ -167,8 +172,8 @@ private[deploy] class DriverRunner(
       CommandUtils.redirectStream(process.getInputStream, stdout)
 
       val stderr = new File(baseDir, "stderr")
-      val header = "Launch Command: %s\n%s\n\n".format(
-        builder.command.mkString("\"", "\" \"", "\""), "=" * 40)
+      val formattedCommand = builder.command.asScala.mkString("\"", "\" \"", "\"")
+      val header = "Launch Command: %s\n%s\n\n".format(formattedCommand, "=" * 40)
       Files.append(header, stderr, UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
@@ -224,6 +229,6 @@ private[deploy] trait ProcessBuilderLike {
 private[deploy] object ProcessBuilderLike {
   def apply(processBuilder: ProcessBuilder): ProcessBuilderLike = new ProcessBuilderLike {
     override def start(): Process = processBuilder.start()
-    override def command: Seq[String] = processBuilder.command()
+    override def command: Seq[String] = processBuilder.command().asScala
   }
 }

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -67,3 +68,4 @@ object SimpleSkewedGroupByTest {
     sc.stop()
   }
 }
+// scalastyle:on println

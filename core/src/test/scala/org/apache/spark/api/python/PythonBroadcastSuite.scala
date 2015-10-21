@@ -21,15 +21,15 @@ import scala.io.Source
 
 import java.io.{PrintWriter, File}
 
-import org.scalatest.{Matchers, FunSuite}
+import org.scalatest.Matchers
 
-import org.apache.spark.{SharedSparkContext, SparkConf}
+import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
 // This test suite uses SharedSparkContext because we need a SparkEnv in order to deserialize
 // a PythonBroadcast:
-class PythonBroadcastSuite extends FunSuite with Matchers with SharedSparkContext {
+class PythonBroadcastSuite extends SparkFunSuite with Matchers with SharedSparkContext {
   test("PythonBroadcast can be serialized with Kryo (SPARK-4882)") {
     val tempDir = Utils.createTempDir()
     val broadcastedString = "Hello, world!"

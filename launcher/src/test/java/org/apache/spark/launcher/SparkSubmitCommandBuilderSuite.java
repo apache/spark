@@ -30,7 +30,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-public class SparkSubmitCommandBuilderSuite {
+public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private static File dummyPropsFile;
   private static SparkSubmitOptionParser parser;
@@ -48,12 +48,14 @@ public class SparkSubmitCommandBuilderSuite {
 
   @Test
   public void testDriverCmdBuilder() throws Exception {
-    testCmdBuilder(true);
+    testCmdBuilder(true, true);
+    testCmdBuilder(true, false);
   }
 
   @Test
   public void testClusterCmdBuilder() throws Exception {
-    testCmdBuilder(false);
+    testCmdBuilder(false, true);
+    testCmdBuilder(false, false);
   }
 
   @Test
@@ -98,7 +100,7 @@ public class SparkSubmitCommandBuilderSuite {
       parser.NAME,
       "appName");
 
-    List<String> args = new SparkSubmitCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
+    List<String> args = newCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
     List<String> expected = Arrays.asList("spark-shell", "--app-arg", "bar", "--app-switch");
     assertEquals(expected, args.subList(args.size() - expected.size(), args.size()));
   }
@@ -110,7 +112,7 @@ public class SparkSubmitCommandBuilderSuite {
       parser.MASTER + "=foo",
       parser.DEPLOY_MODE + "=bar");
 
-    List<String> cmd = new SparkSubmitCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
+    List<String> cmd = newCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
     assertEquals("org.my.Class", findArgValue(cmd, parser.CLASS));
     assertEquals("foo", findArgValue(cmd, parser.MASTER));
     assertEquals("bar", findArgValue(cmd, parser.DEPLOY_MODE));
@@ -149,11 +151,11 @@ public class SparkSubmitCommandBuilderSuite {
     assertEquals("arg1", cmd.get(cmd.size() - 1));
   }
 
-  private void testCmdBuilder(boolean isDriver) throws Exception {
+  private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
-      new SparkSubmitCommandBuilder(Collections.<String>emptyList());
+      newCommandBuilder(Collections.<String>emptyList());
     launcher.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME,
       System.getProperty("spark.test.home"));
     launcher.master = "yarn";
@@ -161,14 +163,20 @@ public class SparkSubmitCommandBuilderSuite {
     launcher.appResource = "/foo";
     launcher.appName = "MyApp";
     launcher.mainClass = "my.Class";
-    launcher.propertiesFile = dummyPropsFile.getAbsolutePath();
     launcher.appArgs.add("foo");
     launcher.appArgs.add("bar");
-    launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
-    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
-    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
-    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
     launcher.conf.put("spark.foo", "foo");
+    // either set the property through "--conf" or through default property file
+    if (!useDefaultPropertyFile) {
+      launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
+      launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
+    } else {
+      launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
+          + "/launcher/src/test/resources");
+    }
 
     Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = launcher.buildCommand(env);
@@ -194,7 +202,7 @@ public class SparkSubmitCommandBuilderSuite {
         if (isDriver) {
           assertEquals("-XX:MaxPermSize=256m", arg);
         } else {
-          assertEquals("-XX:MaxPermSize=128m", arg);
+          assertEquals("-XX:MaxPermSize=256m", arg);
         }
       }
     }
@@ -216,7 +224,9 @@ public class SparkSubmitCommandBuilderSuite {
     }
 
     // Checks below are the same for both driver and non-driver mode.
-    assertEquals(dummyPropsFile.getAbsolutePath(), findArgValue(cmd, parser.PROPERTIES_FILE));
+    if (!useDefaultPropertyFile) {
+      assertEquals(dummyPropsFile.getAbsolutePath(), findArgValue(cmd, parser.PROPERTIES_FILE));
+    }
     assertEquals("yarn", findArgValue(cmd, parser.MASTER));
     assertEquals(deployMode, findArgValue(cmd, parser.DEPLOY_MODE));
     assertEquals("my.Class", findArgValue(cmd, parser.CLASS));
@@ -273,10 +283,15 @@ public class SparkSubmitCommandBuilderSuite {
     return contains(needle, list.split(sep));
   }
 
-  private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
+  private SparkSubmitCommandBuilder newCommandBuilder(List<String> args) {
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(args);
     builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, System.getProperty("spark.test.home"));
-    return builder.buildCommand(env);
+    builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_ASSEMBLY, "dummy");
+    return builder;
+  }
+
+  private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
+    return newCommandBuilder(args).buildCommand(env);
   }
 
 }

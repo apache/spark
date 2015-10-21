@@ -150,8 +150,13 @@ import org.apache.spark.util.Utils
  *  authorization. If not filter is in place the user is generally null and no authorization
  *  can take place.
  *
- *  Connection encryption (SSL) configuration is organized hierarchically. The user can configure
- *  the default SSL settings which will be used for all the supported communication protocols unless
+ *  When authentication is being used, encryption can also be enabled by setting the option
+ *  spark.authenticate.enableSaslEncryption to true. This is only supported by communication
+ *  channels that use the network-common library, and can be used as an alternative to SSL in those
+ *  cases.
+ *
+ *  SSL can be used for encryption for certain communication channels. The user can configure the
+ *  default SSL settings which will be used for all the supported communication protocols unless
  *  they are overwritten by protocol specific settings. This way the user can easily provide the
  *  common settings for all the protocols without disabling the ability to configure each one
  *  individually.
@@ -187,7 +192,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // key used to store the spark secret in the Hadoop UGI
   private val sparkSecretLookupKey = "sparkCookie"
 
-  private val authOn = sparkConf.getBoolean("spark.authenticate", false)
+  private val authOn = sparkConf.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
   private var aclsOn =
     sparkConf.getBoolean("spark.acls.enable", sparkConf.getBoolean("spark.ui.acls.enable", false))
@@ -305,7 +310,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
-  def getViewAcls: String = viewAcls.mkString(",")
+  /**
+   * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
+   */
+  def getViewAcls: String = {
+    if (viewAcls.contains("*")) {
+      "*"
+    } else {
+      viewAcls.mkString(",")
+    }
+  }
 
   /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
@@ -316,7 +330,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
   }
 
-  def getModifyAcls: String = modifyAcls.mkString(",")
+  /**
+   * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
+   */
+  def getModifyAcls: String = {
+    if (modifyAcls.contains("*")) {
+      "*"
+    } else {
+      modifyAcls.mkString(",")
+    }
+  }
 
   /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
@@ -360,10 +383,12 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       cookie
     } else {
       // user must have set spark.authenticate.secret config
-      sparkConf.getOption("spark.authenticate.secret") match {
+      // For Master/Worker, auth secret is in conf; for Executors, it is in env variable
+      sys.env.get(SecurityManager.ENV_AUTH_SECRET)
+        .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
         case Some(value) => value
         case None => throw new Exception("Error: a secret key must be specified via the " +
-          "spark.authenticate.secret config")
+          SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
       }
     }
     sCookie
@@ -387,7 +412,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(","))
-    !aclsEnabled || user == null || viewAcls.contains(user)
+    !aclsEnabled || user == null || viewAcls.contains(user) || viewAcls.contains("*")
   }
 
   /**
@@ -402,7 +427,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(","))
-    !aclsEnabled || user == null || modifyAcls.contains(user)
+    !aclsEnabled || user == null || modifyAcls.contains(user) || modifyAcls.contains("*")
   }
 
 
@@ -411,6 +436,14 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * @return true if authentication is enabled, otherwise false
    */
   def isAuthenticationEnabled(): Boolean = authOn
+
+  /**
+   * Checks whether SASL encryption should be enabled.
+   * @return Whether to enable SASL encryption when connecting to services that support it.
+   */
+  def isSaslEncryptionEnabled(): Boolean = {
+    sparkConf.getBoolean("spark.authenticate.enableSaslEncryption", false)
+  }
 
   /**
    * Gets the user used for authenticating HTTP connections.
@@ -435,4 +468,13 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // Default SecurityManager only has a single secret key, so ignore appId.
   override def getSaslUser(appId: String): String = getSaslUser()
   override def getSecretKey(appId: String): String = getSecretKey()
+}
+
+private[spark] object SecurityManager {
+
+  val SPARK_AUTH_CONF: String = "spark.authenticate"
+  val SPARK_AUTH_SECRET_CONF: String = "spark.authenticate.secret"
+  // This is used to set auth secret to an executor's env variable. It should have the same
+  // value as SPARK_AUTH_SECERET_CONF set in SparkConf
+  val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
 }

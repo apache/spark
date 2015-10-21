@@ -66,7 +66,6 @@ private[graphx] object BytecodeUtils {
       val finder = new MethodInvocationFinder(c.getName, m)
       getClassReader(c).accept(finder, 0)
       for (classMethod <- finder.methodsInvoked) {
-        // println(classMethod)
         if (classMethod._1 == targetClass && classMethod._2 == targetMethod) {
           return true
         } else if (!seen.contains(classMethod)) {
@@ -122,7 +121,7 @@ private[graphx] object BytecodeUtils {
           override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
             if (op == INVOKEVIRTUAL || op == INVOKESPECIAL || op == INVOKESTATIC) {
               if (!skipClass(owner)) {
-                methodsInvoked.add((Class.forName(owner.replace("/", ".")), name))
+                methodsInvoked.add((Utils.classForName(owner.replace("/", ".")), name))
               }
             }
           }

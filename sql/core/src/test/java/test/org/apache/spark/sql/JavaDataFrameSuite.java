@@ -19,44 +19,50 @@ package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import scala.collection.JavaConverters;
+import scala.collection.Seq;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.primitives.Ints;
+import org.junit.*;
+
+import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.test.TestSQLContext;
-import org.apache.spark.sql.test.TestSQLContext$;
-import org.apache.spark.sql.types.*;
-
 import static org.apache.spark.sql.functions.*;
+import org.apache.spark.sql.test.TestSQLContext;
+import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
-  private transient SQLContext context;
+  private transient TestSQLContext context;
 
   @Before
   public void setUp() {
     // Trigger static initializer of TestData
-    TestData$.MODULE$.testData();
-    jsc = new JavaSparkContext(TestSQLContext.sparkContext());
-    context = TestSQLContext$.MODULE$;
+    SparkContext sc = new SparkContext("local[*]", "testing");
+    jsc = new JavaSparkContext(sc);
+    context = new TestSQLContext(sc);
+    context.loadTestData();
   }
 
   @After
   public void tearDown() {
-    jsc = null;
+    context.sparkContext().stop();
     context = null;
+    jsc = null;
   }
 
   @Test
   public void testExecution() {
     DataFrame df = context.table("testData").filter("key = 1");
-    Assert.assertEquals(df.select("key").collect()[0].get(0), 1);
+    Assert.assertEquals(1, df.select("key").collect()[0].get(0));
   }
 
   /**
@@ -85,12 +91,24 @@ public class JavaDataFrameSuite {
     df.groupBy().mean("key");
     df.groupBy().max("key");
     df.groupBy().min("key");
+    df.groupBy().stddev("key");
     df.groupBy().sum("key");
 
     // Varargs in column expressions
     df.groupBy().agg(countDistinct("key", "value"));
     df.groupBy().agg(countDistinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
+
+    // Varargs with mathfunctions
+    DataFrame df2 = context.table("testData2");
+    df2.select(exp("a"), exp("b"));
+    df2.select(exp(log("a")));
+    df2.select(pow("a", "a"), pow("b", 2.0));
+    df2.select(pow(col("a"), col("b")), exp("b"));
+    df2.select(sin("a"), acos("b"));
+
+    df2.select(rand(), acos("b"));
+    df2.select(col("*"), randn(5L));
   }
 
   @Ignore
@@ -103,7 +121,9 @@ public class JavaDataFrameSuite {
 
   public static class Bean implements Serializable {
     private double a = 0.0;
-    private Integer[] b = new Integer[]{0, 1};
+    private Integer[] b = { 0, 1 };
+    private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
+    private List<String> d = Arrays.asList("floppy", "disk");
 
     public double getA() {
       return a;
@@ -112,6 +132,58 @@ public class JavaDataFrameSuite {
     public Integer[] getB() {
       return b;
     }
+
+    public Map<String, int[]> getC() {
+      return c;
+    }
+
+    public List<String> getD() {
+      return d;
+    }
+  }
+
+  void validateDataFrameWithBeans(Bean bean, DataFrame df) {
+    StructType schema = df.schema();
+    Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
+      schema.apply("a"));
+    Assert.assertEquals(
+      new StructField("b", new ArrayType(IntegerType$.MODULE$, true), true, Metadata.empty()),
+      schema.apply("b"));
+    ArrayType valueType = new ArrayType(DataTypes.IntegerType, false);
+    MapType mapType = new MapType(DataTypes.StringType, valueType, true);
+    Assert.assertEquals(
+      new StructField("c", mapType, true, Metadata.empty()),
+      schema.apply("c"));
+    Assert.assertEquals(
+      new StructField("d", new ArrayType(DataTypes.StringType, true), true, Metadata.empty()),
+      schema.apply("d"));
+    Row first = df.select("a", "b", "c", "d").first();
+    Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
+    // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
+    // verify that it has the expected length, and contains expected elements.
+    Seq<Integer> result = first.getAs(1);
+    Assert.assertEquals(bean.getB().length, result.length());
+    for (int i = 0; i < result.length(); i++) {
+      Assert.assertEquals(bean.getB()[i], result.apply(i));
+    }
+    @SuppressWarnings("unchecked")
+    Seq<Integer> outputBuffer = (Seq<Integer>) first.getJavaMap(2).get("hello");
+    Assert.assertArrayEquals(
+      bean.getC().get("hello"),
+      Ints.toArray(JavaConverters.seqAsJavaListConverter(outputBuffer).asJava()));
+    Seq<String> d = first.getAs(3);
+    Assert.assertEquals(bean.getD().size(), d.length());
+    for (int i = 0; i < d.length(); i++) {
+      Assert.assertEquals(bean.getD().get(i), d.apply(i));
+    }
+  }
+
+  @Test
+  public void testCreateDataFrameFromLocalJavaBeans() {
+    Bean bean = new Bean();
+    List<Bean> data = Arrays.asList(bean);
+    DataFrame df = context.createDataFrame(data, Bean.class);
+    validateDataFrameWithBeans(bean, df);
   }
 
   @Test
@@ -119,14 +191,74 @@ public class JavaDataFrameSuite {
     Bean bean = new Bean();
     JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
     DataFrame df = context.createDataFrame(rdd, Bean.class);
-    StructType schema = df.schema();
-    Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
-      schema.apply("a"));
-    Assert.assertEquals(
-      new StructField("b", new ArrayType(IntegerType$.MODULE$, true), true, Metadata.empty()),
-      schema.apply("b"));
-    Row first = df.select("a", "b").first();
-    Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
-    Assert.assertArrayEquals(bean.getB(), first.<Integer[]>getAs(1));
+    validateDataFrameWithBeans(bean, df);
+  }
+
+  @Test
+  public void testCreateDataFromFromList() {
+    StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
+    List<Row> rows = Arrays.asList(RowFactory.create(0));
+    DataFrame df = context.createDataFrame(rows, schema);
+    Row[] result = df.collect();
+    Assert.assertEquals(1, result.length);
+  }
+
+  private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
+    @Override
+    public int compare(Row row1, Row row2) {
+      String item1 = row1.getString(0);
+      String item2 = row2.getString(0);
+      return item1.compareTo(item2);
+    }
+  };
+
+  @Test
+  public void testCrosstab() {
+    DataFrame df = context.table("testData2");
+    DataFrame crosstab = df.stat().crosstab("a", "b");
+    String[] columnNames = crosstab.schema().fieldNames();
+    Assert.assertEquals("a_b", columnNames[0]);
+    Assert.assertEquals("1", columnNames[1]);
+    Assert.assertEquals("2", columnNames[2]);
+    Row[] rows = crosstab.collect();
+    Arrays.sort(rows, crosstabRowComparator);
+    Integer count = 1;
+    for (Row row : rows) {
+      Assert.assertEquals(row.get(0).toString(), count.toString());
+      Assert.assertEquals(1L, row.getLong(1));
+      Assert.assertEquals(1L, row.getLong(2));
+      count++;
+    }
+  }
+
+  @Test
+  public void testFrequentItems() {
+    DataFrame df = context.table("testData2");
+    String[] cols = {"a"};
+    DataFrame results = df.stat().freqItems(cols, 0.2);
+    Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
+  }
+
+  @Test
+  public void testCorrelation() {
+    DataFrame df = context.table("testData2");
+    Double pearsonCorr = df.stat().corr("a", "b", "pearson");
+    Assert.assertTrue(Math.abs(pearsonCorr) < 1.0e-6);
+  }
+
+  @Test
+  public void testCovariance() {
+    DataFrame df = context.table("testData2");
+    Double result = df.stat().cov("a", "b");
+    Assert.assertTrue(Math.abs(result) < 1.0e-6);
+  }
+
+  @Test
+  public void testSampleBy() {
+    DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
+    DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
+    Row[] expected = {RowFactory.create(0, 5), RowFactory.create(1, 8)};
+    Assert.assertArrayEquals(expected, actual);
   }
 }

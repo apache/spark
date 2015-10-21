@@ -20,12 +20,11 @@ package org.apache.spark.deploy.worker.ui
 import java.io.File
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.deploy.worker.ui.WorkerWebUI._
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.RpcUtils
 
 /**
  * Web UI server for the standalone worker.
@@ -38,7 +37,7 @@ class WorkerWebUI(
   extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
-  private[ui] val timeout = AkkaUtils.askTimeout(worker.conf)
+  private[ui] val timeout = RpcUtils.askRpcTimeout(worker.conf)
 
   initialize()
 
@@ -49,10 +48,14 @@ class WorkerWebUI(
     attachPage(new WorkerPage(this))
     attachHandler(createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"))
     attachHandler(createServletHandler("/log",
-      (request: HttpServletRequest) => logPage.renderLog(request), worker.securityMgr))
+      (request: HttpServletRequest) => logPage.renderLog(request),
+      worker.securityMgr,
+      worker.conf))
   }
 }
 
-private[ui] object WorkerWebUI {
+private[worker] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
+  val DEFAULT_RETAINED_DRIVERS = 1000
+  val DEFAULT_RETAINED_EXECUTORS = 1000
 }

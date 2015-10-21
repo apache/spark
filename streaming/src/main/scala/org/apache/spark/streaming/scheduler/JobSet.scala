@@ -18,8 +18,10 @@
 package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.HashSet
+import scala.util.Failure
 
 import org.apache.spark.streaming.Time
+import org.apache.spark.util.Utils
 
 /** Class representing a set of Jobs
   * belong to the same batch.
@@ -28,14 +30,14 @@ private[streaming]
 case class JobSet(
     time: Time,
     jobs: Seq[Job],
-    receivedBlockInfo: Map[Int, Array[ReceivedBlockInfo]] = Map.empty) {
+    streamIdToInputInfo: Map[Int, StreamInputInfo] = Map.empty) {
 
   private val incompleteJobs = new HashSet[Job]()
   private val submissionTime = System.currentTimeMillis() // when this jobset was submitted
   private var processingStartTime = -1L // when the first job of this jobset started processing
   private var processingEndTime = -1L // when the last job of this jobset finished processing
 
-  jobs.zipWithIndex.foreach { case (job, i) => job.setId(i) }
+  jobs.zipWithIndex.foreach { case (job, i) => job.setOutputOpId(i) }
   incompleteJobs ++= jobs
 
   def handleJobStart(job: Job) {
@@ -62,12 +64,13 @@ case class JobSet(
   }
 
   def toBatchInfo: BatchInfo = {
-    new BatchInfo(
+    BatchInfo(
       time,
-      receivedBlockInfo,
+      streamIdToInputInfo,
       submissionTime,
-      if (processingStartTime >= 0 ) Some(processingStartTime) else None,
-      if (processingEndTime >= 0 ) Some(processingEndTime) else None
+      if (processingStartTime >= 0) Some(processingStartTime) else None,
+      if (processingEndTime >= 0) Some(processingEndTime) else None,
+      jobs.map { job => (job.outputOpId, job.toOutputOperationInfo) }.toMap
     )
   }
 }

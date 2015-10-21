@@ -1,0 +1,69 @@
+[ {
+  "id" : "local-1430917381534",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2015-05-06T13:03:00.893GMT",
+    "endTime" : "2015-05-06T13:03:11.398GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  } ]
+}, {
+  "id" : "local-1430917381535",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "attemptId" : "2",
+    "startTime" : "2015-05-06T13:03:00.893GMT",
+    "endTime" : "2015-05-06T13:03:00.950GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  }, {
+    "attemptId" : "1",
+    "startTime" : "2015-05-06T13:03:00.880GMT",
+    "endTime" : "2015-05-06T13:03:00.890GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  } ]
+}, {
+  "id" : "local-1426533911241",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "attemptId" : "2",
+    "startTime" : "2015-03-17T23:11:50.242GMT",
+    "endTime" : "2015-03-17T23:12:25.177GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  }, {
+    "attemptId" : "1",
+    "startTime" : "2015-03-16T19:25:10.242GMT",
+    "endTime" : "2015-03-16T19:25:45.177GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  } ]
+}, {
+  "id" : "local-1425081759269",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2015-02-28T00:02:38.277GMT",
+    "endTime" : "2015-02-28T00:02:46.912GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  } ]
+}, {
+  "id" : "local-1422981780767",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2015-02-03T16:42:59.720GMT",
+    "endTime" : "2015-02-03T16:43:08.731GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  } ]
+}, {
+  "id" : "local-1422981759269",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2015-02-03T16:42:38.277GMT",
+    "endTime" : "2015-02-03T16:42:46.912GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  } ]
+} ]

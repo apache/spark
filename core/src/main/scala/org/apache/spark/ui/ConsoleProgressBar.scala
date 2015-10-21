@@ -65,7 +65,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     val stageIds = sc.statusTracker.getActiveStageIds()
     val stages = stageIds.map(sc.statusTracker.getStageInfo).flatten.filter(_.numTasks() > 1)
       .filter(now - _.submissionTime() > FIRST_DELAY).sortBy(_.stageId())
-    if (stages.size > 0) {
+    if (stages.length > 0) {
       show(now, stages.take(3))  // display at most 3 stages in same time
     }
   }
@@ -81,7 +81,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
       val total = s.numTasks()
       val header = s"[Stage ${s.stageId()}:"
       val tailer = s"(${s.numCompletedTasks()} + ${s.numActiveTasks()}) / $total]"
-      val w = width - header.size - tailer.size
+      val w = width - header.length - tailer.length
       val bar = if (w > 0) {
         val percent = w * s.numCompletedTasks() / total
         (0 until w).map { i =>

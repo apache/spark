@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
 import java.net.ServerSocket
@@ -57,8 +58,7 @@ object PageViewGenerator {
                        404 -> .05)
   val userZipCode = Map(94709 -> .5,
                         94117 -> .5)
-  val userID = Map((1 to 100).map(_ -> .01):_*)
-
+  val userID = Map((1 to 100).map(_ -> .01) : _*)
 
   def pickFromDistribution[T](inputMap : Map[T, Double]) : T = {
     val rand = new Random().nextDouble()
@@ -109,3 +109,4 @@ object PageViewGenerator {
     }
   }
 }
+// scalastyle:on println

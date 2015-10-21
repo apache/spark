@@ -24,7 +24,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
@@ -41,8 +41,11 @@ import org.apache.spark.util.Utils
  * @param topNode root node
  * @param algo algorithm type -- classification or regression
  */
+@Since("1.0.0")
 @Experimental
-class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable with Saveable {
+class DecisionTreeModel @Since("1.0.0") (
+    @Since("1.0.0") val topNode: Node,
+    @Since("1.0.0") val algo: Algo) extends Serializable with Saveable {
 
   /**
    * Predict values for a single data point using the model trained.
@@ -50,6 +53,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features array representing a single data point
    * @return Double prediction from the trained model
    */
+  @Since("1.0.0")
   def predict(features: Vector): Double = {
     topNode.predict(features)
   }
@@ -60,6 +64,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features RDD representing data points to be predicted
    * @return RDD of predictions for each of the given data points
    */
+  @Since("1.0.0")
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
   }
@@ -70,6 +75,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features JavaRDD representing data points to be predicted
    * @return JavaRDD of predictions for each of the given data points
    */
+  @Since("1.2.0")
   def predict(features: JavaRDD[Vector]): JavaRDD[Double] = {
     predict(features.rdd)
   }
@@ -77,6 +83,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   /**
    * Get number of nodes in tree, including leaf nodes.
    */
+  @Since("1.1.0")
   def numNodes: Int = {
     1 + topNode.numDescendants
   }
@@ -85,6 +92,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * Get depth of tree.
    * E.g.: Depth 0 means 1 leaf node.  Depth 1 means 1 internal node and 2 leaf nodes.
    */
+  @Since("1.1.0")
   def depth: Int = {
     topNode.subtreeDepth
   }
@@ -104,19 +112,29 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   /**
    * Print the full model to a string.
    */
+  @Since("1.2.0")
   def toDebugString: String = {
     val header = toString + "\n"
     header + topNode.subtreeToString(2)
   }
 
+  /**
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              If the directory already exists, this method throws an exception.
+   */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     DecisionTreeModel.SaveLoadV1_0.save(sc, path, this)
   }
 
-  override protected def formatVersion: String = "1.0"
+  override protected def formatVersion: String = DecisionTreeModel.formatVersion
 }
 
+@Since("1.3.0")
 object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
+
+  private[spark] def formatVersion: String = "1.0"
 
   private[tree] object SaveLoadV1_0 {
 
@@ -196,7 +214,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         val driverMemory = sc.getConf.getOption("spark.driver.memory")
           .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
           .map(Utils.memoryStringToMb)
-          .getOrElse(512)
+          .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
         if (driverMemory <= memThreshold) {
           logWarning(s"$thisClassName.save() was called, but it may fail because of too little" +
             s" driver memory (${driverMemory}m)." +
@@ -221,14 +239,14 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       val dataRDD: DataFrame = sc.parallelize(nodes)
         .map(NodeData.apply(0, _))
         .toDF()
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       // Load Parquet data.
-      val dataRDD = sqlContext.parquetFile(datapath)
+      val dataRDD = sqlContext.read.parquet(datapath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[NodeData](dataRDD.schema)
       val nodes = dataRDD.map(NodeData.apply)
@@ -295,6 +313,13 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
     }
   }
 
+  /**
+   *
+   * @param sc  Spark context used for loading model files.
+   * @param path  Path specifying the directory to which the model was saved.
+   * @return  Model instance
+   */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): DecisionTreeModel = {
     implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)

@@ -19,6 +19,7 @@ package org.apache.spark.streaming.kafka;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.Map;
 
 import scala.Tuple2;
 
@@ -37,13 +38,12 @@ import org.apache.spark.api.java.function.Function;
 
 public class JavaKafkaRDDSuite implements Serializable {
   private transient JavaSparkContext sc = null;
-  private transient KafkaStreamSuiteBase suiteBase = null;
+  private transient KafkaTestUtils kafkaTestUtils = null;
 
   @Before
   public void setUp() {
-    suiteBase = new KafkaStreamSuiteBase() { };
-    suiteBase.setupKafka();
-    System.clearProperty("spark.driver.port");
+    kafkaTestUtils = new KafkaTestUtils();
+    kafkaTestUtils.setup();
     SparkConf sparkConf = new SparkConf()
       .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
     sc = new JavaSparkContext(sparkConf);
@@ -51,10 +51,15 @@ public class JavaKafkaRDDSuite implements Serializable {
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
-    System.clearProperty("spark.driver.port");
-    suiteBase.tearDownKafka();
+    if (sc != null) {
+      sc.stop();
+      sc = null;
+    }
+
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.teardown();
+      kafkaTestUtils = null;
+    }
   }
 
   @Test
@@ -62,20 +67,20 @@ public class JavaKafkaRDDSuite implements Serializable {
     String topic1 = "topic1";
     String topic2 = "topic2";
 
-    String[] topic1data = createTopicAndSendData(topic1);
-    String[] topic2data = createTopicAndSendData(topic2);
+    createTopicAndSendData(topic1);
+    createTopicAndSendData(topic2);
 
-    HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("metadata.broker.list", suiteBase.brokerAddress());
+    Map<String, String> kafkaParams = new HashMap<>();
+    kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
 
     OffsetRange[] offsetRanges = {
       OffsetRange.create(topic1, 0, 0, 1),
       OffsetRange.create(topic2, 0, 0, 1)
     };
 
-    HashMap<TopicAndPartition, Broker> emptyLeaders = new HashMap<TopicAndPartition, Broker>();
-    HashMap<TopicAndPartition, Broker> leaders = new HashMap<TopicAndPartition, Broker>();
-    String[] hostAndPort = suiteBase.brokerAddress().split(":");
+    Map<TopicAndPartition, Broker> emptyLeaders = new HashMap<>();
+    Map<TopicAndPartition, Broker> leaders = new HashMap<>();
+    String[] hostAndPort = kafkaTestUtils.brokerAddress().split(":");
     Broker broker = Broker.create(hostAndPort[0], Integer.parseInt(hostAndPort[1]));
     leaders.put(new TopicAndPartition(topic1, 0), broker);
     leaders.put(new TopicAndPartition(topic2, 0), broker);
@@ -91,7 +96,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     ).map(
         new Function<Tuple2<String, String>, String>() {
           @Override
-          public String call(Tuple2<String, String> kv) throws Exception {
+          public String call(Tuple2<String, String> kv) {
             return kv._2();
           }
         }
@@ -109,7 +114,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         emptyLeaders,
         new Function<MessageAndMetadata<String, String>, String>() {
           @Override
-          public String call(MessageAndMetadata<String, String> msgAndMd) throws Exception {
+          public String call(MessageAndMetadata<String, String> msgAndMd) {
             return msgAndMd.message();
           }
         }
@@ -127,7 +132,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         leaders,
         new Function<MessageAndMetadata<String, String>, String>() {
           @Override
-          public String call(MessageAndMetadata<String, String> msgAndMd) throws Exception {
+          public String call(MessageAndMetadata<String, String> msgAndMd) {
             return msgAndMd.message();
           }
         }
@@ -144,8 +149,8 @@ public class JavaKafkaRDDSuite implements Serializable {
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
-    suiteBase.createTopic(topic);
-    suiteBase.sendMessages(topic, data);
+    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.sendMessages(topic, data);
     return data;
   }
 }

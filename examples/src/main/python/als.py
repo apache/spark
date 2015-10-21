@@ -21,7 +21,8 @@ ALS in pyspark.mllib.recommendation for more conventional use.
 
 This example requires numpy (http://www.numpy.org/)
 """
-from os.path import realpath
+from __future__ import print_function
+
 import sys
 
 import numpy as np
@@ -57,9 +58,9 @@ if __name__ == "__main__":
     Usage: als [M] [U] [F] [iterations] [partitions]"
     """
 
-    print >> sys.stderr, """WARN: This is a naive implementation of ALS and is given as an
+    print("""WARN: This is a naive implementation of ALS and is given as an
       example. Please use the ALS method found in pyspark.mllib.recommendation for more
-      conventional use."""
+      conventional use.""", file=sys.stderr)
 
     sc = SparkContext(appName="PythonALS")
     M = int(sys.argv[1]) if len(sys.argv) > 1 else 100
@@ -68,8 +69,8 @@ if __name__ == "__main__":
     ITERATIONS = int(sys.argv[4]) if len(sys.argv) > 4 else 5
     partitions = int(sys.argv[5]) if len(sys.argv) > 5 else 2
 
-    print "Running ALS with M=%d, U=%d, F=%d, iters=%d, partitions=%d\n" % \
-        (M, U, F, ITERATIONS, partitions)
+    print("Running ALS with M=%d, U=%d, F=%d, iters=%d, partitions=%d\n" %
+          (M, U, F, ITERATIONS, partitions))
 
     R = matrix(rand(M, F)) * matrix(rand(U, F).T)
     ms = matrix(rand(M, F))
@@ -95,7 +96,7 @@ if __name__ == "__main__":
         usb = sc.broadcast(us)
 
         error = rmse(R, ms, us)
-        print "Iteration %d:" % i
-        print "\nRMSE: %5.4f\n" % error
+        print("Iteration %d:" % i)
+        print("\nRMSE: %5.4f\n" % error)
 
     sc.stop()

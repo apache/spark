@@ -15,10 +15,16 @@
 # limitations under the License.
 #
 
+import sys
 import numpy as np
 import warnings
 
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper, inherit_doc
+if sys.version > '3':
+    xrange = range
+    basestring = str
+
+from pyspark import SparkContext, since
+from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 
 
@@ -26,6 +32,8 @@ class MLUtils(object):
 
     """
     Helper methods to load, save and pre-process data used in MLlib.
+
+    .. versionadded:: 1.0.0
     """
 
     @staticmethod
@@ -63,6 +71,7 @@ class MLUtils(object):
         return " ".join(items)
 
     @staticmethod
+    @since("1.0.0")
     def loadLibSVMFile(sc, path, numFeatures=-1, minPartitions=None, multiclass=None):
         """
         Loads labeled data in the LIBSVM format into an RDD of
@@ -94,22 +103,16 @@ class MLUtils(object):
         >>> from pyspark.mllib.util import MLUtils
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> tempFile = NamedTemporaryFile(delete=True)
-        >>> tempFile.write("+1 1:1.0 3:2.0 5:3.0\\n-1\\n-1 2:4.0 4:5.0 6:6.0")
+        >>> _ = tempFile.write(b"+1 1:1.0 3:2.0 5:3.0\\n-1\\n-1 2:4.0 4:5.0 6:6.0")
         >>> tempFile.flush()
         >>> examples = MLUtils.loadLibSVMFile(sc, tempFile.name).collect()
         >>> tempFile.close()
-        >>> type(examples[0]) == LabeledPoint
-        True
-        >>> print examples[0]
-        (1.0,(6,[0,2,4],[1.0,2.0,3.0]))
-        >>> type(examples[1]) == LabeledPoint
-        True
-        >>> print examples[1]
-        (-1.0,(6,[],[]))
-        >>> type(examples[2]) == LabeledPoint
-        True
-        >>> print examples[2]
-        (-1.0,(6,[1,3,5],[4.0,5.0,6.0]))
+        >>> examples[0]
+        LabeledPoint(1.0, (6,[0,2,4],[1.0,2.0,3.0]))
+        >>> examples[1]
+        LabeledPoint(-1.0, (6,[],[]))
+        >>> examples[2]
+        LabeledPoint(-1.0, (6,[1,3,5],[4.0,5.0,6.0]))
         """
         from pyspark.mllib.regression import LabeledPoint
         if multiclass is not None:
@@ -123,6 +126,7 @@ class MLUtils(object):
         return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
 
     @staticmethod
+    @since("1.0.0")
     def saveAsLibSVMFile(data, dir):
         """
         Save labeled data in LIBSVM format.
@@ -147,6 +151,7 @@ class MLUtils(object):
         lines.saveAsTextFile(dir)
 
     @staticmethod
+    @since("1.1.0")
     def loadLabeledPoints(sc, path, minPartitions=None):
         """
         Load labeled points saved using RDD.saveAsTextFile.
@@ -171,10 +176,36 @@ class MLUtils(object):
         minPartitions = minPartitions or min(sc.defaultParallelism, 2)
         return callMLlibFunc("loadLabeledPoints", sc, path, minPartitions)
 
+    @staticmethod
+    @since("1.5.0")
+    def appendBias(data):
+        """
+        Returns a new vector with `1.0` (bias) appended to
+        the end of the input vector.
+        """
+        vec = _convert_to_vector(data)
+        if isinstance(vec, SparseVector):
+            newIndices = np.append(vec.indices, len(vec))
+            newValues = np.append(vec.values, 1.0)
+            return SparseVector(len(vec) + 1, newIndices, newValues)
+        else:
+            return _convert_to_vector(np.append(vec.toArray(), 1.0))
+
+    @staticmethod
+    @since("1.5.0")
+    def loadVectors(sc, path):
+        """
+        Loads vectors saved using `RDD[Vector].saveAsTextFile`
+        with the default number of partitions.
+        """
+        return callMLlibFunc("loadVectors", sc, path)
+
 
 class Saveable(object):
     """
     Mixin for models and transformers which may be saved as files.
+
+    .. versionadded:: 1.3.0
     """
 
     def save(self, sc, path):
@@ -200,15 +231,25 @@ class JavaSaveable(Saveable):
     """
     Mixin for models that provide save() through their Scala
     implementation.
+
+    .. versionadded:: 1.3.0
     """
 
+    @since("1.3.0")
     def save(self, sc, path):
+        """Save this model to the given path."""
+        if not isinstance(sc, SparkContext):
+            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         self._java_model.save(sc._jsc.sc(), path)
 
 
 class Loader(object):
     """
     Mixin for classes which can load saved models from files.
+
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -230,6 +271,8 @@ class JavaLoader(Loader):
     """
     Mixin for classes which can load saved models using its Scala
     implementation.
+
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -254,9 +297,52 @@ class JavaLoader(Loader):
         return java_obj.load(sc._jsc.sc(), path)
 
     @classmethod
+    @since("1.3.0")
     def load(cls, sc, path):
+        """Load a model from the given path."""
         java_model = cls._load_java(sc, path)
         return cls(java_model)
+
+
+class LinearDataGenerator(object):
+    """Utils for generating linear data.
+
+    .. versionadded:: 1.5.0
+    """
+
+    @staticmethod
+    @since("1.5.0")
+    def generateLinearInput(intercept, weights, xMean, xVariance,
+                            nPoints, seed, eps):
+        """
+        :param: intercept bias factor, the term c in X'w + c
+        :param: weights   feature vector, the term w in X'w + c
+        :param: xMean     Point around which the data X is centered.
+        :param: xVariance Variance of the given data
+        :param: nPoints   Number of points to be generated
+        :param: seed      Random Seed
+        :param: eps       Used to scale the noise. If eps is set high,
+                          the amount of gaussian noise added is more.
+
+        Returns a list of LabeledPoints of length nPoints
+        """
+        weights = [float(weight) for weight in weights]
+        xMean = [float(mean) for mean in xMean]
+        xVariance = [float(var) for var in xVariance]
+        return list(callMLlibFunc(
+            "generateLinearInputWrapper", float(intercept), weights, xMean,
+            xVariance, int(nPoints), int(seed), float(eps)))
+
+    @staticmethod
+    @since("1.5.0")
+    def generateLinearRDD(sc, nexamples, nfeatures, eps,
+                          nParts=2, intercept=0.0):
+        """
+        Generate a RDD of LabeledPoints.
+        """
+        return callMLlibFunc(
+            "generateLinearRDDWrapper", sc, int(nexamples), int(nfeatures),
+            float(eps), int(nParts), float(intercept))
 
 
 def _test():

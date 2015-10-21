@@ -27,7 +27,7 @@ object RawTextHelper {
    * Splits lines and counts the words.
    */
   def splitAndCountPartitions(iter: Iterator[String]): Iterator[(String, Long)] = {
-    val map = new OpenHashMap[String,Long]
+    val map = new OpenHashMap[String, Long]
     var i = 0
     var j = 0
     while (iter.hasNext) {
@@ -98,7 +98,7 @@ object RawTextHelper {
    * before real workload starts.
    */
   def warmUp(sc: SparkContext) {
-    for(i <- 0 to 1) {
+    for (i <- 0 to 1) {
       sc.parallelize(1 to 200000, 1000)
         .map(_ % 1331).map(_.toString)
         .mapPartitions(splitAndCountPartitions).reduceByKey(_ + _, 10)

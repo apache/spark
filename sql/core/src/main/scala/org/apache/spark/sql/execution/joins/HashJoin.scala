@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 
 trait HashJoin {
@@ -43,35 +44,65 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  @transient protected lazy val buildSideKeyGenerator: Projection =
-    newProjection(buildKeys, buildPlan.output)
+  protected[this] def isUnsafeMode: Boolean = {
+    (self.codegenEnabled && self.unsafeEnabled
+      && UnsafeProjection.canSupport(buildKeys)
+      && UnsafeProjection.canSupport(self.schema))
+  }
 
-  @transient protected lazy val streamSideKeyGenerator: () => MutableProjection =
-    newMutableProjection(streamedKeys, streamedPlan.output)
+  override def outputsUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessSafeRows: Boolean = !isUnsafeMode
 
-  protected def hashJoin(streamIter: Iterator[Row], hashedRelation: HashedRelation): Iterator[Row] =
+  protected def buildSideKeyGenerator: Projection =
+    if (isUnsafeMode) {
+      UnsafeProjection.create(buildKeys, buildPlan.output)
+    } else {
+      newMutableProjection(buildKeys, buildPlan.output)()
+    }
+
+  protected def streamSideKeyGenerator: Projection =
+    if (isUnsafeMode) {
+      UnsafeProjection.create(streamedKeys, streamedPlan.output)
+    } else {
+      newMutableProjection(streamedKeys, streamedPlan.output)()
+    }
+
+  protected def hashJoin(
+      streamIter: Iterator[InternalRow],
+      numStreamRows: LongSQLMetric,
+      hashedRelation: HashedRelation,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] =
   {
-    new Iterator[Row] {
-      private[this] var currentStreamedRow: Row = _
-      private[this] var currentHashMatches: CompactBuffer[Row] = _
+    new Iterator[InternalRow] {
+      private[this] var currentStreamedRow: InternalRow = _
+      private[this] var currentHashMatches: Seq[InternalRow] = _
       private[this] var currentMatchPosition: Int = -1
 
       // Mutable per row objects.
-      private[this] val joinRow = new JoinedRow2
+      private[this] val joinRow = new JoinedRow
+      private[this] val resultProjection: (InternalRow) => InternalRow = {
+        if (isUnsafeMode) {
+          UnsafeProjection.create(self.schema)
+        } else {
+          identity[InternalRow]
+        }
+      }
 
-      private[this] val joinKeys = streamSideKeyGenerator()
+      private[this] val joinKeys = streamSideKeyGenerator
 
       override final def hasNext: Boolean =
         (currentMatchPosition != -1 && currentMatchPosition < currentHashMatches.size) ||
           (streamIter.hasNext && fetchNext())
 
-      override final def next(): Row = {
+      override final def next(): InternalRow = {
         val ret = buildSide match {
           case BuildRight => joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
           case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
         }
         currentMatchPosition += 1
-        ret
+        numOutputRows += 1
+        resultProjection(ret)
       }
 
       /**
@@ -86,8 +117,10 @@ trait HashJoin {
 
         while (currentHashMatches == null && streamIter.hasNext) {
           currentStreamedRow = streamIter.next()
-          if (!joinKeys(currentStreamedRow).anyNull) {
-            currentHashMatches = hashedRelation.get(joinKeys.currentValue)
+          numStreamRows += 1
+          val key = joinKeys(currentStreamedRow)
+          if (!key.anyNull) {
+            currentHashMatches = hashedRelation.get(key)
           }
         }
 

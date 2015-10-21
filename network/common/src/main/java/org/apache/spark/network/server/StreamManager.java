@@ -17,7 +17,10 @@
 
 package org.apache.spark.network.server;
 
+import io.netty.channel.Channel;
+
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.TransportClient;
 
 /**
  * The StreamManager is used to fetch individual chunks from a stream. This is used in
@@ -44,9 +47,26 @@ public abstract class StreamManager {
   public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
 
   /**
-   * Indicates that the TCP connection that was tied to the given stream has been terminated. After
-   * this occurs, we are guaranteed not to read from the stream again, so any state can be cleaned
-   * up.
+   * Associates a stream with a single client connection, which is guaranteed to be the only reader
+   * of the stream. The getChunk() method will be called serially on this connection and once the
+   * connection is closed, the stream will never be used again, enabling cleanup.
+   *
+   * This must be called before the first getChunk() on the stream, but it may be invoked multiple
+   * times with the same channel and stream id.
    */
-  public void connectionTerminated(long streamId) { }
+  public void registerChannel(Channel channel, long streamId) { }
+
+  /**
+   * Indicates that the given channel has been terminated. After this occurs, we are guaranteed not
+   * to read from the associated streams again, so any state can be cleaned up.
+   */
+  public void connectionTerminated(Channel channel) { }
+
+  /**
+   * Verify that the client is authorized to read from the given stream.
+   *
+   * @throws SecurityException If client is not authorized.
+   */
+  public void checkAuthorization(TransportClient client, long streamId) { }
+
 }

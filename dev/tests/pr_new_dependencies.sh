@@ -39,12 +39,12 @@ CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
 # First switch over to the master branch
-git checkout master &>/dev/null
+git checkout -f master
 # Find and copy all pom.xml files into a *.gate file that we can check
 # against through various `git` changes
 find -name "pom.xml" -exec cp {} {}.gate \;
 # Switch back to the current PR
-git checkout "${current_pr_head}" &>/dev/null
+git checkout -f "${current_pr_head}"
 
 # Check if any *.pom files from the current branch are different from the master
 difference_q=""
@@ -71,7 +71,7 @@ else
     sort > ${CURR_CP_FILE}
 
   # Checkout the master branch to compare against
-  git checkout master &>/dev/null
+  git checkout -f master
 
   ${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null | \
     sed -n -e '/Building Spark Project Assembly/,$p' | \
@@ -84,7 +84,7 @@ else
     rev | \
     sort > ${MASTER_CP_FILE}
 
-  DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
+  DIFF_RESULTS="`diff ${CURR_CP_FILE} ${MASTER_CP_FILE}`"
 
   if [ -z "${DIFF_RESULTS}" ]; then
     echo " * This patch does not change any dependencies."

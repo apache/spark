@@ -20,28 +20,27 @@ package org.apache.spark.sql.columnar.compression
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
-import org.apache.spark.sql.types.NativeType
+import org.apache.spark.sql.types.AtomicType
 
 /**
  * A stackable trait that builds optionally compressed byte buffer for a column.  Memory layout of
  * the final byte buffer is:
  * {{{
- *    .--------------------------- Column type ID (4 bytes)
- *    |   .----------------------- Null count N (4 bytes)
- *    |   |   .------------------- Null positions (4 x N bytes, empty if null count is zero)
- *    |   |   |     .------------- Compression scheme ID (4 bytes)
- *    |   |   |     |   .--------- Compressed non-null elements
- *    V   V   V     V   V
- *   +---+---+-----+---+---------+
- *   |   |   | ... |   | ... ... |
- *   +---+---+-----+---+---------+
- *    \-----------/ \-----------/
- *       header         body
+ *    .----------------------- Null count N (4 bytes)
+ *    |   .------------------- Null positions (4 x N bytes, empty if null count is zero)
+ *    |   |     .------------- Compression scheme ID (4 bytes)
+ *    |   |     |   .--------- Compressed non-null elements
+ *    V   V     V   V
+ *   +---+-----+---+---------+
+ *   |   | ... |   | ... ... |
+ *   +---+-----+---+---------+
+ *    \-------/ \-----------/
+ *     header         body
  * }}}
  */
-private[sql] trait CompressibleColumnBuilder[T <: NativeType]
+private[sql] trait CompressibleColumnBuilder[T <: AtomicType]
   extends ColumnBuilder with Logging {
 
   this: NativeColumnBuilder[T] with WithCompressionSchemes =>
@@ -66,7 +65,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     encoder.compressionRatio < 0.8
   }
 
-  private def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
+  private def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
     var i = 0
     while (i < compressionEncoders.length) {
       compressionEncoders(i).gatherCompressibilityStats(row, ordinal)
@@ -74,7 +73,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     }
   }
 
-  abstract override def appendFrom(row: Row, ordinal: Int): Unit = {
+  abstract override def appendFrom(row: InternalRow, ordinal: Int): Unit = {
     super.appendFrom(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       gatherCompressibilityStats(row, ordinal)
@@ -83,14 +82,13 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
   override def build(): ByteBuffer = {
     val nonNullBuffer = buildNonNulls()
-    val typeId = nonNullBuffer.getInt()
     val encoder: Encoder[T] = {
       val candidate = compressionEncoders.minBy(_.compressionRatio)
       if (isWorthCompressing(candidate)) candidate else PassThrough.encoder(columnType)
     }
 
-    // Header = column type ID + null count + null positions
-    val headerSize = 4 + 4 + nulls.limit()
+    // Header = null count + null positions
+    val headerSize = 4 + nulls.limit()
     val compressedSize = if (encoder.compressedSize == 0) {
       nonNullBuffer.remaining()
     } else {
@@ -102,7 +100,6 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
       .allocate(headerSize + 4 + compressedSize)
       .order(ByteOrder.nativeOrder)
       // Write the header
-      .putInt(typeId)
       .putInt(nullCount)
       .put(nulls)
 

@@ -24,11 +24,10 @@ import java.io.FileOutputStream
 import scala.collection.immutable.IndexedSeq
 
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.Text
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 import org.apache.hadoop.io.compress.{DefaultCodec, CompressionCodecFactory, GzipCodec}
 
@@ -37,7 +36,7 @@ import org.apache.hadoop.io.compress.{DefaultCodec, CompressionCodecFactory, Gzi
  * [[org.apache.spark.input.WholeTextFileRecordReader WholeTextFileRecordReader]]. A temporary
  * directory is created as fake input. Temporal storage would be deleted in the end.
  */
-class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
+class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   private var sc: SparkContext = _
   private var factory: CompressionCodecFactory = _
 
@@ -86,7 +85,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
    */
   test("Correctness of WholeTextFileRecordReader.") {
     val dir = Utils.createTempDir()
-    println(s"Local disk address is ${dir.toString}.")
+    logInfo(s"Local disk address is ${dir.toString}.")
 
     WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
       createNativeFile(dir, filename, contents, false)
@@ -110,7 +109,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
 
   test("Correctness of WholeTextFileRecordReader with GzipCodec.") {
     val dir = Utils.createTempDir()
-    println(s"Local disk address is ${dir.toString}.")
+    logInfo(s"Local disk address is ${dir.toString}.")
 
     WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
       createNativeFile(dir, filename, contents, true)

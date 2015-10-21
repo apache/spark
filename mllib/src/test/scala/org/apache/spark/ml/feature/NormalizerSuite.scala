@@ -17,16 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
-private case class DataSet(features: Vector)
 
-class NormalizerSuite extends FunSuite with MLlibTestSparkContext {
+class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var data: Array[Vector] = _
   @transient var dataFrame: DataFrame = _
@@ -63,7 +61,7 @@ class NormalizerSuite extends FunSuite with MLlibTestSparkContext {
     )
 
     val sqlContext = new SQLContext(sc)
-    dataFrame = sqlContext.createDataFrame(sc.parallelize(data, 2).map(DataSet))
+    dataFrame = sqlContext.createDataFrame(sc.parallelize(data, 2).map(NormalizerSuite.FeatureData))
     normalizer = new Normalizer()
       .setInputCol("features")
       .setOutputCol("normalized_features")
@@ -106,4 +104,8 @@ class NormalizerSuite extends FunSuite with MLlibTestSparkContext {
 
     assertValues(result, l1Normalized)
   }
+}
+
+private object NormalizerSuite {
+  case class FeatureData(features: Vector)
 }

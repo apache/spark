@@ -16,10 +16,15 @@
 #
 
 import os
-import cPickle
+import sys
 import gc
 from tempfile import NamedTemporaryFile
 
+if sys.version < '3':
+    import cPickle as pickle
+else:
+    import pickle
+    unicode = str
 
 __all__ = ['Broadcast']
 
@@ -70,33 +75,19 @@ class Broadcast(object):
             self._path = path
 
     def dump(self, value, f):
-        if isinstance(value, basestring):
-            if isinstance(value, unicode):
-                f.write('U')
-                value = value.encode('utf8')
-            else:
-                f.write('S')
-            f.write(value)
-        else:
-            f.write('P')
-            cPickle.dump(value, f, 2)
+        pickle.dump(value, f, 2)
         f.close()
         return f.name
 
     def load(self, path):
         with open(path, 'rb', 1 << 20) as f:
-            flag = f.read(1)
-            data = f.read()
-            if flag == 'P':
-                # cPickle.loads() may create lots of objects, disable GC
-                # temporary for better performance
-                gc.disable()
-                try:
-                    return cPickle.loads(data)
-                finally:
-                    gc.enable()
-            else:
-                return data.decode('utf8') if flag == 'U' else data
+            # pickle.load() may create lots of objects, disable GC
+            # temporary for better performance
+            gc.disable()
+            try:
+                return pickle.load(f)
+            finally:
+                gc.enable()
 
     @property
     def value(self):
@@ -124,4 +115,6 @@ class Broadcast(object):
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

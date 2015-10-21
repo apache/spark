@@ -20,8 +20,8 @@ package org.apache.spark.network.client;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,13 +50,18 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
+  /** Records the time (in system nanoseconds) that the last fetch or RPC request was sent. */
+  private final AtomicLong timeOfLastRequestNs;
+
   public TransportResponseHandler(Channel channel) {
     this.channel = channel;
     this.outstandingFetches = new ConcurrentHashMap<StreamChunkId, ChunkReceivedCallback>();
     this.outstandingRpcs = new ConcurrentHashMap<Long, RpcResponseCallback>();
+    this.timeOfLastRequestNs = new AtomicLong(0);
   }
 
   public void addFetchRequest(StreamChunkId streamChunkId, ChunkReceivedCallback callback) {
+    timeOfLastRequestNs.set(System.nanoTime());
     outstandingFetches.put(streamChunkId, callback);
   }
 
@@ -65,6 +70,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   public void addRpcRequest(long requestId, RpcResponseCallback callback) {
+    timeOfLastRequestNs.set(System.nanoTime());
     outstandingRpcs.put(requestId, callback);
   }
 
@@ -161,8 +167,12 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   /** Returns total number of outstanding requests (fetch requests + rpcs) */
-  @VisibleForTesting
   public int numOutstandingRequests() {
     return outstandingFetches.size() + outstandingRpcs.size();
+  }
+
+  /** Returns the time in nanoseconds of when the last request was sent out. */
+  public long getTimeOfLastRequestNs() {
+    return timeOfLastRequestNs.get();
   }
 }

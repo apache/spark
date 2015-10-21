@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
-class SerializationSuite extends FunSuite {
+class SerializationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("[SPARK-5235] SQLContext should be serializable") {
-    val sqlContext = new SQLContext(TestSQLContext.sparkContext)
-    new JavaSerializer(new SparkConf()).newInstance().serialize(sqlContext)
+    val _sqlContext = new SQLContext(sparkContext)
+    new JavaSerializer(new SparkConf()).newInstance().serialize(_sqlContext)
   }
 }

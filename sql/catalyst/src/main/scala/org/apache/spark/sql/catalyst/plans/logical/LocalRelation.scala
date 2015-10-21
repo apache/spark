@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.types.{DataTypeConversions, StructType, StructField}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, analysis}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
   def apply(output: Attribute*): LocalRelation = new LocalRelation(output)
@@ -29,13 +29,20 @@ object LocalRelation {
     new LocalRelation(StructType(output1 +: output).toAttributes)
   }
 
+  def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
+    val schema = StructType.fromAttributes(output)
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
+  }
+
   def fromProduct(output: Seq[Attribute], data: Seq[Product]): LocalRelation = {
     val schema = StructType.fromAttributes(output)
-    LocalRelation(output, data.map(row => DataTypeConversions.productToRow(row, schema)))
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
   }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[Row] = Nil)
+case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
   extends LeafNode with analysis.MultiInstanceRelation {
 
   /**

@@ -17,19 +17,21 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData._
 
-class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
-  val originalColumnBatchSize = conf.columnBatchSize
-  val originalInMemoryPartitionPruning = conf.inMemoryPartitionPruning
+class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext {
+  import testImplicits._
+
+  private lazy val originalColumnBatchSize = sqlContext.conf.columnBatchSize
+  private lazy val originalInMemoryPartitionPruning = sqlContext.conf.inMemoryPartitionPruning
 
   override protected def beforeAll(): Unit = {
+    super.beforeAll()
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
-    setConf(SQLConf.COLUMN_BATCH_SIZE, "10")
+    sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, 10)
 
     val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
@@ -38,20 +40,20 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
     pruningData.registerTempTable("pruningData")
 
     // Enable in-memory partition pruning
-    setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
+    sqlContext.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
+    // Enable in-memory table scan accumulators
+    sqlContext.setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
+    sqlContext.cacheTable("pruningData")
   }
 
   override protected def afterAll(): Unit = {
-    setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
-    setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
-  }
-
-  before {
-    cacheTable("pruningData")
-  }
-
-  after {
-    uncacheTable("pruningData")
+    try {
+      sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+      sqlContext.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      sqlContext.uncacheTable("pruningData")
+    } finally {
+      super.afterAll()
+    }
   }
 
   // Comparisons

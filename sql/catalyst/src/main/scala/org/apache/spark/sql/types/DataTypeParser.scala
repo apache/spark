@@ -40,15 +40,15 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
   protected lazy val primitiveType: Parser[DataType] =
     "(?i)string".r ^^^ StringType |
     "(?i)float".r ^^^ FloatType |
-    "(?i)int".r ^^^ IntegerType |
+    "(?i)(?:int|integer)".r ^^^ IntegerType |
     "(?i)tinyint".r ^^^ ByteType |
     "(?i)smallint".r ^^^ ShortType |
     "(?i)double".r ^^^ DoubleType |
-    "(?i)bigint".r ^^^ LongType |
+    "(?i)(?:bigint|long)".r ^^^ LongType |
     "(?i)binary".r ^^^ BinaryType |
     "(?i)boolean".r ^^^ BooleanType |
     fixedDecimalType |
-    "(?i)decimal".r ^^^ DecimalType.Unlimited |
+    "(?i)decimal".r ^^^ DecimalType.USER_DEFAULT |
     "(?i)date".r ^^^ DateType |
     "(?i)timestamp".r ^^^ TimestampType |
     varchar
@@ -108,7 +108,7 @@ private[sql] object DataTypeParser {
     override val lexical = new SqlLexical
   }
 
-  def apply(dataTypeString: String): DataType = dataTypeParser.toDataType(dataTypeString)
+  def parse(dataTypeString: String): DataType = dataTypeParser.toDataType(dataTypeString)
 }
 
 /** The exception thrown from the [[DataTypeParser]]. */

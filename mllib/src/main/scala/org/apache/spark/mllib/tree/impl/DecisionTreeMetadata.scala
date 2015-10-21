@@ -37,7 +37,7 @@ import org.apache.spark.rdd.RDD
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  * @param numBins  Number of bins for each feature.
  */
-private[tree] class DecisionTreeMetadata(
+private[spark] class DecisionTreeMetadata(
     val numFeatures: Int,
     val numExamples: Long,
     val numClasses: Int,
@@ -94,7 +94,7 @@ private[tree] class DecisionTreeMetadata(
 
 }
 
-private[tree] object DecisionTreeMetadata extends Logging {
+private[spark] object DecisionTreeMetadata extends Logging {
 
   /**
    * Construct a [[DecisionTreeMetadata]] instance for this dataset and parameters.
@@ -107,7 +107,10 @@ private[tree] object DecisionTreeMetadata extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String): DecisionTreeMetadata = {
 
-    val numFeatures = input.take(1)(0).features.size
+    val numFeatures = input.map(_.features.size).take(1).headOption.getOrElse {
+      throw new IllegalArgumentException(s"DecisionTree requires size of input RDD > 0, " +
+        s"but was given by empty one.")
+    }
     val numExamples = input.count()
     val numClasses = strategy.algo match {
       case Classification => strategy.numClasses
@@ -125,9 +128,13 @@ private[tree] object DecisionTreeMetadata extends Logging {
     // based on the number of training examples.
     if (strategy.categoricalFeaturesInfo.nonEmpty) {
       val maxCategoriesPerFeature = strategy.categoricalFeaturesInfo.values.max
+      val maxCategory =
+        strategy.categoricalFeaturesInfo.find(_._2 == maxCategoriesPerFeature).get._1
       require(maxCategoriesPerFeature <= maxPossibleBins,
-        s"DecisionTree requires maxBins (= $maxPossibleBins) >= max categories " +
-          s"in categorical features (= $maxCategoriesPerFeature)")
+        s"DecisionTree requires maxBins (= $maxPossibleBins) to be at least as large as the " +
+        s"number of values in each categorical feature, but categorical feature $maxCategory " +
+        s"has $maxCategoriesPerFeature values. Considering remove this and other categorical " +
+        "features with a large number of values, or add more training examples.")
     }
 
     val unorderedFeatures = new mutable.HashSet[Int]()
@@ -137,21 +144,28 @@ private[tree] object DecisionTreeMetadata extends Logging {
       val maxCategoriesForUnorderedFeature =
         ((math.log(maxPossibleBins / 2 + 1) / math.log(2.0)) + 1).floor.toInt
       strategy.categoricalFeaturesInfo.foreach { case (featureIndex, numCategories) =>
-        // Decide if some categorical features should be treated as unordered features,
-        //  which require 2 * ((1 << numCategories - 1) - 1) bins.
-        // We do this check with log values to prevent overflows in case numCategories is large.
-        // The next check is equivalent to: 2 * ((1 << numCategories - 1) - 1) <= maxBins
-        if (numCategories <= maxCategoriesForUnorderedFeature) {
-          unorderedFeatures.add(featureIndex)
-          numBins(featureIndex) = numUnorderedBins(numCategories)
-        } else {
-          numBins(featureIndex) = numCategories
+        // Hack: If a categorical feature has only 1 category, we treat it as continuous.
+        // TODO(SPARK-9957): Handle this properly by filtering out those features.
+        if (numCategories > 1) {
+          // Decide if some categorical features should be treated as unordered features,
+          //  which require 2 * ((1 << numCategories - 1) - 1) bins.
+          // We do this check with log values to prevent overflows in case numCategories is large.
+          // The next check is equivalent to: 2 * ((1 << numCategories - 1) - 1) <= maxBins
+          if (numCategories <= maxCategoriesForUnorderedFeature) {
+            unorderedFeatures.add(featureIndex)
+            numBins(featureIndex) = numUnorderedBins(numCategories)
+          } else {
+            numBins(featureIndex) = numCategories
+          }
         }
       }
     } else {
       // Binary classification or regression
       strategy.categoricalFeaturesInfo.foreach { case (featureIndex, numCategories) =>
-        numBins(featureIndex) = numCategories
+        // If a categorical feature has only 1 category, we treat it as continuous: SPARK-9957
+        if (numCategories > 1) {
+          numBins(featureIndex) = numCategories
+        }
       }
     }
 

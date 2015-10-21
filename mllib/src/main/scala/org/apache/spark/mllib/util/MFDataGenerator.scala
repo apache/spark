@@ -23,7 +23,7 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Since, DeveloperApi}
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
 
@@ -52,11 +52,15 @@ import org.apache.spark.rdd.RDD
  *   testSampFact   (Double) Percentage of training data to use as test data.
  */
 @DeveloperApi
+@Since("0.8.0")
 object MFDataGenerator {
+  @Since("0.8.0")
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       println("Usage: MFDataGenerator " +
         "<master> <outputDir> [m] [n] [rank] [trainSampFact] [noise] [sigma] [test] [testSampFact]")
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -82,8 +86,7 @@ object MFDataGenerator {
     BLAS.gemm(z, A, B, 1.0, fullData)
 
     val df = rank * (m + n - rank)
-    val sampSize = scala.math.min(scala.math.round(trainSampFact * df),
-      scala.math.round(.99 * m * n)).toInt
+    val sampSize = math.min(math.round(trainSampFact * df), math.round(.99 * m * n)).toInt
     val rand = new Random()
     val mn = m * n
     val shuffled = rand.shuffle((0 until mn).toList)
@@ -102,8 +105,8 @@ object MFDataGenerator {
 
     // optionally generate testing data
     if (test) {
-      val testSampSize = scala.math
-        .min(scala.math.round(sampSize * testSampFact),scala.math.round(mn - sampSize)).toInt
+      val testSampSize = math.min(
+        math.round(sampSize * testSampFact), math.round(mn - sampSize)).toInt
       val testOmega = shuffled.slice(sampSize, sampSize + testSampSize)
       val testOrdered = testOmega.sortWith(_ < _).toArray
       val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)

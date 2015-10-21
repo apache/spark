@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.4.0-SNAPSHOT</version>
+    <version>1.6.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -37,6 +37,23 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-network-yarn_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -86,6 +103,27 @@
     </dependency>
     <!-- End of shaded deps. -->
 
+    <!--
+      SPARK-10059: Explicitly add JSP dependencies for tests since the MiniYARN cluster needs them.
+    -->
+    <dependency>
+      <groupId>org.eclipse.jetty.orbit</groupId>
+      <artifactId>javax.servlet.jsp</artifactId>
+      <version>2.2.0.v201112011158</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.orbit</groupId>
+      <artifactId>javax.servlet.jsp.jstl</artifactId>
+      <version>1.2.0.v201105211821</version>
+      <scope>test</scope>
+    </dependency>
+
+     <!--
+    See SPARK-3710. hadoop-yarn-server-tests in Hadoop 2.2 fails to pull some needed
+    dependencies, so they need to be added manually for the tests to work.
+    -->
+
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-server-tests</artifactId>
@@ -94,61 +132,37 @@
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
-      <artifactId>mockito-all</artifactId>
+      <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.mortbay.jetty</groupId>
+      <artifactId>jetty</artifactId>
+      <version>6.1.26</version>
+      <exclusions>
+       <exclusion>
+        <groupId>org.mortbay.jetty</groupId>
+         <artifactId>servlet-api</artifactId>
+       </exclusion>
+      </exclusions>
+      <scope>test</scope>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey</groupId>
+       <artifactId>jersey-core</artifactId>
+       <scope>test</scope>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey</groupId>
+       <artifactId>jersey-json</artifactId>
+       <scope>test</scope>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey</groupId>
+       <artifactId>jersey-server</artifactId>
+       <scope>test</scope>
+     </dependency>
   </dependencies>
-
-  <!--
-    See SPARK-3710. hadoop-yarn-server-tests in Hadoop 2.2 fails to pull some needed
-    dependencies, so they need to be added manually for the tests to work.
-  -->
-  <profiles>
-    <profile>
-      <id>hadoop-2.2</id>
-      <properties>
-        <jersey.version>1.9</jersey.version>
-      </properties>
-      <dependencies>
-        <dependency>
-          <groupId>org.mortbay.jetty</groupId>
-          <artifactId>jetty</artifactId>
-          <version>6.1.26</version>
-          <exclusions>
-            <exclusion>
-              <groupId>org.mortbay.jetty</groupId>
-              <artifactId>servlet-api</artifactId>
-            </exclusion>
-          </exclusions>
-          <scope>test</scope>
-        </dependency>
-        <dependency>
-          <groupId>com.sun.jersey</groupId>
-          <artifactId>jersey-core</artifactId>
-          <version>${jersey.version}</version>
-          <scope>test</scope>
-        </dependency>
-        <dependency>
-          <groupId>com.sun.jersey</groupId>
-          <artifactId>jersey-json</artifactId>
-          <version>${jersey.version}</version>
-          <scope>test</scope>
-          <exclusions>
-            <exclusion>
-              <groupId>stax</groupId>
-              <artifactId>stax-api</artifactId>
-            </exclusion>
-          </exclusions>
-        </dependency>
-        <dependency>
-          <groupId>com.sun.jersey</groupId>
-          <artifactId>jersey-server</artifactId>
-          <version>${jersey.version}</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
