@@ -30,6 +30,7 @@ import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
 import org.apache.spark.ui.jobs.{JobsTab, JobProgressListener, StagesTab}
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
+import org.apache.spark.ui.sql.{SQLTab, SQLListener}
 
 /**
  * Top level user interface for a Spark application.
@@ -150,7 +151,12 @@ private[spark] object SparkUI {
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    create(None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
+    val sqlListener = new SQLListener(conf)
+    listenerBus.addListener(sqlListener)
+    val sparkUI = create(
+      None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
+    new SQLTab(sqlListener, sparkUI)
+    sparkUI
   }
 
   /**

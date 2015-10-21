@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SqlMetricInfo, SparkPlanInfo}
+import org.apache.spark.ui.sql.{SqlMetricInfo, SparkPlanInfo}
 
 object SparkPlanInfo {
 

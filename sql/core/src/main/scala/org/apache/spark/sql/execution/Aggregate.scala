@@ -18,13 +18,12 @@
 package org.apache.spark.sql.execution
 
 import java.util.HashMap
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.ui.sql.SQLMetrics
 
 /**
  * Groups input data by `groupingExpressions` and computes the `aggregateExpressions` for each

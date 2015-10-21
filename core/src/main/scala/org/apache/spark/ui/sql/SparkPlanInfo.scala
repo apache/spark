@@ -15,14 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.ui.sql
+
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Stores information about a SQL Metric.
+ * Stores information about a SQL SparkPlan.
  */
-class SqlMetricInfo(
-    val name: String,
-    val accumulatorId: Long,
-    val metricParam: String) {
+@DeveloperApi
+class SparkPlanInfo(
+    val nodeName: String,
+    val simpleString: String,
+    val children: Seq[SparkPlanInfo],
+    val metrics: Seq[SqlMetricInfo]
+) {
 }

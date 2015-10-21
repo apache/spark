@@ -21,11 +21,11 @@ import java.util.Properties
 
 import org.apache.spark.{SparkException, SparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.sql.execution.metric.LongSQLMetricValue
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.ui.sql.{LongSQLMetricValue, SparkPlanGraph, SQLListener}
 
 class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._

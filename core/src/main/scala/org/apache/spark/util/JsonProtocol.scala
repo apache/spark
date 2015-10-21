@@ -20,7 +20,7 @@ package org.apache.spark.util
 import java.util.{Properties, UUID}
 
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.sql.{SqlMetricInfo, SparkPlanInfo}
+import org.apache.spark.ui.sql.{SqlMetricInfo, SparkPlanInfo}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map

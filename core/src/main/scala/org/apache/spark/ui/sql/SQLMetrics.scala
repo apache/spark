@@ -15,10 +15,10 @@
 * limitations under the License.
 */
 
-package org.apache.spark.sql.execution.metric
+package org.apache.spark.ui.sql
 
+import org.apache.spark.{SparkContext, AccumulableParam, Accumulable}
 import org.apache.spark.util.Utils
-import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
 
 /**
  * Create a layer for specialized metric. We cannot add `@specialized` to
@@ -26,7 +26,7 @@ import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
  *
  * An implementation of SQLMetric should override `+=` and `add` to avoid boxing.
  */
-private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
+private[spark] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String, val param: SQLMetricParam[R, T])
   extends Accumulable[R, T](param.zero, param, Some(name), true) {
 
@@ -39,7 +39,7 @@ private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
  * Create a layer for specialized metric. We cannot add `@specialized` to
  * `Accumulable/AccumulableParam` because it will break Java source compatibility.
  */
-private[sql] trait SQLMetricParam[R <: SQLMetricValue[T], T] extends AccumulableParam[R, T] {
+private[spark] trait SQLMetricParam[R <: SQLMetricValue[T], T] extends AccumulableParam[R, T] {
 
   /**
    * A function that defines how we aggregate the final accumulator results among all tasks,
@@ -54,7 +54,7 @@ private[sql] trait SQLMetricParam[R <: SQLMetricValue[T], T] extends Accumulable
  * Create a layer for specialized metric. We cannot add `@specialized` to
  * `Accumulable/AccumulableParam` because it will break Java source compatibility.
  */
-private[sql] trait SQLMetricValue[T] extends Serializable {
+private[spark] trait SQLMetricValue[T] extends Serializable {
 
   def value: T
 
@@ -64,7 +64,7 @@ private[sql] trait SQLMetricValue[T] extends Serializable {
 /**
  * A wrapper of Long to avoid boxing and unboxing when using Accumulator
  */
-private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetricValue[Long] {
+private[spark] class LongSQLMetricValue(private var _value : Long) extends SQLMetricValue[Long] {
 
   def add(incr: Long): LongSQLMetricValue = {
     _value += incr
@@ -79,7 +79,7 @@ private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetr
  * A specialized long Accumulable to avoid boxing and unboxing when using Accumulator's
  * `+=` and `add`.
  */
-private[sql] class LongSQLMetric private[metric](name: String, param: LongSQLMetricParam)
+private[spark] class LongSQLMetric(name: String, param: LongSQLMetricParam)
   extends SQLMetric[LongSQLMetricValue, Long](name, param) {
 
   override def +=(term: Long): Unit = {
@@ -91,7 +91,7 @@ private[sql] class LongSQLMetric private[metric](name: String, param: LongSQLMet
   }
 }
 
-private[sql] object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue, Long] {
+private[spark] object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue, Long] {
 
   val stringValue : Seq[Long] => String = _.sum.toString
 
@@ -105,7 +105,7 @@ private[sql] object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue
   override def zero: LongSQLMetricValue = new LongSQLMetricValue(0L)
 }
 
-private[sql] class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
+private[spark] class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
   extends SQLMetricParam[LongSQLMetricValue, Long] {
 
   override def addAccumulator(r: LongSQLMetricValue, t: Long): LongSQLMetricValue = r.add(t)
@@ -118,7 +118,7 @@ private[sql] class LongSQLMetricParam(val stringValue: Seq[Long] => String, init
   override def zero: LongSQLMetricValue = new LongSQLMetricValue(initialValue)
 }
 
-private[sql] object SQLMetrics {
+private[spark] object SQLMetrics {
 
   private def createLongMetric(
       sc: SparkContext,

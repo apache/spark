@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.sql.SparkPlanInfo
+import org.apache.spark.ui.sql.SparkPlanInfo
 
 import scala.collection.Map
 import scala.collection.mutable

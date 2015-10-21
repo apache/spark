@@ -15,18 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.ui.sql
 
 import javax.servlet.http.HttpServletRequest
-
-import scala.xml.{Node, Unparsed}
-
-import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
+import scala.xml.Node
+
+private[ui] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
   private val listener = parent.listener
 

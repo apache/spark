@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.ui.sql.LongSQLMetric
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.unsafe.KVIterator
@@ -26,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{UnsafeKVExternalSorter, UnsafeFixedWidthAggregationMap}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.sql.types.StructType
 
 /**

@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
-
-import scala.collection.mutable
+package org.apache.spark.ui.sql
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 
-private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
+import scala.collection.mutable
+
+private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
+
+  val EXECUTION_ID_KEY = "spark.sql.execution.id"
 
   private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
@@ -78,7 +78,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-    val executionIdString = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
+    val executionIdString = jobStart.properties.getProperty(EXECUTION_ID_KEY)
     if (executionIdString == null) {
       // This is not a job created by SQL
       return
