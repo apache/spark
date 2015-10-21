@@ -28,6 +28,9 @@ class HiveToDruidTransfer(BaseOperator):
     :param hadoop_dependency_coordinates: list of coordinates to squeeze
         int the ingest json
     :type hadoop_dependency_coordinates: list of str
+    :param intervals: list of time intervals that defines segments, this
+        is passed as is to the json object
+    :type intervals: list
     """
 
     template_fields = ('sql', 'intervals')
