@@ -42,7 +42,7 @@ object RRunner {
     val backendTimeout = sys.env.getOrElse("SPARKR_BACKEND_TIMEOUT", "120").toInt
     val rCommand = {
       var cmd = sys.props.getOrElse("spark.sparkr.r.command", "Rscript")
-      if (sys.props("spark.submit.deployMode") == "client") {
+      if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
         cmd = sys.props.getOrElse("spark.sparkr.r.driver.command", cmd)
       }
       cmd
