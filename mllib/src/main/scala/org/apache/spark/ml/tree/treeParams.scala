@@ -20,9 +20,11 @@ package org.apache.spark.ml.tree
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
+import org.apache.spark.sql.types.{DoubleType, DataType, StructType}
 
 /**
  * Parameters for Decision Tree-based algorithms.
@@ -254,6 +256,35 @@ private[ml] trait TreeRegressorParams extends Params {
 private[ml] object TreeRegressorParams {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
+}
+
+private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
+  with TreeRegressorParams with HasVarianceCol {
+
+  /** @group setParam */
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
+
+  /**
+   * Validates and transforms the input schema with the provided param map.
+   * @param schema input schema
+   * @param fitting whether this is in fitting
+   * @param featuresDataType SQL DataType for FeaturesType.
+   *                         E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
+   * @return output schema
+   */
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
+    if (fitting) {
+      SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    }
+    if (isDefined(varianceCol)) {
+      SchemaUtils.appendColumn(schema, $(varianceCol), DoubleType)
+    }
+    SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
+  }
 }
 
 /**

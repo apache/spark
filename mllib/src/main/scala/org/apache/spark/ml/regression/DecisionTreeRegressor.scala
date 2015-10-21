@@ -20,8 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.HasVarianceCol
-import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeRegressorParams}
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
@@ -42,7 +41,7 @@ import org.apache.spark.sql.functions._
 @Experimental
 final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
-  with DecisionTreeParams with TreeRegressorParams with HasVarianceCol {
+  with DecisionTreeRegressorParams {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtr"))
@@ -76,7 +75,7 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
   /** @group setParam */
-  def setVarianceCol(value: String): this.type = set(varianceCol, value)
+  override def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -118,13 +117,10 @@ final class DecisionTreeRegressionModel private[ml] (
     override val rootNode: Node,
     override val numFeatures: Int)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
-  with DecisionTreeModel with HasVarianceCol with Serializable {
+  with DecisionTreeModel with DecisionTreeRegressorParams with Serializable {
 
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
-
-  /** @group setParam */
-  def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   /**
    * Construct a decision tree regression model.
