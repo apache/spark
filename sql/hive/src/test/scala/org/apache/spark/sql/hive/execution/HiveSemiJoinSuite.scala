@@ -361,7 +361,7 @@ class SemiJoinBroadcastCodeGenTungsten extends HiveSemiJoinSuite {
 
 // TODO we should move this to module sql/core, however, the SQLParser doesn't support
 // in/exists clause right now.
-class SemiJoinSemanticCheckSuite extends HiveComparisonTest with BeforeAndAfter {
+class SubqueryPredicateSemanticCheckSuite extends HiveComparisonTest with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive._
 
   override def beforeAll() {
@@ -383,7 +383,7 @@ class SemiJoinSemanticCheckSuite extends HiveComparisonTest with BeforeAndAfter 
           |        )
           |order by key, value
           |LIMIT 5""".stripMargin)
-    }.getMessage.contains("Outer query expression should be only presented at the filter clause"))
+    }.getMessage.contains("Cannot resolve the projection"))
 
     assert(intercept[AnalysisException] {
       sql(
@@ -396,7 +396,7 @@ class SemiJoinSemanticCheckSuite extends HiveComparisonTest with BeforeAndAfter 
           |        )
           |order by key, value
           |LIMIT 5""".stripMargin)
-    }.getMessage.contains("Outer query expression should be only presented at the filter clause"))
+    }.getMessage.contains("Cannot resolve the projection"))
 
     assert(intercept[AnalysisException] {
       sql(
@@ -410,7 +410,7 @@ class SemiJoinSemanticCheckSuite extends HiveComparisonTest with BeforeAndAfter 
           |        )
           |order by key, value
           |LIMIT 5""".stripMargin)
-    }.getMessage.contains("Outer query expression should be only presented at the filter clause"))
+    }.getMessage.contains("Cannot resolve the projection"))
   }
 
   test("Expect only 1 projection in In Subquery Expression") {
@@ -425,7 +425,7 @@ class SemiJoinSemanticCheckSuite extends HiveComparisonTest with BeforeAndAfter 
           |        )
           |order by key, value
           |LIMIT 5""".stripMargin)
-    }.getMessage.contains("Expect only 1 projection in In Subquery Expression"))
+    }.getMessage.contains("Expect only 1 projection in In SubQuery Expression"))
   }
 
   test("Exist clause should be correlated") {
@@ -436,7 +436,7 @@ class SemiJoinSemanticCheckSuite extends HiveComparisonTest with BeforeAndAfter 
           |where EXISTS
           |(select max(s1.key) from src s1 group by s1.value having max(s1.key) > 3)
           |order by key, value LIMIT 5""".stripMargin)
-    }.getMessage.contains("Exist clause should be correlated"))
+    }.getMessage.contains("Exists/Not Exists operator SubQuery must be correlated"))
 
     assert(intercept[AnalysisException] {
       sql(
@@ -445,6 +445,6 @@ class SemiJoinSemanticCheckSuite extends HiveComparisonTest with BeforeAndAfter 
           |where NOT EXISTS
           |(select value from src where key > 3)
           |order by key, value LIMIT 5""".stripMargin)
-    }.getMessage.contains("Exist clause should be correlated"))
+    }.getMessage.contains("Exists/Not Exists operator SubQuery must be correlated"))
   }
 }

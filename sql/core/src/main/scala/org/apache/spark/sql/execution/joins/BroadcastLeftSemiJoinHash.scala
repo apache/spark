@@ -36,7 +36,7 @@ case class BroadcastLeftSemiJoinHash(
     left: SparkPlan,
     right: SparkPlan,
     condition: Option[Expression],
-    sj: LeftSemiOrAntiJoin) extends BinaryNode with HashSemiJoin {
+    sj: LeftSemiJoin) extends BinaryNode with HashSemiJoin {
   override private[sql] lazy val metrics = Map(
     "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
     "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),

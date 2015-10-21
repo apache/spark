@@ -48,9 +48,9 @@ case object RightOuter extends JoinType
 
 case object FullOuter extends JoinType
 
-trait LeftSemiOrAntiJoin extends JoinType
+trait LeftSemiJoin extends JoinType
 
-case object LeftSemi extends LeftSemiOrAntiJoin
+case object LeftSemi extends LeftSemiJoin
 
-case object LeftAnti extends LeftSemiOrAntiJoin
+case object LeftAnti extends LeftSemiJoin
 
