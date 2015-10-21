@@ -497,6 +497,19 @@ private[spark] class Client(
    */
   private def createConfArchive(): File = {
     val hadoopConfFiles = new HashMap[String, File]()
+
+    // Uploading $SPARK_CONF_DIR/log4j.properties file to the distributed cache to make sure that
+    // the executors will use the latest configurations instead of the default values. This is
+    // required when user changes log4j.properties directly to set the log configurations. If
+    // configuration file is provided through --files then executors will be taking configurations
+    // from --files instead of $SPARK_CONF_DIR/log4j.properties.
+    val log4jFileName = "log4j.properties"
+    Option(Utils.getContextOrSparkClassLoader.getResource(log4jFileName)).foreach { url =>
+      if (url.getProtocol == "file") {
+        hadoopConfFiles(log4jFileName) = new File(url.getPath)
+      }
+    }
+
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
@@ -1008,9 +1021,9 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           "pyspark.zip not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.9-src.zip")
         require(py4jFile.exists(),
-          "py4j-0.8.2.1-src.zip not found; cannot run pyspark application in YARN mode.")
+          "py4j-0.9-src.zip not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
   }
