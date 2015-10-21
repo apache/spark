@@ -1403,32 +1403,33 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
     withTempTable("t1") {
       Seq(1 -> "a").toDF("key", "value").registerTempTable("t1")
-
       withTable("t2", "t3") {
-        Seq(1 -> Array("a")).toDF("int", "array").write.format("json").saveAsTable("t2")
-        Seq((1, 2, 3)).toDF("i", "j", "k").write.format("json").saveAsTable("t3")
+        withTempDatabase { db =>
+          Seq(1 -> Array("a")).toDF("int", "array").write.format("json").saveAsTable(s"$db.t2")
+          Seq((1, 2, 3)).toDF("i", "j", "k").write.format("json").saveAsTable("t3")
 
-        val allTables = sql("select * from catalog_tables")
-          .filter('name.startsWith("t") && length('name) === 2)
-          .sort('name)
-        checkAnswer(allTables, Seq(
-          Row("t1", null, true),
-          Row("t2", "default", false),
-          Row("t3", "default", false)
-        ))
+          val allTables = sql("select * from catalog_tables")
+            .filter('name.startsWith("t") && length('name) === 2)
+            .sort('name)
+          checkAnswer(allTables, Seq(
+            Row("t1", null, true),
+            Row("t2", db, false),
+            Row("t3", "default", false)
+          ))
 
-        val allColumns = sql("select * from catalog_columns")
-          .filter('table.startsWith("t") && length('table) === 2)
-          .sort('name)
-        checkAnswer(allColumns, Seq(
-          Row("array", "t2", "default", "array<string>", true),
-          Row("i", "t3", "default", "int", true),
-          Row("int", "t2", "default", "int", true),
-          Row("j", "t3", "default", "int", true),
-          Row("k", "t3", "default", "int", true),
-          Row("key", "t1", null, "int", false),
-          Row("value", "t1", null, "string", true)
-        ))
+          val allColumns = sql("select * from catalog_columns")
+            .filter('table.startsWith("t") && length('table) === 2)
+            .sort('name)
+          checkAnswer(allColumns, Seq(
+            Row("array", "t2", db, "array<string>", true),
+            Row("i", "t3", "default", "int", true),
+            Row("int", "t2", db, "int", true),
+            Row("j", "t3", "default", "int", true),
+            Row("k", "t3", "default", "int", true),
+            Row("key", "t1", null, "int", false),
+            Row("value", "t1", null, "string", true)
+          ))
+        }
       }
     }
   }

@@ -209,7 +209,11 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    overrides.keySet().asScala.map(_ -> true).toSeq ++ super.getTables(databaseName)
+    if (databaseName.isEmpty) {
+      overrides.keySet().asScala.map(_ -> true).toSeq
+    } else {
+      Nil
+    } ++ super.getTables(databaseName)
   }
 
   override def registerTable(tableIdent: TableIdentifier, plan: LogicalPlan): Unit = {
@@ -249,15 +253,11 @@ trait MetaDataCatalog extends Catalog {
   }
 
   private def tablesMeta() = {
-    val databases = getDatabases().map(Option(_))
-    if (databases.isEmpty) {
-      getTables(None).map { case (name, isTemporary) => TableInfo(name, None, isTemporary) }
-    } else {
-      for {
-        db <- databases
-        (name, isTemporary) <- getTables(db)
-      } yield TableInfo(name, if (isTemporary) None else db, isTemporary)
-    }
+    val databases = None +: getDatabases().map(Option(_))
+    for {
+      db <- databases
+      (name, isTemporary) <- getTables(db)
+    } yield TableInfo(name, if (isTemporary) None else db, isTemporary)
   }
 
   private def columnsMeta() = {
