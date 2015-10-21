@@ -14,21 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.shuffle
 
-import java.io.{File, IOException}
+import java.io.File
 
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.Logging
 
 /**
- * Obtained inside a map task to write out records to the shuffle system.
+ * Ensures that on each executor, there are no conflicting writes to the same shuffle files.  It
+ * implements "first write wins", by atomically moving all shuffle files into their final location,
+ * only if the files did not already exist.
  */
-private[spark] abstract class ShuffleWriter[K, V] {
-  /** Write a sequence of records to this task's output */
-  @throws[IOException]
-  def write(records: Iterator[Product2[K, V]]): Seq[(File, File)]
+object ShuffleOutputCoordinator extends Logging {
 
-  /** Close this writer, passing along whether the map completed */
-  def stop(success: Boolean): Option[MapStatus]
+  def moveIfDestMissing(tmpToDest: Seq[(File, File)]): Boolean = synchronized {
+    val prevExists = tmpToDest.forall(_._2.exists)
+    if (!prevExists) {
+      tmpToDest.foreach { case (tmp, dest) =>
+        !tmp.renameTo(dest)
+      }
+      true
+    } else {
+      logInfo(s"shuffle output already exists, not overwriting.  Another task must have created" +
+        s" this shuffle outputs")
+      tmpToDest.foreach{ case (tmp, _) => tmp.delete()}
+      false
+    }
+  }
 }

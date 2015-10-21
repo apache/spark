@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.hash
 
+import java.io.File
+
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
@@ -49,7 +51,7 @@ private[spark] class HashShuffleWriter[K, V](
     writeMetrics)
 
   /** Write a bunch of records to this task's output */
-  override def write(records: Iterator[Product2[K, V]]): Unit = {
+  override def write(records: Iterator[Product2[K, V]]): Seq[(File, File)] = {
     val iter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         dep.aggregator.get.combineValuesByKey(records, context)
@@ -63,8 +65,9 @@ private[spark] class HashShuffleWriter[K, V](
 
     for (elem <- iter) {
       val bucketId = dep.partitioner.getPartition(elem._1)
-      shuffle.writers(bucketId).write(elem._1, elem._2)
+      shuffle.writers(bucketId)._1.write(elem._1, elem._2)
     }
+    shuffle.writers.map { case (writer, destFile) => writer.file -> destFile}
   }
 
   /** Close this writer, passing along whether the map completed */
@@ -102,7 +105,7 @@ private[spark] class HashShuffleWriter[K, V](
 
   private def commitWritesAndBuildStatus(): MapStatus = {
     // Commit the writes. Get the size of each bucket block (total block size).
-    val sizes: Array[Long] = shuffle.writers.map { writer: DiskBlockObjectWriter =>
+    val sizes: Array[Long] = shuffle.writers.map { case (writer: DiskBlockObjectWriter, _) =>
       writer.commitAndClose()
       writer.fileSegment().length
     }
@@ -112,7 +115,7 @@ private[spark] class HashShuffleWriter[K, V](
   private def revertWrites(): Unit = {
     if (shuffle != null && shuffle.writers != null) {
       for (writer <- shuffle.writers) {
-        writer.revertPartialWritesAndClose()
+        writer._1.revertPartialWritesAndClose()
       }
     }
   }

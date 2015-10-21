@@ -17,11 +17,14 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.File
+
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
-import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.{ShuffleOutputCoordinator, IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
+import org.apache.spark.storage.{ShuffleIndexBlockId, ShuffleBlockId}
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
@@ -48,7 +51,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   context.taskMetrics.shuffleWriteMetrics = Some(writeMetrics)
 
   /** Write a bunch of records to this task's output */
-  override def write(records: Iterator[Product2[K, V]]): Unit = {
+  override def write(records: Iterator[Product2[K, V]]): Seq[(File, File)] = {
     sorter = if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
@@ -65,12 +68,19 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val (_, tmpDataFile) = blockManager.diskBlockManager.createTempShuffleBlock()
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
-    val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
-    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
+    val partitionLengths = sorter.writePartitionedFile(blockId, context, tmpDataFile)
+    val tmpIndexFile = shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
+    val dataFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val indexFile = blockManager.diskBlockManager.getFile(
+      ShuffleIndexBlockId(handle.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID))
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+    Seq(
+      tmpDataFile -> dataFile,
+      tmpIndexFile -> indexFile
+    )
   }
 
   /** Close this writer, passing along whether the map completed */
