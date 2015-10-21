@@ -128,19 +128,14 @@ abstract class JdbcDialect {
     * by parsing it into a (catalog, schema, objectName)
     * triple. The catalog and schema names may be empty. Raises
     * a SparkException if the user-supplied id is malformed,
-    * e.g., is a string like "foo; drop database finance;"
-    * intended for a SQL injection attack.
+    * e.g., is a string like "foo; drop database finance;",
+    * something intended for a SQL injection attack.
     *
     * @param rawId The user-supplied object id (name).
     * @throws org.apache.spark.SparkException On invalid ids.
     */
   def vetSqlIdentifier(rawId: String) {
 
-    // It's ok to assume that the database uppercases unquoted
-    // identifiers. That's because we aren't actually returning the
-    // parsed result to the user. The case-sensitivity of SQL
-    // identifiers is a tricky topic. See, for instance:
-    // https://github.com/ontop/ontop/wiki/Case-sensitivity-for-SQL-identifiers
     val parsed : Array[String] = parseMultiPartSQLIdentifier(rawId,
       quoteChar, true)
 
