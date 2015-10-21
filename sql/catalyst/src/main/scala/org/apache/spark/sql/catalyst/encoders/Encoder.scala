@@ -31,6 +31,7 @@ import org.apache.spark.sql.types.StructType
  * and reuse internal buffers to improve performance.
  */
 trait Encoder[T] {
+
   /** Returns the schema of encoding this type of object as a Row. */
   def schema: StructType
 
@@ -55,7 +56,6 @@ trait Encoder[T] {
    * given schema.
    */
   def bind(schema: Seq[Attribute]): Encoder[T]
-
 
   /**
    * Binds this encoder to the given schema positionally.  In this binding, the first reference to
