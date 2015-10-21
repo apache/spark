@@ -1,5 +1,8 @@
-from __future__ import print_function
+from __future__ import absolute_import
 from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
 from builtins import str
 from past.builtins import basestring
 from past.utils import old_div
@@ -59,10 +62,10 @@ if conf.getboolean('webserver', 'AUTHENTICATE'):
     try:
         # Environment specific login
         import airflow_login as login
-    except ImportError:
+    except ImportError as e:
         logging.error(
             "authenticate is set to True in airflow.cfg, "
-            "but airflow_login failed to import")
+            "but airflow_login failed to import %s" % e)
 login_required = login.login_required
 current_user = login.current_user
 logout_user = login.logout_user
@@ -354,9 +357,9 @@ class Airflow(BaseView):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
         csv = request.args.get('csv') == "true"
-        chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
+        chart = session.query(models.Chart).filter_by(id=chart_id).first()
         db = session.query(
-            models.Connection).filter_by(conn_id=chart.conn_id).all()[0]
+            models.Connection).filter_by(conn_id=chart.conn_id).first()
         session.expunge_all()
         session.commit()
         session.close()
@@ -630,7 +633,7 @@ class Airflow(BaseView):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
         embed = request.args.get('embed')
-        chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
+        chart = session.query(models.Chart).filter_by(id=chart_id).first()
         session.expunge_all()
         session.commit()
         session.close()
@@ -759,7 +762,7 @@ class Airflow(BaseView):
             response=json.dumps(d, indent=4),
             status=200, mimetype="application/json")
 
-    @expose('/login')
+    @expose('/login', methods=['GET', 'POST'])
     def login(self):
         return login.login(self, request)
 

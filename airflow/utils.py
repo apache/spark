@@ -1,4 +1,8 @@
+from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
+
 from builtins import str, input, object
 from past.builtins import basestring
 from copy import copy
@@ -111,6 +115,24 @@ def initdb():
     C = models.Connection
     session = settings.Session()
 
+    conn = session.query(C).filter(C.conn_id == 'airflow_db').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='airflow_db', conn_type='mysql',
+                host='localhost', login='root', password='',
+                schema='airflow'))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'beeline_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='beeline_default', conn_type='beeline',
+                host='localhost',
+                schema='airflow'))
+        session.commit()
+
     conn = session.query(C).filter(C.conn_id == 'local_mysql').first()
     if not conn:
         session.add(
@@ -210,9 +232,27 @@ def initdb():
             KET.know_event_type == 'Marketing Campaign').first():
         session.add(KET(know_event_type='Marketing Campaign'))
     session.commit()
-    session.close()
 
     models.DagBag(sync_to_db=True)
+
+    Chart = models.Chart
+    chart_label = "Airflow task instance by type"
+    chart = session.query(Chart).filter(Chart.label == chart_label).first()
+    if not chart:
+        chart = Chart(
+            label=chart_label,
+            conn_id='airflow_db',
+            chart_type='bar',
+            x_is_date=False,
+            sql=(
+                "SELECT state, COUNT(1) as number "
+                "FROM task_instance "
+                "WHERE dag_id LIKE 'example%' "
+                "GROUP BY state"),
+        )
+        session.add(chart)
+        session.commit()
+    session.close()
 
 
 def upgradedb():
