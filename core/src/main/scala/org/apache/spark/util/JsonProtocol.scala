@@ -20,7 +20,7 @@ package org.apache.spark.util
 import java.util.{Properties, UUID}
 
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.ui.sql.{SqlMetricInfo, SparkPlanInfo}
+import org.apache.spark.ui.sql.{SQLMetricInfo, SparkPlanInfo}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -458,7 +458,7 @@ private[spark] object JsonProtocol {
     ("Metrics" -> metrics)
   }
 
-  def sqlMetricInfoToJson(sqlMetricInfo: SqlMetricInfo): JValue = {
+  def sqlMetricInfoToJson(sqlMetricInfo: SQLMetricInfo): JValue = {
     ("Name" -> sqlMetricInfo.name) ~
     ("Accumulator Id" -> sqlMetricInfo.accumulatorId) ~
     ("Metric Param" -> sqlMetricInfo.metricParam)
@@ -960,11 +960,11 @@ private[spark] object JsonProtocol {
     new SparkPlanInfo(nodeName, simpleString, children, metrics)
   }
 
-  def sqlMetricInfoFromJson(json: JValue): SqlMetricInfo = {
+  def sqlMetricInfoFromJson(json: JValue): SQLMetricInfo = {
     val name = (json \ "Name").extract[String]
     val accumulatorId = (json \ "Accumulator Id").extract[Long]
     val metricParam = (json \ "Metric Param").extract[String]
-    new SqlMetricInfo(name, accumulatorId, metricParam)
+    new SQLMetricInfo(name, accumulatorId, metricParam)
   }
 
   /** -------------------------------- *

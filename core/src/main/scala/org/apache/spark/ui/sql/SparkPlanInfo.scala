@@ -28,6 +28,6 @@ class SparkPlanInfo(
     val nodeName: String,
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
-    val metrics: Seq[SqlMetricInfo]
+    val metrics: Seq[SQLMetricInfo]
 ) {
 }

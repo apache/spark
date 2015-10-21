@@ -21,7 +21,7 @@ package org.apache.spark.ui.sql
  * :: DeveloperApi ::
  * Stores information about a SQL Metric.
  */
-class SqlMetricInfo(
+class SQLMetricInfo(
     val name: String,
     val accumulatorId: Long,
     val metricParam: String) {
