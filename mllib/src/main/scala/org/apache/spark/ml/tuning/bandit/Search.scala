@@ -23,17 +23,24 @@ import org.apache.spark.sql.DataFrame
 
 import scala.collection.mutable.ArrayBuffer
 
-abstract class Search(val trainingData: DataFrame, val validationData: DataFrame) {
-  def search(totalBudgets: Int, arms: Array[Arm]): Arm
+abstract class Search {
+  def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm
 }
 
 /**
  * A naive search strategy that pulling arms in a round robin style.
  */
-class StaticSearch(
-    override val trainingData: DataFrame,
-    override val validationData: DataFrame) extends Search(trainingData, validationData) {
-  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+class StaticSearch extends Search {
+
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm = {
 
     assert(arms.length != 0, "ERROR: No arms!")
     val numArms = arms.length
@@ -51,10 +58,13 @@ class StaticSearch(
 /**
  * Simple search strategy that ...
  */
-class SimpleBanditSearch(
-    override val trainingData: DataFrame,
-    override val validationData: DataFrame) extends Search(trainingData, validationData) {
-  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+class SimpleBanditSearch extends Search {
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm = {
+
     val numArms = arms.length
     val alpha = 0.3
     val initialRounds = math.max(1, (alpha * totalBudgets / numArms).toInt)
@@ -82,10 +92,13 @@ class SimpleBanditSearch(
 /**
  * Exponential weight search strategy that ...
  */
-class ExponentialWeightsSearch(
-    override val trainingData: DataFrame,
-    override val validationData: DataFrame) extends Search(trainingData, validationData) {
-  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+class ExponentialWeightsSearch extends Search {
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm = {
+
     val numArms = arms.length
     val eta = math.sqrt(2 * math.log(numArms) / (numArms * totalBudgets))
 
@@ -107,13 +120,14 @@ class ExponentialWeightsSearch(
 
 /**
  *
- * @param trainingData
- * @param validationData
  */
-class LILUCBSearch(
-    override val trainingData: DataFrame,
-    override val validationData: DataFrame) extends Search(trainingData, validationData) {
-  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+class LILUCBSearch extends Search {
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm = {
+
     val numArms = arms.length
 
     val nj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
@@ -159,13 +173,14 @@ class LILUCBSearch(
 
 /**
  *
- * @param trainingData
- * @param validationData
  */
-class LUCBSearch(
-    override val trainingData: DataFrame,
-    override val validationData: DataFrame) extends Search(trainingData, validationData) {
-  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+class LUCBSearch extends Search {
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm = {
+
     val numArms = arms.length
 
     val nj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
@@ -230,13 +245,14 @@ class LUCBSearch(
 
 /**
  *
- * @param trainingData
- * @param validationData
  */
-class SuccessiveHalvingSearch(
-    override val trainingData: DataFrame,
-    override val validationData: DataFrame) extends Search(trainingData, validationData) {
-  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+class SuccessiveHalvingSearch extends Search {
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm = {
+
     val numArms = arms.length
     val numOfHalvingIter = math.ceil(Utils.log2(numArms)).toInt
 
@@ -276,13 +292,14 @@ class SuccessiveHalvingSearch(
 
 /**
  *
- * @param trainingData
- * @param validationData
  */
-class SuccessiveRejectSearch(
-    override val trainingData: DataFrame,
-    override val validationData: DataFrame) extends Search(trainingData, validationData) {
-  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+class SuccessiveRejectSearch extends Search {
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm = {
+
     val numArms = arms.length
 
     var armsRef = arms
@@ -322,13 +339,14 @@ class SuccessiveRejectSearch(
 
 /**
  *
- * @param trainingData
- * @param validationData
  */
-class SuccessiveEliminationSearch(
-    override val trainingData: DataFrame,
-    override val validationData: DataFrame) extends Search(trainingData, validationData) {
-  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+class SuccessiveEliminationSearch extends Search {
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame): Arm = {
+
     val numArms = arms.length
     val delta = 0.1
 

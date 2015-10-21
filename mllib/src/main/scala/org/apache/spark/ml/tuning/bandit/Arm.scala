@@ -98,12 +98,14 @@ class Arm(override val uid: String) extends ArmParams {
    */
   private var model: Option[Model[_]] = $(initialModel)
 
+  def getModel: Model[_] = model.get
+
   /**
    * Keep record of the number of pulls for computations in some search strategies.
    */
   private var numPulls: Int = 0
 
-  def getNumPulls: Int = this.numPulls
+  def getNumPulls: Int = numPulls
 
   /**
    * Pull the arm to perform maxIter steps of the iterative [Estimator]. Model will be updated

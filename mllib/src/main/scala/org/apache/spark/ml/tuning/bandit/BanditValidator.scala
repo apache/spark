@@ -20,18 +20,30 @@ package org.apache.spark.ml.tuning.bandit
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params, _}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, _}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext}
 
 /**
  * Params for [[BanditValidator]] and [[BanditValidatorModel]].
  */
-trait BanditValidatorParams extends ValidatorParams with HasStepsPerPulling with HasSeed with HasMaxIter {
+trait BanditValidatorParams extends ValidatorParams with HasMaxIter {
+
+  /**
+   * Step control for one pulling of an arm.
+   *
+   * @group param
+   */
+  final val stepsPerPulling: IntParam =
+    new IntParam(this, "stepsPerPulling", "the count of iterative steps in one pulling")
+
+  /** @group getParam */
+  final def getStepsPerPulling: Int = $(stepsPerPulling)
+
 /**
    * Param for number of folds for cross validation.  Must be >= 2.
    * Default: 3
@@ -43,17 +55,6 @@ trait BanditValidatorParams extends ValidatorParams with HasStepsPerPulling with
   /** @group getParam */
   def getNumFolds: Int = $(numFolds)
 
-  setDefault(numFolds -> 3)
-  /**
-   * A list of expected iterations for each arm.
-   *
-   * @group param
-   */
-  val expectedIters: Param[Array[Int]] = new Param(this, "expectedIters", "expected iterations")
-
-  /** @group getParam */
-  def getExpectedIters: Array[Int] = $(expectedIters)
-
   /**
    * An array of search strategies to use.
    *
@@ -64,7 +65,7 @@ trait BanditValidatorParams extends ValidatorParams with HasStepsPerPulling with
   /** @group getParam */
   def getSearchStrategy: Search = $(searchStrategy)
 
-  setDefault(maxIter -> math.pow(2, 6).toInt)
+  setDefault(maxIter -> math.pow(2, 6).toInt, stepsPerPulling -> 1, numFolds -> 3)
 }
 
 /**
@@ -86,16 +87,10 @@ class BanditValidator(override val uid: String)
   def copy(extra: ParamMap): BanditValidator = ???
 
   /** @group setParam */
-  def setExpectedIters(value: Array[Int]): this.type = set(expectedIters, value)
-
-  /** @group setParam */
   def setSearchStrategy(value: Search): this.type = set(searchStrategy, value)
 
   /** @group setParam */
   def setStepsPerPulling(value: Int): this.type = set(stepsPerPulling, value)
-
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -107,8 +102,6 @@ class BanditValidator(override val uid: String)
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
-    val numModels = epm.length
-    val metrics = new Array[Double](epm.length)
     val splits = MLUtils.kFold(dataset.rdd, $(numFolds), 0)
     val bestArms = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
@@ -117,16 +110,16 @@ class BanditValidator(override val uid: String)
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       val arms = epm.map { parameter =>
-        val arm = new Arm().setEstimator(est).setEstimatorParamMap(parameter).setEvaluator(eval)
+        val arm = new Arm().setMaxIter($(stepsPerPulling)).setEstimator(est).setEstimatorParamMap(parameter).setEvaluator(eval)
         arm
       }
 
-      val bestArm = $(searchStrategy).search($(maxIter), arms)
+      val bestArm = $(searchStrategy).search($(maxIter), arms, trainingDataset, validationDataset)
       (bestArm, bestArm.getValidationResult(validationDataset))
     }
 
     val bestArm = bestArms.minBy(_._2)._1
-    val bestModel = bestArm.model.get
+    val bestModel = bestArm.getModel
 
 
     copyValues(new BanditValidatorModel(uid, bestModel).setParent(this))
