@@ -32,7 +32,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
 
-
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
  * separate Mesos task, allowing multiple applications to share cluster nodes both in space (tasks
@@ -69,7 +68,12 @@ private[spark] class MesosSchedulerBackend(
   override def start() {
     classLoader = Thread.currentThread.getContextClassLoader
     val driver = createSchedulerDriver(
-      master, MesosSchedulerBackend.this, sc.sparkUser, sc.appName, sc.conf)
+      master,
+      MesosSchedulerBackend.this,
+      sc.sparkUser,
+      sc.appName,
+      sc.conf,
+      sc.ui.map(_.appUIAddress))
     startScheduler(driver)
   }
 
@@ -127,7 +131,7 @@ private[spark] class MesosSchedulerBackend(
     }
     val builder = MesosExecutorInfo.newBuilder()
     val (resourcesAfterCpu, usedCpuResources) =
-      partitionResources(availableResources, "cpus", scheduler.CPUS_PER_TASK)
+      partitionResources(availableResources, "cpus", mesosExecutorCores)
     val (resourcesAfterMem, usedMemResources) =
       partitionResources(resourcesAfterCpu.asJava, "mem", calculateTotalMemory(sc))
 
@@ -390,7 +394,7 @@ private[spark] class MesosSchedulerBackend(
                             slaveId: SlaveID, status: Int) {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
                                                                  slaveId.getValue))
-    recordSlaveLost(d, slaveId, ExecutorExited(status))
+    recordSlaveLost(d, slaveId, ExecutorExited(status, isNormalExit = false))
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {

@@ -32,7 +32,7 @@ import org.apache.spark.streaming.scheduler.JobGenerator
 
 
 private[streaming]
-class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
+class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   extends Logging with Serializable {
   val master = ssc.sc.master
   val framework = ssc.sc.appName
@@ -321,7 +321,7 @@ object CheckpointReader extends Logging {
 
     // Try to read the checkpoint files in the order
     logInfo("Checkpoint files found: " + checkpointFiles.mkString(","))
-    val compressionCodec = CompressionCodec.createCodec(conf)
+    var readError: Exception = null
     checkpointFiles.foreach(file => {
       logInfo("Attempting to load checkpoint from file " + file)
       try {
@@ -332,13 +332,15 @@ object CheckpointReader extends Logging {
         return Some(cp)
       } catch {
         case e: Exception =>
+          readError = e
           logWarning("Error reading checkpoint from file " + file, e)
       }
     })
 
     // If none of checkpoint files could be read, then throw exception
     if (!ignoreReadError) {
-      throw new SparkException(s"Failed to read checkpoint from directory $checkpointPath")
+      throw new SparkException(
+        s"Failed to read checkpoint from directory $checkpointPath", readError)
     }
     None
   }

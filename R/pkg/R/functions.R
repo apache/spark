@@ -18,16 +18,21 @@
 #' @include generics.R column.R
 NULL
 
-#' Creates a \code{Column} of literal value.
+#' lit
 #'
-#' The passed in object is returned directly if it is already a \linkS4class{Column}.
-#' If the object is a Scala Symbol, it is converted into a \linkS4class{Column} also.
-#' Otherwise, a new \linkS4class{Column} is created to represent the literal value.
+#' A new \linkS4class{Column} is created to represent the literal value.
+#' If the parameter is a \linkS4class{Column}, it is returned unchanged.
 #'
 #' @family normal_funcs
 #' @rdname lit
 #' @name lit
 #' @export
+#' @examples
+#' \dontrun{
+#' lit(df$name)
+#' select(df, lit("x"))
+#' select(df, lit("2015-01-01"))
+#'}
 setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -231,6 +236,28 @@ setMethod("ceil",
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ceil", x@jc)
             column(jc)
+          })
+
+#' Though scala functions has "col" function, we don't expose it in SparkR
+#' because we don't want to conflict with the "col" function in the R base
+#' package and we also have "column" function exported which is an alias of "col".
+col <- function(x) {
+  column(callJStatic("org.apache.spark.sql.functions", "col", x))
+}
+
+#' column
+#'
+#' Returns a Column based on the given column name.
+#'
+#' @rdname col
+#' @name column
+#' @family normal_funcs
+#' @export
+#' @examples \dontrun{column(df)}
+setMethod("column",
+          signature(x = "character"),
+          function(x) {
+            col(x)
           })
 
 #' cos
@@ -1331,7 +1358,7 @@ setMethod("countDistinct",
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              listToSeq(jcol))
+                              jcol)
             column(jc)
           })
 
@@ -1348,7 +1375,7 @@ setMethod("concat",
           signature(x = "Column"),
           function(x, ...) {
             jcols <- lapply(list(x, ...), function(x) { x@jc })
-            jc <- callJStatic("org.apache.spark.sql.functions", "concat", listToSeq(jcols))
+            jc <- callJStatic("org.apache.spark.sql.functions", "concat", jcols)
             column(jc)
           })
 
@@ -1366,7 +1393,7 @@ setMethod("greatest",
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
             jcols <- lapply(list(x, ...), function(x) { x@jc })
-            jc <- callJStatic("org.apache.spark.sql.functions", "greatest", listToSeq(jcols))
+            jc <- callJStatic("org.apache.spark.sql.functions", "greatest", jcols)
             column(jc)
           })
 
@@ -1384,7 +1411,7 @@ setMethod("least",
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
             jcols <- lapply(list(x, ...), function(x) { x@jc })
-            jc <- callJStatic("org.apache.spark.sql.functions", "least", listToSeq(jcols))
+            jc <- callJStatic("org.apache.spark.sql.functions", "least", jcols)
             column(jc)
           })
 
@@ -1675,7 +1702,7 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
 #' @export
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
-            jcols <- listToSeq(lapply(list(x, ...), function(x) { x@jc }))
+            jcols <- lapply(list(x, ...), function(x) { x@jc })
             jc <- callJStatic("org.apache.spark.sql.functions", "concat_ws", sep, jcols)
             column(jc)
           })
@@ -1723,7 +1750,7 @@ setMethod("expr", signature(x = "character"),
 #' @export
 setMethod("format_string", signature(format = "character", x = "Column"),
           function(format, x, ...) {
-            jcols <- listToSeq(lapply(list(x, ...), function(arg) { arg@jc }))
+            jcols <- lapply(list(x, ...), function(arg) { arg@jc })
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "format_string",
                               format, jcols)

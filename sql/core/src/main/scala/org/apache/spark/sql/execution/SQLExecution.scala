@@ -37,7 +37,7 @@ private[sql] object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sqlContext: SQLContext, queryExecution: SQLContext#QueryExecution)(body: => T): T = {
+      sqlContext: SQLContext, queryExecution: QueryExecution)(body: => T): T = {
     val sc = sqlContext.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     if (oldExecutionId == null) {

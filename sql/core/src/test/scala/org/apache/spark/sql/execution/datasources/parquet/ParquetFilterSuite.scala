@@ -55,7 +55,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         .where(Column(predicate))
 
       val analyzedPredicate = query.queryExecution.optimizedPlan.collect {
-        case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation)) => filters
+        case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation, _)) => filters
       }.flatten
       assert(analyzedPredicate.nonEmpty)
 
@@ -219,7 +219,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - string") {
+  // See https://issues.apache.org/jira/browse/SPARK-11153
+  ignore("filter pushdown - string") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate(
@@ -247,7 +248,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - binary") {
+  // See https://issues.apache.org/jira/browse/SPARK-11153
+  ignore("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes("UTF-8")
     }
@@ -294,6 +296,23 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         checkAnswer(
           sqlContext.read.parquet(path).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
+      }
+    }
+  }
+
+  test("SPARK-10829: Filter combine partition key and attribute doesn't work in DataSource scan") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+
+        // If the "part = 1" filter gets pushed down, this query will throw an exception since
+        // "part" is not a valid column in the actual Parquet file
+        checkAnswer(
+          sqlContext.read.parquet(path).filter("a > 0 and (part = 0 or a > 1)"),
+          (2 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
   }

@@ -1127,15 +1127,15 @@ def _verify_type(obj, dataType):
         return
 
     _type = type(dataType)
-    assert _type in _acceptable_types, "unknown datatype: %s" % dataType
+    assert _type in _acceptable_types, "unknown datatype: %s for object %r" % (dataType, obj)
 
     if _type is StructType:
         if not isinstance(obj, (tuple, list)):
-            raise TypeError("StructType can not accept object in type %s" % type(obj))
+            raise TypeError("StructType can not accept object %r in type %s" % (obj, type(obj)))
     else:
         # subclass of them can not be fromInternald in JVM
         if type(obj) not in _acceptable_types[_type]:
-            raise TypeError("%s can not accept object in type %s" % (dataType, type(obj)))
+            raise TypeError("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
 
     if isinstance(dataType, ArrayType):
         for i in obj:
@@ -1176,6 +1176,8 @@ class Row(tuple):
     >>> row = Row(name="Alice", age=11)
     >>> row
     Row(age=11, name='Alice')
+    >>> row['name'], row['age']
+    ('Alice', 11)
     >>> row.name, row.age
     ('Alice', 11)
 
@@ -1242,6 +1244,19 @@ class Row(tuple):
     def __call__(self, *args):
         """create new Row object"""
         return _create_row(self, args)
+
+    def __getitem__(self, item):
+        if isinstance(item, (int, slice)):
+            return super(Row, self).__getitem__(item)
+        try:
+            # it will be slow when it has many fields,
+            # but this will not be used in normal cases
+            idx = self.__fields__.index(item)
+            return super(Row, self).__getitem__(idx)
+        except IndexError:
+            raise KeyError(item)
+        except ValueError:
+            raise ValueError(item)
 
     def __getattr__(self, item):
         if item.startswith("__"):

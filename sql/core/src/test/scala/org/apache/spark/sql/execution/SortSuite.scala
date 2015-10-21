@@ -36,13 +36,13 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
 
     checkAnswer(
       input.toDF("a", "b", "c"),
-      ExternalSort('a.asc :: 'b.asc :: Nil, global = true, _: SparkPlan),
+      Sort('a.asc :: 'b.asc :: Nil, global = true, _: SparkPlan),
       input.sortBy(t => (t._1, t._2)).map(Row.fromTuple),
       sortAnswers = false)
 
     checkAnswer(
       input.toDF("a", "b", "c"),
-      ExternalSort('b.asc :: 'a.asc :: Nil, global = true, _: SparkPlan),
+      Sort('b.asc :: 'a.asc :: Nil, global = true, _: SparkPlan),
       input.sortBy(t => (t._2, t._1)).map(Row.fromTuple),
       sortAnswers = false)
   }

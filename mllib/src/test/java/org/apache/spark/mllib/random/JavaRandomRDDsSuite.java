@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.random;
 
+import java.io.Serializable;
 import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
@@ -231,4 +232,50 @@ public class JavaRandomRDDsSuite {
     }
   }
 
+  @Test
+  public void testArbitrary() {
+    long size = 10;
+    long seed = 1L;
+    int numPartitions = 0;
+    StringGenerator gen = new StringGenerator();
+    JavaRDD<String> rdd1 = randomJavaRDD(sc, gen, size);
+    JavaRDD<String> rdd2 = randomJavaRDD(sc, gen, size, numPartitions);
+    JavaRDD<String> rdd3 = randomJavaRDD(sc, gen, size, numPartitions, seed);
+    for (JavaRDD<String> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(size, rdd.count());
+      Assert.assertEquals(2, rdd.first().length());
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testRandomVectorRDD() {
+    UniformGenerator generator = new UniformGenerator();
+    long m = 100L;
+    int n = 10;
+    int p = 2;
+    long seed = 1L;
+    JavaRDD<Vector> rdd1 = randomJavaVectorRDD(sc, generator, m, n);
+    JavaRDD<Vector> rdd2 = randomJavaVectorRDD(sc, generator, m, n, p);
+    JavaRDD<Vector> rdd3 = randomJavaVectorRDD(sc, generator, m, n, p, seed);
+    for (JavaRDD<Vector> rdd: Arrays.asList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(m, rdd.count());
+      Assert.assertEquals(n, rdd.first().size());
+    }
+  }
+}
+
+// This is just a test generator, it always returns a string of 42
+class StringGenerator implements RandomDataGenerator<String>, Serializable {
+  @Override
+  public String nextValue() {
+    return "42";
+  }
+  @Override
+  public StringGenerator copy() {
+    return new StringGenerator();
+  }
+  @Override
+  public void setSeed(long seed) {
+  }
 }

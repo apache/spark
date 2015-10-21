@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -83,7 +84,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData full outer join testData2 ON key = a",
-        classOf[ShuffledHashOuterJoin]),
+        classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
         classOf[BroadcastNestedLoopJoin]),
       ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
@@ -359,8 +360,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     upperCaseData.where('N <= 4).registerTempTable("left")
     upperCaseData.where('N >= 3).registerTempTable("right")
 
-    val left = UnresolvedRelation(Seq("left"), None)
-    val right = UnresolvedRelation(Seq("right"), None)
+    val left = UnresolvedRelation(TableIdentifier("left"), None)
+    val right = UnresolvedRelation(TableIdentifier("right"), None)
 
     checkAnswer(
       left.join(right, $"left.N" === $"right.N", "full"),

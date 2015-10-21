@@ -1807,7 +1807,7 @@ To run a Spark Streaming applications, you need to have the following.
     + *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this
       with Mesos.
 
-- *[Since Spark 1.2] Configuring write ahead logs* - Since Spark 1.2,
+- *Configuring write ahead logs* - Since Spark 1.2,
   we have introduced _write ahead logs_ for achieving strong
   fault-tolerance guarantees. If enabled,  all the data received from a receiver gets written into
   a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
@@ -1821,6 +1821,17 @@ To run a Spark Streaming applications, you need to have the following.
   received data within Spark be disabled when the write ahead log is enabled as the log is already
   stored in a replicated storage system. This can be done by setting the storage level for the
   input stream to `StorageLevel.MEMORY_AND_DISK_SER`.
+
+- *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
+  application to process data as fast as it is being received, the receivers can be rate limited
+  by setting a maximum rate limit in terms of records / sec.
+  See the [configuration parameters](configuration.html#spark-streaming)
+  `spark.streaming.receiver.maxRate` for receivers and `spark.streaming.kafka.maxRatePerPartition`
+  for Direct Kafka approach. In Spark 1.5, we have introduced a feature called *backpressure* that
+  eliminate the need to set this rate limit, as Spark Streaming automatically figures out the
+  rate limits and dynamically adjusts them if the processing conditions change. This backpressure
+  can be enabled by setting the [configuration parameter](configuration.html#spark-streaming)
+  `spark.streaming.backpressure.enabled` to `true`.
 
 ### Upgrading Application Code
 {:.no_toc}

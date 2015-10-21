@@ -119,6 +119,20 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }
   }
 
+  override def onOutputOperationStarted(
+      outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = synchronized {
+    // This method is called after onBatchStarted
+    runningBatchUIData(outputOperationStarted.outputOperationInfo.batchTime).
+      updateOutputOperationInfo(outputOperationStarted.outputOperationInfo)
+  }
+
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = synchronized {
+    // This method is called before onBatchCompleted
+    runningBatchUIData(outputOperationCompleted.outputOperationInfo.batchTime).
+      updateOutputOperationInfo(outputOperationCompleted.outputOperationInfo)
+  }
+
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     getBatchTimeAndOutputOpId(jobStart.properties).foreach { case (batchTime, outputOpId) =>
       var outputOpIdToSparkJobIds = batchTimeToOutputOpIdSparkJobIdPair.get(batchTime)

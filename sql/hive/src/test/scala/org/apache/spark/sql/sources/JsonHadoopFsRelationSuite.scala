@@ -28,6 +28,14 @@ import org.apache.spark.sql.types._
 class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = "json"
 
+  // JSON does not write data of NullType and does not play well with BinaryType.
+  override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: NullType => false
+    case _: BinaryType => false
+    case _: CalendarIntervalType => false
+    case _ => true
+  }
+
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
       val basePath = new Path(file.getCanonicalPath)

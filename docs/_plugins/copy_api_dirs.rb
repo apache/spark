@@ -26,11 +26,14 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt -Pkinesis-asl compile unidoc' from " + pwd + "; this may take a few minutes..."
-    puts `build/sbt -Pkinesis-asl compile unidoc`
+    puts "Running 'build/sbt -Pkinesis-asl clean compile unidoc' from " + pwd + "; this may take a few minutes..."
+    puts `build/sbt -Pkinesis-asl clean compile unidoc`
 
     puts "Moving back into docs dir."
     cd("docs")
+
+    puts "Removing old docs"
+    puts `rm -rf api`
 
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.

@@ -24,13 +24,20 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{execution, AnalysisException, SaveMode}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
 
   override val dataSourceName: String = "parquet"
+
+  // Parquet does not play well with NullType.
+  override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: NullType => false
+    case _: CalendarIntervalType => false
+    case _ => true
+  }
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
