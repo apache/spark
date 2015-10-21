@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import warnings
+
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
@@ -189,7 +191,16 @@ class LogisticRegressionModel(JavaModel):
         """
         Model weights.
         """
+
         return self._call_java("weights")
+
+    @property
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        warnings.warn("weights is deprecated. Use coefficients() instead.")
+        return self._call_java("coefficients")
 
     @property
     def intercept(self):
