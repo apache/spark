@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.language.implicitConversions
 import scala.util.matching.Regex
+import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 
 import org.apache.spark.sql.catalyst.SqlLexical
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.SqlLexical
  * This is a data type parser that can be used to parse string representations of data types
  * provided in SQL queries. This parser is mixed in with DDLParser and SqlParser.
  */
-private[sql] trait DataTypeParser extends StandardTokenParsers {
+private[sql] trait DataTypeParser extends StandardTokenParsers with PackratParsers {
 
   // This is used to create a parser from a regex. We are using regexes for data type strings
   // since these strings can be also used as column names or field names.
@@ -67,6 +68,11 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
       case tpe => ArrayType(tpe)
     }
 
+  protected lazy val standardArrayType: PackratParser[DataType] =
+    (standardArrayType | primitiveType) <~ "(?i)array".r <~ ("[" ~ numericLit ~ "]").? ^^ {
+      case tpe => ArrayType(tpe)
+    }
+
   protected lazy val mapType: Parser[DataType] =
     "(?i)map".r ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
       case t1 ~ _ ~ t2 => MapType(t1, t2)
@@ -85,6 +91,7 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
 
   protected lazy val dataType: Parser[DataType] =
     arrayType |
+    standardArrayType |
     mapType |
     structType |
     primitiveType
