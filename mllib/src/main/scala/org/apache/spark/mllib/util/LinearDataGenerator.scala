@@ -125,6 +125,59 @@ object LinearDataGenerator {
   }
 
   /**
+   *
+   * @param intercept Data intercept
+   * @param weights  Weights to be applied.
+   * @param xMean the mean of the generated features. Lots of time, if the features are not properly
+   *              standardized, the algorithm with poor implementation will have difficulty
+   *              to converge.
+   * @param xVariance the variance of the generated features.
+   * @param nPoints Number of points in sample.
+   * @param seed Random seed
+   * @param eps Epsilon scaling factor.
+   * @return Seq of LabeledPoint includes sparse vectors..
+   */
+  @Since("1.6.0")
+  def generateLinearSparseInput(
+      intercept: Double,
+      weights: Array[Double],
+      xMean: Array[Double],
+      xVariance: Array[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double): Seq[LabeledPoint] = {
+    val rnd = new Random(seed)
+    val x = Array.fill[Array[Double]](nPoints)(
+      Array.fill[Double](weights.length)(rnd.nextDouble()))
+
+    x.foreach { v =>
+      var i = 0
+      val len = v.length
+      while (i < len) {
+        if (rnd.nextDouble() < 0.7) {
+          v(i) = 0.0
+        } else {
+          v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+        }
+        i += 1
+      }
+    }
+
+    val y = x.map { xi =>
+      blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
+    }
+
+    val sparseX = x.map { (v: Array[Double]) =>
+      v.zipWithIndex.filter{
+        case (d: Double, i: Int) => d != 0.0
+      }.map {
+        case (d: Double, i: Int) => (i, d)
+      }
+    }
+    y.zip(sparseX).map(p => LabeledPoint(p._1, Vectors.sparse(weights.length, p._2)))
+  }
+
+  /**
    * Generate an RDD containing sample data for Linear Regression models - including Ridge, Lasso,
    * and uregularized variants.
    *

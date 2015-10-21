@@ -34,7 +34,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   private val seed: Int = 42
   @transient var dataset: DataFrame = _
   @transient var datasetWithoutIntercept: DataFrame = _
-  @transient var datasetWithBigFeature: DataFrame = _
+  @transient var datasetWithManyFeature: DataFrame = _
 
   /*
      In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
@@ -52,22 +52,27 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     super.beforeAll()
     dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, seed, 0.1), 2))
+        intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed = seed, eps = 0.1), 2))
     /*
        datasetWithoutIntercept is not needed for correctness testing but is useful for illustrating
        training model without intercept
      */
     datasetWithoutIntercept = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        0.0, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, seed, 0.1), 2))
+        intercept = 0.0, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed = seed, eps = 0.1), 2))
 
     val r = new Random(seed)
+    // When feature size is larger than 4096, normal optimizer is choosed
+    // as the solver of linear regression in the case of "auto" mode.
     val featureSize = 4100
-    datasetWithBigFeature = sqlContext.createDataFrame(
-      sc.parallelize(LinearDataGenerator.generateLinearInput(
-        0.0, Seq.fill(featureSize)(r.nextDouble).toArray,
-        Seq.fill(featureSize)(r.nextDouble).toArray,
-        Seq.fill(featureSize)(r.nextDouble).toArray, 200, seed, 0.1
+    datasetWithManyFeature = sqlContext.createDataFrame(
+      sc.parallelize(LinearDataGenerator.generateLinearSparseInput(
+        intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble).toArray,
+        xMean = Seq.fill(featureSize)(r.nextDouble).toArray,
+        xVariance = Seq.fill(featureSize)(r.nextDouble).toArray, nPoints = 200,
+        seed = seed, eps = 0.1
       ), 2))
   }
 
@@ -696,7 +701,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("linear regression model with l-bfgs with big feature datasets") {
     val trainer = new LinearRegression().setSolver("auto")
-    val model = trainer.fit(datasetWithBigFeature)
+    val model = trainer.fit(datasetWithManyFeature)
 
     // Training results for the model should be available
     assert(model.hasSummary)
