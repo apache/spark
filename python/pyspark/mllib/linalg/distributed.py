@@ -785,9 +785,6 @@ class BlockMatrix(DistributedMatrix):
         two dense sub matrix blocks are added, the output block will
         also be a DenseMatrix.
 
-        :param other: A BlockMatrix
-        :return: A BlockMatrix
-
         >>> dm1 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
         >>> dm2 = Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12])
         >>> sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 1, 2], [7, 11, 12])
@@ -820,9 +817,6 @@ class BlockMatrix(DistributedMatrix):
         The output BlockMatrix will only consist of DenseMatrix blocks.
         This may cause some performance issues until support for
         multiplying two sparse matrices is added.
-
-        :param other: A BlockMatrix
-        :return: A BlockMatrix
 
         >>> dm1 = Matrices.dense(2, 3, [1, 2, 3, 4, 5, 6])
         >>> dm2 = Matrices.dense(2, 3, [7, 8, 9, 10, 11, 12])
