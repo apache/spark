@@ -141,7 +141,7 @@ class KMeansModel(Saveable, Loader):
                              [_convert_to_vector(c) for c in self.centers])
         return cost
 
-    @since(1.4)
+    @since('1.4.0')
     def save(self, sc, path):
         """
         Save this model to the given path.
