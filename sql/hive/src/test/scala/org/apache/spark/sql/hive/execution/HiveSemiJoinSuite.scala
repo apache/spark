@@ -396,7 +396,7 @@ class SubqueryPredicateSemanticCheckSuite extends HiveComparisonTest with Before
           |        )
           |order by key, value
           |LIMIT 5""".stripMargin)
-    }.getMessage.contains("Cannot resolve the projection"))
+    }.getMessage.contains("Cannot resolve the aggregation"))
 
     assert(intercept[AnalysisException] {
       sql(
@@ -410,7 +410,7 @@ class SubqueryPredicateSemanticCheckSuite extends HiveComparisonTest with Before
           |        )
           |order by key, value
           |LIMIT 5""".stripMargin)
-    }.getMessage.contains("Cannot resolve the projection"))
+    }.getMessage.contains("Cannot resolve the aggregation"))
   }
 
   test("Expect only 1 projection in In Subquery Expression") {
