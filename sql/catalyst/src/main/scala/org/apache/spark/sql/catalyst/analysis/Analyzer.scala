@@ -518,10 +518,9 @@ class Analyzer(
               // we don't support nested correlation yet, so the `child` must be resolved.
               checkAnalysis(child)
               val rightKey = ResolveReferences.tryResolveAttributes(aggregations(0), child) match {
-                case e if e.resolved == false =>
+                case e if !e.resolved =>
                   throw new AnalysisException(
-                    s"Outer query expression should be only presented at the filter clause" +
-                      s", but we got $e")
+                    s"Cannot resolve the aggregation $e")
                 case e: NamedExpression => e
                 case other => Alias(other, " in_subquery_key")()
               }
