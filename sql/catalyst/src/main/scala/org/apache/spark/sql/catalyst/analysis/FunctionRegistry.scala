@@ -142,6 +142,7 @@ object FunctionRegistry {
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
     expression[Cos]("cos"),
+    expression[Cosh]("cosh"),
     expression[Conv]("conv"),
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
