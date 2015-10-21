@@ -116,10 +116,16 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
 
     // creating an initial model
-    val initialModel = new MLlibKMeansModel(Array(points(0), points(1), points(2), points(3), points(4)))
+    val initialModel = new MLlibKMeansModel(
+      Array(points(0), points(1), points(2), points(3), points(4))
+    )
 
     val predictionColName = "kmeans_prediction"
-    var kmeans : KMeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1).setInitialModel(initialModel)
+    val kmeans = new KMeans()
+      .setK(k)
+      .setPredictionCol(predictionColName)
+      .setSeed(1)
+      .setInitialModel(initialModel)
     val model = kmeans.fit(dataset)
     assert(model.clusterCenters.length === k)
 
