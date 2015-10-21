@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.encoders.Encoder
+
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
@@ -37,9 +39,9 @@ private[sql] object Column {
 }
 
 /**
- * A [[Column]] where a type hint has been given for the expected return type.
+ * A [[Column]] where an [[Encoder]] has been given for the expected return type.
  */
-class TypedColumn[T](expr: Expression) extends Column(expr)
+class TypedColumn[T](expr: Expression)(implicit val encoder: Encoder[T]) extends Column(expr)
 
 /**
  * :: Experimental ::
@@ -78,7 +80,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * be used by operations such as `select` on a [[Dataset]] to automatically convert the
    * results into the correct JVM types.
    */
-  def as[T]: TypedColumn[T] = new TypedColumn[T](expr)
+  def as[T : Encoder]: TypedColumn[T] = new TypedColumn[T](expr)
 
   /**
    * Extracts a value or values from a complex type.

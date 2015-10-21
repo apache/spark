@@ -30,14 +30,15 @@ import org.apache.spark.sql.types.StructType
  * using functional or relational operations.
  *
  * A [[Dataset]] differs from an [[RDD]] in the following ways:
+ *  - Internally, a [[Dataset]] is represented by a Catalyst logical plan and the data is stored
+ *    in the encoded form.  This representation allows for additional logical operations and
+ *    enables many operations (sorting, shuffling, etc.) to be performed without deserializing to
+ *    an object.
  *  - The creation of a [[Dataset]] requires the presence of an explicit [[Encoder]] that can be
  *    used to serialize the object into a binary format.  Encoders are also capable of mapping the
  *    schema of a given object to the Spark SQL type system.  In contrast, RDDs rely on runtime
- *    reflection based serialization.
- *  - Internally, a [[Dataset]] is represented by a Catalyst logical plan and the Data is stored
- *    in the encoded form.  This representation allows for additional logical operations and
- *    enables many operations (sorting, shuffling, etc.) to be performed without deserialzing to
- *    an object.
+ *    reflection based serialization. Operations that change the type of object stored in the
+ *    dataset also need an encoder for the new type.
  *
  * A [[Dataset]] can be thought of as a specialized DataFrame, where the elements map to a specific
  * JVM object type, instead of to a generic [[Row]] container. A DataFrame can be transformed into
@@ -46,7 +47,7 @@ import org.apache.spark.sql.types.StructType
  *
  * COMPATIBILITY NOTE: Long term we plan to make [[DataFrame]] extend `Dataset[Row]`.  However,
  * making this change to che class hierarchy would break the function signatures for the existing
- * function operations (map, flatMap, etc).  As such, this class should be considered a preview
+ * functional operations (map, flatMap, etc).  As such, this class should be considered a preview
  * of the final API.  Changes will be made to the interface after Spark 1.6.
  *
  * @since 1.6.0
@@ -192,14 +193,13 @@ class Dataset[T] private[sql](
   def reduce(func: (T, T) => T): T = rdd.reduce(func)
 
   /**
-   * Aggregate the elements of each partition, and then the results for all the partitions, using a
+   * Aggregates the elements of each partition, and then the results for all the partitions, using a
    * given associative and commutative function and a neutral "zero value".
    *
-   * This behaves somewhat differently from fold operations implemented for non-distributed
+   * This behaves somewhat differently than the fold operations implemented for non-distributed
    * collections in functional languages like Scala. This fold operation may be applied to
-   * partitions individually, and then fold those results into the final result, rather than
-   * apply the fold to each element sequentially in some defined ordering. For functions
-   * that are not commutative, the result may differ from that of a fold applied to a
+   * partitions individually, and then those results will be folded into the final result.
+   * If op is not commutative, then the result may differ from that of a fold applied to a
    * non-distributed collection.
    * @since 1.6.0
    */
@@ -227,7 +227,7 @@ class Dataset[T] private[sql](
    * ****************** */
 
   /**
-   * Returns a new Dataset by computing the given [[Column]] expression for each element.
+   * Returns a new [[Dataset]] by computing the given [[Column]] expression for each element.
    *
    * {{{
    *   val ds = Seq(1, 2, 3).toDS()
@@ -239,39 +239,88 @@ class Dataset[T] private[sql](
     new Dataset[U1](sqlContext, Project(Alias(c1.expr, "_1")() :: Nil, logicalPlan))
   }
 
-  /**
-   * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
-   * @since 1.6.0
-   */
-  def select[U1: Encoder, U2: Encoder](
-      c1: TypedColumn[U1],
-      c2: TypedColumn[U2]): Dataset[(U1, U2)] = {
-    implicit val te = new Tuple2Encoder(
-      implicitly[Encoder[U1]],
-      implicitly[Encoder[U2]])
-    new Dataset[(U1, U2)](sqlContext,
-      Project(
-        Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Nil,
-        logicalPlan))
+  // Codegen
+  // scalastyle:off
+
+  /** sbt scalaShell; println(Seq(1).toDS().genSelect) */
+  private def genSelect: String = {
+    (2 to 5).map { n =>
+      val types = (1 to n).map(i =>s"U$i").mkString(", ")
+      val args = (1 to n).map(i => s"c$i: TypedColumn[U$i]").mkString(", ")
+      val encoders = (1 to n).map(i => s"c$i.encoder").mkString(", ")
+      val schema = (1 to n).map(i => s"""Alias(c$i.expr, "_$i")()""").mkString(" :: ")
+      s"""
+         |/**
+         | * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
+         | * @since 1.6.0
+         | */
+         |def select[$types]($args): Dataset[($types)] = {
+         |  implicit val te = new Tuple${n}Encoder($encoders)
+         |  new Dataset[($types)](sqlContext,
+         |    Project(
+         |      $schema :: Nil,
+         |      logicalPlan))
+         |}
+         |
+       """.stripMargin
+    }.mkString("\n")
   }
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    * @since 1.6.0
    */
-  def select[U1: Encoder, U2: Encoder, U3: Encoder](
-      c1: TypedColumn[U1],
-      c2: TypedColumn[U2],
-      c3: TypedColumn[U3]): Dataset[(U1, U2, U3)] = {
-    implicit val te = new Tuple3Encoder(
-      implicitly[Encoder[U1]],
-      implicitly[Encoder[U2]],
-      implicitly[Encoder[U3]])
+  def select[U1, U2](c1: TypedColumn[U1], c2: TypedColumn[U2]): Dataset[(U1, U2)] = {
+    implicit val te = new Tuple2Encoder(c1.encoder, c2.encoder)
+    new Dataset[(U1, U2)](sqlContext,
+      Project(
+        Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Nil,
+        logicalPlan))
+  }
+
+
+
+  /**
+   * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
+   * @since 1.6.0
+   */
+  def select[U1, U2, U3](c1: TypedColumn[U1], c2: TypedColumn[U2], c3: TypedColumn[U3]): Dataset[(U1, U2, U3)] = {
+    implicit val te = new Tuple3Encoder(c1.encoder, c2.encoder, c3.encoder)
     new Dataset[(U1, U2, U3)](sqlContext,
       Project(
         Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Alias(c3.expr, "_3")() :: Nil,
         logicalPlan))
   }
+
+
+
+  /**
+   * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
+   * @since 1.6.0
+   */
+  def select[U1, U2, U3, U4](c1: TypedColumn[U1], c2: TypedColumn[U2], c3: TypedColumn[U3], c4: TypedColumn[U4]): Dataset[(U1, U2, U3, U4)] = {
+    implicit val te = new Tuple4Encoder(c1.encoder, c2.encoder, c3.encoder, c4.encoder)
+    new Dataset[(U1, U2, U3, U4)](sqlContext,
+      Project(
+        Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Alias(c3.expr, "_3")() :: Alias(c4.expr, "_4")() :: Nil,
+        logicalPlan))
+  }
+
+
+
+  /**
+   * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
+   * @since 1.6.0
+   */
+  def select[U1, U2, U3, U4, U5](c1: TypedColumn[U1], c2: TypedColumn[U2], c3: TypedColumn[U3], c4: TypedColumn[U4], c5: TypedColumn[U5]): Dataset[(U1, U2, U3, U4, U5)] = {
+    implicit val te = new Tuple5Encoder(c1.encoder, c2.encoder, c3.encoder, c4.encoder, c5.encoder)
+    new Dataset[(U1, U2, U3, U4, U5)](sqlContext,
+      Project(
+        Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Alias(c3.expr, "_3")() :: Alias(c4.expr, "_4")() :: Alias(c5.expr, "_5")() :: Nil,
+        logicalPlan))
+  }
+
+  // scalastyle:on
 
   /* **************** *
    *  Set operations  *
