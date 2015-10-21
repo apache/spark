@@ -314,15 +314,14 @@ class WebUiTests(unittest.TestCase):
             'origin=/admin')
         assert "Wait a minute" in response.data
         response = self.app.get(
-            '/admin/airflow/action?action=clear&task_id=run_this_last&'
-            'dag_id=example_bash_operator&future=true&past=false&'
-            'upstream=true&downstream=false&'
-            'execution_date=2015-01-01T00:00:00&confirmed=true&'
-            'origin=/admin')
+            '/admin/airflow/action?action=clear&task_id=run_after_loop&'
+            'dag_id=example_bash_operator&future=false&past=false&'
+            'upstream=false&downstream=true&'
+            'execution_date=2015-01-01T00:00:00&')
         url = (
             '/admin/airflow/action?action=success&task_id=runme_0&'
             'dag_id=example_bash_operator&upstream=false&'
-            'downstream=false&execution_date=2015-08-12&'
+            'downstream=false&execution_date=2017-01-12&'
             'origin=/admin')
         response = self.app.get(url)
         assert "Wait a minute" in response.data
