@@ -24,20 +24,54 @@ module Jekyll
       Pygments.highlight(code, :lexer => @lang)
     end
  
-    # Select lines according to labels in code. Currently we use "begin code" and "end code" as
-    # labels.
+    # Trim the code block so as to have the same indention, regardless of their positions in the
+    # code file.
+    def trim_codeblock(lines)
+      # Select the minimum indention of the current code block.
+      min_start_spaces = lines
+        .select{ |l| l.strip.size !=0 }
+        .map{ |l| l[/\A */].size }
+        .min
+
+      lines.map{ |l| l[min_start_spaces .. -1] }
+    end
+
+    # Select lines according to labels in code. Currently we use "$example on$" and "$example off$"
+    # as labels. Note that code blocks identified by the labels should not overlap.
     def select_lines(code)
       lines = code.each_line.to_a
-      start = lines.each_with_index.select { |l, i| l.include? "$example on$" }.last.last
-      endline = lines.each_with_index.select { |l, i| l.include? "$example off$" }.last.last
-      length = lines.count
- 
-      if start > 0 or endline < length - 1
-        raise "Wrong positions of begin and end tags." if start > endline
-        range = Range.new(start, endline)
-        code = lines[range].join
+
+      # Select the array of start labels from code.
+      startIndices = lines
+        .each_with_index
+        .select{ |l, i| l.include? "$example on$" }
+        .map{ |l, i| i }
+
+      # Select the array of end labels from code.
+      endIndices = lines
+        .each_with_index
+        .select{ |l, i| l.include? "$example off$" }
+        .map{ |l, i| i }
+
+      raise "Start indices amount is not equal to end indices amount, please check the code." \
+        unless startIndices.size == endIndices.size
+
+      raise "No code is selected by include_example, please check the code." \
+        if startIndices.size == 0
+
+      # Select and join code blocks together, with a space line between each of two continuous
+      # blocks.
+      lastIndex = -1
+      result = ""
+      startIndices.zip(endIndices).each do |start, endline|
+        raise "Overlapping between two example code blocks are not allowed." if start <= lastIndex
+        raise "$example on$ should not be in the same line with $example off$." if start == endline
+        lastIndex = endline
+        range = Range.new(start + 1, endline - 1)
+        result += trim_codeblock(lines[range]).join
+        result += "\n"
       end
-      code
+      result
     end
   end
 end

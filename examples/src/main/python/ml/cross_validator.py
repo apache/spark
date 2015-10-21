@@ -17,6 +17,7 @@
 
 from __future__ import print_function
 
+# $example on$
 from pyspark import SparkContext
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
@@ -24,6 +25,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 from pyspark.sql import Row, SQLContext
+# $example off$
 
 """
 A simple example demonstrating model selection using CrossValidator.

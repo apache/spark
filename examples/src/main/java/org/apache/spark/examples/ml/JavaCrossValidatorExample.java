@@ -17,6 +17,7 @@
 
 package org.apache.spark.examples.ml;
 
+// $example on$
 import java.util.List;
 
 import com.google.common.collect.Lists;
@@ -36,6 +37,7 @@ import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+// $example off$
 
 /**
  * A simple example demonstrating model selection using CrossValidator.
