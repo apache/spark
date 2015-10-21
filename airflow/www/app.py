@@ -1782,6 +1782,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('samba', 'Samba',),
             ('sqlite', 'Sqlite',),
             ('mssql', 'Microsoft SQL Server'),
+            ('mesos_framework-id', 'Mesos Framework ID'),
         ]
     }
 

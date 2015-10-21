@@ -241,6 +241,12 @@ task_memory = 256
 # See http://mesos.apache.org/documentation/latest/slave-recovery/
 checkpoint = False
 
+# Failover timeout in milliseconds.
+# When checkpointing is enabled and this option is set, Mesos waits until the configured timeout for
+# the MesosExecutor framework to re-register after a failover. Mesos shuts down running tasks if the
+# MesosExecutor framework fails to re-register within this timeframe.
+# failover_timeout = 604800
+
 # Enable framework authentication for mesos
 # See http://mesos.apache.org/documentation/latest/configuration/
 authenticate = False
