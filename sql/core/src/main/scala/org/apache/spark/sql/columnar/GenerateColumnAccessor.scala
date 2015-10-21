@@ -31,7 +31,6 @@ abstract class ColumnarIterator extends Iterator[InternalRow] {
     columnIndexes: Array[Int]): Unit
 }
 
-
 /**
  * An helper class to update the fields of UnsafeRow, used by ColumnAccessor
  */
@@ -52,7 +51,6 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(nu
   override def setDecimal(i: Int, v: Decimal, precision: Int): Unit =
     throw new UnsupportedOperationException
   override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
-
 
   // all other methods inherited from GenericMutableRow are not need
 }
@@ -117,6 +115,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
     val code = s"""
       import java.nio.ByteBuffer;
       import java.nio.ByteOrder;
+      import scala.collection.Iterator;
+      import org.apache.spark.sql.types.DataType;
       import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
       import org.apache.spark.sql.columnar.MutableUnsafeRow;
@@ -139,7 +139,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         private scala.collection.Iterator input = null;
         private MutableRow mutableRow = null;
-        private ${classOf[DataType].getName}[] columnTypes = null;
+        private DataType[] columnTypes = null;
         private int[] columnIndexes = null;
 
         ${declareMutableStates(ctx)}
@@ -152,8 +152,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           ${initMutableStates(ctx)}
         }
 
-        public void initialize(scala.collection.Iterator input,
-                               ${classOf[DataType].getName}[] columnTypes, int[] columnIndexes) {
+        public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
           this.input = input;
           this.mutableRow = mutableRow;
           this.columnTypes = columnTypes;
