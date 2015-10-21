@@ -23,7 +23,7 @@ import java.util.Properties
 import scala.util.Try
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -92,7 +92,8 @@ object JdbcUtils extends Logging {
       iterator: Iterator[Row],
       rddSchema: StructType,
       nullTypes: Array[Int],
-      batchSize: Int): Iterator[Byte] = {
+      batchSize: Int,
+      dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
     try {
@@ -121,6 +122,21 @@ object JdbcUtils extends Logging {
                 case TimestampType => stmt.setTimestamp(i + 1, row.getAs[java.sql.Timestamp](i))
                 case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
                 case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
+                case ArrayType(elemType, _) =>
+                  val elemDataBaseType = dialect.getJDBCType(elemType).map(_.databaseTypeDefinition).getOrElse(
+                    dialect.getCommonJDBCType(elemType).map(_.databaseTypeDefinition).getOrElse(
+                      throw new IllegalArgumentException(
+                        s"Can't determine array element type for $elemType in field $i")
+                    ))
+                  val array: Array[AnyRef] = elemType match {
+                    case _: ArrayType =>
+                      throw new IllegalArgumentException(s"Nested array writes to JDBC are not supported for field $i")
+                    case BinaryType => row.getSeq[Array[Byte]](i).toArray
+                    case TimestampType => row.getSeq[java.sql.Timestamp](i).toArray
+                    case DateType => row.getSeq[java.sql.Date](i).toArray
+                    case _ => row.getSeq[AnyRef](i).toArray
+                  }
+                  stmt.setArray(i + 1, conn.createArrayOf(elemDataBaseType, array))
                 case _ => throw new IllegalArgumentException(
                   s"Can't translate non-null value for field $i")
               }
@@ -202,7 +218,7 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize)
+      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
     }
   }
 

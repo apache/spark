@@ -225,6 +225,8 @@ case object PostgresDialect extends JdbcDialect {
       Some(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
       Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("uuid")) {
+        Some(StringType)
     } else if (sqlType == Types.ARRAY) {
       typeName match {
         case "_bit" | "_bool" => Some(ArrayType(BooleanType))
@@ -235,7 +237,7 @@ case object PostgresDialect extends JdbcDialect {
         case "_money" | "_float8" => Some(ArrayType(DoubleType))
         case "_text" | "_varchar" | "_char" | "_bpchar" | "_name" => Some(ArrayType(StringType))
         case "_bytea" => Some(ArrayType(BinaryType))
-        case "_timestamp" | "timestamptz" | "time" | "timetz" => Some(ArrayType(TimestampType))
+        case "_timestamp" | "_timestamptz" | "_time" | "_timetz" => Some(ArrayType(TimestampType))
         case "_date" => Some(ArrayType(DateType))
         case "_numeric"
           if size != 0 || scale != 0 => Some(ArrayType(DecimalType(size, scale)))
