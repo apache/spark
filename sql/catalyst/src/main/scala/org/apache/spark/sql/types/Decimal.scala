@@ -123,7 +123,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def set(decimal: BigDecimal): Decimal = {
     this.decimalVal = decimal
     this.longVal = 0L
-    this._precision = math.max(decimal.precision, decimal.scale)
+    this._precision = decimal.precision
     this._scale = decimal.scale
     this
   }
@@ -306,7 +306,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def % (that: Decimal): Decimal =
     if (that.isZero) null
-    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT), precision, scale)
+    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def remainder(that: Decimal): Decimal = this % that
 

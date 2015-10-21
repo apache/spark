@@ -20,16 +20,16 @@ package org.apache.spark.sql.catalyst.expressions
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types._
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils._
+  import IntegralLiteralTestUtils._
 
   /**
    * Used for testing leaf math expressions.
@@ -535,13 +535,13 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Round(longPi, scale), longResults(i), EmptyRow)
     }
 
-    val results: Seq[Decimal] = Seq(Decimal(3, 8, 0), Decimal(31, 8, 1), Decimal(314, 8, 2),
-      Decimal(3142, 8, 3), Decimal(31416, 8, 4), Decimal(314159, 8, 5),
-      Decimal(3141593, 8, 6), Decimal(31415927, 8, 7))
+    val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3.0), BigDecimal(3.1), BigDecimal(3.14),
+      BigDecimal(3.142), BigDecimal(3.1416), BigDecimal(3.14159),
+      BigDecimal(3.141593), BigDecimal(3.1415927))
     // round_scale > current_scale would result in precision increase
     // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null
     (0 to 7).foreach { i =>
-      checkEvaluation(Round(bdPi, i), results(i), EmptyRow)
+      checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
     }
     (8 to 10).foreach { scale =>
       checkEvaluation(Round(bdPi, scale), null, EmptyRow)

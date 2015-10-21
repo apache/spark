@@ -111,23 +111,26 @@ public class UnsafeArrayWriter {
     holder.cursor += 8;
   }
 
-  public void write(int ordinal, Decimal input, int precision) {
-    assert(input != null);
-    assert(input.precision() == precision);
-    if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      Platform.putLong(holder.buffer, holder.cursor, input.toUnscaledLong());
-      setOffset(ordinal);
-      holder.cursor += 8;
-    } else {
-      final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
-      assert bytes.length <= 16;
-      holder.grow(bytes.length);
+  public void write(int ordinal, Decimal input, int precision, int scale) {
+    // make sure Decimal object has the same scale as DecimalType
+    if (input.changePrecision(precision, scale)) {
+      if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        Platform.putLong(holder.buffer, holder.cursor, input.toUnscaledLong());
+        setOffset(ordinal);
+        holder.cursor += 8;
+      } else {
+        final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
+        assert bytes.length <= 16;
+        holder.grow(bytes.length);
 
-      // Write the bytes to the variable length portion.
-      Platform.copyMemory(
-        bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
-      setOffset(ordinal);
-      holder.cursor += bytes.length;
+        // Write the bytes to the variable length portion.
+        Platform.copyMemory(
+          bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
+        setOffset(ordinal);
+        holder.cursor += bytes.length;
+      }
+    } else {
+      setNullAt(ordinal);
     }
   }
 

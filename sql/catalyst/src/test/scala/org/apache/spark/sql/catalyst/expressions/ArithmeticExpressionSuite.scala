@@ -38,6 +38,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     testFunc(_.toLong)
     testFunc(_.toFloat)
     testFunc(_.toDouble)
+    testFunc(Decimal(_))
   }
 
   test("+ (Add)") {
@@ -48,7 +49,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Add(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Add(left, Literal.create(null, right.dataType)), null)
     }
-    checkEvaluation(Add(Literal(Decimal(1)), Literal(Decimal(2))), Decimal(3))
     checkEvaluation(Add(positiveShortLit, negativeShortLit), -1.toShort)
     checkEvaluation(Add(positiveIntLit, negativeIntLit), -1)
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
@@ -65,7 +65,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(UnaryMinus(input), convert(-1))
       checkEvaluation(UnaryMinus(Literal.create(null, dataType)), null)
     }
-    checkEvaluation(UnaryMinus(Literal(Decimal(1))), Decimal(-1))
     checkEvaluation(UnaryMinus(Literal(Long.MinValue)), Long.MinValue)
     checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
     checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
@@ -90,7 +89,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Subtract(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Subtract(left, Literal.create(null, right.dataType)), null)
     }
-    checkEvaluation(Subtract(Literal(Decimal(1)), Literal(Decimal(2))), Decimal(-1))
     checkEvaluation(Subtract(positiveShortLit, negativeShortLit),
       (positiveShort - negativeShort).toShort)
     checkEvaluation(Subtract(positiveIntLit, negativeIntLit), positiveInt - negativeInt)
@@ -109,8 +107,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Multiply(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Multiply(left, Literal.create(null, right.dataType)), null)
     }
-    checkEvaluation(Cast(Multiply(Literal(Decimal(1)), Literal(Decimal(2))), DecimalType(20, 0)),
-      Decimal(2, 20, 0))
     checkEvaluation(Multiply(positiveShortLit, negativeShortLit),
       (positiveShort * negativeShort).toShort)
     checkEvaluation(Multiply(positiveIntLit, negativeIntLit), positiveInt * negativeInt)
@@ -131,8 +127,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Divide(left, Literal.create(null, right.dataType)), null)
       checkEvaluation(Divide(left, Literal(convert(0))), null)  // divide by zero
     }
-    checkEvaluation(Cast(Divide(Literal(Decimal(2)), Literal(Decimal(1))), DecimalType(18, 9)),
-      Decimal(2.0, 18, 9))
+
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(Divide, tpe, tpe)
     }
@@ -151,8 +146,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("/ (Divide) for floating point") {
     checkEvaluation(Divide(Literal(1.0f), Literal(2.0f)), 0.5f)
     checkEvaluation(Divide(Literal(1.0), Literal(2.0)), 0.5)
-    checkEvaluation(Cast(Divide(Literal(Decimal(1.0)), Literal(Decimal(2.0))), DecimalType(4, 3)),
-      Decimal(0.5, 4, 3))
+    checkEvaluation(Divide(Literal(Decimal(1.0)), Literal(Decimal(2.0))), Decimal(0.5))
   }
 
   test("% (Remainder)") {
@@ -164,8 +158,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Remainder(left, Literal.create(null, right.dataType)), null)
       checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
     }
-    checkEvaluation(Cast(Remainder(Literal(Decimal(1)), Literal(Decimal(2))), DecimalType(10, 0)),
-      Decimal(1))
     checkEvaluation(Remainder(positiveShortLit, positiveShortLit), 0.toShort)
     checkEvaluation(Remainder(negativeShortLit, negativeShortLit), 0.toShort)
     checkEvaluation(Remainder(positiveIntLit, positiveIntLit), 0)
