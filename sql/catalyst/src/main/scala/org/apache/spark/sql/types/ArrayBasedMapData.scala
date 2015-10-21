@@ -66,4 +66,8 @@ object ArrayBasedMapData {
   def toScalaMap(keys: Array[Any], values: Array[Any]): Map[Any, Any] = {
     keys.zip(values).toMap
   }
+
+  def toScalaMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
+    keys.zip(values).toMap
+  }
 }

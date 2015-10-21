@@ -148,7 +148,7 @@ object RandomDataGenerator {
         () => BigDecimal.apply(
           rand.nextLong() % math.pow(10, precision).toLong,
           scale,
-          new MathContext(precision)))
+          new MathContext(precision)).bigDecimal)
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
           Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
@@ -166,7 +166,7 @@ object RandomDataGenerator {
       case NullType => Some(() => null)
       case ArrayType(elementType, containsNull) => {
         forType(elementType, nullable = containsNull, seed = Some(rand.nextLong())).map {
-          elementGenerator => () => Array.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
+          elementGenerator => () => Seq.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
         }
       }
       case MapType(keyType, valueType, valueContainsNull) => {
