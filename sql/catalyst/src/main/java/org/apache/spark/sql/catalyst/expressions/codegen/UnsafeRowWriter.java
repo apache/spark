@@ -135,12 +135,10 @@ public class UnsafeRowWriter {
 
   public void write(int ordinal, Decimal input, int precision, int scale) {
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      // make sure Decimal object has the same scale as DecimalType
-      if (input.changePrecision(precision, scale)) {
-        Platform.putLong(holder.buffer, getFieldOffset(ordinal), input.toUnscaledLong());
-      } else {
-        setNullAt(ordinal);
-      }
+      assert(input != null);
+      assert(input.precision() == precision);
+      assert(input.scale() == scale);
+      Platform.putLong(holder.buffer, getFieldOffset(ordinal), input.toUnscaledLong());
     } else {
       // grow the global buffer before writing data.
       holder.grow(16);
@@ -149,13 +147,14 @@ public class UnsafeRowWriter {
       Platform.putLong(holder.buffer, holder.cursor, 0L);
       Platform.putLong(holder.buffer, holder.cursor + 8, 0L);
 
-      // Make sure Decimal object has the same scale as DecimalType.
       // Note that we may pass in null Decimal object to set null for it.
-      if (input == null || !input.changePrecision(precision, scale)) {
+      if (input == null) {
         BitSetMethods.set(holder.buffer, startingOffset, ordinal);
         // keep the offset for future update
         setOffsetAndSize(ordinal, 0L);
       } else {
+        assert(input.precision() == precision);
+        assert(input.scale() == scale);
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         assert bytes.length <= 16;
 

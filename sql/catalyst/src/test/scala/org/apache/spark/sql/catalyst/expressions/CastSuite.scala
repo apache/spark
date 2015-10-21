@@ -222,8 +222,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1, 1.0)
     checkCast(123, "123")
 
-    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123, 10, 0))
+    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123, 3, 0))
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
   }
@@ -240,10 +240,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1L, 1.0)
     checkCast(123L, "123")
 
-    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123, 10, 0))
+    checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123, 3, 0))
     checkEvaluation(cast(123L, DecimalType(3, 1)), null)
-
     checkEvaluation(cast(123L, DecimalType(2, 0)), null)
   }
 
@@ -261,8 +260,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -2.toLong)
 
-    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123, 10, 0))
+    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123, 3, 0))
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
   }
@@ -329,7 +328,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast("abdef", StringType), "abdef")
     checkEvaluation(cast("abdef", DecimalType.USER_DEFAULT), null)
     checkEvaluation(cast("abdef", TimestampType), null)
-    checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
+    checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65, 38, 18))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
@@ -409,20 +408,20 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable === true)
 
 
-    checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
+    checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03, 38, 18))
     checkEvaluation(cast(10.03, DecimalType(4, 2)), Decimal(10.03))
     checkEvaluation(cast(10.03, DecimalType(3, 1)), Decimal(10.0))
-    checkEvaluation(cast(10.03, DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(cast(10.03, DecimalType(2, 0)), Decimal(10, 2, 0))
     checkEvaluation(cast(10.03, DecimalType(1, 0)), null)
     checkEvaluation(cast(10.03, DecimalType(2, 1)), null)
     checkEvaluation(cast(10.03, DecimalType(3, 2)), null)
     checkEvaluation(cast(Decimal(10.03), DecimalType(3, 1)), Decimal(10.0))
     checkEvaluation(cast(Decimal(10.03), DecimalType(3, 2)), null)
 
-    checkEvaluation(cast(10.05, DecimalType.SYSTEM_DEFAULT), Decimal(10.05))
+    checkEvaluation(cast(10.05, DecimalType.SYSTEM_DEFAULT), Decimal(10.05, 38, 18))
     checkEvaluation(cast(10.05, DecimalType(4, 2)), Decimal(10.05))
     checkEvaluation(cast(10.05, DecimalType(3, 1)), Decimal(10.1))
-    checkEvaluation(cast(10.05, DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(cast(10.05, DecimalType(2, 0)), Decimal(10, 2, 0))
     checkEvaluation(cast(10.05, DecimalType(1, 0)), null)
     checkEvaluation(cast(10.05, DecimalType(2, 1)), null)
     checkEvaluation(cast(10.05, DecimalType(3, 2)), null)
@@ -431,7 +430,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(cast(9.95, DecimalType(3, 2)), Decimal(9.95))
     checkEvaluation(cast(9.95, DecimalType(3, 1)), Decimal(10.0))
-    checkEvaluation(cast(9.95, DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(cast(9.95, DecimalType(2, 0)), Decimal(10, 2, 0))
     checkEvaluation(cast(9.95, DecimalType(2, 1)), null)
     checkEvaluation(cast(9.95, DecimalType(1, 0)), null)
     checkEvaluation(cast(Decimal(9.95), DecimalType(3, 1)), Decimal(10.0))
@@ -439,7 +438,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(cast(-9.95, DecimalType(3, 2)), Decimal(-9.95))
     checkEvaluation(cast(-9.95, DecimalType(3, 1)), Decimal(-10.0))
-    checkEvaluation(cast(-9.95, DecimalType(2, 0)), Decimal(-10))
+    checkEvaluation(cast(-9.95, DecimalType(2, 0)), Decimal(-10, 2, 0))
     checkEvaluation(cast(-9.95, DecimalType(2, 1)), null)
     checkEvaluation(cast(-9.95, DecimalType(1, 0)), null)
     checkEvaluation(cast(Decimal(-9.95), DecimalType(3, 1)), Decimal(-10.0))
@@ -491,7 +490,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       millis.toDouble / 1000)
     checkEvaluation(
       cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
-      Decimal(1))
+      Decimal(1.0, 38, 18))
 
     // A test for higher precision than millis
     checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
