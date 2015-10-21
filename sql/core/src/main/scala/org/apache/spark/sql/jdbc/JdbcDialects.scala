@@ -94,7 +94,7 @@ abstract class JdbcDialect {
       case BinaryType => Some(JdbcType("BLOB", java.sql.Types.BLOB))
       case TimestampType => Some(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       case DateType => Some(JdbcType("DATE", java.sql.Types.DATE))
-      case DecimalType(p, s) => Some(JdbcType(s"DECIMAL($p,$s)", java.sql.Types.DECIMAL))
+      case t: DecimalType => Some(JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
       case _ => None
     }
   }
@@ -249,7 +249,7 @@ case object PostgresDialect extends JdbcDialect {
     case StringType => Some(JdbcType("TEXT", java.sql.Types.CHAR))
     case BinaryType => Some(JdbcType("BYTEA", java.sql.Types.BINARY))
     case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
-    case ArrayType(t) =>
+    case ArrayType(t, _) =>
       val subtype = getJDBCType(t).map(_.databaseTypeDefinition).getOrElse(
         getCommonJDBCType(t).map(_.databaseTypeDefinition).getOrElse(
           throw new IllegalArgumentException(s"Unexpected JDBC array subtype $t")

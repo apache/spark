@@ -447,18 +447,15 @@ private[sql] class JDBCRDD(
             case ArrayConversion(subConvert) =>
               val a = rs.getArray(pos)
               if (a != null) {
-                val genericArrayData = a.getArray match {
-                  case x: Array[java.math.BigDecimal] =>
-                    subConvert match {
-                      case DecimalConversion(p, s) => new GenericArrayData(x.map(convert_decimal(_, p, s)))
-                      case _ => throw new IllegalArgumentException("Incompatible decimal conversions")
-                    }
-                  case x: Array[java.sql.Timestamp] => new GenericArrayData(x.map(convert_timestamp))
-                  case x: Array[java.lang.String] => new GenericArrayData(x.map(UTF8String.fromString))
-                  case x: Array[java.sql.Date] => new GenericArrayData(x.map(convert_date))
-                  case x: Array[Any] => new GenericArrayData(x)
-                  case _ => throw new IllegalArgumentException(s"Unsupported arraytype $a")
-                }
+                val x = a.getArray
+                val genericArrayData = new GenericArrayData(subConvert match {
+                  case TimestampConversion => x.asInstanceOf[Array[java.sql.Timestamp]].map(convert_timestamp)
+                  case StringConversion => x.asInstanceOf[Array[java.lang.String]].map(UTF8String.fromString)
+                  case DateConversion => x.asInstanceOf[Array[java.sql.Date]].map(convert_date)
+                  case DecimalConversion(p, s) => x.asInstanceOf[Array[java.math.BigDecimal]].map(convert_decimal(_, p, s))
+                  case ArrayConversion(_) => throw new IllegalArgumentException("Nested arrays unsupported")
+                  case _ => x.asInstanceOf[Array[Any]]
+                })
                 mutableRow.update(i, genericArrayData)
               } else {
                 mutableRow.update(i, null)
