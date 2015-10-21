@@ -46,7 +46,7 @@ trait Encoder[T] {
 
   /**
    * Returns an object of type `T`, extracting the required values from the provided row.  Note that
-   * you must `bind` and encoder to a specific schema before you can call this function.
+   * you must `bind` an encoder to a specific schema before you can call this function.
    */
   def fromRow(row: InternalRow): T
 
@@ -58,8 +58,8 @@ trait Encoder[T] {
 
 
   /**
-   * Binds this encoder to the given schema positionally.  This means that the first reference to
-   * input is mapped to `schema(0)`, and so on for each element.
+   * Binds this encoder to the given schema positionally.  In this binding, the first reference to
+   * any input is mapped to `schema(0)`, and so on for each input that is encountered.
    */
   def bindOrdinals(schema: Seq[Attribute]): Encoder[T]
 
