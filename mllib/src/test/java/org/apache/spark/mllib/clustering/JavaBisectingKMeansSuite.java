@@ -57,7 +57,7 @@ public class JavaBisectingKMeansSuite implements Serializable {
     Vector expectedCenter = Vectors.dense(1.0, 3.0, 4.0);
 
     JavaRDD<Vector> data = sc.parallelize(points, 2);
-    BisectingKMeans algo = new BisectingKMeans().setNumClusters(1);
+    BisectingKMeans algo = new BisectingKMeans().setK(1);
     BisectingKMeansModel model = algo.run(data.rdd());
     assertEquals(1, model.getCenters().length);
     assertEquals(expectedCenter, model.getCenters()[0]);
@@ -73,7 +73,7 @@ public class JavaBisectingKMeansSuite implements Serializable {
       points.add(point);
     }
     JavaRDD<Vector> data = sc.parallelize(points, 2);
-    BisectingKMeans algo = new BisectingKMeans().setNumClusters(numClusters);
+    BisectingKMeans algo = new BisectingKMeans().setK(numClusters);
     BisectingKMeansModel model = algo.run(data.rdd());
     Vector[] centers = model.getCenters();
     assertEquals(numClusters, centers.length);
@@ -103,7 +103,7 @@ public class JavaBisectingKMeansSuite implements Serializable {
       points.add(point);
     }
     JavaRDD<Vector> data = sc.parallelize(points, 2);
-    BisectingKMeans algo = new BisectingKMeans().setNumClusters(numClusters);
+    BisectingKMeans algo = new BisectingKMeans().setK(numClusters);
     BisectingKMeansModel model = algo.run(data.rdd());
     Vector[] centers = model.getCenters();
     assertEquals(numClusters, centers.length);
