@@ -829,6 +829,8 @@ test_that("column functions", {
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
+  c12 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
+  c13 <- cumeDist() + ntile(1)
 
   df <- jsonFile(sqlContext, jsonPath)
   df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
