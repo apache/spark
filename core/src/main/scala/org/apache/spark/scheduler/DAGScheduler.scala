@@ -353,14 +353,11 @@ class DAGScheduler(
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      var numAvailableOutputs = 0
-      var i = 0
-      while (i < locs.length) {
+      (0 until locs.length).foreach { i =>
         if (locs(i) ne null) {
           // locs(i) will be null if missing
           stage.addOutputLoc(i, locs(i))
         }
-        i += 1
       }
     } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
