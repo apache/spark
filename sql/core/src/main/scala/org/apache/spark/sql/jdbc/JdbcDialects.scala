@@ -299,6 +299,17 @@ case object MySQLDialect extends JdbcDialect {
   override protected def tableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"
   }
+
+  // The default implementation of this method allows embedded,
+  // escaped quotes inside quoted identifiers. SQL Server does not
+  // allow embedded quotes. This means that this method won't catch
+  // some illegal table names. Those names will appear to SQL Server as an
+  // ungrammatical sequence of quoted identifiers. In order to get
+  // a better error message, someone may want to provide an
+  // implementation which handles the SQL Server grammar better.
+  //
+  //override def vetSqlIdentifier(rawId: String)
+
 }
 
 /**
