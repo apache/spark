@@ -99,7 +99,7 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   /** @group setParam */
   def setInputCol(value: String): this.type = {
     set(inputCol, value)
-    if (!isDefined(inputCols)) {
+    if (!isSet(inputCols)) {
       set(inputCols, Array(value))
     }
     this
@@ -108,7 +108,7 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   /** @group setParam */
   def setOutputCol(value: String): this.type = {
     set(outputCol, value)
-    if (!isDefined(outputCols)) {
+    if (!isSet(outputCols)) {
       set(outputCols, Array(value))
     }
     this
@@ -212,7 +212,7 @@ class StringIndexerModel (
   /** @group setParam */
   def setInputCol(value: String): this.type = {
     set(inputCol, value)
-    if (!isDefined(inputCols)) {
+    if (!isSet(inputCols)) {
       set(inputCols, Array(value))
     }
     this
@@ -221,7 +221,7 @@ class StringIndexerModel (
   /** @group setParam */
   def setOutputCol(value: String): this.type = {
     set(outputCol, value)
-    if (!isDefined(outputCols)) {
+    if (!isSet(outputCols)) {
       set(outputCols, Array(value))
     }
     this
