@@ -249,69 +249,69 @@ class WebUiTests(unittest.TestCase):
 
     def test_index(self):
         response = self.app.get('/', follow_redirects=True)
-        assert "DAGs" in response.data.decode('ascii')
-        assert "example_bash_operator" in response.data.decode('ascii')
+        assert "DAGs" in response.data.decode('utf-8')
+        assert "example_bash_operator" in response.data.decode('utf-8')
 
     def test_query(self):
         response = self.app.get('/admin/queryview/')
-        assert "Ad Hoc Query" in response.data.decode('ascii')
+        assert "Ad Hoc Query" in response.data.decode('utf-8')
         response = self.app.get(
             "/admin/queryview/?"
             "conn_id=presto_default&"
             "sql=SELECT+COUNT%281%29+FROM+airflow.static_babynames")
-        assert "Ad Hoc Query" in response.data.decode('ascii')
+        assert "Ad Hoc Query" in response.data.decode('utf-8')
 
     def test_health(self):
         response = self.app.get('/health')
-        assert 'The server is healthy!' in response.data.decode('ascii')
+        assert 'The server is healthy!' in response.data.decode('utf-8')
 
     def test_dag_views(self):
         response = self.app.get(
             '/admin/airflow/graph?dag_id=example_bash_operator')
-        assert "runme_0" in response.data.decode('ascii')
+        assert "runme_0" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/tree?num_runs=25&dag_id=example_bash_operator')
-        assert "runme_0" in response.data.decode('ascii')
+        assert "runme_0" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/duration?days=30&dag_id=example_bash_operator')
-        assert "example_bash_operator" in response.data.decode('ascii')
+        assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/landing_times?'
             'days=30&dag_id=example_bash_operator')
-        assert "example_bash_operator" in response.data.decode('ascii')
+        assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/gantt?dag_id=example_bash_operator')
-        assert "example_bash_operator" in response.data.decode('ascii')
+        assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/code?dag_id=example_bash_operator')
-        assert "example_bash_operator" in response.data.decode('ascii')
+        assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/configurationview/')
-        assert "Airflow Configuration" in response.data.decode('ascii')
+        assert "Airflow Configuration" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/rendered?'
             'task_id=runme_1&dag_id=example_bash_operator&'
             'execution_date=2015-01-07T00:00:00')
-        assert "example_bash_operator__runme_1__20150107" in response.data.decode('ascii')
+        assert "example_bash_operator__runme_1__20150107" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/log?task_id=run_this_last&'
             'dag_id=example_bash_operator&execution_date=2015-01-01T00:00:00')
-        assert "run_this_last" in response.data.decode('ascii')
+        assert "run_this_last" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/task?'
             'task_id=runme_0&dag_id=example_bash_operator&'
             'execution_date=2015-01-01')
-        assert "Attributes" in response.data.decode('ascii')
+        assert "Attributes" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/dag_stats')
-        assert "example_bash_operator" in response.data.decode('ascii')
+        assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/action?action=clear&task_id=run_this_last&'
             'dag_id=example_bash_operator&future=true&past=false&'
             'upstream=true&downstream=false&'
             'execution_date=2015-01-01T00:00:00&'
             'origin=/admin')
-        assert "Wait a minute" in response.data.decode('ascii')
+        assert "Wait a minute" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/action?action=clear&task_id=run_after_loop&'
             'dag_id=example_bash_operator&future=false&past=false&'
@@ -323,7 +323,7 @@ class WebUiTests(unittest.TestCase):
             'downstream=false&execution_date=2017-01-12&'
             'origin=/admin')
         response = self.app.get(url)
-        assert "Wait a minute" in response.data.decode('ascii')
+        assert "Wait a minute" in response.data.decode('utf-8')
         response = self.app.get(url + "&confirmed=true")
         url = (
             "/admin/airflow/action?action=run&task_id=runme_0&"
@@ -347,11 +347,11 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/chart'
             '?chart_id={}&iteration_no=1'.format(chart_id))
-        assert "Airflow task instance by type" in response.data.decode('ascii')
+        assert "Airflow task instance by type" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/chart_data'
             '?chart_id={}&iteration_no=1'.format(chart_id))
-        assert "example" in response.data.decode('ascii')
+        assert "example" in response.data.decode('utf-8')
 
     def tearDown(self):
         pass
