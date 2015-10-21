@@ -298,7 +298,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     assert(metrics.recordsRead === numRecords)
     assert(metrics.recordsWritten === numRecords)
-    assert(metrics.bytesWritten === metrics.byresRead)
+    assert(metrics.bytesWritten === metrics.bytesRead)
     assert(metrics.bytesWritten > 0)
   }
 
@@ -314,7 +314,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     assert(metrics.recordsRead === numRecords)
     assert(metrics.recordsWritten === numRecords)
-    assert(metrics.bytesWritten === metrics.byresRead)
+    assert(metrics.bytesWritten === metrics.bytesRead)
     assert(metrics.bytesWritten > 0)
   }
 }
@@ -335,7 +335,7 @@ object ShuffleSuite {
     recordsWritten: Long,
     recordsRead: Long,
     bytesWritten: Long,
-    byresRead: Long)
+    bytesRead: Long)
 
   def runAndReturnMetrics(sc: SparkContext)(job: => Unit): AggregatedShuffleMetrics = {
     @volatile var recordsWritten: Long = 0
