@@ -461,7 +461,9 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
-      return UnsafeReaders.readArray(baseObject, baseOffset + offset, size);
+      final UnsafeArrayData array = new UnsafeArrayData();
+      array.pointTo(baseObject, baseOffset + offset, size);
+      return array;
     }
   }
 
@@ -473,7 +475,9 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
-      return UnsafeReaders.readMap(baseObject, baseOffset + offset, size);
+      final UnsafeMapData map = new UnsafeMapData();
+      map.pointTo(baseObject, baseOffset + offset, size);
+      return map;
     }
   }
 

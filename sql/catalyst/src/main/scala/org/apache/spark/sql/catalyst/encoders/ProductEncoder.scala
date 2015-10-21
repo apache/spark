@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
-import org.apache.spark.sql.catalyst.{ScalaReflection, InternalRow}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.{ObjectType, StructType}
 
 /**
@@ -44,44 +40,6 @@ object ProductEncoder {
     val constructExpression = ScalaReflection.constructorFor[T]
     new ClassEncoder[T](schema, extractExpressions, constructExpression, ClassTag[T](cls))
   }
-}
 
-/**
- * A generic encoder for JVM objects.
- *
- * @param schema The schema after converting `T` to a Spark SQL row.
- * @param extractExpressions A set of expressions, one for each top-level field that can be used to
- *                           extract the values from a raw object.
- * @param clsTag A classtag for `T`.
- */
-case class ClassEncoder[T](
-    schema: StructType,
-    extractExpressions: Seq[Expression],
-    constructExpression: Expression,
-    clsTag: ClassTag[T])
-  extends Encoder[T] {
 
-  private val extractProjection = GenerateUnsafeProjection.generate(extractExpressions)
-  private val inputRow = new GenericMutableRow(1)
-
-  private lazy val constructProjection = GenerateSafeProjection.generate(constructExpression :: Nil)
-  private val dataType = ObjectType(clsTag.runtimeClass)
-
-  override def toRow(t: T): InternalRow = {
-    inputRow(0) = t
-    extractProjection(inputRow)
-  }
-
-  override def fromRow(row: InternalRow): T = {
-    constructProjection(row).get(0, dataType).asInstanceOf[T]
-  }
-
-  override def bind(schema: Seq[Attribute]): ClassEncoder[T] = {
-    val plan = Project(Alias(constructExpression, "object")() :: Nil, LocalRelation(schema))
-    val analyzedPlan = SimpleAnalyzer.execute(plan)
-    val resolvedExpression = analyzedPlan.expressions.head.children.head
-    val boundExpression = BindReferences.bindReference(resolvedExpression, schema)
-
-    copy(constructExpression = boundExpression)
-  }
 }

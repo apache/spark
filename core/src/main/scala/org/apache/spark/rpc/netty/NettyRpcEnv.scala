@@ -308,7 +308,7 @@ private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
   }
 }
 
-private[netty] class NettyRpcEndpointRef(@transient conf: SparkConf)
+private[netty] class NettyRpcEndpointRef(@transient private val conf: SparkConf)
   extends RpcEndpointRef(conf) with Serializable with Logging {
 
   @transient @volatile private var nettyEnv: NettyRpcEnv = _
