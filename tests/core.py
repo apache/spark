@@ -4,9 +4,10 @@ from time import sleep
 import unittest
 from airflow import configuration
 configuration.test_mode()
-from airflow import jobs, models, DAG, executors, utils, operators, hooks
+from airflow import jobs, models, DAG, utils, operators, hooks
 from airflow.configuration import conf
 from airflow.www.app import app
+from airflow.settings import Session
 
 NUM_EXAMPLE_DAGS = 6
 DEV_NULL = '/dev/null'
@@ -101,7 +102,6 @@ class CoreTest(unittest.TestCase):
         cli.list_tasks(args)
 
         cli.initdb(parser.parse_args(['initdb']))
-        # cli.upgradedb(parser.parse_args(['upgradedb']))
 
     def test_time_sensor(self):
         t = operators.TimeSensor(
@@ -340,12 +340,20 @@ class WebUiTests(unittest.TestCase):
             "dag_id=example_python_operator&is_paused=false")
 
     def test_charts(self):
+        session = Session()
+        chart_label = "Airflow task instance by type"
+        chart = session.query(
+            models.Chart).filter(models.Chart.label==chart_label).first()
+        chart_id = chart.id
+        session.close()
         response = self.app.get(
-            '/admin/airflow/chart?chart_id=1&iteration_no=1')
-        assert "Most Popular" in response.data
+            '/admin/airflow/chart'
+            '?chart_id={}&iteration_no=1'.format(chart_id))
+        assert "Airflow task instance by type" in response.data
         response = self.app.get(
-            '/admin/airflow/chart_data?chart_id=1&iteration_no=1')
-        assert "Michael" in response.data
+            '/admin/airflow/chart_data'
+            '?chart_id={}&iteration_no=1'.format(chart_id))
+        assert "example" in response.data
 
     def tearDown(self):
         pass

@@ -354,9 +354,9 @@ class Airflow(BaseView):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
         csv = request.args.get('csv') == "true"
-        chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
+        chart = session.query(models.Chart).filter_by(id=chart_id).first()
         db = session.query(
-            models.Connection).filter_by(conn_id=chart.conn_id).all()[0]
+            models.Connection).filter_by(conn_id=chart.conn_id).first()
         session.expunge_all()
         session.commit()
         session.close()
@@ -630,7 +630,7 @@ class Airflow(BaseView):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
         embed = request.args.get('embed')
-        chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
+        chart = session.query(models.Chart).filter_by(id=chart_id).first()
         session.expunge_all()
         session.commit()
         session.close()
