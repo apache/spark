@@ -515,7 +515,7 @@ class TaskInstance(Base):
         Index('ti_pool', pool, state, priority_weight),
     )
 
-    def __init__(self, task, execution_date):
+    def __init__(self, task, execution_date, state=None):
         self.dag_id = task.dag_id
         self.task_id = task.task_id
         self.execution_date = execution_date
@@ -525,6 +525,8 @@ class TaskInstance(Base):
         self.priority_weight = task.priority_weight_total
         self.try_number = 1
         self.unixname = getpass.getuser()
+        if state:
+            self.state = state
 
     def command(
             self,
