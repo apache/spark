@@ -25,7 +25,7 @@ pyhive
 pydruid
 PySmbClient
 python-dateutil
-pyhs2
+# pyhs2 -> not compatible with Python 3 because of sasl
 redis
 requests
 setproctitle

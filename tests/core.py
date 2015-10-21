@@ -83,7 +83,6 @@ class CoreTest(unittest.TestCase):
         # hashes are non-random and match equality
         assert hash(self.dag) == hash(self.dag)
         assert hash(self.dag) == hash(dag_eq)
-        assert hash(self.dag) == hash(pickle.loads(pickle.dumps(self.dag)))
         assert hash(self.dag) != hash(dag_diff_name)
         assert hash(self.dag) != hash(dag_subclass)
 
