@@ -129,7 +129,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     }
   }
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
+  private def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
@@ -181,7 +181,28 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         }
       }
     }
-    new ShuffledRowRDD(rddWithPartitionIds, serializer, part.numPartitions)
+
+    // Now, we manually create a ShuffleDependency. Because pairs in rddWithPartitionIds
+    // are in the form of (partitionId, row) and every partitionId is in the expected range
+    // [0, part.numPartitions - 1]. The partitioner of this is a PartitionIdPassthrough.
+    val dependency =
+      new ShuffleDependency[Int, InternalRow, InternalRow](
+        rddWithPartitionIds,
+        new PartitionIdPassthrough(part.numPartitions),
+        Some(serializer))
+
+    dependency
+  }
+
+  private def preparePostShuffleRDD(
+      shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow]): RDD[InternalRow] = {
+    new ShuffledRowRDD(shuffleDependency)
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
+    val shuffleDependency = prepareShuffleDependency()
+
+    preparePostShuffleRDD(shuffleDependency)
   }
 }
 
