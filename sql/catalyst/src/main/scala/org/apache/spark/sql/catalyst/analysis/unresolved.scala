@@ -271,14 +271,23 @@ trait SubQueryExpression extends Unevaluable {
   override def foldable: Boolean = false
   override def nullable: Boolean = false
 
+  /**
+   * Replace the subquery with new one, usually will be used when resolving the subquery.
+   */
   def withNewSubQuery(newSubquery: LogicalPlan): this.type
 }
 
 /**
- * Exist subquery expression, only used in filter only
+ * Exist subquery expression, only used in subquery predicate only.
+ *
+ * positive: true means EXISTS, other wise means NOT EXISTS
+ *
+ * NOTICE: Exists is a LeafExpression, and we need to resolve the subquery
+ * explicitly in analyzer rule.
  */
 case class Exists(subquery: LogicalPlan, positive: Boolean)
   extends LeafExpression with SubQueryExpression {
+
   override def withNewSubQuery(newSubquery: LogicalPlan): this.type = {
     this.copy(subquery = newSubquery).asInstanceOf[this.type]
   }
@@ -293,10 +302,20 @@ case class Exists(subquery: LogicalPlan, positive: Boolean)
 }
 
 /**
- * In subquery expression, only used in filter only
+ * In subquery expression, only used in subquery predicate only.
+ *
+ * child: The referenced key in WHERE clause for IN / NOT IN
+ *  e.g. SELECT value FROM src a WHERE a.key IN (SELECT key FROM src1 b WHERE b.key > 10)
+ *  The child expression is the 'a.key'
+ *
+ * positive: true means EXISTS, other wise means NOT EXISTS
+ *
+ * NOTICE: InSubquery is a LeafExpression, and we need to resolve its subquery
+ * explicitly in analyzer rule.
  */
 case class InSubquery(child: Expression, subquery: LogicalPlan, positive: Boolean)
   extends UnaryExpression with SubQueryExpression {
+
   override def withNewSubQuery(newSubquery: LogicalPlan): this.type = {
     this.copy(subquery = newSubquery).asInstanceOf[this.type]
   }
@@ -309,4 +328,3 @@ case class InSubquery(child: Expression, subquery: LogicalPlan, positive: Boolea
     s"NotInSubQuery($child, ${subquery.asCode})"
   }
 }
-

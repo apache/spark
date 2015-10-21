@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{LeftSemiJoin, LeftSemi, LeftAnti}
+import org.apache.spark.sql.catalyst.plans.{LeftSemiOrAntiJoin, LeftSemi, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, Distribution, ClusteredDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -35,7 +35,7 @@ case class LeftSemiJoinHash(
     left: SparkPlan,
     right: SparkPlan,
     condition: Option[Expression],
-    jt: LeftSemiJoin) extends BinaryNode with HashSemiJoin {
+    jt: LeftSemiOrAntiJoin) extends BinaryNode with HashSemiJoin {
 
   override private[sql] lazy val metrics = Map(
     "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),

@@ -274,38 +274,119 @@ class Analyzer(
 
   /**
    * Rewrite the [[Exists]] [[In]] with left semi join or anti join.
+   *
+   * 1. Some of the key concepts:
+   *  Correlated:
+   *   References the attributes of the parent query within subquery, we call that Correlated.
+   *  e.g. We reference the "a.value", which is the attribute in parent query, in the subquery.
+   *
+   *   SELECT a.value FROM src a
+   *   WHERE a.key in (
+   *     SELECT b.key FROM src1 b
+   *     WHERE a.value > b.value)
+   *
+   *  Unrelated:
+   *   Do not have any attribute reference to its parent query in the subquery.
+   *  e.g.
+   *   SELECT a.value FROM src a WHERE a.key IN (SELECT key FROM src WHERE key > 100);
+   *
+   * 2. Basic Logic for the Transformation
+   *    EXISTS / IN => LEFT SEMI JOIN
+   *    NOT EXISTS / NOT IN => LEFT ANTI JOIN
+   *
+   *    In logical plan demostration, we support the cases like below:
+   *
+   *    e.g. EXISTS / NOT EXISTS
+   *    SELECT value FROM src a WHERE (NOT) EXISTS (SELECT 1 FROM src1 b WHERE a.key < b.key)
+   *        ==>
+   *    SELECT a.value FROM src a LEFT (ANTI) SEMI JOIN src1 b WHERE a.key < b.key
+   *
+   *    e.g. IN / NOT IN
+   *    SELECT value FROM src a WHERE key (NOT) IN (SELECT key FROM src1 b WHERE a.value < b.value)
+   *       ==>
+   *    SELECT value FROM src a LEFT (ANTI) SEMI JOIN src1 b ON a.key = b.key AND a.value < b.value
+   *
+   *    e.g. IN / NOT IN with other conjunctions
+   *    SELECT value FROM src a
+   *    WHERE key (NOT) IN (
+   *      SELECT key FROM src1 b WHERE a.value < b.value
+   *    ) AND a.key > 10
+   *       ==>
+   *    SELECT value
+   *      (FROM src a WHERE a.key > 10)
+   *    LEFT (ANTI) SEMI JOIN src1 b ON a.key = b.key AND a.value < b.value
+   *
+   * 3. There are also some limitations:
+   *   a. IN/NOT IN subqueries may only select a single column.
+   *    e.g.(bad example)
+   *    SELECT value FROM src a WHERE EXISTS (SELECT key, value FROM src1 WHERE key > 10)
+   *   b. EXISTS/NOT EXISTS must have one or more correlated predicates.
+   *    e.g.(bad example)
+   *    SELECT value FROM src a WHERE EXISTS (SELECT 1 FROM src1 b WHERE b.key > 10)
+   *   c. References to the parent query is only supported in the WHERE clause of the subquery.
+   *    e.g.(bad example)
+   *    SELECT value FROM src a WHERE key IN (SELECT a.key + b.key FROM src1 b)
+   *   d. Only a single subquery can support in IN/EXISTS predicate.
+   *    e.g.(bad example)
+   *    SELECT value FROM src WHERE key IN (SELECT xx1 FROM xxx1) AND key in (SELECT xx2 FROM xxx2)
+   *   e. Disjunction is not supported in the top level.
+   *    e.g.(bad example)
+   *    SELECT value FROM src WHERE key > 10 OR key IN (SELECT xx1 FROM xxx1)
+   *   f. Implicit reference expression substitution to the parent query is not supported.
+   *    e.g.(bad example)
+   *    SELECT min(key) FROM src a HAVING EXISTS (SELECT 1 FROM src1 b WHERE b.key = min(a.key))
+   *
+   * 4. TODOs
+   *   a. More pretty message to user why we failed in parsing.
+   *   b. Support multiple IN / EXISTS clause in the predicates.
+   *   c. Implicit reference expression substitution to the parent query
+   *   d. ..
    */
   object RewriteFilterSubQuery extends Rule[LogicalPlan] with PredicateHelper {
+    // This is to extract the SubQuery expression and other conjunction expressions.
     def unapply(condition: Expression): Option[(Expression, Seq[Expression])] = {
       if (condition.resolved == false) {
         return None
       }
 
-      val conjuctions = splitConjunctivePredicates(condition).map(_ transformDown {
+      val conjunctions = splitConjunctivePredicates(condition).map(_ transformDown {
           // Remove the Cast expression for SubQueryExpression.
           case Cast(f: SubQueryExpression, BooleanType) => f
         }
       )
 
-      val (subqueries, others) = conjuctions.partition(c => c.isInstanceOf[SubQueryExpression])
+      val (subqueries, others) = conjunctions.partition(c => c.isInstanceOf[SubQueryExpression])
       if (subqueries.isEmpty) {
         None
       } else if (subqueries.length > 1) {
+        // We don't support the cases with multiple subquery in the predicates now like:
+        // SELECT value FROM src
+        // WHERE
+        //   key IN (SELECT key xxx) AND
+        //   key IN (SELECT key xxx)
+        // TODO support this case in the future since it's part of the `standard SQL`
         throw new AnalysisException(
-          s"Only 1 SubQuery expression is supported, but we got $subqueries")
+          s"Only 1 SubQuery expression is supported in predicates, but we got $subqueries")
       } else {
         val subQueryExpr = subqueries(0).asInstanceOf[SubQueryExpression]
         // try to resolve the subquery
 
         val subquery = Analyzer.this.execute(subQueryExpr.subquery) match {
-          case Distinct(child) => child // Distinct is useless for semi join, ignore it.
+          case Distinct(child) =>
+            // Distinct is useless for semi join, ignore it.
+            // e.g. SELECT value FROM src WHERE key IN (SELECT DISTINCT key FROM src b)
+            // which is equvilent to
+            // SELECT value FROM src WHERE key IN (SELECT key FROM src b)
+            // The reason we discard the DISTINCT keyword is we don't want to make
+            // additional rule for DISTINCT operator in the `def apply(..)`
+            child
           case other => other
         }
         Some((subQueryExpr.withNewSubQuery(subquery), others))
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case f if f.childrenResolved == false => f
 
       case f @ Filter(RewriteFilterSubQuery(subquery, others), left) =>
@@ -315,48 +396,90 @@ class Analyzer(
             if (condition.resolved) {
               // Apparently, it should be not resolved here, since EXIST should be correlated.
               throw new AnalysisException(
-                s"Exist clause should be correlated, but we got $condition")
+                s"Exists/Not Exists operator SubQuery must be correlated, but we got $condition")
             }
-            Join(others.reduceOption(And).map(Filter(_, left)).getOrElse(left), right,
+            val newLeft = others.reduceOption(And).map(Filter(_, left)).getOrElse(left)
+            Join(newLeft, right,
               if (positive) LeftSemi else LeftAnti,
               Some(ResolveReferences.tryResolveAttributes(condition, right)))
 
           case Exists(right, positive) =>
-            throw new AnalysisException(s"Exist clause should be correlated, but we got $right")
+            throw new AnalysisException(s"Exists/Not Exists operator SubQuery must be Correlated," +
+              s"but we got $right")
 
           case InSubquery(key, Project(projectList, Filter(condition, right)), positive) =>
+            // we don't support nested correlation yet, so the `right` must be resolved.
             checkAnalysis(right)
             if (projectList.length != 1) {
               throw new AnalysisException(
-                s"Expect only 1 projection in In Subquery Expression, but we got $projectList")
+                s"Expect only 1 projection in In SubQuery Expression, but we got $projectList")
             } else {
+              // This is a workaround to solve the ambiguous references issue like:
+              // SELECT 'value FROM src WHERE 'key IN (SELECT 'key FROM src b WHERE 'key > 100)
+              //
+              // Literally, we will transform the SQL into:
+              //
+              // SELECT 'value FROM src
+              // LEFT SEMI JOIN src b
+              //   ON 'key = 'key and 'key > 100 -- this is reference ambiguous for 'key!
+              //
+              // The ResolveReferences.tryResolveAttributes will partially resolve the project
+              // list and filter condition of the subquery, and then what we got looks like:
+              //
+              // SELECT 'value FROM src
+              // LEFI SEMI JOIN src b
+              //   ON 'key = key#123 and key#123 > 100
+              //
+              // And then we will leave the remaining unresolved attributes for the other rules
+              // in Analyzer.
               val rightKey = ResolveReferences.tryResolveAttributes(projectList(0), right)
 
               if (!rightKey.resolved) {
-                throw new AnalysisException(
-                  s"Outer query expression should be only presented at the filter clause, " +
-                    s"but we got $rightKey")
+                throw new AnalysisException(s"Cannot resolve the projection for SubQuery $rightKey")
               }
-              Join(others.reduceOption(And).map(Filter(_, left)).getOrElse(left), right,
-                if (positive) LeftSemi else LeftAnti,
-                Some(
-                  And(
-                    ResolveReferences.tryResolveAttributes(condition, right),
-                    EqualTo(rightKey, key))))
+
+              // This is for the SQL with conjunction like:
+              //
+              // SELECT value FROM src a
+              // WHERE key > 5 AND key IN (SELECT key FROM src1 b key >7) AND key < 10
+              //
+              // ==>
+              // SELECT value FROM (src a
+              //   WHERE key > 5 AND key < 10)
+              // LEFT SEMI JOIN src1 b ON a.key = b.key AND b.key > 7
+              //
+              // Ideally, we should transform the original plan into
+              // SELECT value FROM src a
+              // LEFT SEMI JOIN src1 b
+              // ON a.key = b.key AND b.key > 7 AND a.key > 5 AND a.key < 10
+              //
+              // However, the former one only requires few code change to support
+              // the multiple subquery for IN clause, and less overhead for Optimizer
+              val newLeft = others.reduceOption(And).map(Filter(_, left)).getOrElse(left)
+              val newCondition = Some(
+                And(
+                  ResolveReferences.tryResolveAttributes(condition, right),
+                  EqualTo(rightKey, key)))
+
+              Join(newLeft, right, if (positive) LeftSemi else LeftAnti, newCondition)
             }
 
           case InSubquery(key, Project(projectList, right), positive) =>
+            // we don't support nested correlation yet, so the `right` must be resolved.
             checkAnalysis(right)
             if (projectList.length != 1) {
               throw new AnalysisException(
-                s"Expect only 1 projection in In Subquery Expression, but we got $projectList")
+                s"Expect only 1 projection in In SubQuery Expression, but we got $projectList")
             } else {
               if (!projectList(0).resolved) {
-                throw new AnalysisException(
-                  s"Outer query expression should be only presented at the filter clause, " +
-                    s"but we got ${projectList(0)}")
+                // We don't support reference in the outer column in the subquery projection list.
+                // e.g. SELECT value FROM src a WHERE key in (SELECT b.key + a.key FROM src b)
+                // That means, the project list of the subquery MUST BE resolved already, otherwise
+                // throws exception.
+                throw new AnalysisException(s"Cannot resolve the projection ${projectList(0)}")
               }
-              Join(others.reduceOption(And).map(Filter(_, left)).getOrElse(left), right,
+              val newLeft = others.reduceOption(And).map(Filter(_, left)).getOrElse(left)
+              Join(newLeft, right,
                 if (positive) LeftSemi else LeftAnti,
                 Some(EqualTo(projectList(0), key)))
             }
@@ -364,23 +487,26 @@ class Analyzer(
           case InSubquery(key, right @ Aggregate(grouping, aggregations, child), positive) =>
             if (aggregations.length != 1) {
               throw new AnalysisException(
-                s"Expect only 1 projection in In Subquery Expression, but we got $aggregations")
+                s"Expect only 1 projection in In SubQuery Expression, but we got $aggregations")
             } else {
+              // we don't support nested correlation yet, so the `child` must be resolved.
               checkAnalysis(child)
               val rightKey = ResolveReferences.tryResolveAttributes(aggregations(0), child) match {
-                case e if e.resolved == false =>
+                case e if !e.resolved =>
                   throw new AnalysisException(
-                    s"Outer query expression should be only presented at the filter clause" +
-                      s", but we got $e")
+                    s"Cannot resolve the aggregation $e")
                 case e: NamedExpression => e
-                case other => Alias(other, " in_subquery_key")()
+                case other =>
+                  // place a space before `in_subquery_key`, hopefully end user
+                  // will not take that as the field name or alias.
+                  Alias(other, " in_subquery_key")()
               }
 
-              Join(
-                others.reduceOption(And).map(Filter(_, left)).getOrElse(left),
-                Aggregate(grouping, rightKey :: Nil, child),
-                if (positive) LeftSemi else LeftAnti,
-                Some(EqualTo(rightKey.toAttribute, key)))
+              val newLeft = others.reduceOption(And).map(Filter(_, left)).getOrElse(left)
+              val newRight = Aggregate(grouping, rightKey :: Nil, child)
+              val newCondition = Some(EqualTo(rightKey.toAttribute, key))
+
+              Join(newLeft, newRight, if (positive) LeftSemi else LeftAnti, newCondition)
             }
 
           case InSubquery(key,
@@ -389,6 +515,7 @@ class Analyzer(
               throw new AnalysisException(
                 s"Expect only 1 projection in In Subquery Expression, but we got $aggregations")
             } else {
+              // we don't support nested correlation yet, so the `child` must be resolved.
               checkAnalysis(child)
               val rightKey = ResolveReferences.tryResolveAttributes(aggregations(0), child) match {
                 case e if e.resolved == false =>
@@ -399,14 +526,13 @@ class Analyzer(
                 case other => Alias(other, " in_subquery_key")()
               }
 
-              Join(
-                Filter(
-                  others.foldLeft(
-                    ResolveReferences.tryResolveAttributes(condition(0), child))(And(_, _)),
-                  left),
-                Aggregate(grouping, rightKey :: Nil, child),
-                if (positive) LeftSemi else LeftAnti,
-                Some(EqualTo(rightKey.toAttribute, key)))
+              val newLeft =
+                Filter(others.foldLeft(
+                  ResolveReferences.tryResolveAttributes(condition(0), child))(And(_, _)),
+                  left)
+              val newRight = Aggregate(grouping, rightKey :: Nil, child)
+              val newCondition = Some(EqualTo(rightKey.toAttribute, key))
+              Join(newLeft, newRight, if (positive) LeftSemi else LeftAnti, newCondition)
             }
         }
     }
@@ -553,6 +679,7 @@ class Analyzer(
     }
 
     // Try to resolve the attributes from the given logical plan
+    // TODO share the code with above rules? How?
     def tryResolveAttributes(expr: Expression, q: LogicalPlan): Expression = {
       checkAnalysis(q)
       val projection = Project(q.output, q)

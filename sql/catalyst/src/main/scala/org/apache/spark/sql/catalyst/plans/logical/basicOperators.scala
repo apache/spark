@@ -123,7 +123,7 @@ case class Join(
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case _: LeftSemiJoin =>
+      case _: LeftSemiOrAntiJoin =>
         left.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
