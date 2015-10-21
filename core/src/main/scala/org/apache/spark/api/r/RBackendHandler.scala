@@ -224,7 +224,7 @@ private[r] class RBackendHandler(server: RBackend)
                 case _ => parameterType
               }
             }
-            if (!(!parameterType.isPrimitive && args(i) == null) &&
+            if ((parameterType.isPrimitive || args(i) != null) &&
                 !parameterWrapperType.isInstance(args(i))) {
               argMatched = false
             }
