@@ -975,4 +975,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expected(except)
     )
   }
+
+  test("SPARK-10743: keep the name of expression if possible when do cast") {
+    val df = (1 to 10).map(Tuple1.apply).toDF("i").as("src")
+    assert(df.select($"src.i".cast(StringType)).columns.head === "i")
+  }
 }
