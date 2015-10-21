@@ -19,8 +19,9 @@ from __future__ import print_function
 
 import os
 import shutil
+import signal
 import sys
-from threading import Lock
+from threading import RLock
 from tempfile import NamedTemporaryFile
 
 from pyspark import accumulators
@@ -64,7 +65,7 @@ class SparkContext(object):
     _jvm = None
     _next_accum_id = 0
     _active_spark_context = None
-    _lock = Lock()
+    _lock = RLock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
 
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
@@ -217,6 +218,12 @@ class SparkContext(object):
         else:
             self.profiler_collector = None
 
+        # create a signal handler which would be invoked on receiving SIGINT
+        def signal_handler(signal, frame):
+            self.cancelAllJobs()
+
+        signal.signal(signal.SIGINT, signal_handler)
+
     def _initialize_context(self, jconf):
         """
         Initialize SparkContext in function to allow subclass specific initialization
@@ -272,6 +279,18 @@ class SparkContext(object):
         Specifically stop the context on exit of the with block.
         """
         self.stop()
+
+    @classmethod
+    def getOrCreate(cls, conf=None):
+        """
+        Get or instantiate a SparkContext and register it as a singleton object.
+
+        :param conf: SparkConf (optional)
+        """
+        with SparkContext._lock:
+            if SparkContext._active_spark_context is None:
+                SparkContext(conf=conf or SparkConf())
+            return SparkContext._active_spark_context
 
     def setLogLevel(self, logLevel):
         """

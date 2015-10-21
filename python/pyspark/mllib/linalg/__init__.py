@@ -240,6 +240,7 @@ class Vector(object):
     def toArray(self):
         """
         Convert the vector into an numpy.ndarray
+
         :return: numpy.ndarray
         """
         raise NotImplementedError
@@ -301,11 +302,14 @@ class DenseVector(Vector):
         return DenseVector, (self.array.tostring(),)
 
     def numNonzeros(self):
+        """
+        Number of nonzero elements. This scans all active values and count non zeros
+        """
         return np.count_nonzero(self.array)
 
     def norm(self, p):
         """
-        Calculte the norm of a DenseVector.
+        Calculates the norm of a DenseVector.
 
         >>> a = DenseVector([0, -1, 2, -3])
         >>> a.norm(2)
@@ -397,10 +401,16 @@ class DenseVector(Vector):
         return np.dot(diff, diff)
 
     def toArray(self):
+        """
+        Returns an numpy.ndarray
+        """
         return self.array
 
     @property
     def values(self):
+        """
+        Returns a list of values
+        """
         return self.array
 
     def __getitem__(self, item):
@@ -479,8 +489,8 @@ class SparseVector(Vector):
 
         :param size: Size of the vector.
         :param args: Active entries, as a dictionary {index: value, ...},
-          a list of tuples [(index, value), ...], or a list of strictly i
-          ncreasing indices and a list of corresponding values [index, ...],
+          a list of tuples [(index, value), ...], or a list of strictly
+          increasing indices and a list of corresponding values [index, ...],
           [value, ...]. Inactive entries are treated as zeros.
 
         >>> SparseVector(4, {1: 1.0, 3: 5.5})
@@ -521,11 +531,14 @@ class SparseVector(Vector):
                     raise TypeError("indices array must be sorted")
 
     def numNonzeros(self):
+        """
+        Number of nonzero elements. This scans all active values and count non zeros.
+        """
         return np.count_nonzero(self.values)
 
     def norm(self, p):
         """
-        Calculte the norm of a SparseVector.
+        Calculates the norm of a SparseVector.
 
         >>> a = SparseVector(4, [0, 1], [3., -4.])
         >>> a.norm(1)
@@ -751,10 +764,14 @@ class SparseVector(Vector):
         if not isinstance(index, int):
             raise TypeError(
                 "Indices must be of type integer, got type %s" % type(index))
+
+        if index >= self.size or index < -self.size:
+            raise ValueError("Index %d out of bounds." % index)
         if index < 0:
             index += self.size
-        if index >= self.size or index < 0:
-            raise ValueError("Index %d out of bounds." % index)
+
+        if (inds.size == 0) or (index > inds.item(-1)):
+            return 0.
 
         insert_index = np.searchsorted(inds, index)
         row_ind = inds[insert_index]
@@ -797,7 +814,7 @@ class Vectors(object):
         values (sorted by index).
 
         :param size: Size of the vector.
-        :param args: Non-zero entries, as a dictionary, list of tupes,
+        :param args: Non-zero entries, as a dictionary, list of tuples,
                      or two sorted lists containing indices and values.
 
         >>> Vectors.sparse(4, {1: 1.0, 3: 5.5})

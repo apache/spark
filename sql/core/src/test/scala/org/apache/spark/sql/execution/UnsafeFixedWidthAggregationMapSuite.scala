@@ -200,9 +200,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
-      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
-        initialMemoryConsumption + 4096 * 16)
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.
@@ -305,9 +303,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
-      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
-        initialMemoryConsumption + 4096 * 16)
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.

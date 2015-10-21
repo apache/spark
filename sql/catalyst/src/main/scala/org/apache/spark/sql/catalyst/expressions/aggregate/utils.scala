@@ -61,15 +61,15 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = true)
 
-        case expressions.First(child) =>
+        case expressions.First(child, ignoreNulls) =>
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.First(child),
+            aggregateFunction = aggregate.First(child, ignoreNulls),
             mode = aggregate.Complete,
             isDistinct = false)
 
-        case expressions.Last(child) =>
+        case expressions.Last(child, ignoreNulls) =>
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Last(child),
+            aggregateFunction = aggregate.Last(child, ignoreNulls),
             mode = aggregate.Complete,
             isDistinct = false)
 
@@ -114,6 +114,12 @@ object Utils {
             aggregateFunction = aggregate.Sum(child),
             mode = aggregate.Complete,
             isDistinct = true)
+
+        case expressions.ApproxCountDistinct(child, rsd) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.HyperLogLogPlusPlus(child, rsd),
+            mode = aggregate.Complete,
+            isDistinct = false)
       }
       // Check if there is any expressions.AggregateExpression1 left.
       // If so, we cannot convert this plan.

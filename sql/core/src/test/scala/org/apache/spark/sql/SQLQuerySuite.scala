@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.joins.{SortMergeJoin, CartesianProduct}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -581,28 +582,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       mapData.collect().sortBy(_.data(1)).reverse.map(Row.fromTuple).toSeq)
   }
 
-  test("sorting") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false") {
-      sortTest()
-    }
-  }
-
   test("external sorting") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true") {
-      sortTest()
-    }
-  }
-
-  test("SPARK-6927 sorting with codegen on") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "true") {
-      sortTest()
-    }
+    sortTest()
   }
 
   test("SPARK-6927 external sorting with codegen on") {
-    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
       sortTest()
     }
   }
@@ -864,6 +849,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row (4, "D", 4, "D") ::
       Row(null, null, 5, "E") ::
       Row(null, null, 6, "F") :: Nil)
+  }
+
+  test("SPARK-11111 null-safe join should not use cartesian product") {
+    val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
+    val cp = df.queryExecution.executedPlan.collect {
+      case cp: CartesianProduct => cp
+    }
+    assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
+    val smj = df.queryExecution.executedPlan.collect {
+      case smj: SortMergeJoin => smj
+    }
+    assert(smj.size > 0, "should use SortMergeJoin")
+    checkAnswer(df, Row(100) :: Nil)
   }
 
   test("SPARK-3349 partitioning after limit") {
@@ -1731,10 +1729,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("external sorting updates peak execution memory") {
-    withSQLConf((SQLConf.EXTERNAL_SORT.key, "true")) {
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
-        sortTest()
-      }
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
+      sortTest()
     }
   }
 
@@ -1797,6 +1793,71 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Seq(Row(1), Row(1)))
       checkAnswer(sql("SELECT MAX(value) FROM src GROUP BY key + 1 ORDER BY (key + 1) * 2"),
         Seq(Row(1), Row(1)))
+    }
+  }
+
+  test("run sql directly on files") {
+    val df = sqlContext.range(100)
+    withTempPath(f => {
+      df.write.json(f.getCanonicalPath)
+      checkAnswer(sql(s"select id from json.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select id from `org.apache.spark.sql.json`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select a.id from json.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+
+    val e1 = intercept[AnalysisException] {
+      sql("select * from in_valid_table")
+    }
+    assert(e1.message.contains("Table not found"))
+
+    val e2 = intercept[AnalysisException] {
+      sql("select * from no_db.no_table")
+    }
+    assert(e2.message.contains("Table not found"))
+
+    val e3 = intercept[AnalysisException] {
+      sql("select * from json.invalid_file")
+    }
+    assert(e3.message.contains("No input paths specified"))
+  }
+
+  test("SortMergeJoin returns wrong results when using UnsafeRows") {
+    // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
+    // This bug will be triggered when Tungsten is enabled and there are multiple
+    // SortMergeJoin operators executed in the same task.
+    val confs =
+      SQLConf.SORTMERGE_JOIN.key -> "true" ::
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" ::
+        SQLConf.TUNGSTEN_ENABLED.key -> "true" :: Nil
+    withSQLConf(confs: _*) {
+      val df1 = (1 to 50).map(i => (s"str_$i", i)).toDF("i", "j")
+      val df2 =
+        df1
+          .join(df1.select(df1("i")), "i")
+          .select(df1("i"), df1("j"))
+
+      val df3 = df2.withColumnRenamed("i", "i1").withColumnRenamed("j", "j1")
+      val df4 =
+        df2
+          .join(df3, df2("i") === df3("i1"))
+          .withColumn("diff", $"j" - $"j1")
+          .select(df2("i"), df2("j"), $"diff")
+
+      checkAnswer(
+        df4,
+        df1.withColumn("diff", lit(0)))
+    }
+  }
+
+  test("SPARK-11032: resolve having correctly") {
+    withTempTable("src") {
+      Seq(1 -> "a").toDF("i", "j").registerTempTable("src")
+      checkAnswer(
+        sql("SELECT MIN(t.i) FROM (SELECT * FROM src WHERE i > 0) t HAVING(COUNT(1) > 0)"),
+        Row(1))
     }
   }
 }
