@@ -4,6 +4,7 @@ celery
 chartkick
 cryptography
 coverage
+coveralls
 dill
 flake8
 flask

@@ -36,3 +36,4 @@ script:
   - ls -l $HOME/.wheelhouse
   - tox --version
   - tox -e $TOX_ENV
+after_success: coveralls
