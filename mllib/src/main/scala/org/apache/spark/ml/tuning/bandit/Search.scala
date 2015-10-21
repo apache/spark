@@ -21,18 +21,22 @@ import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 import org.apache.spark.sql.DataFrame
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 abstract class Search(val trainingData: DataFrame, val validationData: DataFrame) {
   def search(totalBudgets: Int, arms: Array[Arm]): Arm
 }
 
-class StaticSearch(override val trainingData: DataFrame, override val validationData: DataFrame) extends Search(trainingData, validationData) {
+/**
+ * A naive search strategy that pulling arms in a round robin style.
+ */
+class StaticSearch(
+    override val trainingData: DataFrame,
+    override val validationData: DataFrame) extends Search(trainingData, validationData) {
   override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
 
-    assert(arms.size != 0, "ERROR: No arms!")
-    val numArms = arms.size
+    assert(arms.length != 0, "ERROR: No arms!")
+    val numArms = arms.length
     var i = 0
     while (i  < totalBudgets) {
       arms(i % numArms).pull(trainingData)
@@ -44,9 +48,14 @@ class StaticSearch(override val trainingData: DataFrame, override val validation
   }
 }
 
-class SimpleBanditSearch(override val trainingData: DataFrame, override val validationData: DataFrame) extends Search(trainingData, validationData) {
+/**
+ * Simple search strategy that ...
+ */
+class SimpleBanditSearch(
+    override val trainingData: DataFrame,
+    override val validationData: DataFrame) extends Search(trainingData, validationData) {
   override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
-    val numArms = arms.size
+    val numArms = arms.length
     val alpha = 0.3
     val initialRounds = math.max(1, (alpha * totalBudgets / numArms).toInt)
 
@@ -70,9 +79,14 @@ class SimpleBanditSearch(override val trainingData: DataFrame, override val vali
   }
 }
 
-class ExponentialWeightsSearch(override val trainingData: DataFrame, override val validationData: DataFrame) extends Search(trainingData, validationData) {
+/**
+ * Exponential weight search strategy that ...
+ */
+class ExponentialWeightsSearch(
+    override val trainingData: DataFrame,
+    override val validationData: DataFrame) extends Search(trainingData, validationData) {
   override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
-    val numArms = arms.size
+    val numArms = arms.length
     val eta = math.sqrt(2 * math.log(numArms) / (numArms * totalBudgets))
 
     val lt = Vectors.zeros(numArms).asInstanceOf[DenseVector]
@@ -91,9 +105,16 @@ class ExponentialWeightsSearch(override val trainingData: DataFrame, override va
   }
 }
 
-class LILUCBSearch(override val trainingData: DataFrame, override val validationData: DataFrame) extends Search(trainingData, validationData) {
+/**
+ *
+ * @param trainingData
+ * @param validationData
+ */
+class LILUCBSearch(
+    override val trainingData: DataFrame,
+    override val validationData: DataFrame) extends Search(trainingData, validationData) {
   override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
-    val numArms = arms.size
+    val numArms = arms.length
 
     val nj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
     val sumj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
@@ -136,9 +157,16 @@ class LILUCBSearch(override val trainingData: DataFrame, override val validation
   }
 }
 
-class LUCBSearch(override val trainingData: DataFrame, override val validationData: DataFrame) extends Search(trainingData, validationData) {
+/**
+ *
+ * @param trainingData
+ * @param validationData
+ */
+class LUCBSearch(
+    override val trainingData: DataFrame,
+    override val validationData: DataFrame) extends Search(trainingData, validationData) {
   override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
-    val numArms = arms.size
+    val numArms = arms.length
 
     val nj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
     val sumj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
@@ -183,7 +211,7 @@ class LUCBSearch(override val trainingData: DataFrame, override val validationDa
       val k1 = 1.25
       val t2nd = math.max(t * t / 4.0, 1.0)
       val t4th = t2nd * t2nd
-      var ctTmp = math.sqrt(0.5 * math.log(k1 * numArms * t4th / delta) / arms(it).numPulls)
+      var ctTmp = math.sqrt(0.5 * math.log(k1 * numArms * t4th / delta) / arms(it).getNumPulls)
       ucbj.values(it) = sumj(it) / nj(it) - ctTmp
 
       it = if (inds1(0) == inds0(0)) inds1(1) else inds1(0)
@@ -191,7 +219,7 @@ class LUCBSearch(override val trainingData: DataFrame, override val validationDa
       sumj.values(it) += arms(it).getValidationResult(validationData)
       nj.values(it) += 1
       t += 1
-      ctTmp = math.sqrt(0.5 * math.log(k1 * numArms * t4th / delta) / arms(it).numPulls)
+      ctTmp = math.sqrt(0.5 * math.log(k1 * numArms * t4th / delta) / arms(it).getNumPulls)
       ucbj.values(it) = sumj(it) / nj(it) - ctTmp
     }
 
@@ -200,51 +228,65 @@ class LUCBSearch(override val trainingData: DataFrame, override val validationDa
   }
 }
 
-/*
-class SuccessiveHalvingSearch(override val trainingData: DataFrame, override val validationData: DataFrame) extends Search(trainingData, validationData) {
+/**
+ *
+ * @param trainingData
+ * @param validationData
+ */
+class SuccessiveHalvingSearch(
+    override val trainingData: DataFrame,
+    override val validationData: DataFrame) extends Search(trainingData, validationData) {
   override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
-    val numArms = arms.size
+    val numArms = arms.length
     val numOfHalvingIter = math.ceil(Utils.log2(numArms)).toInt
 
-    var armAry = arms
+    var armsRef = arms
 
     var t = 0
 
-    if ((totalBudgets / (arms.size * numOfHalvingIter)) > 0) {
+    if ((totalBudgets / (armsRef.length * numOfHalvingIter)) > 0) {
       for (_ <- 0 until numOfHalvingIter) {
-        val numOfCurrentPulling = totalBudgets / (arms.size * numOfHalvingIter)
+        val numOfCurrentPulling = totalBudgets / (armsRef.length * numOfHalvingIter)
         var i = 0
-        while (i < arms.size) {
+        while (i < armsRef.length) {
           for (_ <- 0 until numOfCurrentPulling) {
-            arms(i).pull(trainingData)
+            armsRef(i).pull(trainingData)
             t += 1
           }
           i += 1
         }
-        arms = arms.sortBy(_.getValidationResult(validationData))
-          .drop(arms.size - math.ceil(arms.size / 2.0).toInt)
+        armsRef = armsRef.sortBy(_.getValidationResult(validationData))
+          .drop(armsRef.length - math.ceil(armsRef.length / 2.0).toInt)
       }
     }
 
     val bestArm = if (t == totalBudgets) {
-      armValues.maxBy(arm => arm.getValidationResult(recompute = false))
+      armsRef.maxBy(arm => arm.getValidationResult(validationData))
     } else {
       while (t < totalBudgets) {
-        armValues(t % armValues.size).pull()
+        armsRef(t % armsRef.length).pull(trainingData)
         t += 1
       }
-      armValues.maxBy(arm => arm.getValidationResult())
+      armsRef.maxBy(arm => arm.getValidationResult(validationData))
     }
 
     bestArm
   }
 }
 
-class SuccessiveRejectSearch extends Search {
-  override val name = "successive reject search"
-  override def search(totalBudgets: Int, arms: Map[(String, String), Arm[_]]): Arm[_] = {
-    val numArms = arms.size
-    var armValues = arms.values.toArray
+/**
+ *
+ * @param trainingData
+ * @param validationData
+ */
+class SuccessiveRejectSearch(
+    override val trainingData: DataFrame,
+    override val validationData: DataFrame) extends Search(trainingData, validationData) {
+  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+    val numArms = arms.length
+
+    var armsRef = arms
+
     val barLogOfNumArms = 0.5 + (2 to numArms).map(i => 1.0 / i).sum
 
     var prevNk = 0
@@ -253,89 +295,95 @@ class SuccessiveRejectSearch extends Search {
       val currNk = math.ceil((totalBudgets - numArms) / ((numArms + 1 - k) * barLogOfNumArms)).toInt
       val numOfCurrentPulling = currNk - prevNk
       var i = 0
-      while (i < armValues.size) {
+      while (i < armsRef.length) {
         for (_ <- 0 until numOfCurrentPulling) {
-          armValues(i).pull()
+          armsRef(i).pull(trainingData)
           t += 1
         }
         i += 1
       }
-      armValues = armValues.sortBy(_.getValidationResult()).drop(1)
+      armsRef = armsRef.sortBy(_.getValidationResult(validationData)).drop(1)
       prevNk = currNk
     }
 
     val bestArm = if (t == totalBudgets) {
-      armValues.maxBy(arm => arm.getValidationResult(recompute = false))
+      armsRef.maxBy(arm => arm.getValidationResult(validationData))
     } else {
       while (t < totalBudgets) {
-        armValues(t % armValues.size).pull()
+        armsRef(t % armsRef.length).pull(trainingData)
         t += 1
       }
-      armValues.maxBy(arm => arm.getValidationResult())
+      armsRef.maxBy(arm => arm.getValidationResult(validationData))
     }
 
     bestArm
   }
 }
 
-class SuccessiveEliminationSearch extends Search {
-  override val name = "successive elimination search"
-  override def search(totalBudgets: Int, arms: Map[(String, String), Arm[_]]): Arm[_] = {
-    val numArms = arms.size
+/**
+ *
+ * @param trainingData
+ * @param validationData
+ */
+class SuccessiveEliminationSearch(
+    override val trainingData: DataFrame,
+    override val validationData: DataFrame) extends Search(trainingData, validationData) {
+  override def search(totalBudgets: Int, arms: Array[Arm]): Arm = {
+    val numArms = arms.length
     val delta = 0.1
-    var armValues = arms.values.toArray
 
-    armValues.foreach(_.pull())
+    var armsRef = arms
+
+    armsRef.foreach(_.pull(trainingData))
     var t = numArms
 
-    val maxArmValidationResult = armValues.map(_.getValidationResult()).max
+    val maxArmValidationResult = armsRef.map(_.getValidationResult(validationData)).max
     val ct = math.sqrt(0.5
-      * math.log(4.0 * numArms * armValues(0).numPulls * armValues(0).numPulls / delta)
-      / armValues(0).numPulls)
-    val armValuesBuilder = new ArrayBuffer[Arm[_]]()
+      * math.log(4.0 * numArms * armsRef(0).getNumPulls * armsRef(0).getNumPulls / delta)
+      / armsRef(0).getNumPulls)
+    val armValuesBuilder = new ArrayBuffer[Arm]()
     var i = 0
-    while (i < armValues.size) {
-      if (maxArmValidationResult - armValues(i).getValidationResult(recompute = false) < ct) {
-        armValuesBuilder += armValues(i)
+    while (i < armsRef.length) {
+      if (maxArmValidationResult - armsRef(i).getValidationResult(validationData) < ct) {
+        armValuesBuilder += armsRef(i)
       }
       i += 1
     }
-    armValues = armValuesBuilder.toArray
+    armsRef = armValuesBuilder.toArray
 
     while (2 * t <= totalBudgets) {
       val numIter = t
       for (i <- 0 until numIter) {
-        armValues(i % armValues.size).pull()
+        armsRef(i % armsRef.length).pull(trainingData)
         t += 1
       }
 
-      val maxArmValidationResult = armValues.map(_.getValidationResult()).max
+      val maxArmValidationResult = armsRef.map(_.getValidationResult(validationData)).max
       val ct = math.sqrt(0.5
-        * math.log(4.0 * numArms * armValues(0).numPulls * armValues(0).numPulls / delta)
-        / armValues(0).numPulls)
-      val armValuesBuilder = new ArrayBuffer[Arm[_]]()
+        * math.log(4.0 * numArms * armsRef(0).getNumPulls * armsRef(0).getNumPulls / delta)
+        / armsRef(0).getNumPulls)
+      val armValuesBuilder = new ArrayBuffer[Arm]()
       var i = 0
-      while (i < armValues.size) {
-        if (maxArmValidationResult - armValues(i).getValidationResult(recompute = false) < ct) {
-          armValuesBuilder += armValues(i)
+      while (i < armsRef.size) {
+        if (maxArmValidationResult - armsRef(i).getValidationResult(validationData) < ct) {
+          armValuesBuilder += armsRef(i)
         }
         i += 1
       }
-      armValues = armValuesBuilder.toArray
+      armsRef = armValuesBuilder.toArray
     }
 
     val bestArm = if (t == totalBudgets) {
-      armValues.maxBy(arm => arm.getValidationResult(recompute = false))
+      armsRef.maxBy(arm => arm.getValidationResult(validationData))
     } else {
       while (t < totalBudgets) {
-        armValues(t % armValues.size).pull()
+        armsRef(t % armsRef.length).pull(trainingData)
         t += 1
       }
-      armValues.maxBy(arm => arm.getValidationResult())
+      armsRef.maxBy(arm => arm.getValidationResult(validationData))
     }
 
     bestArm
   }
 }
 
-*/
