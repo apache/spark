@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
 
@@ -543,12 +543,38 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }
   }
 
+
+
   private def discoverPartitions(): PartitionSpec = {
-    val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
-    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
-      typeInference)
+    userDefinedPartitionColumns match {
+      case Some(schema) =>
+        val spec = PartitioningUtils.parsePartitions(
+          leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME, false)
+
+        // Without auto inference, all of value in the `row` should be null or in StringType,
+        // we need to cast into the data type that user specified.
+        def castPartitionValueWithGivenSchema(row: InternalRow, schema: StructType)
+        : InternalRow = {
+          InternalRow((0 until row.numFields) map { i =>
+            Cast(Literal.create(row.getString(i), StringType), schema.fields(i).dataType).eval()
+          }: _*)
+        }
+
+        assert(schema.length == spec.partitionColumns.length &&
+          schema.fieldNames.sameElements(spec.partitionColumns.fieldNames),
+          s"Auto infer partition column is not match with user specified, " +
+            s"expect $schema, but got ${spec.partitionColumns}}")
+
+        PartitionSpec(schema, spec.partitions.map { part =>
+          part.copy(values = castPartitionValueWithGivenSchema(part.values, schema))
+        })
+      case None =>
+        val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
+        PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference)
+    }
   }
 
   /**

@@ -510,9 +510,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  // HadoopFsRelation.discoverPartitions() called by refresh(), which will ignore
-  // the given partition data type.
-  ignore("Partition column type casting") {
+  test("Partition column type casting") {
     withTempPath { file =>
       val input = partitionedTestDF.select('a, 'b, 'p1.cast(StringType).as('ps), 'p2)
 
@@ -523,8 +521,16 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .partitionBy("ps", "p2")
         .saveAsTable("t")
 
+      input
+        .write
+        .format(dataSourceName)
+        .mode(SaveMode.Append)
+        .partitionBy("ps", "p2")
+        .saveAsTable("t")
+
+      val realData = input.collect()
       withTempTable("t") {
-        checkAnswer(sqlContext.table("t"), input.collect())
+        checkAnswer(sqlContext.table("t"), realData ++ realData)
       }
     }
   }
