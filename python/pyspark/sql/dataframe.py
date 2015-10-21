@@ -203,7 +203,7 @@ class DataFrame(object):
          |-- name: string (nullable = true)
         <BLANKLINE>
         """
-        self._jdf.printSchema()
+        print(self._jdf.schema().treeString())
 
     @since(1.3)
     def explain(self, extended=False):
@@ -212,6 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
+        == Physical Plan ==
         Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
@@ -224,7 +225,10 @@ class DataFrame(object):
         == Physical Plan ==
         ...
         """
-        self._jdf.explain(extended)
+        if extended:
+            print(self._jdf.queryExecution().toString())
+        else:
+            print(self._jdf.queryExecution().simpleString())
 
     @since(1.3)
     def isLocal(self):
@@ -250,7 +254,7 @@ class DataFrame(object):
         |  5|  Bob|
         +---+-----+
         """
-        self._jdf.show(n, truncate)
+        print(self._jdf.showString(n, truncate))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
