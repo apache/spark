@@ -697,7 +697,7 @@ private[hive] object HiveContext {
     doc = "TODO")
 
   val HIVE_METASTORE_SHARED_PREFIXES = stringSeqConf("spark.sql.hive.metastore.sharedPrefixes",
-    defaultValue = Some(jdbcPrefixes),
+    defaultValue = Some(jdbcPrefixes ++ securityPrefixes),
     doc = "A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
       "that should be shared is JDBC drivers that are needed to talk to the metastore. Other " +
@@ -706,6 +706,11 @@ private[hive] object HiveContext {
 
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
+
+  private def securityPrefixes = Seq(
+    "org.apache.hadoop.security.UserGroupInformation",
+    "org.apache.hadoop.security.token.Token",
+    "org.apache.hadoop.io.Text")
 
   val HIVE_METASTORE_BARRIER_PREFIXES = stringSeqConf("spark.sql.hive.metastore.barrierPrefixes",
     defaultValue = Some(Seq()),
