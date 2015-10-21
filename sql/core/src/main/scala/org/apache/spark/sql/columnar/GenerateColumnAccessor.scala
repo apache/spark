@@ -49,8 +49,10 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(nu
   override def setDouble(i: Int, v: Double): Unit = writer.write(i, v)
 
   // the writer will be used directly to avoid creating wrapper objects
-  override def setDecimal(i: Int, v: Decimal, precision: Int): Unit = ???
-  override def update(i: Int, v: Any): Unit = ???
+  override def setDecimal(i: Int, v: Decimal, precision: Int): Unit =
+    throw new UnsupportedOperationException
+  override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
+
 
   // all other methods inherited from GenericMutableRow are not need
 }

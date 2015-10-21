@@ -133,41 +133,41 @@ public class UnsafeRowWriter {
     Platform.putDouble(holder.buffer, getFieldOffset(ordinal), value);
   }
 
-  public void writeCompactDecimal(int ordinal, Decimal input, int precision, int scale) {
-    // make sure Decimal object has the same scale as DecimalType
-    if (input.changePrecision(precision, scale)) {
-      Platform.putLong(holder.buffer, getFieldOffset(ordinal), input.toUnscaledLong());
-    } else {
-      setNullAt(ordinal);
-    }
-  }
-
   public void write(int ordinal, Decimal input, int precision, int scale) {
-    // grow the global buffer before writing data.
-    holder.grow(16);
-
-    // zero-out the bytes
-    Platform.putLong(holder.buffer, holder.cursor, 0L);
-    Platform.putLong(holder.buffer, holder.cursor + 8, 0L);
-
-    // Make sure Decimal object has the same scale as DecimalType.
-    // Note that we may pass in null Decimal object to set null for it.
-    if (input == null || !input.changePrecision(precision, scale)) {
-      BitSetMethods.set(holder.buffer, startingOffset, ordinal);
-      // keep the offset for future update
-      setOffsetAndSize(ordinal, 0L);
+    if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      // make sure Decimal object has the same scale as DecimalType
+      if (input.changePrecision(precision, scale)) {
+        Platform.putLong(holder.buffer, getFieldOffset(ordinal), input.toUnscaledLong());
+      } else {
+        setNullAt(ordinal);
+      }
     } else {
-      final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
-      assert bytes.length <= 16;
+      // grow the global buffer before writing data.
+      holder.grow(16);
 
-      // Write the bytes to the variable length portion.
-      Platform.copyMemory(
-        bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
-      setOffsetAndSize(ordinal, bytes.length);
+      // zero-out the bytes
+      Platform.putLong(holder.buffer, holder.cursor, 0L);
+      Platform.putLong(holder.buffer, holder.cursor + 8, 0L);
+
+      // Make sure Decimal object has the same scale as DecimalType.
+      // Note that we may pass in null Decimal object to set null for it.
+      if (input == null || !input.changePrecision(precision, scale)) {
+        BitSetMethods.set(holder.buffer, startingOffset, ordinal);
+        // keep the offset for future update
+        setOffsetAndSize(ordinal, 0L);
+      } else {
+        final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
+        assert bytes.length <= 16;
+
+        // Write the bytes to the variable length portion.
+        Platform.copyMemory(
+          bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
+        setOffsetAndSize(ordinal, bytes.length);
+      }
+
+      // move the cursor forward.
+      holder.cursor += 16;
     }
-
-    // move the cursor forward.
-    holder.cursor += 16;
   }
 
   public void write(int ordinal, UTF8String input) {
