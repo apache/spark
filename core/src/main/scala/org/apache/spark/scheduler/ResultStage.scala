@@ -43,5 +43,10 @@ private[spark] class ResultStage(
    */
   var resultOfJob: Option[ActiveJob] = None
 
+  override def findMissingPartitions(): Seq[Int] = {
+    val job = resultOfJob.get
+    (0 until job.numPartitions).filter(id => !job.finished(id))
+  }
+
   override def toString: String = "ResultStage " + id
 }
