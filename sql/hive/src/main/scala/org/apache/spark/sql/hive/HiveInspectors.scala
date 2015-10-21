@@ -723,6 +723,10 @@ private[hive] trait HiveInspectors {
         inspectorToDataType(m.getMapValueObjectInspector))
     case _: WritableStringObjectInspector => StringType
     case _: JavaStringObjectInspector => StringType
+    case _: WritableHiveVarcharObjectInspector => StringType
+    case _: JavaHiveVarcharObjectInspector => StringType
+    case _: WritableHiveCharObjectInspector => StringType
+    case _: JavaHiveCharObjectInspector => StringType
     case _: WritableIntObjectInspector => IntegerType
     case _: JavaIntObjectInspector => IntegerType
     case _: WritableDoubleObjectInspector => DoubleType
