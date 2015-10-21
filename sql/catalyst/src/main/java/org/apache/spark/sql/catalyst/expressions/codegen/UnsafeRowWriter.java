@@ -58,6 +58,10 @@ public class UnsafeRowWriter {
     }
   }
 
+  public boolean isNullAt(int ordinal) {
+    return BitSetMethods.isSet(holder.buffer, startingOffset, ordinal);
+  }
+
   public void setNullAt(int ordinal) {
     BitSetMethods.set(holder.buffer, startingOffset, ordinal);
     Platform.putLong(holder.buffer, getFieldOffset(ordinal), 0L);
@@ -93,6 +97,40 @@ public class UnsafeRowWriter {
         holder.cursor++;
       }
     }
+  }
+
+  public void write(int ordinal, boolean value) {
+    Platform.putBoolean(holder.buffer, getFieldOffset(ordinal), value);
+  }
+
+  public void write(int ordinal, byte value) {
+    Platform.putByte(holder.buffer, getFieldOffset(ordinal), value);
+  }
+
+  public void write(int ordinal, short value) {
+    Platform.putShort(holder.buffer, getFieldOffset(ordinal), value);
+  }
+
+  public void write(int ordinal, int value) {
+    Platform.putInt(holder.buffer, getFieldOffset(ordinal), value);
+  }
+
+  public void write(int ordinal, long value) {
+    Platform.putLong(holder.buffer, getFieldOffset(ordinal), value);
+  }
+
+  public void write(int ordinal, float value) {
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    }
+    Platform.putFloat(holder.buffer, getFieldOffset(ordinal), value);
+  }
+
+  public void write(int ordinal, double value) {
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
+    Platform.putDouble(holder.buffer, getFieldOffset(ordinal), value);
   }
 
   public void writeCompactDecimal(int ordinal, Decimal input, int precision, int scale) {
@@ -151,7 +189,10 @@ public class UnsafeRowWriter {
   }
 
   public void write(int ordinal, byte[] input) {
-    final int numBytes = input.length;
+    write(ordinal, input, 0, input.length);
+  }
+
+  public void write(int ordinal, byte[] input, int offset, int numBytes) {
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
 
     // grow the global buffer before writing data.
@@ -160,7 +201,8 @@ public class UnsafeRowWriter {
     zeroOutPaddingBytes(numBytes);
 
     // Write the bytes to the variable length portion.
-    Platform.copyMemory(input, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
+    Platform.copyMemory(input, Platform.BYTE_ARRAY_OFFSET + offset,
+      holder.buffer, holder.cursor, numBytes);
 
     setOffsetAndSize(ordinal, numBytes);
 

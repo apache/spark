@@ -69,7 +69,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     """
   }
 
-  private def writeExpressionsToBuffer(
+  def writeExpressionsToBuffer(
       ctx: CodeGenContext,
       row: String,
       inputs: Seq[GeneratedExpressionCode],
@@ -89,7 +89,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         val setNull = dt match {
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
             // Can't call setNullAt() for DecimalType with precision larger than 18.
-            s"$rowWriter.write($index, null, ${t.precision}, ${t.scale});"
+            s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
@@ -124,11 +124,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             """
 
           case _ if ctx.isPrimitiveType(dt) =>
-            val fieldOffset = ctx.freshName("fieldOffset")
             s"""
-              final long $fieldOffset = $rowWriter.getFieldOffset($index);
-              Platform.putLong($bufferHolder.buffer, $fieldOffset, 0L);
-              ${writePrimitiveType(ctx, input.value, dt, s"$bufferHolder.buffer", fieldOffset)}
+              $rowWriter.write($index, ${input.value});
             """
 
           case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
