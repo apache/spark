@@ -308,7 +308,7 @@ case object MySQLDialect extends JdbcDialect {
   // a better error message, someone may want to provide an
   // implementation which handles the SQL Server grammar better.
   //
-  //override def vetSqlIdentifier(rawId: String)
+  // override def vetSqlIdentifier(rawId: String)
 
 }
 
