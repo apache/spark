@@ -342,31 +342,32 @@ class SchedulerJob(BaseJob):
         This method checks whether a new DagRun needs to be created
         for a DAG based on scheduling interval
         """
-        DagRun = models.DagRun
-        session = settings.Session()
-        qry = session.query(func.max(DagRun.execution_date)).filter(and_(
-            DagRun.dag_id == dag.dag_id,
-            DagRun.external_trigger == False
-        ))
-        last_scheduled_run = qry.scalar()
-        if not last_scheduled_run or last_scheduled_run <= datetime.now():
-            if last_scheduled_run:
+        if dag.schedule_interval:
+            DagRun = models.DagRun
+            session = settings.Session()
+            qry = session.query(func.max(DagRun.execution_date)).filter(and_(
+                DagRun.dag_id == dag.dag_id,
+                DagRun.external_trigger == False
+            ))
+            last_scheduled_run = qry.scalar()
+            next_run_date = None
+            if not last_scheduled_run:
+                next_run_date = min([t.start_date for t in dag.tasks])
+            elif dag.schedule_interval != '@once':
                 next_run_date = dag.following_schedule(last_scheduled_run)
-            else:
-                next_run_date = dag.default_args['start_date']
-            if not next_run_date:
-                raise Exception('no next_run_date defined!')
-            next_run = DagRun(
-                dag_id=dag.dag_id,
-                run_id='scheduled',
-                execution_date=next_run_date,
-                state=State.RUNNING,
-                external_trigger=False
-            )
-            session.add(next_run)
-            session.commit()
+            elif dag.schedule_interval == '@once' and not last_scheduled_run:
+                next_run_date = datetime.now()
 
-
+            if next_run_date and next_run_date <= datetime.now():
+                next_run = DagRun(
+                    dag_id=dag.dag_id,
+                    run_id='scheduled__' + next_run_date.isoformat(),
+                    execution_date=next_run_date,
+                    state=State.RUNNING,
+                    external_trigger=False
+                )
+                session.add(next_run)
+                session.commit()
 
     def process_dag(self, dag, executor):
         """
@@ -387,8 +388,7 @@ class SchedulerJob(BaseJob):
                 executors.LocalExecutor, executors.SequentialExecutor):
             pickle_id = dag.pickle(session).id
 
-        db_dag = session.query(
-            DagModel).filter(DagModel.dag_id == dag.dag_id).first()
+        db_dag = session.query(DagModel).filter_by(dag_id=dag.dag_id).first()
         last_scheduler_run = db_dag.last_scheduler_run or datetime(2000, 1, 1)
         secs_since_last = (
             datetime.now() - last_scheduler_run).total_seconds()
@@ -404,7 +404,6 @@ class SchedulerJob(BaseJob):
             session.commit()
 
         active_runs = dag.get_active_runs()
-
         for task, dttm in product(dag.tasks, active_runs):
             if task.adhoc:
                 continue
@@ -413,7 +412,7 @@ class SchedulerJob(BaseJob):
             if ti.state in (State.RUNNING, State.QUEUED, State.SUCCESS):
                 continue
             elif ti.is_runnable(flag_upstream_failed=True):
-                logging.debug('Queuing next run: ' + str(ti))
+                logging.debug('Firing task: {}'.format(ti))
                 executor.queue_task_instance(ti, pickle_id=pickle_id)
 
         # Releasing the lock
@@ -454,15 +453,37 @@ class SchedulerJob(BaseJob):
 
         for pool, tis in list(d.items()):
             open_slots = pools[pool].open_slots(session=session)
-            if open_slots > 0:
-                tis = sorted(
-                    tis, key=lambda ti: (-ti.priority_weight, ti.start_date))
-                for ti in tis[:open_slots]:
-                    task = None
-                    try:
-                        task = dagbag.dags[ti.dag_id].get_task(ti.task_id)
-                    except:
-                        logging.error("Queued task {} seems gone".format(ti))
+            if not open_slots:
+                return
+            tis = sorted(
+                tis, key=lambda ti: (-ti.priority_weight, ti.start_date))
+            for ti in tis:
+                if not open_slots:
+                    return
+                task = None
+                try:
+                    task = dagbag.dags[ti.dag_id].get_task(ti.task_id)
+                except:
+                    logging.error("Queued task {} seems gone".format(ti))
+                    session.delete(ti)
+                if task:
+                    ti.task = task
+
+                    # picklin'
+                    dag = dagbag.dags[ti.dag_id]
+                    pickle_id = None
+                    if self.do_pickle and self.executor.__class__ not in (
+                            executors.LocalExecutor,
+                            executors.SequentialExecutor):
+                        pickle_id = dag.pickle(session).id
+
+                    if (
+                            ti.are_dependencies_met() and
+                            not task.dag.concurrency_reached):
+                        executor.queue_task_instance(
+                            ti, force=True, pickle_id=pickle_id)
+                        open_slots -= 1
+                    else:
                         session.delete(ti)
                         continue
                     ti.task = task
@@ -627,8 +648,7 @@ class BackfillJob(BaseJob):
 
             start_date = start_date or task.start_date
             end_date = end_date or task.end_date or datetime.now()
-            for dttm in utils.date_range(
-                    start_date, end_date, task.dag.schedule_interval):
+            for dttm in self.dag.date_range(start_date, end_date=end_date):
                 ti = models.TaskInstance(task, dttm)
                 tasks_to_run[ti.key] = ti
 

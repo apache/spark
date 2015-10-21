@@ -53,7 +53,8 @@ defaults = {
         'plugins_folder': None,
         'security': None,
         'donot_pickle': False,
-        's3_log_folder': ''
+        's3_log_folder': '',
+        'dag_concurrency': 16,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -119,6 +120,9 @@ sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
 # the max number of task instances that should run simultaneously
 # on this airflow installation
 parallelism = 32
+
+# The number of task instances allowed to run concurrently by the scheduler
+dag_concurrency = 16
 
 # Whether to load the examples that ship with Airflow. It's good to
 # get started, but you probably want to set this to False in a production
@@ -271,6 +275,7 @@ sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/unittests.db
 unit_test_mode = True
 load_examples = True
 donot_pickle = False
+dag_concurrency = 16
 
 [webserver]
 base_url = http://localhost:8080

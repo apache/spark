@@ -71,12 +71,9 @@ class SqlSensor(BaseSensorOperator):
 
     @apply_defaults
     def __init__(self, conn_id, sql, *args, **kwargs):
-
-        super(SqlSensor, self).__init__(*args, **kwargs)
-
         self.sql = sql
         self.conn_id = conn_id
-
+        super(SqlSensor, self).__init__(*args, **kwargs)
 
     def poke(self, context):
         hook = BaseHook.get_connection(self.conn_id).get_hook()
@@ -447,10 +444,9 @@ class TimeDeltaSensor(BaseSensorOperator):
         self.delta = delta
 
     def poke(self, context):
-        target_dttm = (
-            context['execution_date'] +
-            context['dag'].schedule_interval +
-            self.delta)
+        dag = context['dag']
+        target_dttm = dag.following_schedule(context['execution_date'])
+        target_dttm += self.delta
         logging.info('Checking if the time ({0}) has come'.format(target_dttm))
         return datetime.now() > target_dttm
 

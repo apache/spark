@@ -1,5 +1,10 @@
 TODO
 -----
+
+### Current
+* Test @once
+* Test ``run_id`` in template and ``dag_run``
+
 #### UI
 * Backfill form
 * Better task filtering int duration and landing time charts (operator toggle, task regex, uncheck all button)

@@ -31,6 +31,6 @@ for i in range(3):
 
 task = BashOperator(
     task_id='also_run_this',
-    bash_command='echo "{{ macros.uuid.uuid1() }}"',
+    bash_command='echo "run_id={{ run_id }} | dag_run={{ dag_run }}"',
     dag=dag)
 task.set_downstream(run_this_last)

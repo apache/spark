@@ -85,7 +85,10 @@ class State(object):
 
     @classmethod
     def color(cls, state):
-        return cls.state_color[state]
+        if state in cls.state_color:
+            return cls.state_color[state]
+        else:
+            return 'white'
 
     @classmethod
     def runnable(cls):
@@ -93,6 +96,14 @@ class State(object):
             None, cls.FAILED, cls.UP_FOR_RETRY, cls.UPSTREAM_FAILED,
             cls.SKIPPED]
 
+
+cron_presets = {
+    '@hourly': '0 * * * *',
+    '@daily': '0 0 * * *',
+    '@weekly': '0 0 * * 0',
+    '@monthly': '0 0 1 * *',
+    '@yearly': '0 0 1 1 *',
+}
 
 def provide_session(func):
     """
@@ -284,31 +295,49 @@ def validate_key(k, max_length=250):
         return True
 
 
-def date_range(start_date, end_date=datetime.now(), delta=timedelta(1)):
+def date_range(
+        start_date,
+        end_date=None,
+        num=None,
+        delta=None):
     """
     Get a set of dates as a list based on a start, end and delta, delta
     can be something that can be added to ``datetime.datetime``
     or a cron expression as a ``str``
 
-    >>> date_range(datetime(2016, 1, 1), datetime(2016, 1, 3))
-    [datetime.datetime(2016, 1, 1, 0, 0),
-     datetime.datetime(2016, 1, 2, 0, 0),
-     datetime.datetime(2016, 1, 3, 0, 0)]
-    >>> date_range(datetime(2016, 1, 1), datetime(2016, 1, 3), '0 0 * * *')
-    [datetime.datetime(2016, 1, 1, 0, 0),
-     datetime.datetime(2016, 1, 2, 0, 0),
-     datetime.datetime(2016, 1, 3, 0, 0)]
+    :param start_date: anchor date to start the series from
+    :type start_date: datetime.datetime
+    :param end_date: right boundary for the date range
+    :type end_date: datetime.datetime
+    :param num: alternatively to end_date, you can specify the number of
+        number of entries you want in the range. This number can be negative,
+        output will always be sorted regardless
+    :type num: int
+
+    >>> date_range(datetime(2016, 1, 1), datetime(2016, 1, 3), delta=timedelta(1))
+    [datetime.datetime(2016, 1, 1, 0, 0), datetime.datetime(2016, 1, 2, 0, 0), datetime.datetime(2016, 1, 3, 0, 0)]
+    >>> date_range(datetime(2016, 1, 1), datetime(2016, 1, 3), delta='0 0 * * *')
+    [datetime.datetime(2016, 1, 1, 0, 0), datetime.datetime(2016, 1, 2, 0, 0), datetime.datetime(2016, 1, 3, 0, 0)]
     >>> date_range(datetime(2016, 1, 1), datetime(2016, 3, 3), delta="0 0 0 * *")
-    [datetime.datetime(2016, 1, 1, 0, 0),
-      datetime.datetime(2016, 2, 1, 0, 0),
-      datetime.datetime(2016, 3, 1, 0, 0)]
+    [datetime.datetime(2016, 1, 1, 0, 0), datetime.datetime(2016, 2, 1, 0, 0), datetime.datetime(2016, 3, 1, 0, 0)]
     """
+    if not delta:
+        return []
+    if end_date and start_date > end_date:
+        raise Exception("Wait. start_date needs to be before end_date")
+    if end_date and num:
+        raise Exception("Wait. Either specify end_date OR num")
+    if not end_date and not num:
+        end_date = datetime.now()
+
     delta_iscron = False
     if isinstance(delta, six.string_types):
         delta_iscron = True
         cron = croniter(delta, start_date)
+    else:
+        delta = abs(delta)
     l = []
-    if end_date >= start_date:
+    if end_date:
         while start_date <= end_date:
             l.append(start_date)
             if delta_iscron:
@@ -316,8 +345,19 @@ def date_range(start_date, end_date=datetime.now(), delta=timedelta(1)):
             else:
                 start_date += delta
     else:
-        raise AirflowException("start_date can't be after end_date")
-    return l
+        for i in range(abs(num)):
+            l.append(start_date)
+            if delta_iscron:
+                if num > 0:
+                    start_date = cron.get_next(datetime)
+                else:
+                    start_date = cron.get_prev(datetime)
+            else:
+                if num > 0:
+                    start_date += delta
+                else:
+                    start_date -= delta
+    return sorted(l)
 
 
 def json_ser(obj):
