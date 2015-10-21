@@ -44,7 +44,7 @@ class HiveToDruidTransfer(BaseOperator):
             druid_datasource,
             ts_dim,
             metric_spec=None,
-            hive_cli_conn_id='hiveserver2_default',
+            hive_cli_conn_id='hive_cli_default',
             druid_ingest_conn_id='druid_ingest_default',
             metastore_conn_id='metastore_default',
             hadoop_dependency_coordinates=None,
