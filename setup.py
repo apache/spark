@@ -1,3 +1,8 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
 from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 
@@ -22,7 +27,7 @@ class Tox(TestCommand):
         sys.exit(errno)
 
 celery = [
-    'celery>=3.1.17', 
+    'celery>=3.1.17',
     'flower>=0.7.3'
 ]
 crypto = ['cryptography>=0.9.3']
