@@ -164,7 +164,8 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       fail("Table creation should have failed.")
     } catch {
       case exc: SparkException => {
-        val expectedMessage = "Error parsing SQL identifier: TEST.FOO(A INT); DROP TABLE TEST.DUMMY;"
+        val expectedMessage =
+          "Error parsing SQL identifier: TEST.FOO(A INT); DROP TABLE TEST.DUMMY;"
         assert(expectedMessage == exc.getMessage)
       }
       case obj: Throwable => {
