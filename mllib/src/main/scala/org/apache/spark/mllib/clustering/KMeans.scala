@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Since
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
@@ -103,17 +103,21 @@ class KMeans private (
   }
 
   /**
+   * :: Experimental ::
    * Number of runs of the algorithm to execute in parallel.
    */
   @Since("1.4.0")
+  @Experimental
   def getRuns: Int = runs
 
   /**
+   * :: Experimental ::
    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
    * return the best clustering found over any run. Default: 1.
    */
   @Since("0.8.0")
+  @Experimental
   def setRuns(runs: Int): this.type = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")

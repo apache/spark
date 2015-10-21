@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, norm}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
@@ -51,9 +51,11 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
   }
 
   /**
+   * :: Experimental ::
    * Set fraction of data to be used for each SGD iteration.
    * Default 1.0 (corresponding to deterministic/classical gradient descent)
    */
+  @Experimental
   def setMiniBatchFraction(fraction: Double): this.type = {
     this.miniBatchFraction = fraction
     this
