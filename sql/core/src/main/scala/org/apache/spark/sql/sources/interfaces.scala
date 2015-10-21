@@ -547,31 +547,33 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
     userDefinedPartitionColumns match {
-      case Some(schema) =>
+      case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
-          leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME, false)
+          leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference = false)
 
         // Without auto inference, all of value in the `row` should be null or in StringType,
         // we need to cast into the data type that user specified.
-        def castPartitionValueWithGivenSchema(row: InternalRow, schema: StructType)
-        : InternalRow = {
-          InternalRow((0 until row.numFields) map { i =>
-            Cast(Literal.create(row.getString(i), StringType), schema.fields(i).dataType).eval()
+        def castPartitionValuesToUserSchema(row: InternalRow) = {
+          InternalRow((0 until row.numFields).map { i =>
+            Cast(
+              Literal.create(row.getString(i), StringType),
+              userProvidedSchema.fields(i).dataType).eval()
           }: _*)
         }
 
-        assert(schema.length == spec.partitionColumns.length &&
-          schema.fieldNames.sameElements(spec.partitionColumns.fieldNames),
-          s"Auto infer partition column is not match with user specified, " +
-            s"expect $schema, but got ${spec.partitionColumns}}")
+        assert(userProvidedSchema.length == spec.partitionColumns.length &&
+          userProvidedSchema.fieldNames.sameElements(spec.partitionColumns.fieldNames),
+          s"Actual partitioning column names did not match user-specified partitioning schema; " +
+            s"expect $userProvidedSchema, but got ${spec.partitionColumns}}")
 
-        PartitionSpec(schema, spec.partitions.map { part =>
-          part.copy(values = castPartitionValueWithGivenSchema(part.values, schema))
+        PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
+          part.copy(values = castPartitionValuesToUserSchema(part.values))
         })
-      case None =>
-        val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
+
+      case _ =>
+        // user did not provide a partitioning schema
         PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference)
+          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled())
     }
   }
 

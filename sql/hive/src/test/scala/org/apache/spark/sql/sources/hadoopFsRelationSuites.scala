@@ -510,7 +510,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  test("Partition column type casting") {
+  test("SPARK-9735 Partition column type casting") {
     withTempPath { file =>
       val df = (for {
         i <- 1 to 3
