@@ -1,5 +1,9 @@
 # Airflow
 
+[![Build Status](https://travis-ci.org/airbnb/airflow.svg)](https://travis-ci.org/airbnb/airflow)
+[![Coverage Status](https://coveralls.io/repos/airbnb/airflow/badge.svg?service=github)](https://coveralls.io/github/airbnb/airflow)
+[![pypi downloads](https://pypi.python.org/pypi/airflow/)](https://img.shields.io/pypi/dm/airflow.svg)
+
 Airflow is a platform to programmatically author, schedule and monitor
 workflows.
 
