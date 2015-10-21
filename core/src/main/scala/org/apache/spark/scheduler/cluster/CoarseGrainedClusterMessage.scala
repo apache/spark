@@ -92,8 +92,6 @@ private[spark] object CoarseGrainedClusterMessages {
       hostToLocalTaskCount: Map[String, Int])
     extends CoarseGrainedClusterMessage
 
-  case class GetExecutorLossReason(executorId: String)
-
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 
 }
