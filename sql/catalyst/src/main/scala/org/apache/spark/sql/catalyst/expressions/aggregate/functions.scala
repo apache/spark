@@ -951,10 +951,13 @@ object HyperLogLogPlusPlus {
 abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate with Serializable {
 
   /**
-   * The maximum central moment order to be computed
+   * The maximum central moment order to be computed.
    */
   protected def momentOrder: Int
 
+  /**
+   * Array of sufficient moments need to compute the aggregate statistic.
+   */
   protected def sufficientMoments: Array[Int]
 
   override def children: Seq[Expression] = Seq(child)
@@ -974,7 +977,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /**
-   * The number of central moments to store in the buffer
+   * The number of central moments to store in the buffer.
    */
   private[this] val numMoments = 5
 
@@ -988,7 +991,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
     aggBufferAttributes.map(_.newInstance())
 
   /**
-   * Initialize all moments to zero
+   * Initialize all moments to zero.
    */
   override def initialize(buffer: MutableRow): Unit = {
     var aggIndex = 0
@@ -1124,13 +1127,13 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
 
 abstract class SecondMoment(child: Expression) extends CentralMomentAgg(child) {
 
-  protected val momentOrder = 2
+  override protected val momentOrder = 2
 
   protected def isBiased: Boolean
 
   protected def isStd: Boolean
 
-  protected val sufficientMoments = Array(2)
+  override protected val sufficientMoments = Array(2)
 
   override def getStatistic(n: Double, moments: Array[Double]): Double = {
     require(moments.length == sufficientMoments.length,
@@ -1211,13 +1214,13 @@ case class Skewness(child: Expression, mutableAggBufferOffset: Int = 0,
 
   override def prettyName: String = "skewness"
 
-  protected val momentOrder = 3
+  override protected val momentOrder = 3
 
-  protected val sufficientMoments = Array(2, 3)
+  override protected val sufficientMoments = Array(2, 3)
 
   override def getStatistic(n: Double, moments: Array[Double]): Double = {
     require(moments.length == sufficientMoments.length,
-      s"skewness requires two central moments, received: ${moments.length}")
+      s"$prettyName requires two central moments, received: ${moments.length}")
     val Array(m2, m3) = moments
     if (n == 0.0 || m2 == 0.0) {
       Double.NaN
@@ -1238,13 +1241,13 @@ case class Kurtosis(child: Expression, mutableAggBufferOffset: Int = 0,
 
   override def prettyName: String = "kurtosis"
 
-  protected val momentOrder = 4
+  override protected val momentOrder = 4
 
-  protected val sufficientMoments = Array(2, 4)
+  override protected val sufficientMoments = Array(2, 4)
 
   override def getStatistic(n: Double, moments: Array[Double]): Double = {
     require(moments.length == sufficientMoments.length,
-      s"kurtosis requires two central moments, received: ${moments.length}")
+      s"$prettyName requires two central moments, received: ${moments.length}")
     val Array(m2, m4) = moments
     if (n == 0.0 || m2 == 0.0) {
       Double.NaN
