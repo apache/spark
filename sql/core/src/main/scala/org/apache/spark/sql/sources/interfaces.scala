@@ -543,8 +543,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }
   }
 
-
-
   private def discoverPartitions(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
