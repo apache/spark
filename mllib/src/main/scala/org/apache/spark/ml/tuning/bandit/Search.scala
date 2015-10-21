@@ -364,7 +364,7 @@ class SuccessiveEliminationSearch(
         / armsRef(0).getNumPulls)
       val armValuesBuilder = new ArrayBuffer[Arm]()
       var i = 0
-      while (i < armsRef.size) {
+      while (i < armsRef.length) {
         if (maxArmValidationResult - armsRef(i).getValidationResult(validationData) < ct) {
           armValuesBuilder += armsRef(i)
         }
