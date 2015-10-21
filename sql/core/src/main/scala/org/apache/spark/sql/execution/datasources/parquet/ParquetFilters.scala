@@ -60,6 +60,8 @@ private[sql] object ParquetFilters {
     case DoubleType =>
       (n: String, v: Any) => FilterApi.eq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
 
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     // Binary.fromString and Binary.fromByteArray don't accept null values
     case StringType =>
       (n: String, v: Any) => FilterApi.eq(
@@ -69,6 +71,7 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+     */
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -82,6 +85,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.notEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.notEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
@@ -90,6 +96,7 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+     */
   }
 
   private val makeLt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -101,6 +108,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.lt(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.lt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n),
@@ -108,6 +118,7 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+     */
   }
 
   private val makeLtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -119,6 +130,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.ltEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.ltEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n),
@@ -126,6 +140,7 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+     */
   }
 
   private val makeGt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -137,6 +152,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gt(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.gt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n),
@@ -144,6 +162,7 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+     */
   }
 
   private val makeGtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -155,6 +174,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gtEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.gtEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n),
@@ -162,6 +184,7 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+     */
   }
 
   private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
@@ -177,6 +200,9 @@ private[sql] object ParquetFilters {
     case DoubleType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(doubleColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Double]]))
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(binaryColumn(n),
@@ -185,6 +211,7 @@ private[sql] object ParquetFilters {
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(binaryColumn(n),
           SetInFilter(v.map(e => Binary.fromByteArray(e.asInstanceOf[Array[Byte]]))))
+     */
   }
 
   /**
