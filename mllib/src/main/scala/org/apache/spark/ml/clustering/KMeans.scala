@@ -17,9 +17,12 @@
 
 package org.apache.spark.ml.clustering
 
+import javax.xml.transform.stream.StreamResult
+
 import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.param.{Param, Params, IntParam, ParamMap}
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.pmml.PMMLExportable
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
@@ -94,7 +97,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 @Experimental
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    private val parentModel: MLlibKMeansModel) extends Model[KMeansModel] with KMeansParams {
+  private val parentModel: MLlibKMeansModel) extends Model[KMeansModel] with KMeansParams
+    with PMMLExportable {
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
@@ -128,6 +132,14 @@ class KMeansModel private[ml] (
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     val data = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
     parentModel.computeCost(data)
+  }
+
+  /**
+   * Export the model to stream result in PMML format
+   */
+  @Since("1.6.0")
+  override def toPMML(streamResult: StreamResult): Unit = {
+    parentModel.toPMML(streamResult)
   }
 }
 
@@ -209,4 +221,3 @@ class KMeans @Since("1.5.0") (
     validateAndTransformSchema(schema)
   }
 }
-

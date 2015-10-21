@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml
+package org.apache.spark.ml.pmml
 
 import java.io.{File, OutputStream, StringWriter}
 import javax.xml.transform.stream.StreamResult
@@ -31,35 +31,35 @@ import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
  * Export model to the PMML format
  * Predictive Model Markup Language (PMML) is an XML-based file format
  * developed by the Data Mining Group (www.dmg.org).
+ * Based on [[org.apache.spark.mllib.pmml.Exportable]]
  */
 @DeveloperApi
-@Since("1.4.0")
+@Since("1.6.0")
 trait PMMLExportable {
 
   /**
-   * Export the model to the stream result in PMML format
+   * Export the model to the stream result in PMML format.
    */
-  private[spark] def toPMML(streamResult: StreamResult): Unit = {
-    val pmmlModelExport = PMMLModelExportFactory.createPMMLModelExport(this)
-    JAXBUtil.marshalPMML(pmmlModelExport.getPmml, streamResult)
-  }
+  private[spark] def toPMML(streamResult: StreamResult): Unit
 
   /**
    * :: Experimental ::
    * Export the model to a local file in PMML format
    */
   @Experimental
-  @Since("1.4.0")
+  @Since("1.6.0")
   def toPMML(localPath: String): Unit = {
     toPMML(new StreamResult(new File(localPath)))
   }
 
   /**
    * :: Experimental ::
-   * Export the model to a directory on a distributed file system in PMML format
+   * Export the model to a directory on a distributed file system in PMML format.
+   * Models should override if they may contain more data than
+   * is reasonable to store locally.
    */
   @Experimental
-  @Since("1.4.0")
+  @Since("1.6.0")
   def toPMML(sc: SparkContext, path: String): Unit = {
     val pmml = toPMML()
     sc.parallelize(Array(pmml), 1).saveAsTextFile(path)
@@ -70,7 +70,7 @@ trait PMMLExportable {
    * Export the model to the OutputStream in PMML format
    */
   @Experimental
-  @Since("1.4.0")
+  @Since("1.6.0")
   def toPMML(outputStream: OutputStream): Unit = {
     toPMML(new StreamResult(outputStream))
   }
@@ -80,7 +80,7 @@ trait PMMLExportable {
    * Export the model to a String in PMML format
    */
   @Experimental
-  @Since("1.4.0")
+  @Since("1.6.0")
   def toPMML(): String = {
     val writer = new StringWriter
     toPMML(new StreamResult(writer))
