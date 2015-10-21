@@ -143,7 +143,12 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
-        final FileInputStream in = new FileInputStream(partitionWriters[i].fileSegment().file());
+        File file = partitionWriters[i].fileSegment().file();
+        if (!file.exists()) {
+            lengths[i] = 0;
+            continue;
+        }
+        final FileInputStream in = new FileInputStream(file);
         boolean copyThrewException = true;
         try {
           lengths[i] = Utils.copyStream(in, out, false, transferToEnabled);
@@ -151,7 +156,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
         } finally {
           Closeables.close(in, copyThrewException);
         }
-        if (!partitionWriters[i].fileSegment().file().delete()) {
+        if (!file.delete()) {
           logger.error("Unable to delete file for partition {}", i);
         }
       }
