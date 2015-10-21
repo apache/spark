@@ -17,13 +17,14 @@
 
 package org.apache.spark.ml.tuning.bandit
 
+import org.apache.spark.ml.param.shared.HasMaxIter
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, _}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 
-trait ArmParams extends Params {
+trait ArmParams extends Params with HasMaxIter {
   /**
    * param for the estimator to be validated
    * @group param
@@ -42,7 +43,6 @@ trait ArmParams extends Params {
 
   /** @group getParam */
   val getInitialModel: Option[Model[_]] = $(initialModel)
-  setDefault(initialModel -> None)
 
   /**
    * param for estimator param maps
@@ -63,6 +63,8 @@ trait ArmParams extends Params {
 
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
+
+  setDefault(initialModel -> None, maxIter -> 1)
 }
 
 
@@ -88,23 +90,34 @@ class Arm(override val uid: String) extends ArmParams {
   /** @group setParam */
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
 
-  var model: Option[Model[_]] = $(initialModel)
-
-  var numPulls: Int = 0
-  var numEvals: Int = 0
+  /** @group setParam */
+  def setMaxIter(value: Int):this.type = set(maxIter, value)
 
   /**
-   * Pull the arm to perform one step of the iterative [PartialEstimator]. Model will be updated
+   * Inner model to record intermediate training result.
+   */
+  private var model: Option[Model[_]] = $(initialModel)
+
+  /**
+   * Keep record of the number of pulls for computations in some search strategies.
+   */
+  private var numPulls: Int = 0
+
+  def getNumPulls: Int = this.numPulls
+
+  /**
+   * Pull the arm to perform maxIter steps of the iterative [Estimator]. Model will be updated
    * after the pulling.
    */
   def pull(dataset: DataFrame): this.type = {
     this.numPulls += 1
-    this.model = Some($(estimator).fit(dataset, $(estimatorParamMap).put(initialModel, model)).asInstanceOf[Model[_]])
+    val epm = $(estimatorParamMap).put(initialModel, model).put(maxIter, $(maxIter))
+    this.model = Some($(estimator).fit(dataset, epm).asInstanceOf[Model[_]])
     this
   }
 
   /**
-   * Evaluate the model according to training, validation, and test set.
+   * Evaluate the model according to a validation dataset.
    */
   def getValidationResult(validationSet: DataFrame): Double = {
     if (model.isEmpty) {
