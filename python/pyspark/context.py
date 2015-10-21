@@ -71,8 +71,7 @@ class SparkContext(object):
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(),
-                 conf=None, gateway=None, jsc=None, profiler_cls=BasicProfiler,
-                 requirementsFile=None):
+                 conf=None, gateway=None, jsc=None, profiler_cls=BasicProfiler):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -97,8 +96,6 @@ class SparkContext(object):
         :param jsc: The JavaSparkContext instance (optional).
         :param profiler_cls: A class of custom Profiler used to do profiling
                (default is pyspark.profiler.BasicProfiler).
-        :param requirementsFile: Pip requirements file to send dependencies
-               to the cluster and add to PYTHONPATH.
 
 
         >>> from pyspark.context import SparkContext
@@ -120,7 +117,7 @@ class SparkContext(object):
             raise
 
     def _do_init(self, master, appName, sparkHome, pyFiles,  environment,
-                 batchSize, serializer, conf, jsc, profiler_cls, requirementsFile):
+                 batchSize, serializer, conf, jsc, profiler_cls):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
@@ -187,10 +184,6 @@ class SparkContext(object):
         self._python_includes = list()
         for path in (pyFiles or []):
             self.addPyFile(path)
-
-        # Deplpoy code dependencies from requirements file in the constructor
-        if requirementsFile:
-            self.addRequirementsFile(requirementsFile)
 
         # Deploy code dependencies set by spark-submit; these will already have been added
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
@@ -706,25 +699,6 @@ class SparkContext(object):
         # TODO: remove added .py or .zip files from the PYTHONPATH?
         self._jsc.sc().clearFiles()
 
-    def addModule(self, module):
-        """
-        Add a module to the spark context, the module must have already been
-        imported by the driver via __import__ semantics. Supports namespace
-        packages by simulating the loading __path__ as a set of modules from
-        the __path__ list in a single package.
-        """
-        tmp_dir = tempfile.mkdtemp()
-        try:
-            tar_path = os.path.join(tmp_dir, module.__name__+'.tar.gz')
-            tar = tarfile.open(tar_path, "w:gz")
-            for mod in module.__path__[::-1]:
-                # adds in reverse to simulate namespace loading path
-                tar.add(mod, arcname=os.path.basename(mod))
-            tar.close()
-            self.addPyFile(tar_path)
-        finally:
-            shutil.rmtree(tmp_dir)
-
     def addPyFile(self, path):
         """
         Add a .py or .zip dependency for all tasks to be executed on this
@@ -740,6 +714,25 @@ class SparkContext(object):
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
+    def addPyPackage(self, pkg):
+        """
+        Add a package to the spark context, the package must have already been
+        imported by the driver via __import__ semantics. Supports namespace
+        packages by simulating the loading __path__ as a set of modules from
+        the __path__ list in a single package.
+        """
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            tar_path = os.path.join(tmp_dir, pkg.__name__+'.tar.gz')
+            tar = tarfile.open(tar_path, "w:gz")
+            for mod in pkg.__path__[::-1]:
+                # adds in reverse to simulate namespace loading path
+                tar.add(mod, arcname=os.path.basename(mod))
+            tar.close()
+            self.addPyFile(tar_path)
+        finally:
+            shutil.rmtree(tmp_dir)
+
     def addRequirementsFile(self, path):
         """
         Add a pip requirements file to distribute dependencies for all tasks
@@ -752,8 +745,8 @@ class SparkContext(object):
         for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
             if not req.check_if_exists():
                 pip.main(['install', req.req.__str__()])
-            mod = __import__(req.name)
-            self.addModule(mod)
+            pkg = __import__(req.name)
+            self.addPyPackage(pkg)
 
     def setCheckpointDir(self, dirName):
         """
