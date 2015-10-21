@@ -99,13 +99,19 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   /** @group setParam */
   def setInputCol(value: String): this.type = {
     set(inputCol, value)
-    set(inputCols, Array(value))
+    if (!isDefined(inputCols)) {
+      set(inputCols, Array(value))
+    }
+    this
   }
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = {
     set(outputCol, value)
-    set(outputCols, Array(value))
+    if (!isDefined(outputCols)) {
+      set(outputCols, Array(value))
+    }
+    this
   }
 
   /** @group setParam */
@@ -206,13 +212,19 @@ class StringIndexerModel (
   /** @group setParam */
   def setInputCol(value: String): this.type = {
     set(inputCol, value)
-    set(inputCols, Array(value))
+    if (!isDefined(inputCols)) {
+      set(inputCols, Array(value))
+    }
+    this
   }
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = {
     set(outputCol, value)
-    set(outputCols, Array(value))
+    if (!isDefined(outputCols)) {
+      set(outputCols, Array(value))
+    }
+    this
   }
 
   /** @group setParam */
@@ -256,8 +268,9 @@ class StringIndexerModel (
           }
         }
 
+        val inputCol = $(inputCols)(x)
         val outputCol = $(outputCols)(x)
-        val metadata = NominalAttribute.defaultAttr.withName(outputCol)
+        val metadata = NominalAttribute.defaultAttr.withName(inputCol)
           .withValues(labels(x)).toMetadata()
 
         df.withColumn(outputCol, indexer(col($(inputCols)(x))).as(outputCol, metadata))
