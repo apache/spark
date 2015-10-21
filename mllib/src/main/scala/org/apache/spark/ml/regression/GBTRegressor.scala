@@ -161,9 +161,9 @@ object GBTRegressor {
 @Since("1.4.0")
 @Experimental
 final class GBTRegressionModel @Since("1.4.0") (
-                                                 @Since("1.4.0") override val uid: String,
-                                                 private val _trees: Array[DecisionTreeRegressionModel],
-                                                 private val _treeWeights: Array[Double])
+  @Since("1.4.0") override val uid: String,
+  private val _trees: Array[DecisionTreeRegressionModel],
+  private val _treeWeights: Array[Double])
   extends PredictionModel[Vector, GBTRegressionModel]
   with TreeEnsembleModel with Serializable {
 
