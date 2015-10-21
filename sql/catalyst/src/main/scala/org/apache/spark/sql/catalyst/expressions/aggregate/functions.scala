@@ -378,7 +378,7 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
   private val currentMk = AttributeReference("currentMk", resultType)()
 
   override val aggBufferAttributes = preCount :: currentCount :: preAvg ::
-    currentAvg :: currentMk :: Nil
+                                  currentAvg :: currentMk :: Nil
 
   override val initialValues = Seq(
     /* preCount = */ Cast(Literal(0), resultType),
@@ -407,7 +407,7 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     Seq(
       /* preCount = */ If(IsNull(child), preCount, currentCount),
       /* currentCount = */ If(IsNull(child), currentCount,
-        Add(currentCount, Cast(Literal(1), resultType))),
+                           Add(currentCount, Cast(Literal(1), resultType))),
       /* preAvg = */ If(IsNull(child), preAvg, currentAvg),
       /* currentAvg = */ If(IsNull(child), currentAvg, avgAdd),
       /* currentMk = */ If(IsNull(child), currentMk, mkAdd)
@@ -424,7 +424,7 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     // average merge
     def avgMerge: Expression = {
       ((currentAvg.left * preCount) + (currentAvg.right * currentCount.right)) /
-        (preCount + currentCount.right)
+      (preCount + currentCount.right)
     }
 
     // update sum of square differences
@@ -438,14 +438,14 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
 
     Seq(
       /* preCount = */ If(IsNull(currentCount.left),
-        Cast(Literal(0), resultType), currentCount.left),
+                         Cast(Literal(0), resultType), currentCount.left),
       /* currentCount = */ If(IsNull(currentCount.left), currentCount.right,
-        If(IsNull(currentCount.right), currentCount.left, countMerge)),
+                             If(IsNull(currentCount.right), currentCount.left, countMerge)),
       /* preAvg = */ If(IsNull(currentAvg.left), Cast(Literal(0), resultType), currentAvg.left),
       /* currentAvg = */ If(IsNull(currentAvg.left), currentAvg.right,
-        If(IsNull(currentAvg.right), currentAvg.left, avgMerge)),
+                           If(IsNull(currentAvg.right), currentAvg.left, avgMerge)),
       /* currentMk = */ If(IsNull(currentMk.left), currentMk.right,
-        If(IsNull(currentMk.right), currentMk.left, mkMerge))
+                          If(IsNull(currentMk.right), currentMk.left, mkMerge))
     )
   }
 
