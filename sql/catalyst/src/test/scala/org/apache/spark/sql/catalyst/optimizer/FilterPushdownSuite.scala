@@ -661,7 +661,7 @@ class FilterPushdownSuite extends PlanTest {
                         .where('a === 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
- 
+
     val correctAnswer = testRelation
                         .where('a === 2)
                         .groupBy('a)('a, Count('b) as 'c)
