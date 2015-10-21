@@ -139,7 +139,7 @@ private[ml] trait HasProbabilityCol extends Params {
 }
 
 /**
- * Trait for shared param varianceCol (default: "variance").
+ * Trait for shared param varianceCol.
  */
 private[ml] trait HasVarianceCol extends Params {
 
@@ -148,8 +148,6 @@ private[ml] trait HasVarianceCol extends Params {
    * @group param
    */
   final val varianceCol: Param[String] = new Param[String](this, "varianceCol", "Column name for the variance of prediction")
-
-  setDefault(varianceCol, "variance")
 
   /** @group getParam */
   final def getVarianceCol: String = $(varianceCol)

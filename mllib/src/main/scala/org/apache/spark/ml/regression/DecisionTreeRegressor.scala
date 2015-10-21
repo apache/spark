@@ -20,6 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasVarianceCol
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeRegressorParams}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
@@ -41,7 +42,7 @@ import org.apache.spark.sql.functions._
 @Experimental
 final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
-  with TreeRegressorParams {
+  with DecisionTreeParams with TreeRegressorParams with HasVarianceCol {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtr"))
@@ -73,6 +74,9 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   override def setSeed(value: Long): this.type = super.setSeed(value)
+
+  /** @group setParam */
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -114,10 +118,13 @@ final class DecisionTreeRegressionModel private[ml] (
     override val rootNode: Node,
     override val numFeatures: Int)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
-  with DecisionTreeModel with TreeRegressorParams with Serializable {
+  with DecisionTreeModel with HasVarianceCol with Serializable {
 
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
+
+  /** @group setParam */
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   /**
    * Construct a decision tree regression model.
@@ -138,8 +145,12 @@ final class DecisionTreeRegressionModel private[ml] (
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
     val predictUDF = udf { (features: Vector) => predict(features) }
     val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
-      .withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
+    if (isDefined(varianceCol)) {
+      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+        .withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
+    } else {
+      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    }
   }
 
   @Since("1.4.0")
