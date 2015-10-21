@@ -69,7 +69,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     """
   }
 
-  def writeExpressionsToBuffer(
+  private def writeExpressionsToBuffer(
       ctx: CodeGenContext,
       row: String,
       inputs: Seq[GeneratedExpressionCode],
