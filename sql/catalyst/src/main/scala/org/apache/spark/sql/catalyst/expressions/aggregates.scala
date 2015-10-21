@@ -936,3 +936,10 @@ case class StddevFunction(
     }
   }
 }
+
+case class Range(child: Expression) extends UnaryExpression with AggregateExpression {
+  override def nullable: Boolean = false
+  override def dataType: DoubleType.type = DoubleType
+  override def foldable: Boolean = false
+  override def toString: String = s"RANGE($child)"
+}

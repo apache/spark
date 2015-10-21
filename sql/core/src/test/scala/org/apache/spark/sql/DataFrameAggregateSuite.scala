@@ -175,6 +175,21 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(0, null))
   }
 
+  test("range") {
+    checkAnswer(
+      testData2.agg(range('a)),
+      Row(2))
+  }
+
+  test("zero range") {
+    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+    assert(emptyTableData.count() == 0)
+
+    checkAnswer(
+      emptyTableData.agg(range('a)),
+      Row(null))
+  }
+
   test("stddev") {
     val testData2ADev = math.sqrt(4/5.0)
 

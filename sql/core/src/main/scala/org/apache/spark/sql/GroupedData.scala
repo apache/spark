@@ -124,6 +124,7 @@ class GroupedData protected[sql](
       case "avg" | "average" | "mean" => Average
       case "max" => Max
       case "min" => Min
+      case "range" => Range
       case "stddev" => Stddev
       case "stddev_pop" => StddevPop
       case "stddev_samp" => StddevSamp
@@ -284,6 +285,18 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Min)
+  }
+
+  /**
+   * Compute the range value for each numeric column for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the range values for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def range(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Range)
   }
 
   /**

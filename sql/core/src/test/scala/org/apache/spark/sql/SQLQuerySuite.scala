@@ -329,6 +329,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       testCodeGen(
         "SELECT min(key) FROM testData3x",
         Row(1) :: Nil)
+      // RANGE
+      testCodeGen(
+        "SELECT value, range(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, 0)))
+      testCodeGen(
+        "SELECT range(key) FROM testData3x",
+        Row(99) :: Nil)
       // STDDEV
       testCodeGen(
         "SELECT a, stddev(b), stddev_pop(b) FROM testData2 GROUP BY a",
@@ -344,13 +351,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |  sum(key),
           |  max(key),
           |  min(key),
+          |  range(key),
           |  avg(key),
           |  count(key),
           |  count(distinct key)
           |FROM testData3x
           |GROUP BY value
         """.stripMargin,
-        (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
+        (1 to 100).map(i => Row(i.toString, i*3, i, i, 0, i, 3, 1)))
       testCodeGen(
         "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
         Row(100, 1, 50.5, 300, 100) :: Nil)

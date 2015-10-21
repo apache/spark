@@ -85,6 +85,12 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
 
+        case expressions.Range(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Range(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
         case expressions.Stddev(child) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.Stddev(child),
