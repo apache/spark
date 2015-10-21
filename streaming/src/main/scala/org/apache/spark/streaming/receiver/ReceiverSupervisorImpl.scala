@@ -83,7 +83,7 @@ private[streaming] class ReceiverSupervisorImpl(
         case UpdateRateLimit(eps) =>
           logInfo(s"Received a new rate limit: $eps.")
           registeredBlockGenerators.foreach { bg =>
-            bg.updateRate(eps)
+            bg.congestionStrategy.onBlockBoundUpdate(eps)
           }
       }
     })

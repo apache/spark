@@ -76,7 +76,7 @@ private[streaming] trait BlockGeneratorListener {
 private[streaming] class BlockGenerator(
     listener: BlockGeneratorListener,
     receiverId: Int,
-    conf: SparkConf,
+    private[receiver] val conf: SparkConf,
     clock: Clock = new SystemClock()
   ) extends RateLimiter(conf) with Logging {
 
@@ -101,7 +101,7 @@ private[streaming] class BlockGenerator(
   private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
   require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
 
-  private val blockIntervalTimer =
+  private[receiver] val blockIntervalTimer =
     new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
   private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
@@ -226,6 +226,13 @@ private[streaming] class BlockGenerator(
 
   def isStopped(): Boolean = state == StoppedAll
 
+  private[receiver] val congestionStrategy = CongestionStrategy.create(this)
+
+  private def pruneElementsOfBlock: Option[Iterator[Any] => Iterator[Any]] =
+    PartialFunction.condOpt(congestionStrategy) {
+      case s: DestructiveCongestionStrategy => (s.restrictCurrentBuffer _)
+    }
+
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = {
     try {
@@ -236,7 +243,8 @@ private[streaming] class BlockGenerator(
           currentBuffer = new ArrayBuffer[Any]
           val blockId = StreamBlockId(receiverId, time - blockIntervalMs)
           listener.onGenerateBlock(blockId)
-          newBlock = new Block(blockId, newBlockBuffer)
+          newBlock = new Block(blockId,
+            pruneElementsOfBlock.map(f => f(newBlockBuffer.to)).getOrElse(newBlockBuffer).to)
         }
       }
 
