@@ -2054,7 +2054,7 @@ setMethod("lag",
             } else {
               x
             }
-            
+
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lag", col, as.integer(offset), defaultValue)
             column(jc)
@@ -2081,7 +2081,7 @@ setMethod("lead",
             } else {
               x
             }
-            
+
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lead", col, as.integer(offset), defaultValue)
             column(jc)
