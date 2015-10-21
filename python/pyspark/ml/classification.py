@@ -67,6 +67,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+
+    .. versionadded:: 1.3.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -99,6 +101,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         self._checkThresholdConsistency()
 
     @keyword_only
+    @since("1.3.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   threshold=0.5, thresholds=None, probabilityCol="probability",
@@ -119,6 +122,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
 
+    @since("1.4.0")
     def setThreshold(self, value):
         """
         Sets the value of :py:attr:`threshold`.
@@ -129,6 +133,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
             del self._paramMap[self.thresholds]
         return self
 
+    @since("1.4.0")
     def getThreshold(self):
         """
         Gets the value of threshold or its default value.
@@ -144,6 +149,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         else:
             return self.getOrDefault(self.threshold)
 
+    @since("1.5.0")
     def setThresholds(self, value):
         """
         Sets the value of :py:attr:`thresholds`.
@@ -154,6 +160,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
             del self._paramMap[self.threshold]
         return self
 
+    @since("1.5.0")
     def getThresholds(self):
         """
         If :py:attr:`thresholds` is set, return its value.
@@ -185,9 +192,12 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 class LogisticRegressionModel(JavaModel):
     """
     Model fitted by LogisticRegression.
+
+    .. versionadded:: 1.3.0
     """
 
     @property
+    @since("1.4.0")
     def weights(self):
         """
         Model weights.
@@ -215,6 +225,8 @@ class LogisticRegressionModel(JavaModel):
 class TreeClassifierParams(object):
     """
     Private class to track supported impurity measures.
+
+    .. versionadded:: 1.4.0
     """
     supportedImpurities = ["entropy", "gini"]
 
@@ -248,6 +260,8 @@ class TreeClassifierParams(object):
 class GBTParams(TreeEnsembleParams):
     """
     Private class to track supported GBT params.
+
+    .. versionadded:: 1.4.0
     """
     supportedLossTypes = ["logistic"]
 
@@ -287,6 +301,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+
+    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -310,6 +326,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
@@ -333,6 +350,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 class DecisionTreeClassificationModel(DecisionTreeModel):
     """
     Model fitted by DecisionTreeClassifier.
+
+    .. versionadded:: 1.4.0
     """
 
 
@@ -371,6 +390,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+
+    .. versionadded:: 1.4.0
     """
 
     @keyword_only
