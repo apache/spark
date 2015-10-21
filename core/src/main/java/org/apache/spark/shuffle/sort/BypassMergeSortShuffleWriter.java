@@ -108,7 +108,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
       final File file = tempShuffleBlockIdPlusFile._2();
       final BlockId blockId = tempShuffleBlockIdPlusFile._1();
       partitionWriters[i] =
-        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics).open();
+        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
     }
     // Creating the file to write to and creating a disk writer both involve interacting with
     // the disk, and can take a long time in aggregate when we open many files, so should be
