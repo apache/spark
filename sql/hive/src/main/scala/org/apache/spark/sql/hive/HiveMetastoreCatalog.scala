@@ -31,7 +31,7 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -696,7 +696,7 @@ private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: HiveTable)
     (@transient private val sqlContext: SQLContext)
-  extends LeafNode with MultiInstanceRelation with FileRelation {
+  extends LeafNode with FileRelation {
 
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
@@ -854,11 +854,6 @@ private[hive] case class MetastoreRelation
         table.location.getOrElse(
           sys.error(s"Could not get the location of ${table.qualifiedName}.")))
     }
-  }
-
-
-  override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias)(table)(sqlContext)
   }
 }
 

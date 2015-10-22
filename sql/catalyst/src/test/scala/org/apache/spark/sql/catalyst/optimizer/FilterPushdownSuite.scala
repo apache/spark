@@ -33,8 +33,9 @@ class FilterPushdownSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
-      Batch("Filter Pushdown", Once,
+      Batch("Filter Pushdown", FixedPoint(100),
         SamplePushDown,
+        NewOutputPushDown,
         CombineFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
@@ -76,7 +77,7 @@ class FilterPushdownSuite extends PlanTest {
       testRelation
         .select('a)
         .groupBy('a)('a)
-        .select('a).analyze
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -92,7 +93,7 @@ class FilterPushdownSuite extends PlanTest {
       testRelation
         .select('a)
         .groupBy('a)('a as 'c)
-        .select('c).analyze
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }

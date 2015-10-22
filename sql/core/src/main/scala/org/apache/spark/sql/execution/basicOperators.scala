@@ -27,6 +27,15 @@ import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
+case class NewOutput(output: Seq[Attribute], child: SparkPlan) extends UnaryNode {
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+}
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -299,15 +308,4 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
   }
-}
-
-/**
- * A plan node that does nothing but lie about the output of its child.  Used to spice a
- * (hopefully structurally equivalent) tree from a different optimization sequence into an already
- * resolved tree.
- */
-case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
-  def children: Seq[SparkPlan] = child :: Nil
-
-  protected override def doExecute(): RDD[InternalRow] = child.execute()
 }

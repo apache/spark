@@ -21,7 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
@@ -61,7 +60,7 @@ private[sql] case class InMemoryRelation(
     @transient private var _cachedColumnBuffers: RDD[CachedBatch] = null,
     @transient private var _statistics: Statistics = null,
     private var _batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] = null)
-  extends LogicalPlan with MultiInstanceRelation {
+  extends LogicalPlan {
 
   private val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
     if (_batchStats == null) {
@@ -175,19 +174,6 @@ private[sql] case class InMemoryRelation(
   }
 
   override def children: Seq[LogicalPlan] = Seq.empty
-
-  override def newInstance(): this.type = {
-    new InMemoryRelation(
-      output.map(_.newInstance()),
-      useCompression,
-      batchSize,
-      storageLevel,
-      child,
-      tableName)(
-      _cachedColumnBuffers,
-      statisticsToBePropagated,
-      batchStats).asInstanceOf[this.type]
-  }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 

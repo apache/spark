@@ -327,55 +327,7 @@ class Analyzer(
 
       // Special handling for cases when self-join introduce duplicate expression ids.
       case j @ Join(left, right, _, _) if !j.selfJoinResolved =>
-        val conflictingAttributes = left.outputSet.intersect(right.outputSet)
-        logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
-
-        right.collect {
-          // Handle base relations that might appear more than once.
-          case oldVersion: MultiInstanceRelation
-              if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-            val newVersion = oldVersion.newInstance()
-            (oldVersion, newVersion)
-
-          // Handle projects that create conflicting aliases.
-          case oldVersion @ Project(projectList, _)
-              if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
-            (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
-
-          case oldVersion @ Aggregate(_, aggregateExpressions, _)
-              if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
-            (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
-
-          case oldVersion: Generate
-              if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
-            val newOutput = oldVersion.generatorOutput.map(_.newInstance())
-            (oldVersion, oldVersion.copy(generatorOutput = newOutput))
-
-          case oldVersion @ Window(_, windowExpressions, _, _, child)
-              if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
-                .nonEmpty =>
-            (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
-        }
-        // Only handle first case, others will be fixed on the next pass.
-        .headOption match {
-          case None =>
-            /*
-             * No result implies that there is a logical plan node that produces new references
-             * that this rule cannot handle. When that is the case, there must be another rule
-             * that resolves these conflicts. Otherwise, the analysis will fail.
-             */
-            j
-          case Some((oldRelation, newRelation)) =>
-            val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-            val newRight = right transformUp {
-              case r if r == oldRelation => newRelation
-            } transformUp {
-              case other => other transformExpressions {
-                case a: Attribute => attributeRewrites.get(a).getOrElse(a)
-              }
-            }
-            j.copy(right = newRight)
-        }
+        j.copy(right = NewOutput(right))
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on grandchild

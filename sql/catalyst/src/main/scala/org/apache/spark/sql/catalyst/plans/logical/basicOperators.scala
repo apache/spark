@@ -23,6 +23,34 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
+/**
+ * An operator that can be put on top of another query operator to produce different output
+ * attributes(with different expression ids) which are globally unique.
+ *
+ * It is invalid to have multiple copies of the same attribute produced by distinct operators
+ * in a query tree(for example, self-join) as this breaks the guarantee that expression
+ * ids, which are used to differentiate attributes, are unique.  This operator is created to
+ * solve this problem.
+ */
+case class NewOutput(output: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+  assert(output.length == child.output.length)
+  assert(output.zip(child.output).forall {
+    case (a1, a2) => a1.name == a2.name && a1.dataType == a2.dataType
+  })
+
+  override def expressions: Seq[Expression] = Nil
+}
+
+object NewOutput {
+  def apply(child: LogicalPlan): NewOutput = {
+    // If child's output has some exactly same attributes, i.e. having same exprId, the new output
+    // of them should also have same exprId.
+    val childOutput = child.output.distinct
+    val outputMap = AttributeMap(childOutput.zip(childOutput.map(_.newInstance())))
+    NewOutput(child.output.map(outputMap), child)
+  }
+}
+
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
