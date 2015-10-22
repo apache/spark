@@ -1796,6 +1796,34 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("run sql directly on files") {
+    val df = sqlContext.range(100)
+    withTempPath(f => {
+      df.write.json(f.getCanonicalPath)
+      checkAnswer(sql(s"select id from json.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select id from `org.apache.spark.sql.json`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select a.id from json.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+
+    val e1 = intercept[AnalysisException] {
+      sql("select * from in_valid_table")
+    }
+    assert(e1.message.contains("Table not found"))
+
+    val e2 = intercept[AnalysisException] {
+      sql("select * from no_db.no_table")
+    }
+    assert(e2.message.contains("Table not found"))
+
+    val e3 = intercept[AnalysisException] {
+      sql("select * from json.invalid_file")
+    }
+    assert(e3.message.contains("No input paths specified"))
+  }
+
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
     // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
     // This bug will be triggered when Tungsten is enabled and there are multiple

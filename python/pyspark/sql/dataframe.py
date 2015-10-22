@@ -212,6 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
+        == Physical Plan ==
         Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
@@ -227,7 +228,7 @@ class DataFrame(object):
         if extended:
             print(self._jdf.queryExecution().toString())
         else:
-            print(self._jdf.queryExecution().executedPlan().toString())
+            print(self._jdf.queryExecution().simpleString())
 
     @since(1.3)
     def isLocal(self):
