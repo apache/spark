@@ -1383,6 +1383,7 @@ object Client extends Logging {
       } catch {
         case e: java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
         case e: java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
+        case e: java.lang.NoClassDefFoundError => { logDebug("Hive Class not found: " + e); return }
         case e: Exception => { logError("Unexpected Exception " + e)
           throw new RuntimeException("Unexpected exception", e)
         }
