@@ -26,6 +26,16 @@ test_that("repeatedly starting and stopping SparkR", {
   }
 })
 
+test_that("repeatedly starting and stopping SparkR SQL", {
+  for (i in 1:4) {
+    sc <- sparkR.init()
+    sqlContext <- sparkRSQL.init(sc)
+    df <- createDataFrame(sqlContext, data.frame(a = 1:20))
+    expect_equal(count(df), 20)
+    sparkR.stop()
+  }
+})
+
 test_that("rdd GC across sparkR.stop", {
   sparkR.stop()
   sc <- sparkR.init() # sc should get id 0
