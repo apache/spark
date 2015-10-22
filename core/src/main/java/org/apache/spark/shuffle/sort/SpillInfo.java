@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import java.io.File;
 
 import org.apache.spark.storage.TempShuffleBlockId;
 
 /**
- * Metadata for a block of data written by {@link UnsafeShuffleExternalSorter}.
+ * Metadata for a block of data written by {@link ShuffleExternalSorter}.
  */
 final class SpillInfo {
   final long[] partitionLengths;

@@ -101,7 +101,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
     val oldEnv = SparkEnv.get // save the old SparkEnv, as it will be overwritten
     Utils.tryWithSafeFinally {
       val conf = new SparkConf()
-        .set("spark.shuffle.spill.initialMemoryThreshold", "1024")
+        .set("spark.shuffle.spill.initialMemoryThreshold", "1")
         .set("spark.shuffle.sort.bypassMergeThreshold", "0")
         .set("spark.testing.memory", "80000")
 
@@ -109,7 +109,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
       outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
       // prepare data
       val converter = unsafeRowConverter(Array(IntegerType))
-      val data = (1 to 1000).iterator.map { i =>
+      val data = (1 to 10000).iterator.map { i =>
         (i, converter(Row(i)))
       }
       val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
@@ -141,9 +141,8 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("SPARK-10403: unsafe row serializer with UnsafeShuffleManager") {
-    val conf = new SparkConf()
-      .set("spark.shuffle.manager", "tungsten-sort")
+  test("SPARK-10403: unsafe row serializer with SortShuffleManager") {
+    val conf = new SparkConf().set("spark.shuffle.manager", "sort")
     sc = new SparkContext("local", "test", conf)
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))

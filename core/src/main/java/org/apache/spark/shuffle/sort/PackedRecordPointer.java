@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 /**
  * Wrapper around an 8-byte word that holds a 24-bit partition number and 40-bit record pointer.
