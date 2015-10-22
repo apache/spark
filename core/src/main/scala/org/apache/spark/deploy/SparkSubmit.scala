@@ -266,10 +266,6 @@ object SparkSubmit {
       }
     }
 
-    // SPARK-5966, check deployMode CLUSTER and master local
-    if (clusterManager == LOCAL && deployMode == CLUSTER) {
-      printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
-    }
 
     // Update args.deployMode if it is null. It will be passed down as a Spark property later.
     (args.deployMode, deployMode) match {
@@ -333,6 +329,8 @@ object SparkSubmit {
       case (STANDALONE, CLUSTER) if args.isR =>
         printErrorAndExit("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
+      case (LOCAL, CLUSTER) =>
+        printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
