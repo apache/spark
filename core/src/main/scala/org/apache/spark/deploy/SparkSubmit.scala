@@ -266,6 +266,11 @@ object SparkSubmit {
       }
     }
 
+    // SPARK-5966, check deployMode CLUSTER and master local
+    if (clusterManager == LOCAL && deployMode == CLUSTER) {
+      printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
+    }
+
     // Update args.deployMode if it is null. It will be passed down as a Spark property later.
     (args.deployMode, deployMode) match {
       case (null, CLIENT) => args.deployMode = "client"
