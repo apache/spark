@@ -31,6 +31,10 @@ import time
 import datetime
 
 import py4j
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -1222,4 +1226,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()
