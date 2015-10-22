@@ -308,7 +308,13 @@ class HomeView(AdminIndexView):
         # filter the dags if filter_by_owner and current user is not superuser
         do_filter = FILTER_BY_OWNER and (not current_user.is_superuser())
         if do_filter:
-            qry = session.query(DM).filter(~DM.is_subdag, DM.is_active, DM.owners == current_user.username).all()
+            qry = (
+                session.query(DM)
+                .filter(
+                    ~DM.is_subdag, DM.is_active,
+                    DM.owners == current_user.username)
+                .all()
+            )
         else:
             qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
         orm_dags = {dag.dag_id: dag for dag in qry}
@@ -322,7 +328,13 @@ class HomeView(AdminIndexView):
         session.close()
         dags = dagbag.dags.values()
         if do_filter:
-            dags = {dag.dag_id: dag for dag in dags if (dag.owner == current_user.username and (not dag.parent_dag))}
+            dags = {
+                dag.dag_id: dag
+                for dag in dags
+                if (
+                    dag.owner == current_user.username and (not dag.parent_dag)
+                )
+            }
         else:
             dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
         all_dag_ids = sorted(set(orm_dags.keys()) | set(dags.keys()))
@@ -667,13 +679,17 @@ class Airflow(BaseView):
             State.QUEUED,
         ]
         task_ids = []
+        dag_ids = []
         for dag in dagbag.dags.values():
             task_ids += dag.task_ids
+            if not dag.is_subdag:
+                dag_ids.append(dag.dag_id)
         TI = models.TaskInstance
         session = Session()
         qry = (
             session.query(TI.dag_id, TI.state, sqla.func.count(TI.task_id))
             .filter(TI.task_id.in_(task_ids))
+            .filter(TI.dag_id.in_(dag_ids))
             .group_by(TI.dag_id, TI.state)
         )
 
