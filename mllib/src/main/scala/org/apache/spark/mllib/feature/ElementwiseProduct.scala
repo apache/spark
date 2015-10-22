@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.linalg._
 
 /**
@@ -27,8 +27,10 @@ import org.apache.spark.mllib.linalg._
  * multiplier.
  * @param scalingVec The values used to scale the reference vector's individual components.
  */
+@Since("1.4.0")
 @Experimental
-class ElementwiseProduct(val scalingVec: Vector) extends VectorTransformer {
+class ElementwiseProduct @Since("1.4.0") (
+    @Since("1.4.0") val scalingVec: Vector) extends VectorTransformer {
 
   /**
    * Does the hadamard product transformation.
@@ -36,6 +38,7 @@ class ElementwiseProduct(val scalingVec: Vector) extends VectorTransformer {
    * @param vector vector to be transformed.
    * @return transformed vector.
    */
+  @Since("1.4.0")
   override def transform(vector: Vector): Vector = {
     require(vector.size == scalingVec.size,
       s"vector sizes do not match: Expected ${scalingVec.size} but found ${vector.size}")

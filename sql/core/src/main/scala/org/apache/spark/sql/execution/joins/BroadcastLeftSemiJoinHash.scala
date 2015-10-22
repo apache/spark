@@ -18,18 +18,16 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.{InternalAccumulator, TaskContext}
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * :: DeveloperApi ::
  * Build the right table's join keys into a HashSet, and iteratively go through the left
  * table, to find the if join keys are in the Hash set.
  */
-@DeveloperApi
 case class BroadcastLeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -37,18 +35,31 @@ case class BroadcastLeftSemiJoinHash(
     right: SparkPlan,
     condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   protected override def doExecute(): RDD[InternalRow] = {
-    val input = right.execute().map(_.copy()).collect()
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
+
+    val input = right.execute().map { row =>
+      numRightRows += 1
+      row.copy()
+    }.collect()
 
     if (condition.isEmpty) {
-      val hashSet = buildKeyHashSet(input.toIterator)
+      val hashSet = buildKeyHashSet(input.toIterator, SQLMetrics.nullLongMetric)
       val broadcastedRelation = sparkContext.broadcast(hashSet)
 
       left.execute().mapPartitions { streamIter =>
-        hashSemiJoin(streamIter, broadcastedRelation.value)
+        hashSemiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
       }
     } else {
-      val hashRelation = HashedRelation(input.toIterator, rightKeyGenerator, input.size)
+      val hashRelation =
+        HashedRelation(input.toIterator, SQLMetrics.nullLongMetric, rightKeyGenerator, input.size)
       val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
       left.execute().mapPartitions { streamIter =>
@@ -59,7 +70,7 @@ case class BroadcastLeftSemiJoinHash(
               InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
           case _ =>
         }
-        hashSemiJoin(streamIter, hashedRelation)
+        hashSemiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)
       }
     }
   }

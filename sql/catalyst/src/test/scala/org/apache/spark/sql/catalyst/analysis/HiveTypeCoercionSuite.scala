@@ -285,6 +285,17 @@ class HiveTypeCoercionSuite extends PlanTest {
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
     )
+    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
+      CaseWhen(Seq(Literal(true), Literal(1.2), Literal.create(1, DecimalType(7, 2)))),
+      CaseWhen(Seq(
+        Literal(true), Literal(1.2), Cast(Literal.create(1, DecimalType(7, 2)), DoubleType)))
+    )
+    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
+      CaseWhen(Seq(Literal(true), Literal(100L), Literal.create(1, DecimalType(7, 2)))),
+      CaseWhen(Seq(
+        Literal(true), Cast(Literal(100L), DecimalType(22, 2)),
+        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2))))
+    )
   }
 
   test("type coercion simplification for equal to") {

@@ -71,11 +71,18 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   @Override
   public void exceptionCaught(Throwable cause) {
+    rpcHandler.exceptionCaught(cause, reverseClient);
   }
 
   @Override
   public void channelUnregistered() {
-    streamManager.connectionTerminated(channel);
+    if (streamManager != null) {
+      try {
+        streamManager.connectionTerminated(channel);
+      } catch (RuntimeException e) {
+        logger.error("StreamManager connectionTerminated() callback failed.", e);
+      }
+    }
     rpcHandler.connectionTerminated(reverseClient);
   }
 
@@ -97,6 +104,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
     ManagedBuffer buf;
     try {
+      streamManager.checkAuthorization(reverseClient, req.streamChunkId.streamId);
       streamManager.registerChannel(channel, req.streamChunkId.streamId);
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
     } catch (Exception e) {

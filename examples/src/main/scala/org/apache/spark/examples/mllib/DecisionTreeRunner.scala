@@ -100,7 +100,7 @@ object DecisionTreeRunner {
         .action((x, c) => c.copy(numTrees = x))
       opt[String]("featureSubsetStrategy")
         .text(s"feature subset sampling strategy" +
-          s" (${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}}), " +
+          s" (${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}), " +
           s"default: ${defaultParams.featureSubsetStrategy}")
         .action((x, c) => c.copy(featureSubsetStrategy = x))
       opt[Double]("fracTest")

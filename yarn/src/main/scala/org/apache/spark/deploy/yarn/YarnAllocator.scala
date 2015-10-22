@@ -21,8 +21,9 @@ import java.util.Collections
 import java.util.concurrent._
 import java.util.regex.Pattern
 
-import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
@@ -36,9 +37,10 @@ import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
+import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
+import org.apache.spark.util.Utils
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -86,7 +88,13 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter = 0
   @volatile private var numExecutorsFailed = 0
 
-  @volatile private var targetNumExecutors = args.numExecutors
+  @volatile private var targetNumExecutors =
+    YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
+
+  // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
+  // list of requesters that should be responded to once we find out why the given executor
+  // was lost.
+  private val pendingLossReasonRequests = new HashMap[String, mutable.Buffer[RpcCallContext]]
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
@@ -157,7 +165,7 @@ private[yarn] class YarnAllocator(
    * Number of container requests at the given location that have not yet been fulfilled.
    */
   private def getNumPendingAtLocation(location: String): Int =
-    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).map(_.size).sum
+    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala.map(_.size).sum
 
   /**
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
@@ -224,15 +232,13 @@ private[yarn] class YarnAllocator(
           numExecutorsRunning,
           allocateResponse.getAvailableResources))
 
-      handleAllocatedContainers(allocatedContainers)
+      handleAllocatedContainers(allocatedContainers.asScala)
     }
 
     val completedContainers = allocateResponse.getCompletedContainersStatuses()
     if (completedContainers.size > 0) {
       logDebug("Completed %d containers".format(completedContainers.size))
-
-      processCompletedContainers(completedContainers)
-
+      processCompletedContainers(completedContainers.asScala)
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, numExecutorsRunning))
     }
@@ -264,7 +270,7 @@ private[yarn] class YarnAllocator(
         val request = createContainerRequest(resource, locality.nodes, locality.racks)
         amClient.addContainerRequest(request)
         val nodes = request.getNodes
-        val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
+        val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.asScala.last
         logInfo(s"Container request (host: $hostStr, capability: $resource)")
       }
     } else if (missing < 0) {
@@ -273,7 +279,8 @@ private[yarn] class YarnAllocator(
 
       val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
       if (!matchingRequests.isEmpty) {
-        matchingRequests.head.take(numToCancel).foreach(amClient.removeContainerRequest)
+        matchingRequests.iterator().next().asScala
+          .take(numToCancel).foreach(amClient.removeContainerRequest)
       } else {
         logWarning("Expected to find pending requests, but found none.")
       }
@@ -423,52 +430,62 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val alreadyReleased = releasedContainers.remove(containerId)
-      val completedContainerReason : Option[String] =
-      if (!alreadyReleased) {
+      val hostOpt = allocatedContainerToHostMap.get(containerId)
+      val onHostStr = hostOpt.map(host => s" on host: $host").getOrElse("")
+      val exitReason = if (!alreadyReleased) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
         numExecutorsRunning -= 1
-        logInfo("Completed container %s (state: %s, exit status: %s)".format(
+        logInfo("Completed container %s%s (state: %s, exit status: %s)".format(
           containerId,
+          onHostStr,
           completedContainer.getState,
           completedContainer.getExitStatus))
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
         // there are some exit status' we shouldn't necessarily count against us, but for
-        // now I think its ok as none of the containers are expected to exit
-        if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
-          val msg = s"Container preempted: $containerId"
-          logInfo(msg)
-          Some(msg)
-        } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
-          val msg = memLimitExceededLogMessage(
-            completedContainer.getDiagnostics,
-            VMEM_EXCEEDED_PATTERN)
-          logWarning(msg)
-          Some(msg)
-        } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
-          val msg = memLimitExceededLogMessage(
-            completedContainer.getDiagnostics,
-            PMEM_EXCEEDED_PATTERN)
-          logWarning(msg)
-          Some(msg)
-        } else if (completedContainer.getExitStatus != 0) {
-          val msg = "Container marked as failed: " + containerId +
-            ". Exit status: " + completedContainer.getExitStatus +
-            ". Diagnostics: " + completedContainer.getDiagnostics
-          logInfo(msg)
-          numExecutorsFailed += 1
-          Some(msg)
-        } else {
-          None
+        // now I think its ok as none of the containers are expected to exit.
+        val exitStatus = completedContainer.getExitStatus
+        val (isNormalExit, containerExitReason) = exitStatus match {
+          case ContainerExitStatus.SUCCESS =>
+            (true, s"Executor for container $containerId exited normally.")
+          case ContainerExitStatus.PREEMPTED =>
+            // Preemption should count as a normal exit, since YARN preempts containers merely
+            // to do resource sharing, and tasks that fail due to preempted executors could
+            // just as easily finish on any other executor. See SPARK-8167.
+            (true, s"Container ${containerId}${onHostStr} was preempted.")
+          // Should probably still count memory exceeded exit codes towards task failures
+          case VMEM_EXCEEDED_EXIT_CODE =>
+            (false, memLimitExceededLogMessage(
+              completedContainer.getDiagnostics,
+              VMEM_EXCEEDED_PATTERN))
+          case PMEM_EXCEEDED_EXIT_CODE =>
+            (false, memLimitExceededLogMessage(
+              completedContainer.getDiagnostics,
+              PMEM_EXCEEDED_PATTERN))
+          case unknown =>
+            numExecutorsFailed += 1
+            (false, "Container marked as failed: " + containerId + onHostStr +
+              ". Exit status: " + completedContainer.getExitStatus +
+              ". Diagnostics: " + completedContainer.getDiagnostics)
+
         }
+        if (isNormalExit) {
+          logInfo(containerExitReason)
+        } else {
+          logWarning(containerExitReason)
+        }
+        ExecutorExited(0, isNormalExit, containerExitReason)
       } else {
-        None
+        // If we have already released this container, then it must mean
+        // that the driver has explicitly requested it to be killed
+        ExecutorExited(completedContainer.getExitStatus, isNormalExit = true,
+          s"Container $containerId exited from explicit termination request.")
       }
 
-      if (allocatedContainerToHostMap.containsKey(containerId)) {
-        val host = allocatedContainerToHostMap.get(containerId).get
-        val containerSet = allocatedHostToContainersMap.get(host).get
-
+      for {
+        host <- hostOpt
+        containerSet <- allocatedHostToContainersMap.get(host)
+      } {
         containerSet.remove(containerId)
         if (containerSet.isEmpty) {
           allocatedHostToContainersMap.remove(host)
@@ -481,20 +498,32 @@ private[yarn] class YarnAllocator(
 
       containerIdToExecutorId.remove(containerId).foreach { eid =>
         executorIdToContainer.remove(eid)
-
+        pendingLossReasonRequests.remove(eid).foreach { pendingRequests =>
+          // Notify application of executor loss reasons so it can decide whether it should abort
+          pendingRequests.foreach(_.reply(exitReason))
+        }
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)
           // Notify backend about the failure of the executor
           numUnexpectedContainerRelease += 1
-          // If a reason exists, add it to the message. Otherwise, the message will just contain
-          // the executor and container ID but no reason.
-          val messageToSend = s"Yarn deallocated the executor $eid (container $containerId)." +
-            completedContainerReason.fold("") {
-              reasonString => s" Reason: $reasonString"
-            }
-          driverRef.send(RemoveExecutor(eid, messageToSend))
+          driverRef.send(RemoveExecutor(eid, exitReason))
         }
       }
+    }
+  }
+
+  /**
+   * Register that some RpcCallContext has asked the AM why the executor was lost. Note that
+   * we can only find the loss reason to send back in the next call to allocateResources().
+   */
+  private[yarn] def enqueueGetLossReasonRequest(
+      eid: String,
+      context: RpcCallContext): Unit = synchronized {
+    if (executorIdToContainer.contains(eid)) {
+      pendingLossReasonRequests
+        .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
+    } else {
+      logWarning(s"Tried to get the loss reason for non-existent executor $eid")
     }
   }
 
@@ -513,6 +542,8 @@ private object YarnAllocator {
     Pattern.compile(s"$MEM_REGEX of $MEM_REGEX physical memory used")
   val VMEM_EXCEEDED_PATTERN =
     Pattern.compile(s"$MEM_REGEX of $MEM_REGEX virtual memory used")
+  val VMEM_EXCEEDED_EXIT_CODE = -103
+  val PMEM_EXCEEDED_EXIT_CODE = -104
 
   def memLimitExceededLogMessage(diagnostics: String, pattern: Pattern): String = {
     val matcher = pattern.matcher(diagnostics)

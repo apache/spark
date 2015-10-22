@@ -73,16 +73,19 @@ final class RegressionEvaluator(override val uid: String)
       }
     val metrics = new RegressionMetrics(predictionAndLabels)
     val metric = $(metricName) match {
-      case "rmse" =>
-        -metrics.rootMeanSquaredError
-      case "mse" =>
-        -metrics.meanSquaredError
-      case "r2" =>
-        metrics.r2
-      case "mae" =>
-        -metrics.meanAbsoluteError
+      case "rmse" => metrics.rootMeanSquaredError
+      case "mse" => metrics.meanSquaredError
+      case "r2" => metrics.r2
+      case "mae" => metrics.meanAbsoluteError
     }
     metric
+  }
+
+  override def isLargerBetter: Boolean = $(metricName) match {
+    case "rmse" => false
+    case "mse" => false
+    case "r2" => true
+    case "mae" => false
   }
 
   override def copy(extra: ParamMap): RegressionEvaluator = defaultCopy(extra)

@@ -20,6 +20,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
@@ -417,9 +418,8 @@ object WriteAheadLogSuite {
 
   /** Read all the data in the log file in a directory using the WriteAheadLog class. */
   def readDataUsingWriteAheadLog(logDirectory: String): Seq[String] = {
-    import scala.collection.JavaConversions._
     val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
-    val data = wal.readAll().map(byteBufferToString).toSeq
+    val data = wal.readAll().asScala.map(byteBufferToString).toSeq
     wal.close()
     data
   }

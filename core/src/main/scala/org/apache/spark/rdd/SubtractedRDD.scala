@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
@@ -63,15 +63,17 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    Seq(rdd1, rdd2).map { rdd =>
+    def rddDependency[T1: ClassTag, T2: ClassTag](rdd: RDD[_ <: Product2[T1, T2]])
+      : Dependency[_] = {
       if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency(rdd, part, serializer)
+        new ShuffleDependency[T1, T2, Any](rdd, part, serializer)
       }
     }
+    Seq(rddDependency[K, V](rdd1), rddDependency[K, W](rdd2))
   }
 
   override def getPartitions: Array[Partition] = {
@@ -105,7 +107,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
         seq
       }
     }
-    def integrate(depNum: Int, op: Product2[K, V] => Unit) = {
+    def integrate(depNum: Int, op: Product2[K, V] => Unit): Unit = {
       dependencies(depNum) match {
         case oneToOneDependency: OneToOneDependency[_] =>
           val dependencyPartition = partition.narrowDeps(depNum).get.split
@@ -125,7 +127,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     integrate(0, t => getSeq(t._1) += t._2)
     // the second dep is rdd2; remove all of its keys
     integrate(1, t => map.remove(t._1))
-    map.iterator.map { t => t._2.iterator.map { (t._1, _) } }.flatten
+    map.asScala.iterator.map(t => t._2.iterator.map((t._1, _))).flatten
   }
 
   override def clearDependencies() {

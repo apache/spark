@@ -32,7 +32,7 @@ import tachyon.TachyonURI
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 
 /**
@@ -80,7 +80,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     // in order to avoid having really large inodes at the top level in Tachyon.
     tachyonDirs = createTachyonDirs()
     subDirs = Array.fill(tachyonDirs.length)(new Array[TachyonFile](subDirsPerTachyonDir))
-    tachyonDirs.foreach(tachyonDir => Utils.registerShutdownDeleteDir(tachyonDir))
+    tachyonDirs.foreach(tachyonDir => ShutdownHookManager.registerShutdownDeleteDir(tachyonDir))
   }
 
   override def toString: String = {"ExternalBlockStore-Tachyon"}
@@ -240,7 +240,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     logDebug("Shutdown hook called")
     tachyonDirs.foreach { tachyonDir =>
       try {
-        if (!Utils.hasRootAsShutdownDeleteDir(tachyonDir)) {
+        if (!ShutdownHookManager.hasRootAsShutdownDeleteDir(tachyonDir)) {
           Utils.deleteRecursively(tachyonDir, client)
         }
       } catch {

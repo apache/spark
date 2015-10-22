@@ -100,7 +100,9 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
     }
     f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
-    val (bestMetric, bestIndex) = metrics.zipWithIndex.maxBy(_._1)
+    val (bestMetric, bestIndex) =
+      if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
+      else metrics.zipWithIndex.minBy(_._1)
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
@@ -134,6 +136,10 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
 /**
  * :: Experimental ::
  * Model from k-fold cross validation.
+ *
+ * @param bestModel The best model selected from k-fold cross validation.
+ * @param avgMetrics Average cross-validation metrics for each paramMap in
+ *                   [[estimatorParamMaps]], in the corresponding order.
  */
 @Experimental
 class CrossValidatorModel private[ml] (
@@ -160,6 +166,6 @@ class CrossValidatorModel private[ml] (
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
       avgMetrics.clone())
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

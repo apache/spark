@@ -26,7 +26,7 @@ import org.apache.spark.{SparkException, Logging, SparkConf}
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
  */
-private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
+private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   extends Serializable with Logging {
 
   private[this] val maxRetries = RpcUtils.numRetries(conf)

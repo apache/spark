@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.dsl.plans._
 
 class AnalysisSuite extends AnalysisTest {
-  import TestRelations._
+  import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
     val plan = (1 to 100)
@@ -54,32 +54,39 @@ class AnalysisSuite extends AnalysisTest {
       Project(testRelation.output, testRelation))
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(Seq("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("TbL.a")),
+        UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
       Project(testRelation.output, testRelation))
 
     assertAnalysisError(
-      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(Seq("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
+        TableIdentifier("TaBlE"), Some("TbL"))),
       Seq("cannot resolve"))
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(Seq("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(
+        TableIdentifier("TaBlE"), Some("TbL"))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(Seq("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
+        TableIdentifier("TaBlE"), Some("TbL"))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
 
   test("resolve relations") {
-    assertAnalysisError(UnresolvedRelation(Seq("tAbLe"), None), Seq("Table Not Found: tAbLe"))
+    assertAnalysisError(
+      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table Not Found: tAbLe"))
 
-    checkAnalysis(UnresolvedRelation(Seq("TaBlE"), None), testRelation)
+    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
 
-    checkAnalysis(UnresolvedRelation(Seq("tAbLe"), None), testRelation, caseSensitive = false)
+    checkAnalysis(
+      UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
 
-    checkAnalysis(UnresolvedRelation(Seq("TaBlE"), None), testRelation, caseSensitive = false)
+    checkAnalysis(
+      UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {
@@ -96,7 +103,7 @@ class AnalysisSuite extends AnalysisTest {
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
     // StringType will be promoted into Decimal(38, 18)
-    assert(pl(3).dataType == DecimalType(38, 29))
+    assert(pl(3).dataType == DecimalType(38, 22))
     assert(pl(4).dataType == DoubleType)
   }
 
@@ -118,5 +125,22 @@ class AnalysisSuite extends AnalysisTest {
         Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
           Project(testRelation.output :+ projected, testRelation)))
     checkAnalysis(plan, expected)
+  }
+
+  test("SPARK-9634: cleanup unnecessary Aliases in LogicalPlan") {
+    val a = testRelation.output.head
+    var plan = testRelation.select(((a + 1).as("a+1") + 2).as("col"))
+    var expected = testRelation.select((a + 1 + 2).as("col"))
+    checkAnalysis(plan, expected)
+
+    plan = testRelation.groupBy(a.as("a1").as("a2"))((min(a).as("min_a") + 1).as("col"))
+    expected = testRelation.groupBy(a)((min(a) + 1).as("col"))
+    checkAnalysis(plan, expected)
+
+    // CreateStruct is a special case that we should not trim Alias for it.
+    plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
+    checkAnalysis(plan, plan)
+    plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
+    checkAnalysis(plan, plan)
   }
 }

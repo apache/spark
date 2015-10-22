@@ -37,7 +37,7 @@ import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempShuffleBlockId;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -122,6 +122,10 @@ final class UnsafeShuffleExternalSorter {
     this.maxRecordSizeBytes = pageSizeBytes - 4;
     this.writeMetrics = writeMetrics;
     initializeForWriting();
+
+    // preserve first page to ensure that we have at least one page to work with. Otherwise,
+    // other operators in the same task may starve this sorter (SPARK-9709).
+    acquireNewPageIfNecessary(pageSizeBytes);
   }
 
   /**
@@ -211,16 +215,12 @@ final class UnsafeShuffleExternalSorter {
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
       final Object recordPage = taskMemoryManager.getPage(recordPointer);
       final long recordOffsetInPage = taskMemoryManager.getOffsetInPage(recordPointer);
-      int dataRemaining = PlatformDependent.UNSAFE.getInt(recordPage, recordOffsetInPage);
+      int dataRemaining = Platform.getInt(recordPage, recordOffsetInPage);
       long recordReadPosition = recordOffsetInPage + 4; // skip over record length
       while (dataRemaining > 0) {
         final int toTransfer = Math.min(DISK_WRITE_BUFFER_SIZE, dataRemaining);
-        PlatformDependent.copyMemory(
-          recordPage,
-          recordReadPosition,
-          writeBuffer,
-          PlatformDependent.BYTE_ARRAY_OFFSET,
-          toTransfer);
+        Platform.copyMemory(
+          recordPage, recordReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
         writer.write(writeBuffer, 0, toTransfer);
         recordReadPosition += toTransfer;
         dataRemaining -= toTransfer;
@@ -447,14 +447,10 @@ final class UnsafeShuffleExternalSorter {
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
     dataPagePosition += 4;
-    PlatformDependent.copyMemory(
-      recordBaseObject,
-      recordBaseOffset,
-      dataPageBaseObject,
-      dataPagePosition,
-      lengthInBytes);
+    Platform.copyMemory(
+      recordBaseObject, recordBaseOffset, dataPageBaseObject, dataPagePosition, lengthInBytes);
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, partitionId);
   }

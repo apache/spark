@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Strategy
@@ -260,6 +260,7 @@ private class RandomForest (
 
 }
 
+@Since("1.2.0")
 object RandomForest extends Serializable with Logging {
 
   /**
@@ -277,6 +278,7 @@ object RandomForest extends Serializable with Logging {
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return a random forest model that can be used for prediction
    */
+  @Since("1.2.0")
   def trainClassifier(
       input: RDD[LabeledPoint],
       strategy: Strategy,
@@ -314,6 +316,7 @@ object RandomForest extends Serializable with Logging {
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return a random forest model  that can be used for prediction
    */
+  @Since("1.2.0")
   def trainClassifier(
       input: RDD[LabeledPoint],
       numClasses: Int,
@@ -333,6 +336,7 @@ object RandomForest extends Serializable with Logging {
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.RandomForest$#trainClassifier]]
    */
+  @Since("1.2.0")
   def trainClassifier(
       input: JavaRDD[LabeledPoint],
       numClasses: Int,
@@ -363,6 +367,7 @@ object RandomForest extends Serializable with Logging {
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return a random forest model that can be used for prediction
    */
+  @Since("1.2.0")
   def trainRegressor(
       input: RDD[LabeledPoint],
       strategy: Strategy,
@@ -399,6 +404,7 @@ object RandomForest extends Serializable with Logging {
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return a random forest model that can be used for prediction
    */
+  @Since("1.2.0")
   def trainRegressor(
       input: RDD[LabeledPoint],
       categoricalFeaturesInfo: Map[Int, Int],
@@ -417,6 +423,7 @@ object RandomForest extends Serializable with Logging {
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.RandomForest$#trainRegressor]]
    */
+  @Since("1.2.0")
   def trainRegressor(
       input: JavaRDD[LabeledPoint],
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
@@ -434,6 +441,7 @@ object RandomForest extends Serializable with Logging {
   /**
    * List of supported feature subset sampling strategies.
    */
+  @Since("1.2.0")
   val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "sqrt", "log2", "onethird")
 

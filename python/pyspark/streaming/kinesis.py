@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.serializers import PairDeserializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
@@ -26,7 +26,9 @@ __all__ = ['KinesisUtils', 'InitialPositionInStream', 'utf8_decoder']
 
 def utf8_decoder(s):
     """ Decode the unicode as UTF-8 """
-    return s and s.decode('utf-8')
+    if s is None:
+        return None
+    return s.decode('utf-8')
 
 
 class KinesisUtils(object):

@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples, Distribution}
-import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, SparkPlan, UnaryNode}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 case class SortBasedAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
@@ -37,6 +37,10 @@ case class SortBasedAggregate(
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
+
+  override private[sql] lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputsUnsafeRows: Boolean = false
 
@@ -63,6 +67,8 @@ case class SortBasedAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitions { iter =>
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
@@ -72,22 +78,30 @@ case class SortBasedAggregate(
         // so return an empty iterator.
         Iterator[InternalRow]()
       } else {
-        val outputIter = SortBasedAggregationIterator.createFromInputIterator(
-          groupingExpressions,
+        val groupingKeyProjection = if (UnsafeProjection.canSupport(groupingExpressions)) {
+          UnsafeProjection.create(groupingExpressions, child.output)
+        } else {
+          newMutableProjection(groupingExpressions, child.output)()
+        }
+        val outputIter = new SortBasedAggregationIterator(
+          groupingKeyProjection,
+          groupingExpressions.map(_.toAttribute),
+          child.output,
+          iter,
           nonCompleteAggregateExpressions,
           nonCompleteAggregateAttributes,
           completeAggregateExpressions,
           completeAggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
-          newMutableProjection _,
-          newProjection _,
-          child.output,
-          iter,
-          outputsUnsafeRows)
+          newMutableProjection,
+          outputsUnsafeRows,
+          numInputRows,
+          numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
+          numOutputRows += 1
           Iterator[InternalRow](outputIter.outputForEmptyGroupingKeyWithoutInput())
         } else {
           outputIter
@@ -98,6 +112,10 @@ case class SortBasedAggregate(
 
   override def simpleString: String = {
     val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
-    s"""SortBasedAggregate ${groupingExpressions} ${allAggregateExpressions}"""
+
+    val keyString = groupingExpressions.mkString("[", ",", "]")
+    val functionString = allAggregateExpressions.mkString("[", ",", "]")
+    val outputString = output.mkString("[", ",", "]")
+    s"SortBasedAggregate(key=$keyString, functions=$functionString, output=$outputString)"
   }
 }

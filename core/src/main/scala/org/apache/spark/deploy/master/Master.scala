@@ -127,14 +127,8 @@ private[deploy] class Master(
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
-  private val restServer =
-    if (restServerEnabled) {
-      val port = conf.getInt("spark.master.rest.port", 6066)
-      Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
-    } else {
-      None
-    }
-  private val restServerBoundPort = restServer.map(_.start())
+  private var restServer: Option[StandaloneRestServer] = None
+  private var restServerBoundPort: Option[Int] = None
 
   override def onStart(): Unit = {
     logInfo("Starting Spark master at " + masterUrl)
@@ -147,6 +141,12 @@ private[deploy] class Master(
         self.send(CheckForWorkerTimeOut)
       }
     }, 0, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+
+    if (restServerEnabled) {
+      val port = conf.getInt("spark.master.rest.port", 6066)
+      restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
+    }
+    restServerBoundPort = restServer.map(_.start())
 
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
@@ -231,31 +231,6 @@ private[deploy] class Master(
     case RevokedLeadership => {
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
-    }
-
-    case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
-      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
-      if (state == RecoveryState.STANDBY) {
-        // ignore, don't send response
-      } else if (idToWorker.contains(id)) {
-        workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
-      } else {
-        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerUiPort, publicAddress)
-        if (registerWorker(worker)) {
-          persistenceEngine.addWorker(worker)
-          workerRef.send(RegisteredWorker(self, masterWebUiUrl))
-          schedule()
-        } else {
-          val workerAddress = worker.endpoint.address
-          logWarning("Worker registration failed. Attempted to re-register worker at same " +
-            "address: " + workerAddress)
-          workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
-            + workerAddress))
-        }
-      }
     }
 
     case RegisterApplication(description, driver) => {
@@ -387,6 +362,31 @@ private[deploy] class Master(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case RegisterWorker(
+        id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
+      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
+        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
+      if (state == RecoveryState.STANDBY) {
+        context.reply(MasterInStandby)
+      } else if (idToWorker.contains(id)) {
+        context.reply(RegisterWorkerFailed("Duplicate worker ID"))
+      } else {
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          workerRef, workerUiPort, publicAddress)
+        if (registerWorker(worker)) {
+          persistenceEngine.addWorker(worker)
+          context.reply(RegisteredWorker(self, masterWebUiUrl))
+          schedule()
+        } else {
+          val workerAddress = worker.endpoint.address
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          context.reply(RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress))
+        }
+      }
+    }
+
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
@@ -944,7 +944,7 @@ private[deploy] class Master(
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
+        appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)

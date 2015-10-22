@@ -19,15 +19,16 @@ package org.apache.spark.sql.hive.execution
 
 import java.util
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
+import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -38,8 +39,6 @@ import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.{SparkException, TaskContext}
-
-import scala.collection.JavaConversions._
 import org.apache.spark.util.SerializableJobConf
 
 private[hive]
@@ -61,9 +60,9 @@ case class InsertIntoHiveTable(
     serializer
   }
 
-  def output: Seq[Attribute] = child.output
+  def output: Seq[Attribute] = Seq.empty
 
-  def saveAsHiveFile(
+  private def saveAsHiveFile(
       rdd: RDD[InternalRow],
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
@@ -94,7 +93,8 @@ case class InsertIntoHiveTable(
           ObjectInspectorCopyOption.JAVA)
         .asInstanceOf[StructObjectInspector]
 
-      val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+      val fieldOIs = standardOI.getAllStructFieldRefs.asScala
+        .map(_.getFieldObjectInspector).toArray
       val dataTypes: Array[DataType] = child.output.map(_.dataType).toArray
       val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt)}
       val outputData = new Array[Any](fieldOIs.length)
@@ -124,7 +124,7 @@ case class InsertIntoHiveTable(
    *
    * Note: this is run once and then kept to avoid double insertions.
    */
-  protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
@@ -178,6 +178,19 @@ case class InsertIntoHiveTable(
     val jobConf = new JobConf(sc.hiveconf)
     val jobConfSer = new SerializableJobConf(jobConf)
 
+    // When speculation is on and output committer class name contains "Direct", we should warn
+    // users that they may loss data if they are using a direct output committer.
+    val speculationEnabled = sqlContext.sparkContext.conf.getBoolean("spark.speculation", false)
+    val outputCommitterClass = jobConf.get("mapred.output.committer.class", "")
+    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+      val warningMessage =
+        s"$outputCommitterClass may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
+    }
+
     val writerContainer = if (numDynamicPartitions > 0) {
       val dynamicPartColNames = partitionColumnNames.takeRight(numDynamicPartitions)
       new SparkHiveDynamicPartitionWriterContainer(jobConf, fileSinkConf, dynamicPartColNames)
@@ -198,7 +211,7 @@ case class InsertIntoHiveTable(
 
       // loadPartition call orders directories created on the iteration order of the this map
       val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
-      table.hiveQlTable.getPartCols().foreach { entry =>
+      table.hiveQlTable.getPartCols.asScala.foreach { entry =>
         orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
       }
 
@@ -226,7 +239,7 @@ case class InsertIntoHiveTable(
         val oldPart =
           catalog.client.getPartitionOption(
             catalog.client.getTable(table.databaseName, table.tableName),
-            partitionSpec)
+            partitionSpec.asJava)
 
         if (oldPart.isEmpty || !ifNotExists) {
             catalog.client.loadPartition(
@@ -254,10 +267,10 @@ case class InsertIntoHiveTable(
     // however for now we return an empty list to simplify compatibility checks with hive, which
     // does not return anything for insert operations.
     // TODO: implement hive compatibility as rules.
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 
-  override def executeCollect(): Array[Row] = sideEffectResult.toArray
+  override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult.asInstanceOf[Seq[InternalRow]], 1)

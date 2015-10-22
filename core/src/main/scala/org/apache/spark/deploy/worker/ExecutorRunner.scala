@@ -19,7 +19,7 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
@@ -28,7 +28,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
 
 /**
@@ -70,7 +70,8 @@ private[deploy] class ExecutorRunner(
     }
     workerThread.start()
     // Shutdown hook that kills actors on shutdown.
-    shutdownHook = Utils.addShutdownHook { () => killProcess(Some("Worker shutting down")) }
+    shutdownHook = ShutdownHookManager.addShutdownHook { () =>
+      killProcess(Some("Worker shutting down")) }
   }
 
   /**
@@ -102,7 +103,7 @@ private[deploy] class ExecutorRunner(
       workerThread = null
       state = ExecutorState.KILLED
       try {
-        Utils.removeShutdownHook(shutdownHook)
+        ShutdownHookManager.removeShutdownHook(shutdownHook)
       } catch {
         case e: IllegalStateException => None
       }
@@ -128,7 +129,8 @@ private[deploy] class ExecutorRunner(
       val builder = CommandUtils.buildProcessBuilder(appDesc.command, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
-      logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
+      val formattedCommand = command.asScala.mkString("\"", "\" \"", "\"")
+      logInfo(s"Launch command: $formattedCommand")
 
       builder.directory(executorDir)
       builder.environment.put("SPARK_EXECUTOR_DIRS", appLocalDirs.mkString(File.pathSeparator))
@@ -144,7 +146,7 @@ private[deploy] class ExecutorRunner(
 
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
-        command.mkString("\"", "\" \"", "\""), "=" * 40)
+        formattedCommand, "=" * 40)
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")

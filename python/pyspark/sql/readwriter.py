@@ -15,9 +15,14 @@
 # limitations under the License.
 #
 
+import sys
+
+if sys.version >= '3':
+    basestring = unicode = str
+
 from py4j.java_gateway import JavaClass
 
-from pyspark.sql import since
+from pyspark import RDD, since
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
 
@@ -111,6 +116,10 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+        >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
+        ...     'python/test_support/sql/people1.json'])
+        >>> df.dtypes
+        [('age', 'bigint'), ('aka', 'string'), ('name', 'string')]
         """
         if format is not None:
             self.format(format)
@@ -118,30 +127,48 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            return self._df(self._jreader.load(path))
+            if type(path) == list:
+                paths = path
+                gateway = self._sqlContext._sc._gateway
+                jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
+                for i in range(0, len(paths)):
+                    jpaths[i] = paths[i]
+                return self._df(self._jreader.load(jpaths))
+            else:
+                return self._df(self._jreader.load(path))
         else:
             return self._df(self._jreader.load())
 
     @since(1.4)
     def json(self, path, schema=None):
         """
-        Loads a JSON file (one object per line) and returns the result as
-        a :class`DataFrame`.
+        Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
+        (one object per record) and returns the result as a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        :param path: string, path to the JSON dataset.
+        :param path: string represents path to the JSON dataset,
+                     or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
 
-        >>> df = sqlContext.read.json('python/test_support/sql/people.json')
-        >>> df.dtypes
+        >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
+        >>> df1.dtypes
+        [('age', 'bigint'), ('name', 'string')]
+        >>> rdd = sc.textFile('python/test_support/sql/people.json')
+        >>> df2 = sqlContext.read.json(rdd)
+        >>> df2.dtypes
         [('age', 'bigint'), ('name', 'string')]
 
         """
         if schema is not None:
             self.schema(schema)
-        return self._df(self._jreader.json(path))
+        if isinstance(path, basestring):
+            return self._df(self._jreader.json(path))
+        elif isinstance(path, RDD):
+            return self._df(self._jreader.json(path._jrdd))
+        else:
+            raise TypeError("path can be only string or RDD")
 
     @since(1.4)
     def table(self, tableName):
@@ -182,7 +209,7 @@ class DataFrameReader(object):
 
     @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
-             predicates=None, properties={}):
+             predicates=None, properties=None):
         """
         Construct a :class:`DataFrame` representing the database table accessible
         via JDBC URL `url` named `table` and connection `properties`.
@@ -208,6 +235,8 @@ class DataFrameReader(object):
                            should be included.
         :return: a DataFrame
         """
+        if properties is None:
+            properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
@@ -427,7 +456,7 @@ class DataFrameWriter(object):
         self._jwrite.orc(path)
 
     @since(1.4)
-    def jdbc(self, url, table, mode=None, properties={}):
+    def jdbc(self, url, table, mode=None, properties=None):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster;\
@@ -445,6 +474,8 @@ class DataFrameWriter(object):
                            arbitrary string tag/value. Normally at least a
                            "user" and "password" property should be included.
         """
+        if properties is None:
+            properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])

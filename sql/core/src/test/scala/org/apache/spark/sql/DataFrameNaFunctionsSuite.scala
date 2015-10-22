@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+
+import org.apache.spark.sql.test.SharedSQLContext
 
 
-class DataFrameNaFunctionsSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   def createDF(): DataFrame = {
     Seq[(String, java.lang.Integer, java.lang.Double)](
@@ -141,24 +141,26 @@ class DataFrameNaFunctionsSuite extends QueryTest {
   }
 
   test("fill with map") {
-    val df = Seq[(String, String, java.lang.Long, java.lang.Double)](
-      (null, null, null, null)).toDF("a", "b", "c", "d")
+    val df = Seq[(String, String, java.lang.Long, java.lang.Double, java.lang.Boolean)](
+      (null, null, null, null, null)).toDF("a", "b", "c", "d", "e")
     checkAnswer(
       df.na.fill(Map(
         "a" -> "test",
         "c" -> 1,
-        "d" -> 2.2
+        "d" -> 2.2,
+        "e" -> false
       )),
-      Row("test", null, 1, 2.2))
+      Row("test", null, 1, 2.2, false))
 
     // Test Java version
     checkAnswer(
-      df.na.fill(mapAsJavaMap(Map(
+      df.na.fill(Map(
         "a" -> "test",
         "c" -> 1,
-        "d" -> 2.2
-      ))),
-      Row("test", null, 1, 2.2))
+        "d" -> 2.2,
+        "e" -> false
+      ).asJava),
+      Row("test", null, 1, 2.2, false))
   }
 
   test("replace") {

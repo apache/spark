@@ -19,6 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import java.nio.ByteBuffer
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
@@ -28,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
 import org.apache.spark.util.{Clock, Utils}
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf}
 
 /** Trait representing any event in the ReceivedBlockTracker that updates its state. */
 private[streaming] sealed trait ReceivedBlockTrackerLogEvent
@@ -196,10 +197,10 @@ private[streaming] class ReceivedBlockTracker(
 
     writeAheadLogOption.foreach { writeAheadLog =>
       logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
-      import scala.collection.JavaConversions._
-      writeAheadLog.readAll().foreach { byteBuffer =>
+      writeAheadLog.readAll().asScala.foreach { byteBuffer =>
         logTrace("Recovering record " + byteBuffer)
-        Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array) match {
+        Utils.deserialize[ReceivedBlockTrackerLogEvent](
+          byteBuffer.array, Thread.currentThread().getContextClassLoader) match {
           case BlockAdditionEvent(receivedBlockInfo) =>
             insertAddedBlock(receivedBlockInfo)
           case BatchAllocationEvent(time, allocatedBlocks) =>

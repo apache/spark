@@ -23,15 +23,14 @@ import org.apache.spark._
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeRow, UnsafeProjection}
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.
  */
-class UnsafeKVExternalSorterSuite extends SparkFunSuite {
-
+class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
   private val keyTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
   private val valueTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
 
@@ -109,8 +108,6 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
       inputData: Seq[(InternalRow, InternalRow)],
       pageSize: Long,
       spill: Boolean): Unit = {
-    // Calling this make sure we have block manager and everything else setup.
-    TestSQLContext
 
     val taskMemMgr = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
     val shuffleMemMgr = new TestShuffleMemoryManager

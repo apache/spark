@@ -18,7 +18,6 @@
 package org.apache.spark.streaming.scheduler.rate
 
 import org.apache.spark.SparkConf
-import org.apache.spark.SparkException
 import org.apache.spark.streaming.Duration
 
 /**
@@ -61,7 +60,8 @@ object RateEstimator {
         val proportional = conf.getDouble("spark.streaming.backpressure.pid.proportional", 1.0)
         val integral = conf.getDouble("spark.streaming.backpressure.pid.integral", 0.2)
         val derived = conf.getDouble("spark.streaming.backpressure.pid.derived", 0.0)
-        new PIDRateEstimator(batchInterval.milliseconds, proportional, integral, derived)
+        val minRate = conf.getDouble("spark.streaming.backpressure.pid.minRate", 100)
+        new PIDRateEstimator(batchInterval.milliseconds, proportional, integral, derived, minRate)
 
       case estimator =>
         throw new IllegalArgumentException(s"Unkown rate estimator: $estimator")

@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.PrintStream
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.scheduler.StatsReportListener
 import org.apache.spark.sql.hive.HiveContext
@@ -64,7 +64,7 @@ private[hive] object SparkSQLEnv extends Logging {
       hiveContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
 
       if (log.isDebugEnabled) {
-        hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>
+        hiveContext.hiveconf.getAllProperties.asScala.toSeq.sorted.foreach { case (k, v) =>
           logDebug(s"HiveConf var: $k=$v")
         }
       }
