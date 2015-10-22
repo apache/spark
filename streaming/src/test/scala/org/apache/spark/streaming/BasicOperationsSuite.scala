@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.{Session, SessionSpec, DStream, WindowedDStream}
+import org.apache.spark.streaming.dstream.{State, TrackStateSpec, DStream, WindowedDStream}
 import org.apache.spark.util.{Clock, ManualClock}
 import org.apache.spark.{HashPartitioner, SparkConf, SparkException}
 
@@ -630,7 +630,7 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
 
-  test("sessionByKey") {
+  test("trackStateByKey with emitted states") {
     val inputData =
       Seq(
         Seq("a"),
@@ -649,45 +649,16 @@ class BasicOperationsSuite extends TestSuiteBase {
         Seq(("a", 4), ("b", 3)),
         Seq(("a", 5)),
         Seq()
-      ).map { _.map { case (key, value) => Session(key, value, true) } }
-
-    val sessionOperation = (s: DStream[String]) => {
-      val updateFunc = (value: Int, sessionData: Option[Int]) => {
-        Option(value + sessionData.getOrElse(0))
-      }
-      s.map(x => (x, 1)).sessionByKey(SessionSpec.create[String, Int, Int](updateFunc))
-    }
-
-    testOperation(inputData, sessionOperation, outputData, true)
-  }
-
-  test("sessionByKey - with all sessions") {
-    val inputData =
-      Seq(
-        Seq("a"),
-        Seq("a", "b"),
-        Seq("a", "b", "c"),
-        Seq("a", "b"),
-        Seq("a"),
-        Seq()
       )
 
-    val outputData =
-      Seq(
-        Seq(("a", 1)),
-        Seq(("a", 2), ("b", 1)),
-        Seq(("a", 3), ("b", 2), ("c", 1)),
-        Seq(("a", 4), ("b", 3), ("c", 1)),
-        Seq(("a", 5), ("b", 3), ("c", 1)),
-        Seq(("a", 5), ("b", 3), ("c", 1))
-      ).map { _.map { case (key, value) => Session(key, value, true) } }
-
     val sessionOperation = (s: DStream[String]) => {
-      val updateFunc = (value: Int, sessionData: Option[Int]) => {
-        Option(value + sessionData.getOrElse(0))
+      val updateFunc = (key: String, value: Option[Int], state: State[Int]) => {
+        val sum = value.getOrElse(0) + state.getOrElse(0)
+        val output = (key, sum)
+        state.update(sum)
+        Some(output)
       }
-      s.map(x => (x, 1)).sessionByKey(
-        SessionSpec.create[String, Int, Int](updateFunc).reportAllSession(true))
+      s.map(x => (x, 1)).trackStateByKey(TrackStateSpec.create(updateFunc))
     }
 
     testOperation(inputData, sessionOperation, outputData, true)

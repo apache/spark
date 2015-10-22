@@ -2,15 +2,17 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Time}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CompletionIterator, Utils}
 import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.streaming.dstream.OpenHashMapBasedStateMap._
 
 
 // ==================================================
@@ -19,80 +21,43 @@ import org.apache.spark.util.collection.OpenHashMap
 // ==================================================
 // ==================================================
 
+sealed abstract class State[S] {
+  def isDefined(): Boolean
+  def get(): S
+  def update(newState: S): Unit
+  def remove(): Unit
+  def isTimingOut(): Boolean
 
-/** Represents a session */
-case class Session[K, S] private[streaming](
-  private var key: K, private var data: S, private var active: Boolean) {
-
-  def this() = this(null.asInstanceOf[K], null.asInstanceOf[S], true)
-
-  private[streaming] def set(k: K, s: S, a: Boolean): this.type = {
-    key = k
-    data = s
-    active = a
-    this
-  }
-
-  /** Get the session key */
-  def getKey(): K = key
-
-  /** Get the session value */
-  def getData(): S = data
-
-  /** Whether the session is active */
-  def isActive(): Boolean = active
-/*
-  override def toString(): String = {
-    s"Session[ Key=$key, Data=$session, active=$active ]"
-  }*/
+  @inline final def getOrElse[S1 >: S](default: => S1): S1 =
+    if (isDefined) default else this.get
 }
 
-private[streaming] object Session {
-
-}
 
 /** Class representing all the specification of session */
-class SessionSpec[K: ClassTag, V: ClassTag, S: ClassTag] private[streaming](
-    updateFunction: (V, Option[S]) => Option[S]) extends Serializable {
-  @volatile private var partitioner: Partitioner = null
-  @volatile private var initialSessionRDD: RDD[(K, S)] = null
-  @volatile private var allSessions: Boolean = false
+abstract class TrackStateSpec[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag]
+  extends Serializable {
 
-  def setPartition(partitioner: Partitioner): this.type = {
-    this.partitioner = partitioner
-    this
-  }
+  def initialState(rdd: RDD[(K, S)]): this.type
+  def initialState(javaPairRDD: JavaPairRDD[K, S]): this.type
 
-  def setInitialSessions(initialRDD: RDD[(K, S)]): this.type = {
-    this.initialSessionRDD = initialRDD
-    this
-  }
+  def numPartitions(numPartitions: Int): this.type
+  def partitioner(partitioner: Partitioner): this.type
 
-  def reportAllSession(allSessions: Boolean): this.type = {
-    this.allSessions = allSessions
-    this
-  }
-
-  private[streaming] def getPartitioner(): Option[Partitioner] = Option(partitioner)
-
-  private[streaming] def getUpdateFunction(): (V, Option[S]) => Option[S] = updateFunction
-
-  private[streaming] def getInitialSessions(): Option[RDD[(K, S)]] = Option(initialSessionRDD)
-
-  private[streaming] def getAllSessions(): Boolean = allSessions
-
-  private[streaming] def validate(): Unit = {
-    require(updateFunction != null)
-  }
+  def timeout(interval: Duration): this.type
 }
 
-object SessionSpec {
-  def create[K: ClassTag, V: ClassTag, S: ClassTag](
-      updateFunction: (V, Option[S]) => Option[S]): SessionSpec[K, V, S] = {
-    new SessionSpec[K, V, S](updateFunction)
+object TrackStateSpec {
+
+  def apply[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
+      trackingFunction: (K, Option[V], State[S]) => Option[T]): TrackStateSpec[K, V, S, T] = {
+    new TrackStateSpecImpl[K, V, S, T](trackingFunction)
+  }
+
+  def create[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
+      trackingFunction: (K, Option[V], State[S]) => Option[T]): TrackStateSpec[K, V, S, T] = {
+    apply(trackingFunction)
   }
 }
-
 
 
 // ===============================================
@@ -102,192 +67,253 @@ object SessionSpec {
 // ===============================================
 
 
+/** Class representing all the specification of session */
+private[streaming] case class TrackStateSpecImpl[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
+    function: (K, Option[V], State[S]) => Option[T]) extends TrackStateSpec[K, V, S, T] {
+
+  require(function != null)
+
+  @volatile private var partitioner: Partitioner = null
+  @volatile private var initialStateRDD: RDD[(K, S)] = null
+  @volatile private var timeoutInterval: Duration = null
+
+
+  def initialState(rdd: RDD[(K, S)]): this.type = {
+    this.initialStateRDD = rdd
+    this
+  }
+
+  def initialState(javaPairRDD: JavaPairRDD[K, S]): this.type = {
+    this.initialStateRDD = javaPairRDD.rdd
+    this
+  }
+
+
+  def numPartitions(numPartitions: Int): this.type = {
+    this.partitioner(new HashPartitioner(numPartitions))
+    this
+  }
+
+  def partitioner(partitioner: Partitioner): this.type = {
+    this.partitioner = partitioner
+    this
+  }
+
+  def timeout(interval: Duration): this.type = {
+    this.timeoutInterval = interval
+    this
+  }
+
+  // ================= Private Methods =================
+
+  private[streaming] def getFunction(): (K, Option[V], State[S]) => Option[T] = function
+
+  private[streaming] def getInitialStateRDD(): Option[RDD[(K, S)]] = Option(initialStateRDD)
+
+  private[streaming] def getPartitioner(): Option[Partitioner] = Option(partitioner)
+
+  private[streaming] def getTimeoutInterval(): Option[Duration] = Option(timeoutInterval)
+}
+
+
+private[streaming] class StateImpl[S] extends State[S] {
+
+  private var state: S = null.asInstanceOf[S]
+  private var defined: Boolean = true
+  private var timingOut: Boolean = false
+  private var updated: Boolean = false
+  private var removed: Boolean = false
+
+  // ========= Public API =========
+  def isDefined(): Boolean = {
+    defined
+  }
+
+  def get(): S = {
+    null.asInstanceOf[S]
+  }
+
+  def update(newState: S): Unit = {
+    require(!removed, "Cannot update the state after it has been removed")
+    require(!timingOut, "Cannot update the state that is timing out")
+    updated = true
+    state = newState
+  }
+
+  def isTimingOut(): Boolean = {
+    timingOut
+  }
+
+  def remove(): Unit = {
+    require(!timingOut, "Cannot remove the state that is timing out")
+    removed = true
+  }
+
+  // ========= Internal API =========
+
+  def isRemoved(): Boolean = {
+    removed
+  }
+
+  def isUpdated(): Boolean = {
+    updated
+  }
+
+  def wrap(optionalState: Option[S]): Unit = {
+    optionalState match {
+      case Some(newState) =>
+        this.state = newState
+        defined = true
+
+      case None =>
+        this.state = null.asInstanceOf[S]
+        defined = false
+    }
+    timingOut = false
+    removed = false
+    updated = false
+  }
+
+  def wrapTiminoutState(newState: S): Unit = {
+    this.state = newState
+    defined = true
+    timingOut = true
+    removed = false
+    updated = false
+  }
+
+
+}
+
+
 
 // -----------------------------------------------
-// --------------- SessionStore stuff --------------
+// --------------- StateMap stuff --------------
 // -----------------------------------------------
 
-/**
- * Internal interface for defining the map that keeps track of sessions.
- */
-private[streaming] abstract class SessionStore[K: ClassTag, S: ClassTag] extends Serializable {
-  /** Add or update session data */
+/** Internal interface for defining the map that keeps track of sessions. */
+private[streaming] abstract class StateMap[K: ClassTag, S: ClassTag] extends Serializable {
 
-  def put(key: K, session: S): Unit
-
-  /** Get the session data if it exists */
+  /** Get the state for a key if it exists */
   def get(key: K): Option[S]
+
+  /** Get all the keys and states whose updated time is older than the give threshold time */
+  def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)]
+
+  /** Get all the keys and states in this map. */
+  def getAll(): Iterator[(K, S, Long)]
+
+  /** Add or update state */
+  def put(key: K, state: S, updatedTime: Long): Unit
 
   /** Remove a key */
   def remove(key: K): Unit
 
   /**
-   * Shallow copy the map to create a new session store. Updates to the new map
-   * should not mutate `this` map.
+   * Shallow copy `this` map to create a new state map.
+   * Updates to the new map should not mutate `this` map.
    */
-  def copy(): SessionStore[K, S]
+  def copy(): StateMap[K, S]
 
-  /**
-   * Return an iterator of data in this map. If th flag is true, implementations should
-   * return only the session that were updated since the creation of this map.
-   */
-  def iterator(updatedSessionsOnly: Boolean): Iterator[Session[K, S]]
+  def toDebugString(): String = toString()
 }
 
-private[streaming] object SessionStore {
-  def empty[K: ClassTag, S: ClassTag]: SessionStore[K, S] = new EmptySessionStore[K, S]
+private[streaming] object StateMap {
+  def empty[K: ClassTag, S: ClassTag]: StateMap[K, S] = new EmptyStateMap[K, S]
 
-  def create[K: ClassTag, S: ClassTag](conf: SparkConf): SessionStore[K, S] = {
+  def create[K: ClassTag, S: ClassTag](conf: SparkConf): StateMap[K, S] = {
     val deltaChainThreshold = conf.getInt("spark.streaming.sessionByKey.deltaChainThreshold",
-      OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
-    new OpenHashMapBasedSessionStore[K, S](64, deltaChainThreshold)
+      DELTA_CHAIN_LENGTH_THRESHOLD)
+    new OpenHashMapBasedStateMap[K, S](64, deltaChainThreshold)
   }
 }
 
 /** Specific implementation of SessionStore interface representing an empty map */
-private[streaming] class EmptySessionStore[K: ClassTag, S: ClassTag] extends SessionStore[K, S] {
-  override def put(key: K, session: S): Unit = ???
+private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMap[K, S] {
+  override def put(key: K, session: S, updateTime: Long): Unit = ???
   override def get(key: K): Option[S] = None
-  override def copy(): SessionStore[K, S] = new EmptySessionStore[K, S]
+  override def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)] = Iterator.empty
+  override def copy(): StateMap[K, S] = new EmptyStateMap[K, S]
   override def remove(key: K): Unit = { }
-  override def iterator(updatedSessionsOnly: Boolean): Iterator[Session[K, S]] = Iterator.empty
+  override def getAll(): Iterator[(K, S, Long)] = Iterator.empty
+  override def toDebugString(): String = ""
 }
 
-
-/** Specific implementation of the SessionMap interface using a scala mutable HashMap */
-private[streaming] class HashMapBasedSessionStore[K: ClassTag, S: ClassTag](
-    parentSessionStore: SessionStore[K, S]) extends SessionStore[K, S] {
-
-  def this() = this(new EmptySessionStore[K, S])
-
-  private val deltaChainLength: Int = parentSessionStore match {
-    case map: HashMapBasedSessionStore[_, _] => map.deltaChainLength + 1
-    case _ => 0
-  }
-
-  private val internalMap = new mutable.HashMap[K, SessionInfo[S]]
-
-  override def put(key: K, session: S): Unit = {
-    internalMap.get(key) match {
-      case Some(sessionInfo) =>
-        sessionInfo.data = session
-      case None =>
-        internalMap.put(key, new SessionInfo(session))
-    }
-  }
-
-  /** Get the session data if it exists */
-  override def get(key: K): Option[S] = {
-    internalMap.get(key).filter { _.deleted == false }.map { _.data }.orElse(parentSessionStore.get(key))
-  }
-
-  /** Remove a key */
-  override def remove(key: K): Unit = {
-    internalMap.put(key, new SessionInfo(get(key).getOrElse(null.asInstanceOf[S]), deleted = true))
-  }
-
-  /**
-   * Return an iterator of data in this map. If th flag is true, implementations should
-   * return only the session that were updated since the creation of this map.
-   */
-  override def iterator(updatedSessionsOnly: Boolean): Iterator[Session[K, S]] = {
-    val updatedSessions = internalMap.iterator.map { case (key, sessionInfo) =>
-      Session(key, sessionInfo.data, !sessionInfo.deleted)
-    }
-
-    def previousSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter { session =>
-      !internalMap.contains(session.getKey())
-    }
-
-    if (updatedSessionsOnly) {
-      updatedSessions
-    } else {
-      previousSessions ++ updatedSessions
-    }
-  }
-
-  /**
-   * Shallow copy the map to create a new session store. Updates to the new map
-   * should not mutate `this` map.
-   */
-  override def copy(): SessionStore[K, S] = {
-    doCopy(deltaChainLength >= HashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
-  }
-
-  def doCopy(consolidate: Boolean): SessionStore[K, S] = {
-    if (consolidate) {
-      val newParentMap = new HashMapBasedSessionStore[K, S]()
-      iterator(updatedSessionsOnly = false).filter { _.isActive }.foreach { case session =>
-        newParentMap.internalMap.put(session.getKey(), SessionInfo(session.getData(), deleted = false))
-      }
-      new HashMapBasedSessionStore[K, S](newParentMap)
-    } else {
-      new HashMapBasedSessionStore[K, S](this)
-    }
-  }
-}
-
-private[streaming] object HashMapBasedSessionStore {
-  val DELTA_CHAIN_LENGTH_THRESHOLD = 10
-}
-
-
-private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
-    @transient @volatile private var parentSessionStore: SessionStore[K, S],
+/** Implementation of StateMap based on Spark's OpenHashMap */
+private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
+    @transient @volatile private var parentStateMap: StateMap[K, S],
     initialCapacity: Int = 64,
-    deltaChainThreshold: Int = OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD
-  ) extends SessionStore[K, S] {
+    deltaChainThreshold: Int = DELTA_CHAIN_LENGTH_THRESHOLD
+  ) extends StateMap[K, S] { self =>
 
-  def this(initialCapacity: Int, deltaChainThreshold: Int) =
-    this(new EmptySessionStore[K, S], initialCapacity = initialCapacity, deltaChainThreshold = deltaChainThreshold)
+  def this(initialCapacity: Int, deltaChainThreshold: Int) = this(
+    new EmptyStateMap[K, S],
+    initialCapacity = initialCapacity,
+    deltaChainThreshold = deltaChainThreshold)
 
-  def this(deltaChainThreshold: Int) = this(initialCapacity = 64, deltaChainThreshold = deltaChainThreshold)
+  def this(deltaChainThreshold: Int) = this(
+    initialCapacity = 64, deltaChainThreshold = deltaChainThreshold)
 
-  def this() = this(OpenHashMapBasedSessionStore.DELTA_CHAIN_LENGTH_THRESHOLD)
+  def this() = this(DELTA_CHAIN_LENGTH_THRESHOLD)
 
-  @transient @volatile private var deltaMap = new OpenHashMap[K, SessionInfo[S]](initialCapacity)
-
-  override def put(key: K, session: S): Unit = {
-    val sessionInfo = deltaMap(key)
-    if (sessionInfo != null) {
-      sessionInfo.data = session
-    } else {
-      deltaMap.update(key, new SessionInfo(session))
-    }
-  }
+  @transient @volatile private var deltaMap =
+    new OpenHashMap[K, StateInfo[S]](initialCapacity)
 
   /** Get the session data if it exists */
   override def get(key: K): Option[S] = {
-    val sessionInfo = deltaMap(key)
-    if (sessionInfo != null && sessionInfo.deleted == false) {
-      Some(sessionInfo.data)
+    val stateInfo = deltaMap(key)
+    if (stateInfo != null && !stateInfo.deleted) {
+      Some(stateInfo.data)
     } else {
-      parentSessionStore.get(key)
+      parentStateMap.get(key)
     }
   }
 
-  /** Remove a key */
+  /** Get all the keys and states whose updated time is older than the give threshold time */
+  override def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)] = {
+    val oldStates = parentStateMap.getByTime(threshUpdatedTime).filter { case (key, value, _) =>
+      !deltaMap.contains(key)
+    }
+
+    val updatedStates = deltaMap.iterator.flatMap { case (key, stateInfo) =>
+      if (! stateInfo.deleted && stateInfo.updateTime < threshUpdatedTime) {
+        Some((key, stateInfo.data, stateInfo.updateTime))
+      } else None
+    }
+    oldStates ++ updatedStates
+  }
+
+  /** Get all the keys and states in this map. */
+  override def getAll(): Iterator[(K, S, Long)] = {
+
+    val oldStates = parentStateMap.getAll().filter { case (key, _, _) =>
+      !deltaMap.contains(key)
+    }
+    
+    val updatedStates = deltaMap.iterator.filter { ! _._2.deleted }.map { case (key, stateInfo) =>
+      (key, stateInfo.data, stateInfo.updateTime)
+    }
+    oldStates ++ updatedStates
+  }
+
+  /** Add or update state */
+  override def put(key: K, state: S, updateTime: Long): Unit = {
+    val stateInfo = deltaMap(key)
+    if (stateInfo != null) {
+      stateInfo.update(state, updateTime)
+    } else {
+      deltaMap.update(key, new StateInfo(state, updateTime))
+    }
+  }
+
+  /** Remove a state */
   override def remove(key: K): Unit = {
-    deltaMap.update(key, new SessionInfo(get(key).getOrElse(null.asInstanceOf[S]), deleted = true))
-  }
-
-  /**
-   * Return an iterator of data in this map. If th flag is true, implementations should
-   * return only the session that were updated since the creation of this map.
-   */
-  override def iterator(updatedSessionsOnly: Boolean): Iterator[Session[K, S]] = {
-    val updatedSessions = deltaMap.iterator.map { case (key, sessionInfo) =>
-      Session(key, sessionInfo.data, !sessionInfo.deleted)
-    }
-
-    def previousSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter { session =>
-      !deltaMap.contains(session.getKey())
-    }
-
-    if (updatedSessionsOnly) {
-      updatedSessions
+    val stateInfo = deltaMap(key)
+    if (stateInfo != null) {
+      stateInfo.markDeleted()
     } else {
-      previousSessions ++ updatedSessions
+      val newInfo = new StateInfo[S](deleted = true)
+      deltaMap.update(key, newInfo)
     }
   }
 
@@ -295,39 +321,54 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
    * Shallow copy the map to create a new session store. Updates to the new map
    * should not mutate `this` map.
    */
-  override def copy(): SessionStore[K, S] = {
-    new OpenHashMapBasedSessionStore[K, S](this, deltaChainThreshold = deltaChainThreshold)
+  override def copy(): StateMap[K, S] = {
+    new OpenHashMapBasedStateMap[K, S](this, deltaChainThreshold = deltaChainThreshold)
   }
-/*
-  private[streaming] def doCopy(consolidate: Boolean): SessionStore[K, S] = {
-    if (consolidate) {
-      val newParentMap = new OpenHashMapBasedSessionStore[K, S](
-        initialCapacity = sizeHint, deltaChainThreshold)
-      iterator(updatedSessionsOnly = false).filter { _.isActive }.foreach { case session =>
-        newParentMap.internalMap.update(session.getKey(), SessionInfo(session.getData(), deleted = false))
-      }
-      new OpenHashMapBasedSessionStore[K, S](newParentMap, deltaChainThreshold = deltaChainThreshold)
-    } else {
-      new OpenHashMapBasedSessionStore[K, S](this, deltaChainThreshold = deltaChainThreshold)
-    }
+
+  def shouldCompact: Boolean = {
+    deltaChainLength >= deltaChainThreshold
   }
-*/
-  private def deltaChainLength: Int = parentSessionStore match {
-    case map: OpenHashMapBasedSessionStore[_, _] => map.deltaChainLength + 1
+
+  def deltaChainLength: Int = parentStateMap match {
+    case map: OpenHashMapBasedStateMap[_, _] => map.deltaChainLength + 1
     case _ => 0
   }
 
-  private def sizeHint(): Int = deltaMap.size + {
-    parentSessionStore match {
-      case s: OpenHashMapBasedSessionStore[_, _] => s.sizeHint()
+  def approxSize: Int = deltaMap.size + {
+    parentStateMap match {
+      case s: OpenHashMapBasedStateMap[_, _] => s.approxSize
       case _ => 0
     }
   }
 
+  override def toDebugString(): String = {
+    val tabs = if (deltaChainLength > 0) {
+      ("    " * (deltaChainLength - 1)) +"+--- "
+    } else ""
+    parentStateMap.toDebugString() + "\n" + deltaMap.iterator.mkString(tabs, "\n" + tabs, "")
+  }
 
+  /*
+  class CompactParentOnCompletionIterator(iterator: Iterator[(K, S, Long)])
+    extends CompletionIterator[(K, S, Long), Iterator[(K, S, Long)]](iterator) {
 
+    val newParentStateMap =
+      new OpenHashMapBasedStateMap[K, S](initialCapacity = approxSize, deltaChainThreshold)
+
+    override def next(): (K, S, Long) = {
+      val next = super.next()
+      newParentStateMap.put(next._1, next._2, next._3)
+      next
+    }
+
+    override def completion(): Unit = {
+      self.parentStateMap = newParentStateMap
+    }
+  }
+  */
 
   private def writeObject(outputStream: ObjectOutputStream): Unit = {
+
     outputStream.defaultWriteObject()
 
     // Write the deltaMap
@@ -336,40 +377,41 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
     var deltaMapCount = 0
     while (deltaMapIterator.hasNext) {
       deltaMapCount += 1
-      val keyedSessionInfo = deltaMapIterator.next()
-      outputStream.writeObject(keyedSessionInfo._1)
-      outputStream.writeObject(keyedSessionInfo._2)
+      val (key, stateInfo) = deltaMapIterator.next()
+      outputStream.writeObject(key)
+      outputStream.writeObject(stateInfo)
     }
     assert(deltaMapCount == deltaMap.size)
 
-    // Write the parentSessionStore while consolidating
-    val consolidate = deltaChainLength > deltaChainThreshold
-    val newParentSessionStore = if (consolidate) {
-      new OpenHashMapBasedSessionStore[K, S](initialCapacity = sizeHint, deltaChainThreshold)
+    // Write the parentStateMap while consolidating
+    val doCompaction = shouldCompact
+    val newParentSessionStore = if (doCompaction) {
+      new OpenHashMapBasedStateMap[K, S](initialCapacity = approxSize, deltaChainThreshold)
     } else { null }
 
-    val iterOfActiveSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter { _.isActive }
+    val iterOfActiveSessions = parentStateMap.getAll()
 
     var parentSessionCount = 0
 
-    outputStream.writeInt(sizeHint)
+    outputStream.writeInt(approxSize)
 
     while(iterOfActiveSessions.hasNext) {
       parentSessionCount += 1
 
-      val session = iterOfActiveSessions.next()
-      outputStream.writeObject(session.getKey())
-      outputStream.writeObject(session.getData())
+      val (key, state, updateTime) = iterOfActiveSessions.next()
+      outputStream.writeObject(key)
+      outputStream.writeObject(state)
+      outputStream.writeLong(updateTime)
 
-      if (consolidate) {
+      if (doCompaction) {
         newParentSessionStore.deltaMap.update(
-          session.getKey(), SessionInfo(session.getData(), deleted = false))
+          key, StateInfo(state, updateTime, deleted = false))
       }
     }
     val limiterObj = new Limiter(parentSessionCount)
     outputStream.writeObject(limiterObj)
-    if (consolidate) {
-      parentSessionStore = newParentSessionStore
+    if (doCompaction) {
+      parentStateMap = newParentSessionStore
     }
   }
 
@@ -377,23 +419,22 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
     inputStream.defaultReadObject()
 
     val deltaMapSize = inputStream.readInt()
-    deltaMap = new OpenHashMap[K, SessionInfo[S]]()
+    deltaMap = new OpenHashMap[K, StateInfo[S]]()
     var deltaMapCount = 0
     while (deltaMapCount < deltaMapSize) {
       val key = inputStream.readObject().asInstanceOf[K]
-      val sessionInfo = inputStream.readObject().asInstanceOf[SessionInfo[S]]
+      val sessionInfo = inputStream.readObject().asInstanceOf[StateInfo[S]]
       deltaMap.update(key, sessionInfo)
       deltaMapCount += 1
     }
 
     val parentSessionStoreSizeHint = inputStream.readInt()
-    val newParentSessionStore = new OpenHashMapBasedSessionStore[K, S](
+    val newParentSessionStore = new OpenHashMapBasedStateMap[K, S](
       initialCapacity = parentSessionStoreSizeHint, deltaChainThreshold)
 
     var parentSessionLoopDone = false
     while(!parentSessionLoopDone) {
       val obj = inputStream.readObject()
-      //println("Read: " + obj)
       if (obj.isInstanceOf[Limiter]) {
         parentSessionLoopDone = true
         val expectedCount = obj.asInstanceOf[Limiter].num
@@ -401,11 +442,12 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
       } else {
         val key = obj.asInstanceOf[K]
         val state = inputStream.readObject().asInstanceOf[S]
+        val updateTime = inputStream.readLong()
         newParentSessionStore.deltaMap.update(
-          key, SessionInfo(state, deleted = false))
+          key, StateInfo(state, updateTime, deleted = false))
       }
     }
-    parentSessionStore = newParentSessionStore
+    parentStateMap = newParentSessionStore
   }
 
 /*
@@ -413,7 +455,7 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
     if (deltaChainLength > deltaChainThreshold) {
       val newParentSessionStore =
         new OpenHashMapBasedSessionStore[K, S](initialCapacity = sizeHint, deltaChainThreshold)
-      val iterOfActiveSessions = parentSessionStore.iterator(updatedSessionsOnly = false).filter {
+      val iterOfActiveSessions = parentStateMap.iterator(updatedSessionsOnly = false).filter {
         _.isActive
       }
 
@@ -422,7 +464,7 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
         newParentSessionStore.deltaMap.update(
           session.getKey(), SessionInfo(session.getData(), deleted = false))
       }
-      parentSessionStore = newParentSessionStore
+      parentStateMap = newParentSessionStore
     }
     outputStream.defaultWriteObject()
   }
@@ -431,27 +473,45 @@ private[streaming] class OpenHashMapBasedSessionStore[K: ClassTag, S: ClassTag](
     inputStream.defaultReadObject()
   }
 */
-
 }
 
 class Limiter(val num: Int) extends Serializable
 
-case class SessionInfo[SessionDataType](var data: SessionDataType, var deleted: Boolean = false)
 
-private[streaming] object OpenHashMapBasedSessionStore {
+private[streaming] object OpenHashMapBasedStateMap {
 
-  val DELTA_CHAIN_LENGTH_THRESHOLD = 10
+  case class StateInfo[S](
+      var data: S = null.asInstanceOf[S],
+      var updateTime: Long = -1,
+      var deleted: Boolean = false) {
+
+    def markDeleted(): Unit = {
+      deleted = true
+    }
+
+    def update(newData: S, newUpdateTime: Long): Unit = {
+      data = newData
+      updateTime = newUpdateTime
+      deleted = false
+    }
+  }
+
+  val DELTA_CHAIN_LENGTH_THRESHOLD = 20
 }
 
 
 
 // -----------------------------------------------
-// --------------- SessionRDD stuff --------------
+// --------------- StateRDD stuff --------------
 // -----------------------------------------------
 
-private[streaming] class SessionRDDPartition(
+private[streaming] case class TrackStateRDDRecord[K: ClassTag, S: ClassTag, T: ClassTag](
+    stateMap: StateMap[K, S], emittedRecords: Seq[T])
+
+
+private[streaming] class TrackStateRDDPartition(
     idx: Int,
-    @transient private var previousSessionRDD: RDD[_],
+    @transient private var prevStateRDD: RDD[_],
     @transient private var partitionedDataRDD: RDD[_]) extends Partition {
 
   private[dstream] var previousSessionRDDPartition: Partition = null
@@ -463,72 +523,103 @@ private[streaming] class SessionRDDPartition(
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization
-    previousSessionRDDPartition = previousSessionRDD.partitions(index)
+    previousSessionRDDPartition = prevStateRDD.partitions(index)
     partitionedDataRDDPartition = partitionedDataRDD.partitions(index)
     oos.defaultWriteObject()
   }
 }
 
-private[streaming] class SessionRDD[K: ClassTag, V: ClassTag, S: ClassTag](
+private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
     _sc: SparkContext,
-    private var previousSessionRDD: RDD[SessionStore[K, S]],
+    private var prevStateRDD: RDD[TrackStateRDDRecord[K, S, T]],
     private var partitionedDataRDD: RDD[(K, V)],
-    updateFunction: (V, Option[S]) => Option[S],
-    timestamp: Long
-  ) extends RDD[SessionStore[K, S]](
+    trackingFunction: (K, Option[V], State[S]) => Option[T],
+    currentTime: Long, timeoutThresholdTime: Option[Long]
+  ) extends RDD[TrackStateRDDRecord[K, S, T]](
     _sc,
-    List(new OneToOneDependency(previousSessionRDD), new OneToOneDependency(partitionedDataRDD))
+    List(
+      new OneToOneDependency[TrackStateRDDRecord[K, S, T]](prevStateRDD),
+      new OneToOneDependency(partitionedDataRDD))
   ) {
 
-  require(partitionedDataRDD.partitioner == previousSessionRDD.partitioner)
+  @volatile private var doFullScan = false
 
-  override val partitioner = previousSessionRDD.partitioner
+  require(partitionedDataRDD.partitioner.nonEmpty)
+  require(partitionedDataRDD.partitioner == prevStateRDD.partitioner)
 
-  override def compute(partition: Partition, context: TaskContext): Iterator[SessionStore[K, S]] = {
-    val sessionRDDPartition = partition.asInstanceOf[SessionRDDPartition]
-    val prevSessionIterator = previousSessionRDD.iterator(
-      sessionRDDPartition.previousSessionRDDPartition, context)
+  override val partitioner = prevStateRDD.partitioner
+
+  override def checkpoint(): Unit = {
+    super.checkpoint()
+    doFullScan = true
+  }
+
+  override def compute(
+      partition: Partition, context: TaskContext): Iterator[TrackStateRDDRecord[K, S, T]] = {
+
+    val stateRDDPartition = partition.asInstanceOf[TrackStateRDDPartition]
+    val prevStateRDDIterator = prevStateRDD.iterator(
+      stateRDDPartition.previousSessionRDDPartition, context)
     val dataIterator = partitionedDataRDD.iterator(
-      sessionRDDPartition.partitionedDataRDDPartition, context)
+      stateRDDPartition.partitionedDataRDDPartition, context)
+    if (!prevStateRDDIterator.hasNext) {
+      throw new SparkException(s"Could not find state map in previous state RDD")
+    }
 
-    require(prevSessionIterator.hasNext)
+    val newStateMap = prevStateRDDIterator.next().stateMap.copy()
+    val emittedRecords = new ArrayBuffer[T]
 
-    val sessionStore = prevSessionIterator.next().copy()
+    val stateWrapper = new StateImpl[S]()
+
     dataIterator.foreach { case (key, value) =>
-      val prevState = sessionStore.get(key)
-      val newState = updateFunction(value, prevState)
-      if (newState.isDefined) {
-        sessionStore.put(key, newState.get)
-      } else {
-        sessionStore.remove(key)
+      stateWrapper.wrap(newStateMap.get(key))
+      val emittedRecord = trackingFunction(key, Some(value), stateWrapper)
+      if (stateWrapper.isRemoved()) {
+        newStateMap.remove(key)
+      } else if (stateWrapper.isUpdated()) {
+        newStateMap.put(key, stateWrapper.get(), currentTime)
+      }
+      emittedRecords ++= emittedRecord
+    }
+
+    if (doFullScan) {
+      if (timeoutThresholdTime.isDefined) {
+        newStateMap.getByTime(timeoutThresholdTime.get).foreach { case (key, state, _) =>
+          stateWrapper.wrapTiminoutState(state)
+          val emittedRecord = trackingFunction(key, None, stateWrapper)
+          emittedRecords ++= emittedRecord
+        }
       }
     }
-    Iterator(sessionStore)
+
+    Iterator(TrackStateRDDRecord(newStateMap, emittedRecords))
   }
 
   override protected def getPartitions: Array[Partition] = {
-    Array.tabulate(previousSessionRDD.partitions.length) { i =>
-      new SessionRDDPartition(i, previousSessionRDD, partitionedDataRDD)}
+    Array.tabulate(prevStateRDD.partitions.length) { i =>
+      new TrackStateRDDPartition(i, prevStateRDD, partitionedDataRDD)}
   }
 
   override def clearDependencies() {
     super.clearDependencies()
-    previousSessionRDD = null
+    prevStateRDD = null
     partitionedDataRDD = null
   }
 }
 
-private[streaming] object SessionRDD {
-  def createFromPairRDD[K: ClassTag, S: ClassTag](
-      pairRDD: RDD[(K, S)], partitioner: Partitioner): RDD[SessionStore[K, S]] = {
+private[streaming] object TrackStateRDD {
+  def createFromPairRDD[K: ClassTag, S: ClassTag, T: ClassTag](
+      pairRDD: RDD[(K, S)],
+      partitioner: Partitioner,
+      updateTime: Long): RDD[TrackStateRDDRecord[K, S, T]] = {
 
-    val createStateMap = (iterator: Iterator[(K, S)]) => {
-      val newSessionStore = SessionStore.create[K, S](SparkEnv.get.conf)
-      iterator.foreach { case (key, state) => newSessionStore.put(key, state) }
-      Iterator(newSessionStore)
+    val createRecord = (iterator: Iterator[(K, S)]) => {
+      val stateMap = StateMap.create[K, S](SparkEnv.get.conf)
+      iterator.foreach { case (key, state) => stateMap.put(key, state, updateTime) }
+      Iterator(TrackStateRDDRecord(stateMap, Seq.empty[T]))
     }
-    pairRDD.partitionBy(partitioner).mapPartitions[SessionStore[K, S]](
-      createStateMap, preservesPartitioning = true)
+    pairRDD.partitionBy(partitioner).mapPartitions[TrackStateRDDRecord[K, S, T]](
+      createRecord, true)
   }
 }
 
@@ -538,17 +629,16 @@ private[streaming] object SessionRDD {
 // -----------------------------------------------
 
 
-private[streaming] class SessionDStream[K: ClassTag, V: ClassTag, S: ClassTag](
-    parent: DStream[(K, V)], sessionSpec: SessionSpec[K, V, S])
-  extends DStream[SessionStore[K, S]](parent.context) {
+private[streaming] class TrackStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
+    parent: DStream[(K, V)], spec: TrackStateSpecImpl[K, V, S, T])
+  extends DStream[TrackStateRDDRecord[K, S, T]](parent.context) {
 
-  sessionSpec.validate()
   persist(StorageLevel.MEMORY_ONLY)
 
-  private val partitioner = sessionSpec.getPartitioner().getOrElse(
+  private val partitioner = spec.getPartitioner().getOrElse(
     new HashPartitioner(ssc.sc.defaultParallelism))
 
-  private val updateFunction = sessionSpec.getUpdateFunction()
+  private val trackingFunction = spec.getFunction()
 
   override def slideDuration: Duration = parent.slideDuration
 
@@ -557,17 +647,22 @@ private[streaming] class SessionDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   override val mustCheckpoint = true
 
   /** Method that generates a RDD for the given time */
-  override def compute(validTime: Time): Option[RDD[SessionStore[K, S]]] = {
-    val previousSessionRDD = getOrCompute(validTime - slideDuration).getOrElse {
-      SessionRDD.createFromPairRDD[K, S](
-        sessionSpec.getInitialSessions().getOrElse(new EmptyRDD[(K, S)](ssc.sparkContext)),
-        partitioner
+  override def compute(validTime: Time): Option[RDD[TrackStateRDDRecord[K, S, T]]] = {
+    val prevStateRDD = getOrCompute(validTime - slideDuration).getOrElse {
+      TrackStateRDD.createFromPairRDD[K, S, T](
+        spec.getInitialStateRDD().getOrElse(new EmptyRDD[(K, S)](ssc.sparkContext)),
+        partitioner,
+        validTime.milliseconds
       )
     }
     val newDataRDD = parent.getOrCompute(validTime).get
     val partitionedDataRDD = newDataRDD.partitionBy(partitioner)
-    Some(new SessionRDD(
-      ssc.sparkContext, previousSessionRDD, partitionedDataRDD,
-      updateFunction, validTime.milliseconds))
+    val timeoutThresholdTime = spec.getTimeoutInterval().map { interval =>
+      (validTime - interval).milliseconds
+    }
+
+    Some(new TrackStateRDD(
+      ssc.sparkContext, prevStateRDD, partitionedDataRDD,
+      trackingFunction, validTime.milliseconds, timeoutThresholdTime))
   }
 }

@@ -349,9 +349,12 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     )
   }
 
-  def sessionByKey[S: ClassTag](sessionSpec: SessionSpec[K, V, S]): DStream[Session[K, S]] = {
-    new SessionDStream[K, V, S](self, sessionSpec).mapPartitions { partitionIter =>
-      partitionIter.flatMap { _.iterator(!sessionSpec.getAllSessions()) }
+  def trackStateByKey[S: ClassTag, T: ClassTag](spec: TrackStateSpec[K, V, S, T]): DStream[T] = {
+    new TrackStateDStream[K, V, S, T](
+      self,
+      spec.asInstanceOf[TrackStateSpecImpl[K, V, S, T]]
+    ).mapPartitions { partitionIter =>
+      partitionIter.flatMap { _.emittedRecords }
     }
   }
 
