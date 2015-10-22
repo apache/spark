@@ -254,6 +254,7 @@ setMethod("dtypes",
 #' @family DataFrame functions
 #' @rdname columns
 #' @name columns
+
 #' @export
 #' @examples
 #'\dontrun{
@@ -288,6 +289,57 @@ setMethod("names<-",
               sdf <- callJMethod(x@sdf, "toDF", as.list(value))
               dataFrame(sdf)
             }
+          })
+
+#' @rdname columns
+#' @name colnames
+setMethod("colnames",
+          signature(x = "DataFrame"),
+          function(x) {
+            columns(x)
+          })
+
+#' @rdname columns
+#' @name colnames<-
+setMethod("colnames<-",
+          signature(x = "DataFrame", value = "character"),
+          function(x, value) {
+            sdf <- callJMethod(x@sdf, "toDF", as.list(value))
+            dataFrame(sdf)
+          })
+
+#' coltypes
+#'
+#' Set the column types of a DataFrame.
+#'
+#' @name coltypes
+#' @param x (DataFrame)
+#' @return value (character) A character vector with the target column types for the given DataFrame
+#' @rdname coltypes
+#' @aliases coltypes
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' coltypes(df) <- c("string", "integer")
+#'}
+setMethod("coltypes<-",
+          signature(x = "DataFrame", value = "character"),
+          function(x, value) {
+            cols <- columns(x)
+            ncols <- length(cols)
+            if (length(value) == 0 || length(value) != ncols) {
+              stop("Length of type vector should match the number of columns for DataFrame")
+            }
+            newCols <- lapply(seq_len(ncols), function(i) {
+              col <- getColumn(x, cols[i])
+              cast(col, value[i])
+            })
+            nx <- select(x, newCols)
+            dataFrame(nx@sdf)
           })
 
 #' Register Temporary Table

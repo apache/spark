@@ -622,6 +622,30 @@ test_that("schema(), dtypes(), columns(), names() return the correct values/form
   expect_equal(testNames[2], "name")
 })
 
+test_that("names() colnames() set the column names", {
+  df <- jsonFile(sqlContext, jsonPath)
+  names(df) <- c("col1", "col2")
+  expect_equal(colnames(df)[2], "col2")
+
+  colnames(df) <- c("col3", "col4")
+  expect_equal(names(df)[1], "col3")
+})
+
+test_that("coltypes() set the column types", {
+  df <- selectExpr(jsonFile(sqlContext, jsonPath), "name", "(age * 1.21) as age")
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
+
+  df1 <- select(df, cast(df$age, "integer"))
+  coltypes(df) <- c("string", "integer")
+  expect_equal(dtypes(df), list(c("cast(name as string)", "string"), c("cast(age as int)", "int")))
+  value <- collect(df[, 2])[[3, 1]]
+  expect_equal(value, collect(df1)[[3, 1]])
+  expect_equal(value, 22)
+
+  expect_error(coltypes(df) <- c("string"),
+               "Length of type vector should match the number of columns for DataFrame")
+})
+
 test_that("head() and first() return the correct data", {
   df <- jsonFile(sqlContext, jsonPath)
   testHead <- head(df)
