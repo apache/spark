@@ -130,8 +130,7 @@ private[r] object SQLUtils {
   }
 
   def dfToCols(df: DataFrame): Array[Array[Any]] = {
-    // localDF is Array[Row]
-    val localDF = df.collect()
+    val localDF: Array[Row] = df.collect()
     val numCols = df.columns.length
 
     // result is Array[Array[Any]]
