@@ -456,7 +456,13 @@ case class MapObjects(
   }
 }
 
-case class CreateRow(children: Seq[Expression]) extends Expression {
+/**
+ * Constructs a new external row, using the result of evaluating the specified expressions
+ * as content.
+ *
+ * @param children A list of expression to use as content of the external row.
+ */
+case class CreateExternalRow(children: Seq[Expression]) extends Expression {
   override def dataType: DataType = ObjectType(classOf[Row])
 
   override def nullable: Boolean = false

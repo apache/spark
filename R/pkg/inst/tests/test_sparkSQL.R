@@ -1428,7 +1428,7 @@ test_that("sampleBy() on a DataFrame", {
 
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
-  expect_equal(grepl("Table Not Found: blah", retError), TRUE)
+  expect_equal(grepl("Table not found: blah", retError), TRUE)
 })
 
 test_that("Method as.data.frame as a synonym for collect()", {

@@ -117,6 +117,7 @@ private[hive] object HiveQl extends Logging {
     "TOK_CREATEDATABASE",
     "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
+    "TOK_CREATEMACRO",
     "TOK_CREATEROLE",
 
     "TOK_DESCDATABASE",
@@ -125,6 +126,7 @@ private[hive] object HiveQl extends Logging {
     "TOK_DROPDATABASE",
     "TOK_DROPFUNCTION",
     "TOK_DROPINDEX",
+    "TOK_DROPMACRO",
     "TOK_DROPROLE",
     "TOK_DROPTABLE_PROPERTIES",
     "TOK_DROPVIEW",
