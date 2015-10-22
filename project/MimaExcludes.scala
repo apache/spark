@@ -108,6 +108,10 @@ object MimaExcludes {
       ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.SparkContext.preferredNodeLocationData_=")
+      ) ++ Seq(
+        // SPARK-8029 -- this is a private[spark] method but that has to be public in java
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter.write")
       )
     case v if v.startsWith("1.5") =>
       Seq(
