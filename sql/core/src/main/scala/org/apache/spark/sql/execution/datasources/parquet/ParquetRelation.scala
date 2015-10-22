@@ -548,7 +548,20 @@ private[sql] object ParquetRelation extends Logging {
     }
 
     conf.set(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
-      val requestedSchema = StructType(requiredColumns.map(dataSchema(_)))
+      // PARQUET-363 & PARQUET-278: parquet-mr 1.8.1 doesn't allow constructing empty GroupType,
+      // which prevents us to avoid selecting any columns for queries like `SELECT COUNT(*) FROM t`.
+      //  Here we select the "narrowest" column if `requiredColumns` is empty.
+      //
+      // This issue has been fixed in parquet-mr 1.8.2-SNAPSHOT. We should revert this change after
+      // upgrading to 1.8.2 or some later version.
+      val requestedSchema = {
+        val requiredDataColumns = requiredColumns.map(dataSchema(_))
+        if (requiredDataColumns.isEmpty) {
+          StructType(dataSchema.minBy(_.dataType.defaultSize) :: Nil)
+        } else {
+          StructType(requiredDataColumns)
+        }
+      }
       CatalystSchemaConverter.checkFieldNames(requestedSchema).json
     })
 

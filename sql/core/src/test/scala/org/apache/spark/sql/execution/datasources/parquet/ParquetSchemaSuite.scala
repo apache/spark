@@ -1385,21 +1385,25 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |}
       """.stripMargin)
 
-  testSchemaClipping(
-    "empty requested schema",
+  // PARQUET-363 & PARQUET-278: parquet-mr 1.8.1 doesn't allow constructing empty GroupType.  Should
+  // re-enable this test case after upgrading to parquet-mr 1.8.2 or some later version.
+  ignore("empty requested schema") {
+    testSchemaClipping(
+      "empty requested schema",
 
-    parquetSchema =
-      """message root {
-        |  required group f0 {
-        |    required int32 f00;
-        |    required int64 f01;
-        |  }
-        |}
-      """.stripMargin,
+      parquetSchema =
+        """message root {
+          |  required group f0 {
+          |    required int32 f00;
+          |    required int64 f01;
+          |  }
+          |}
+        """.stripMargin,
 
-    catalystSchema = new StructType(),
+      catalystSchema = new StructType(),
 
-    expectedSchema = "message root {}")
+      expectedSchema = "message root {}")
+  }
 
   testSchemaClipping(
     "disjoint field sets",
