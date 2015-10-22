@@ -64,6 +64,11 @@ private[spark] trait Spillable[C] extends Logging {
   // Number of spills
   private[this] var _spillCount = 0
 
+  private[this] def currentTaskAttemptId(): Long = {
+    // In case this is called on the driver, return an invalid task attempt id.
+    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
+  }
+
   /**
    * Spills the current in-memory collection to disk if needed. Attempts to acquire more
    * memory before spilling.
@@ -77,7 +82,7 @@ private[spark] trait Spillable[C] extends Logging {
     if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
-      val granted = memoryManager.tryToAcquire(amountToRequest, TaskContext.get.taskAttemptId())
+      val granted = memoryManager.tryToAcquire(amountToRequest, currentTaskAttemptId())
       myMemoryThreshold += granted
       // If we were granted too little memory to grow further (either tryToAcquire returned 0,
       // or we already had more memory than myMemoryThreshold), spill the current collection
@@ -106,8 +111,7 @@ private[spark] trait Spillable[C] extends Logging {
    */
   private def releaseMemoryForThisThread(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
-    memoryManager.release(
-      myMemoryThreshold - initialMemoryThreshold, TaskContext.get.taskAttemptId())
+    memoryManager.release(myMemoryThreshold - initialMemoryThreshold, currentTaskAttemptId())
     myMemoryThreshold = initialMemoryThreshold
   }
 
