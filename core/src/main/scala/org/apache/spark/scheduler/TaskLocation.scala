@@ -67,7 +67,7 @@ private[spark] object TaskLocation {
     if (hstr.equals(str)) {
       new HostTaskLocation(str)
     } else {
-      new HostTaskLocation(hstr)
+      new HDFSCacheTaskLocation(hstr)
     }
   }
 }
