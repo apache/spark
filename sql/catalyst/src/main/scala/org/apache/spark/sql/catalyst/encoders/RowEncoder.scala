@@ -26,8 +26,11 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * A factory for constructing encoders that convert external row to/from the Spark SQL
+ * internal binary representation.
+ */
 object RowEncoder {
-
   def apply(schema: StructType): ClassEncoder[Row] = {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
@@ -136,7 +139,7 @@ object RowEncoder {
         constructorFor(BoundReference(i, f.dataType, f.nullable), f.dataType)
       )
     }
-    CreateRow(fields)
+    CreateExternalRow(fields)
   }
 
   private def constructorFor(input: Expression, dataType: DataType): Expression = dataType match {
@@ -195,7 +198,7 @@ object RowEncoder {
           Literal.create(null, externalDataTypeFor(f.dataType)),
           constructorFor(getField(input, i, f.dataType), f.dataType))
       }
-      CreateRow(convertedFields)
+      CreateExternalRow(convertedFields)
   }
 
   private def getField(
