@@ -18,6 +18,7 @@
 from pyspark import since
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.param import Params
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
 
@@ -260,21 +261,114 @@ class IsotonicRegressionModel(JavaModel):
         return self._call_java("predictions")
 
 
-class TreeRegressorParams(object):
+class TreeEnsembleParams(DecisionTreeParams):
+    """
+    Mixin for Decision Tree-based ensemble algorithms parameters.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    subsamplingRate = Param(Params._dummy(), "subsamplingRate", "Fraction of the training data " +
+                            "used for learning each decision tree, in range (0, 1].")
+
+    def __init__(self):
+        super(TreeEnsembleParams, self).__init__()
+        #: param for Fraction of the training data, in range (0, 1].
+        self.subsamplingRate = Param(self, "subsamplingRate", "Fraction of the training data " +
+                                     "used for learning each decision tree, in range (0, 1].")
+
+    def setSubsamplingRate(self, value):
+        """
+        Sets the value of :py:attr:`subsamplingRate`.
+        """
+        self._paramMap[self.subsamplingRate] = value
+        return self
+
+    def getSubsamplingRate(self):
+        """
+        Gets the value of subsamplingRate or its default value.
+        """
+        return self.getOrDefault(self.subsamplingRate)
+
+
+class TreeRegressorParams(Params):
     """
     Private class to track supported impurity measures.
     """
+
     supportedImpurities = ["variance"]
+    # a placeholder to make it appear in the generated doc
+    impurity = Param(Params._dummy(), "impurity", "Criterion used for information " +
+                     "gain calculation (case-insensitive). Supported options: variance")
+
+    def __init__(self):
+        super(TreeRegressorParams, self).__init__()
+        #: param for Criterion used for information gain calculation (case-insensitive).
+        self.impurity = Param(self, "impurity", "Criterion used for information " +
+                              "gain calculation (case-insensitive). Supported options: variance")
+
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        self._paramMap[self.impurity] = value
+        return self
+
+    def getImpurity(self):
+        """
+        Gets the value of impurity or its default value.
+        """
+        return self.getOrDefault(self.impurity)
 
 
-class RandomForestParams(object):
+class RandomForestParams(TreeEnsembleParams):
     """
     Private class to track supported random forest parameters.
     """
+
     supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
+    # a placeholder to make it appear in the generated doc
+    numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1).")
+    featureSubsetStrategy = Param(Params._dummy(), "featureSubsetStrategy",
+                                  "The number of features to consider for splits " +
+                                  "at each tree node.")
+
+    def __init__(self):
+        super(RandomForestParams, self).__init__()
+        #: param for Number of trees to train (>= 1).
+        self.numTrees = Param(self, "numTrees", "Number of trees to train (>= 1).")
+        #: param for The number of features to consider for splits at each tree node.
+        self.featureSubsetStrategy = Param(self, "featureSubsetStrategy",
+                                           "The number of features to consider for splits " +
+                                           "at each tree node.")
+
+    def setNumTrees(self, value):
+        """
+        Sets the value of :py:attr:`numTrees`.
+        """
+        self._paramMap[self.numTrees] = value
+        return self
+
+    def getNumTrees(self):
+        """
+        Gets the value of numTrees or its default value.
+        """
+        return self.getOrDefault(self.numTrees)
+
+    def setFeatureSubsetStrategy(self, value):
+        """
+        Sets the value of :py:attr:`featureSubsetStrategy`.
+        """
+        self._paramMap[self.featureSubsetStrategy] = value
+        return self
+
+    def getFeatureSubsetStrategy(self):
+        """
+        Gets the value of featureSubsetStrategy or its default value.
+        """
+        return self.getOrDefault(self.featureSubsetStrategy)
 
 
-class GBTParams(object):
+class GBTParams(TreeEnsembleParams):
     """
     Private class to track supported GBT params.
     """
