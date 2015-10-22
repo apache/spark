@@ -335,11 +335,12 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
 
   /**
    * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed
-   * to be zeroed out (call `zero()` on the result if this is necessary).
+   * to be zeroed out (call `zero()` on the result if this is necessary). This method does
+   * not integrate with the memory bookkeeping system, so callers (i.e. TaskMemoryManager) should
+   * call those methods at appropirate times.
    */
   @throws(classOf[OutOfMemoryError])
-  final def allocateMemoryBlock(size: Long): MemoryBlock = {
-    // TODO(josh): Integrate with execution memory management
+  private[memory] final def allocateMemoryBlock(size: Long): MemoryBlock = {
     if (shouldPool(size)) {
       this synchronized {
         val pool: util.LinkedList[WeakReference[MemoryBlock]] = bufferPoolsBySize.get(size)
@@ -361,8 +362,11 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
     }
   }
 
-  final def freeMemoryBlock(memory: MemoryBlock) {
-    // TODO(josh): Integrate with execution memory management
+  /**
+   * Releases the given memory block, either freeing it immediately or storing it in a pool for
+   * re-use by other tasks.
+   */
+  private[memory] final def releaseMemoryBlock(memory: MemoryBlock) {
     val size: Long = memory.size
     if (shouldPool(size)) {
       this synchronized {

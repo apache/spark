@@ -156,6 +156,13 @@ public class TaskMemoryManager {
       }
       allocatedPages.set(pageNumber);
     }
+    final long acquiredExecutionMemory = acquireExecutionMemory(size);
+    if (acquiredExecutionMemory != size) {
+      synchronized (this) {
+        allocatedPages.clear(pageNumber);
+      }
+      return null;
+    }
     final MemoryBlock page = memoryManager.allocateMemoryBlock(size);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
@@ -179,8 +186,9 @@ public class TaskMemoryManager {
     if (logger.isTraceEnabled()) {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
-    // Cannot access a page once it's freed.
-    memoryManager.freeMemoryBlock(page);
+    long pageSize = page.size();
+    memoryManager.releaseMemoryBlock(page);
+    releaseExecutionMemory(pageSize);
   }
 
   /**
@@ -206,7 +214,7 @@ public class TaskMemoryManager {
    */
   public void free(MemoryBlock memory) {
     assert (memory.pageNumber == -1) : "Should call freePage() for pages, not free()";
-    memoryManager.freeMemoryBlock(memory);
+    memoryManager.releaseMemoryBlock(memory);
     synchronized(allocatedNonPageMemory) {
       final boolean wasAlreadyRemoved = !allocatedNonPageMemory.remove(memory);
       assert (!wasAlreadyRemoved) : "Called free() on memory that was already freed!";
@@ -304,7 +312,7 @@ public class TaskMemoryManager {
         freedBytes += memory.size();
         // We don't call free() here because that calls Set.remove, which would lead to a
         // ConcurrentModificationException here.
-        memoryManager.freeMemoryBlock(memory);
+        memoryManager.releaseMemoryBlock(memory);
         iter.remove();
       }
     }
