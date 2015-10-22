@@ -22,9 +22,8 @@ import java.io.File
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleOutputCoordinator, IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
-import org.apache.spark.storage.{ShuffleIndexBlockId, ShuffleBlockId}
+import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleIndexBlockId}
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
