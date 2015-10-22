@@ -44,8 +44,8 @@ object ShuffleOutputCoordinator extends Logging {
       }
       true
     } else {
-      logInfo(s"shuffle output for shuffle $shuffleId, partition $partitionId already exists, not " +
-        s"overwriting.  Another task must have created this shuffle output.")
+      logInfo(s"shuffle output for shuffle $shuffleId, partition $partitionId already exists, " +
+        s"not overwriting.  Another task must have created this shuffle output.")
       tmpToDest.foreach{ case (tmp, _) => tmp.delete()}
       false
     }
