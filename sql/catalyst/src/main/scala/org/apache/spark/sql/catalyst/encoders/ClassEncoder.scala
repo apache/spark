@@ -48,20 +48,12 @@ case class ClassEncoder[T](
   private val dataType = ObjectType(clsTag.runtimeClass)
 
   override def toRow(t: T): InternalRow = {
-    if (t == null) {
-      null
-    } else {
-      inputRow(0) = t
-      extractProjection(inputRow)
-    }
+    inputRow(0) = t
+    extractProjection(inputRow)
   }
 
   override def fromRow(row: InternalRow): T = {
-    if (row eq null) {
-      null.asInstanceOf[T]
-    } else {
-      constructProjection(row).get(0, dataType).asInstanceOf[T]
-    }
+    constructProjection(row).get(0, dataType).asInstanceOf[T]
   }
 
   override def bind(schema: Seq[Attribute]): ClassEncoder[T] = {

@@ -73,7 +73,7 @@ class RowEncoderSuite extends SparkFunSuite {
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
       val encoder = RowEncoder(schema)
-      val inputGenerator = RandomDataGenerator.forType(schema).get
+      val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
 
       var input: Row = null
       try {
