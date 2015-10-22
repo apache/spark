@@ -83,7 +83,6 @@ object LinearDataGenerator {
       nPoints, seed, eps)}
 
   /**
-   *
    * @param intercept Data intercept
    * @param weights  Weights to be applied.
    * @param xMean the mean of the generated features. Lots of time, if the features are not properly
@@ -125,7 +124,6 @@ object LinearDataGenerator {
   }
 
   /**
-   *
    * @param intercept Data intercept
    * @param weights  Weights to be applied.
    * @param xMean the mean of the generated features. Lots of time, if the features are not properly
