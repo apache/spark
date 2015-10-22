@@ -30,7 +30,7 @@ private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String, val param: SQLMetricParam[R, T])
   extends Accumulable[R, T](param.zero, param, Some(name), true) {
 
-  def reset: Unit = {
+  def reset(): Unit = {
     this.value = param.zero
   }
 }
