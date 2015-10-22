@@ -17,11 +17,10 @@
 
 package org.apache.spark
 
-import org.apache.spark.memory.TaskMemoryManager
-
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
