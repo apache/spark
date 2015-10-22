@@ -98,8 +98,7 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
           x
         }
       }
-      data <- data.frame(lapply(data, dropFactor), stringsAsFactors = FALSE)
-      data <- do.call(mapply, c(list, as.list(data), SIMPLIFY = FALSE))
+      data <- do.call(mapply, c(list, unname(lapply(data, dropFactor)), SIMPLIFY = FALSE))
   }
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlContext)
