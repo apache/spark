@@ -31,38 +31,40 @@ function stripeSummaryTable() {
     });
 }
 
-function toggleThreadStackTrace(threadId) {
-    var threadCell = $("#" + threadId + "_stacktrace");
-    var columnHeader = $('#stacktrace_column');
-    var bindNum = parseInt(columnHeader.attr('bind'));
-    if (threadCell.hasClass('hidden')) {
-        // expand thread cell
-        columnHeader.attr("bind", bindNum + 1);
-        columnHeader.removeClass("hidden");
-        threadCell.removeClass('hidden');
+function toggleThreadStackTrace(threadId, forceAdd) {
+    var stackTrace = $("#" + threadId + "_stacktrace")
+    if (stackTrace.length == 0) {
+        var stackTraceText = $('#' + threadId + "_td_stacktrace").html()
+        var threadCell = $("#thread_" + threadId + "_tr")
+        threadCell.after("<tr id=\"" + threadId +"_stacktrace\" class=\"accordion-body\"><td colspan=\"3\"><pre>" +
+            stackTraceText +  "</pre></td></tr>")
     } else {
-        // collapse thread cell
-        columnHeader.attr("bind", bindNum - 1);
-        if (bindNum - 1 == 0) {
-            columnHeader.addClass("hidden");
+        if (!forceAdd) {
+            stackTrace.remove()
         }
-        threadCell.addClass('hidden');
     }
 }
 
 // expandOrCollapse - true: expand, false: collapse
-function expandOrCollapseAllThreadStackTrace(expandOrCollapse) {
-    var columnHeader = $('#stacktrace_column');
+function expandOrCollapseAllThreadStackTrace(expandOrCollapse, toggleButton) {
     if (expandOrCollapse) {
-        columnHeader.removeClass('hidden');
-        $('.accordion-body').removeClass('hidden');
-        columnHeader.attr("bind", $('.accordion-body').length);
-        $('.expandbutton').toggleClass('hidden')
+        $('.accordion-heading').each(function() {
+            //get thread ID
+            if (!$(this).hasClass("hidden")) {
+                var trId = $(this).attr('id').match(/thread_([0-9]+)_tr/m)[1]
+                toggleThreadStackTrace(trId, true)
+            }
+        })
+        if (toggleButton) {
+            $('.expandbutton').toggleClass('hidden')
+        }
     } else {
-        columnHeader.addClass('hidden');
-        $('.accordion-body').addClass('hidden');
-        columnHeader.attr("bind", 0);
-        $('.expandbutton').toggleClass('hidden');
+        $('.accordion-body').each(function() {
+            $(this).remove()
+        })
+        if (toggleButton) {
+            $('.expandbutton').toggleClass('hidden');
+        }
     }
 }
 
@@ -75,6 +77,8 @@ function onMouseOverAndOut(threadId) {
 
 function onSearchStringChange() {
     var searchString = $('#search').val()
+    //remove the stacktrace
+    expandOrCollapseAllThreadStackTrace(false, false)
     if (searchString.length == 0) {
         $('tr').each(function() {
             $(this).removeClass('hidden')

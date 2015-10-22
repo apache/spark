@@ -63,15 +63,13 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       }.map { thread =>
         val threadId = thread.threadId
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
-            onclick={s"toggleThreadStackTrace($threadId)"}
+            onclick={s"toggleThreadStackTrace($threadId, false)"}
             onmouseover={s"onMouseOverAndOut($threadId)"}
             onmouseout={s"onMouseOverAndOut($threadId)"}>
           <td id={s"${threadId}_td_id"}>{threadId}</td>
           <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
           <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
-          <td id={threadId + "_stacktrace"} class="accordion-body hidden">
-            <pre>{thread.stackTrace}</pre>
-          </td>
+          <td id={s"${threadId}_td_stacktrace"} class="hidden">{thread.stackTrace}</td>
         </tr>
       }
 
@@ -79,10 +77,10 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       <p>Updated at {UIUtils.formatDate(time)}</p>
       {
         // scalastyle:off
-        <p><a class="expandbutton" onClick="expandOrCollapseAllThreadStackTrace(true)">
+        <p><a class="expandbutton" onClick="expandOrCollapseAllThreadStackTrace(true, true)">
           Expand All
         </a></p>
-        <p><a class="expandbutton hidden" onClick="expandOrCollapseAllThreadStackTrace(false)">
+        <p><a class="expandbutton hidden" onClick="expandOrCollapseAllThreadStackTrace(false, true)">
           Collapse All
         </a></p>
         <div class="form-inline">
@@ -99,10 +97,9 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       }
       <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
         <thead>
-          <th>Thread ID</th>
-          <th>Thread Name</th>
-          <th>Thread State</th>
-          <th id='stacktrace_column' bind='0' class="hidden">Thread Stacktrace</th>
+          <th onClick="expandOrCollapseAllThreadStackTrace(false, false)">Thread ID</th>
+          <th onClick="expandOrCollapseAllThreadStackTrace(false, false)">Thread Name</th>
+          <th onClick="expandOrCollapseAllThreadStackTrace(false, false)">Thread State</th>
         </thead>
         <tbody>{dumpRows}</tbody>
       </table>
