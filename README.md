@@ -61,6 +61,7 @@ Currently **officially** using Airflow:
 * Chartboost [[@cgelman](https://github.com/cgelman) & [@dclubb](https://github.com/dclubb)]
 * BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
 * [LingoChamp](http://www.liulishuo.com/) [[@haitaoyao](https://github.com/haitaoyao)]
+* [WeTransfer](https://github.com/WeTransfer) [[@jochem](https://github.com/jochem)]
 
 ## Links
 
