@@ -80,4 +80,24 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0)._2.analyzed.isInstanceOf[Project])
     assert(metrics(0)._3.getMessage == e.getMessage)
   }
+
+  test("get metrics by callback") {
+    val metrics = ArrayBuffer.empty[Long]
+    val listener = new QueryExecutionListener {
+      // Only test successful case here, so no need to implement `onFailure`
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        metrics += qe.executedPlan.longMetric("numInputRows").value.value
+      }
+    }
+    sqlContext.listenerManager.register(listener)
+
+    Seq(1 -> "a").toDF("i", "j").groupBy("i").count().collect()
+    Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
+
+    assert(metrics.length == 2)
+    assert(metrics(0) == 1)
+    assert(metrics(1) == 2)
+  }
 }

@@ -1963,6 +1963,9 @@ class DataFrame private[sql](
    */
   private def withCallback[T](name: String, df: DataFrame)(action: DataFrame => T) = {
     try {
+      df.queryExecution.executedPlan.foreach { plan =>
+        plan.metrics.valuesIterator.foreach(_.reset)
+      }
       val start = System.nanoTime()
       val result = action(df)
       val end = System.nanoTime()
