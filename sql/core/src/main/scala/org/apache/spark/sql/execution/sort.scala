@@ -124,7 +124,7 @@ case class TungstenSort(
         }
       }
 
-      val pageSize = SparkEnv.get.shuffleMemoryManager.pageSizeBytes
+      val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
       val sorter = new UnsafeExternalRowSorter(
         schema, ordering, prefixComparator, prefixComputer, pageSize)
       if (testSpillFrequency > 0) {

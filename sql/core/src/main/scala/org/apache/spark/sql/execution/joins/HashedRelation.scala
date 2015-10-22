@@ -326,7 +326,7 @@ private[joins] final class UnsafeHashedRelation(
       new StaticMemoryManager(
         new SparkConf().set("spark.unsafe.offHeap", "false"), Long.MaxValue, Long.MaxValue), 0)
 
-    val pageSizeBytes = Option(SparkEnv.get).map(_.shuffleMemoryManager.pageSizeBytes)
+    val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
 
     // TODO(josh): We won't need this dummy memory manager after future refactorings; revisit
