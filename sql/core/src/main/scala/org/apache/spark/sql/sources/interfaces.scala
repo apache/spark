@@ -561,11 +561,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           }: _*)
         }
 
-        assert(userProvidedSchema.length == spec.partitionColumns.length &&
-          userProvidedSchema.fieldNames.sameElements(spec.partitionColumns.fieldNames),
-          s"Actual partitioning column names did not match user-specified partitioning schema; " +
-            s"expect $userProvidedSchema, but got ${spec.partitionColumns}}")
-
         PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
           part.copy(values = castPartitionValuesToUserSchema(part.values))
         })
