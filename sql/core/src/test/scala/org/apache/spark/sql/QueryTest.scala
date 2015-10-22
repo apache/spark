@@ -94,14 +94,17 @@ abstract class QueryTest extends PlanTest {
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    * @param absTol the absolute tolerance between actual and expected answers.
    */
-  protected def checkAggregatesWithTol(dataFrame: DataFrame, expectedAnswer: Seq[Row], absTol: Double): Unit = {
+  protected def checkAggregatesWithTol(dataFrame: DataFrame,
+      expectedAnswer: Seq[Row],
+      absTol: Double): Unit = {
     // TODO: catch exceptions in data frame execution
     val actualAnswer = dataFrame.collect()
     require(actualAnswer.length == expectedAnswer.length,
       s"actual num rows ${actualAnswer.length} != expected num of rows ${expectedAnswer.length}")
 
     actualAnswer.zip(expectedAnswer).foreach {
-      case (actualRow, expectedRow) => QueryTest.checkAggregatesWithTol(actualRow, expectedRow, absTol)
+      case (actualRow, expectedRow) =>
+        QueryTest.checkAggregatesWithTol(actualRow, expectedRow, absTol)
     }
   }
 

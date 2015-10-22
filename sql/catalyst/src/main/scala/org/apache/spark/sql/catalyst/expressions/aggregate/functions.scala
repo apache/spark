@@ -994,10 +994,8 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
    * Initialize all moments to zero.
    */
   override def initialize(buffer: MutableRow): Unit = {
-    var aggIndex = 0
-    while (aggIndex < numMoments) {
+    for (aggIndex <- 0 until numMoments) {
       buffer.setDouble(mutableAggBufferOffset + aggIndex, 0.0)
-      aggIndex += 1
     }
   }
 

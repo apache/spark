@@ -235,7 +235,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val expectedVariancePop = Row(4.0 / 6.0)
     checkAggregatesWithTol(sparkVariancePop, expectedVariancePop, absTol)
 
-    val sparkSkewness= testData2.agg(skewness('a))
+    val sparkSkewness = testData2.agg(skewness('a))
     val expectedSkewness = Row(0.0)
     checkAggregatesWithTol(sparkSkewness, expectedSkewness, absTol)
 
