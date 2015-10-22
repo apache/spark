@@ -1237,9 +1237,14 @@ class DataFrame private[sql](
    * @since 1.4.1
    */
   def drop(col: Column): DataFrame = {
+    val expression = col match {
+      case Column(u: UnresolvedAttribute) =>
+        queryExecution.analyzed.resolveQuoted(u.name, sqlContext.analyzer.resolver).getOrElse(u)
+      case Column(expr: Expression) => expr
+    }
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      attr != col.expr
+      attr != expression
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }
