@@ -365,8 +365,8 @@ private[netty] class NettyRpcEndpointRef(
 
   @transient @volatile var client: TransportClient = _
 
-  private var _address = if (endpointAddress.rpcAddress != null) endpointAddress else null
-  private var _name = endpointAddress.name
+  private val _address = if (endpointAddress.rpcAddress != null) endpointAddress else null
+  private val _name = endpointAddress.name
 
   override def address: RpcAddress = if (_address != null) _address.rpcAddress else null
 
