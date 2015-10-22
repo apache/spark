@@ -89,7 +89,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         val setNull = dt match {
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
             // Can't call setNullAt() for DecimalType with precision larger than 18.
-            s"$rowWriter.write($index, null, ${t.precision}, ${t.scale});"
+            s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
@@ -124,16 +124,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             """
 
           case _ if ctx.isPrimitiveType(dt) =>
-            val fieldOffset = ctx.freshName("fieldOffset")
             s"""
-              final long $fieldOffset = $rowWriter.getFieldOffset($index);
-              Platform.putLong($bufferHolder.buffer, $fieldOffset, 0L);
-              ${writePrimitiveType(ctx, input.value, dt, s"$bufferHolder.buffer", fieldOffset)}
+              $rowWriter.write($index, ${input.value});
             """
-
-          case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
-            s"$rowWriter.writeCompactDecimal($index, ${input.value}, " +
-              s"${t.precision}, ${t.scale});"
 
           case t: DecimalType =>
             s"$rowWriter.write($index, ${input.value}, ${t.precision}, ${t.scale});"
@@ -203,20 +196,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           $arrayWriter.setOffset($index);
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}
         """
-
-      case _ if ctx.isPrimitiveType(et) =>
-        // Should we do word align?
-        val dataSize = et.defaultSize
-
-        s"""
-          $arrayWriter.setOffset($index);
-          ${writePrimitiveType(ctx, element, et,
-            s"$bufferHolder.buffer", s"$bufferHolder.cursor")}
-          $bufferHolder.cursor += $dataSize;
-        """
-
-      case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
-        s"$arrayWriter.writeCompactDecimal($index, $element, ${t.precision}, ${t.scale});"
 
       case t: DecimalType =>
         s"$arrayWriter.write($index, $element, ${t.precision}, ${t.scale});"
@@ -294,38 +273,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       $input.writeToMemory($bufferHolder.buffer, $bufferHolder.cursor);
       $bufferHolder.cursor += $sizeInBytes;
     """
-  }
-
-  private def writePrimitiveType(
-      ctx: CodeGenContext,
-      input: String,
-      dt: DataType,
-      buffer: String,
-      offset: String) = {
-    assert(ctx.isPrimitiveType(dt))
-
-    val putMethod = s"put${ctx.primitiveTypeName(dt)}"
-
-    dt match {
-      case FloatType | DoubleType =>
-        val normalized = ctx.freshName("normalized")
-        val boxedType = ctx.boxedType(dt)
-        val handleNaN =
-          s"""
-            final ${ctx.javaType(dt)} $normalized;
-            if ($boxedType.isNaN($input)) {
-              $normalized = $boxedType.NaN;
-            } else {
-              $normalized = $input;
-            }
-          """
-
-        s"""
-          $handleNaN
-          Platform.$putMethod($buffer, $offset, $normalized);
-        """
-      case _ => s"Platform.$putMethod($buffer, $offset, $input);"
-    }
   }
 
   def createCode(ctx: CodeGenContext, expressions: Seq[Expression]): GeneratedExpressionCode = {

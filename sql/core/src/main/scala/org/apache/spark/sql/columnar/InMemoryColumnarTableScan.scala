@@ -209,6 +209,8 @@ private[sql] case class InMemoryColumnarTableScan(
 
   override def output: Seq[Attribute] = attributes
 
+  override def outputsUnsafeRows: Boolean = true
+
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
 
   // Returned filter predicate should return false iff it is impossible for the input expression
@@ -317,14 +319,12 @@ private[sql] case class InMemoryColumnarTableScan(
           cachedBatchIterator
         }
 
-      val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
       val columnTypes = requestedColumnDataTypes.map {
         case udt: UserDefinedType[_] => udt.sqlType
         case other => other
       }.toArray
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
-      columnarIterator.initialize(cachedBatchesToScan, nextRow, columnTypes,
-        requestedColumnIndices.toArray)
+      columnarIterator.initialize(cachedBatchesToScan, columnTypes, requestedColumnIndices.toArray)
       if (enableAccumulators && columnarIterator.hasNext) {
         readPartitions += 1
       }

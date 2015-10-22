@@ -20,15 +20,41 @@ package org.apache.spark.sql.columnar
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.types._
 
 /**
- * An Iterator to walk throught the InternalRows from a CachedBatch
+ * An Iterator to walk through the InternalRows from a CachedBatch
  */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
-  def initialize(input: Iterator[CachedBatch], mutableRow: MutableRow, columnTypes: Array[DataType],
+  def initialize(input: Iterator[CachedBatch], columnTypes: Array[DataType],
     columnIndexes: Array[Int]): Unit
+}
+
+/**
+ * An helper class to update the fields of UnsafeRow, used by ColumnAccessor
+ *
+ * WARNNING: These setter MUST be called in increasing order of ordinals.
+ */
+class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(null) {
+
+  override def isNullAt(i: Int): Boolean = writer.isNullAt(i)
+  override def setNullAt(i: Int): Unit = writer.setNullAt(i)
+
+  override def setBoolean(i: Int, v: Boolean): Unit = writer.write(i, v)
+  override def setByte(i: Int, v: Byte): Unit = writer.write(i, v)
+  override def setShort(i: Int, v: Short): Unit = writer.write(i, v)
+  override def setInt(i: Int, v: Int): Unit = writer.write(i, v)
+  override def setLong(i: Int, v: Long): Unit = writer.write(i, v)
+  override def setFloat(i: Int, v: Float): Unit = writer.write(i, v)
+  override def setDouble(i: Int, v: Double): Unit = writer.write(i, v)
+
+  // the writer will be used directly to avoid creating wrapper objects
+  override def setDecimal(i: Int, v: Decimal, precision: Int): Unit =
+    throw new UnsupportedOperationException
+  override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
+
+  // all other methods inherited from GenericMutableRow are not need
 }
 
 /**
@@ -41,6 +67,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
   protected def create(columnTypes: Seq[DataType]): ColumnarIterator = {
     val ctx = newCodeGenContext()
+    val numFields = columnTypes.size
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
       val accessorName = ctx.freshName("accessor")
       val accessorCls = dt match {
@@ -74,13 +101,27 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       }
 
       val extract = s"$accessorName.extractTo(mutableRow, $index);"
-
-      (createCode, extract)
+      val patch = dt match {
+        case DecimalType.Fixed(p, s) if p > Decimal.MAX_LONG_DIGITS =>
+          // For large Decimal, it should have 16 bytes for future update even it's null now.
+          s"""
+            if (mutableRow.isNullAt($index)) {
+              rowWriter.write($index, (Decimal) null, $p, $s);
+            }
+           """
+        case other => ""
+      }
+      (createCode, extract + patch)
     }.unzip
 
     val code = s"""
       import java.nio.ByteBuffer;
       import java.nio.ByteOrder;
+      import scala.collection.Iterator;
+      import org.apache.spark.sql.types.DataType;
+      import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
+      import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+      import org.apache.spark.sql.columnar.MutableUnsafeRow;
 
       public SpecificColumnarIterator generate($exprType[] expr) {
         return new SpecificColumnarIterator();
@@ -90,13 +131,17 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         private ByteOrder nativeOrder = null;
         private byte[][] buffers = null;
+        private UnsafeRow unsafeRow = new UnsafeRow();
+        private BufferHolder bufferHolder = new BufferHolder();
+        private UnsafeRowWriter rowWriter = new UnsafeRowWriter();
+        private MutableUnsafeRow mutableRow = null;
 
         private int currentRow = 0;
         private int numRowsInBatch = 0;
 
         private scala.collection.Iterator input = null;
         private MutableRow mutableRow = null;
-        private ${classOf[DataType].getName}[] columnTypes = null;
+        private DataType[] columnTypes = null;
         private int[] columnIndexes = null;
 
         ${declareMutableStates(ctx)}
@@ -104,12 +149,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         public SpecificColumnarIterator() {
           this.nativeOrder = ByteOrder.nativeOrder();
           this.buffers = new byte[${columnTypes.length}][];
+          this.mutableRow = new MutableUnsafeRow(rowWriter);
 
           ${initMutableStates(ctx)}
         }
 
-        public void initialize(scala.collection.Iterator input, MutableRow mutableRow,
-                               ${classOf[DataType].getName}[] columnTypes, int[] columnIndexes) {
+        public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
           this.input = input;
           this.mutableRow = mutableRow;
           this.columnTypes = columnTypes;
@@ -136,9 +181,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         }
 
         public InternalRow next() {
-          ${extractors.mkString("\n")}
           currentRow += 1;
-          return mutableRow;
+          bufferHolder.reset();
+          rowWriter.initialize(bufferHolder, $numFields);
+          ${extractors.mkString("\n")}
+          unsafeRow.pointTo(bufferHolder.buffer, $numFields, bufferHolder.totalSize());
+          return unsafeRow;
         }
       }"""
 
