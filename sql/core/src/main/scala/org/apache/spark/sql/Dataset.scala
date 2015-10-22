@@ -46,7 +46,7 @@ import org.apache.spark.sql.types.StructType
  * [[Dataset]] to a generic DataFrame by calling `ds.toDF()`.
  *
  * COMPATIBILITY NOTE: Long term we plan to make [[DataFrame]] extend `Dataset[Row]`.  However,
- * making this change to che class hierarchy would break the function signatures for the existing
+ * making this change to the class hierarchy would break the function signatures for the existing
  * functional operations (map, flatMap, etc).  As such, this class should be considered a preview
  * of the final API.  Changes will be made to the interface after Spark 1.6.
  *
@@ -134,12 +134,6 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def filter(func: T => Boolean): Dataset[T] = mapPartitions(_.filter(func))
-
-  /**
-   * Returns a new [[Dataset]] that only contains elements where `func` returns `false`.
-   * @since 1.6.0
-   */
-  def filterNot(func: T => Boolean): Dataset[T] = mapPartitions(_.filterNot(func))
 
   /**
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.

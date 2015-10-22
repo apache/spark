@@ -21,7 +21,6 @@ import java.beans.{BeanInfo, Introspector}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.sql.catalyst.encoders.Encoder
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -35,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
@@ -388,10 +388,6 @@ class SQLContext private[sql](
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
         new ColumnName(sc.s(args: _*))
-      }
-
-      def e[T : Encoder](args: Any*): TypedColumn[T] = {
-        new TypedColumn[T](SqlParser.parseExpression(sc.s(args: _*)))
       }
     }
   }

@@ -56,13 +56,6 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
       2, 4)
   }
 
-  test("filterNot") {
-    val ds = Seq(1, 2, 3, 4).toDS()
-    checkAnswer(
-      ds.filterNot(_ % 2 == 0),
-      1, 3)
-  }
-
   test("foreach") {
     val ds = Seq(1, 2, 3).toDS()
     val acc = sparkContext.accumulator(0)

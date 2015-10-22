@@ -27,7 +27,6 @@ case class ClassData(a: String, b: Int)
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-
   test("toDS") {
     val data = Seq(("a", 1) , ("b", 2), ("c", 3))
     checkAnswer(
@@ -77,13 +76,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.filter(_._1 == "b"),
       ("b", 2))
-  }
-
-  test("filterNot") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
-    checkAnswer(
-      ds.filterNot(_._1 == "b"),
-      ("a", 1), ("c", 3))
   }
 
   test("foreach") {

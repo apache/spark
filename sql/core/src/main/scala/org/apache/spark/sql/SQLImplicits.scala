@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A collection of implicit methods for converting common Scala objects into [[DataFrame]]s.
  */
-private[sql] abstract class SQLImplicits {
+abstract class SQLImplicits {
   protected def _sqlContext: SQLContext
 
   implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ProductEncoder[T]

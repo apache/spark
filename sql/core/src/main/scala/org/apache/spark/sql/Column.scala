@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.encoders.Encoder
 
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.types._
@@ -40,6 +40,7 @@ private[sql] object Column {
 
 /**
  * A [[Column]] where an [[Encoder]] has been given for the expected return type.
+ * @since 1.6.0
  */
 class TypedColumn[T](expr: Expression)(implicit val encoder: Encoder[T]) extends Column(expr)
 
@@ -79,6 +80,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Provides a type hint about the expected return value of this column.  This information can
    * be used by operations such as `select` on a [[Dataset]] to automatically convert the
    * results into the correct JVM types.
+   * @since 1.6.0
    */
   def as[T : Encoder]: TypedColumn[T] = new TypedColumn[T](expr)
 

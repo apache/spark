@@ -31,8 +31,6 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * A set of composite encoders that take sub encoders and map each of their objects to a
  * Scala tuple.  Note that currently the implementation is fairly limited and only supports going
  * from an internal row to a tuple.
- *
- * The input is assumed to be
  */
 object TupleEncoder {
 
