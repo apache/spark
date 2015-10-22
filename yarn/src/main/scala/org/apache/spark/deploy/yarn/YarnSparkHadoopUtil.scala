@@ -18,28 +18,30 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.util.regex.Matcher
-import java.util.regex.Pattern
+import java.util.regex.{Matcher, Pattern}
 
 import scala.collection.mutable.HashMap
+import scala.reflect.runtime._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.{Master, JobConf}
-import org.apache.hadoop.security.Credentials
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.mapred.{JobConf, Master}
+import org.apache.hadoop.security.token.Token
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.Client._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 
 /**
  * Contains util methods to interact with Hadoop from spark.
@@ -144,7 +146,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 }
 
-object YarnSparkHadoopUtil {
+object YarnSparkHadoopUtil extends Logging {
   // Additional memory overhead
   // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
   // the common cases. Memory overhead tends to grow with container size.
@@ -335,6 +337,83 @@ object YarnSparkHadoopUtil {
         sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(DEFAULT_NUMBER_EXECUTORS)
       // System property can override environment variable.
       conf.getInt("spark.executor.instances", targetNumExecutors)
+    }
+  }
+
+  /**
+   * Obtains token for the Hive metastore. Exceptions are caught and logged
+   */
+  def obtainTokenForHiveMetastore(
+      sparkConf: SparkConf,
+      conf: Configuration): Option[Token[DelegationTokenIdentifier]] = {
+    try {
+      obtainTokenForHiveMetastoreInner(sparkConf, conf,
+        UserGroupInformation.getCurrentUser().getUserName)
+    } catch {
+      case e: java.lang.NoSuchMethodException =>
+        logInfo("Hive Method not found " + e)
+        None
+      case e: java.lang.ClassNotFoundException =>
+        logInfo("Hive Class not found " + e)
+        None
+      case e: java.lang.NoClassDefFoundError =>
+        logDebug("Hive Class not found: " + e)
+        None
+      case e: java.lang.ReflectiveOperationException =>
+        // serious problem: log at error and continue
+        logError("Hive Class operation failed: " + e)
+        None
+      case e: RuntimeException =>
+        // any runtime exception, including Illegal Argument Exception
+        throw e
+      case e: Exception => {
+        logError("Unexpected Exception " + e)
+        throw new RuntimeException("Unexpected exception", e)
+      }
+    }
+  }
+
+  /**
+   * Inner routine to obtains token for the Hive metastore; exceptions are raised on any problem.
+   */
+  private[yarn] def obtainTokenForHiveMetastoreInner(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      username: String): Option[Token[DelegationTokenIdentifier]] = {
+    val mirror = universe.runtimeMirror(getClass.getClassLoader)
+
+    // the hive configuration class is a subclass of Hadoop Configuration
+    val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
+    // so can be cast down
+    val hiveConf = hiveConfClass.newInstance().asInstanceOf[Configuration]
+    val metastore_uri = hiveConf.getTrimmed("hive.metastore.uris", "")
+
+    // Check for local metastore
+    if (metastore_uri.nonEmpty) {
+      val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
+      val hive = hiveClass.getMethod("get").invoke(null, hiveConf.asInstanceOf[Object])
+
+      val metastore_kerberos_principal = "METASTORE_KERBEROS_PRINCIPAL"
+      val principal = hiveConf.getTrimmed(metastore_kerberos_principal, "")
+      if (principal.isEmpty) {
+        throw new IllegalArgumentException(s"Hive principal" +
+            s" in $metastore_kerberos_principal undefined")
+      }
+      if (username.isEmpty) {
+        throw new IllegalArgumentException(s"Username undefined")
+      }
+
+      val tokenStr = hiveClass.getMethod("getDelegationToken",
+        classOf[java.lang.String], classOf[java.lang.String])
+          .invoke(hive, username, principal).asInstanceOf[java.lang.String]
+
+      val hive2Token = new Token[DelegationTokenIdentifier]()
+      hive2Token.decodeFromUrlString(tokenStr)
+      hiveClass.getMethod("closeCurrent").invoke(null)
+      Some(hive2Token)
+    } else {
+      logDebug("HiveMetaStore configured in localmode")
+      None
     }
   }
 }
