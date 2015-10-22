@@ -25,7 +25,12 @@ import org.apache.spark.scheduler.MapStatus
  * Obtained inside a map task to write out records to the shuffle system.
  */
 private[spark] abstract class ShuffleWriter[K, V] {
-  /** Write a sequence of records to this task's output */
+  /**
+   * Write a sequence of records to this task's output.  This should write all data
+   * to temporary files, but return (temporaryFile, destinationFile) pairs for each
+   * file written.  The temporary files will get moved to their destination or deleted
+   * by the [[ShuffleOutputCoordinator]]
+   */
   @throws[IOException]
   def write(records: Iterator[Product2[K, V]]): Seq[(File, File)]
 

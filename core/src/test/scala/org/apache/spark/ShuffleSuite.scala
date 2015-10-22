@@ -322,7 +322,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(metrics.bytesWritten > 0)
   }
 
-  test("multiple attempts for one task") {
+  test("multiple simultaneous attempts for one task (SPARK-8029)") {
     sc = new SparkContext("local", "test", conf)
     val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     val manager = sc.env.shuffleManager
@@ -354,7 +354,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       iter: Iterator[(Int, Int)]): Option[MapStatus] = {
       val files = writer.write(iter)
       val output = writer.stop(true)
-      ShuffleOutputCoordinator.moveIfDestMissing(files)
+      ShuffleOutputCoordinator.commitOutputs(0, 0, files)
       output
     }
     val interleaver = new InterleaveIterators(

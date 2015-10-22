@@ -23,20 +23,29 @@ import org.apache.spark.Logging
 /**
  * Ensures that on each executor, there are no conflicting writes to the same shuffle files.  It
  * implements "first write wins", by atomically moving all shuffle files into their final location,
- * only if the files did not already exist.
+ * only if the files did not already exist. See SPARK-8029
  */
 object ShuffleOutputCoordinator extends Logging {
 
-  def moveIfDestMissing(tmpToDest: Seq[(File, File)]): Boolean = synchronized {
+  /**
+   * if any of the destination files do not exist, then move all of the temporary files to their
+   * destinations.  If all destination files exist, then simply delete all temporary files
+   *
+   * @param tmpToDest pairs of (temporary, destination) file pairs
+   * @return
+   */
+  def commitOutputs(
+      shuffleId: Int,
+      partitionId: Int, tmpToDest: Seq[(File, File)]): Boolean = synchronized {
     val prevExists = tmpToDest.forall(_._2.exists)
     if (!prevExists) {
       tmpToDest.foreach { case (tmp, dest) =>
-        !tmp.renameTo(dest)
+        tmp.renameTo(dest)
       }
       true
     } else {
-      logInfo(s"shuffle output already exists, not overwriting.  Another task must have created" +
-        s" this shuffle outputs")
+      logInfo(s"shuffle output for shuffle $shuffleId, partition $partitionId already exists, not " +
+        s"overwriting.  Another task must have created this shuffle output.")
       tmpToDest.foreach{ case (tmp, _) => tmp.delete()}
       false
     }

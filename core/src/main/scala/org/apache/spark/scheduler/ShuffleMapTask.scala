@@ -74,7 +74,7 @@ private[spark] class ShuffleMapTask(
         rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       val mapStatus = writer.stop(success = true).get
       // SPARK-8029 make sure only one task on this executor writes the final shuffle files
-      ShuffleOutputCoordinator.moveIfDestMissing(tmpToDestFiles)
+      ShuffleOutputCoordinator.commitOutputs(dep.shuffleId, partitionId, tmpToDestFiles)
       mapStatus
     } catch {
       case e: Exception =>
