@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import java.util.Arrays;
 import java.util.Random;
@@ -30,7 +30,7 @@ import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.memory.TaskMemoryManager;
 
-public class UnsafeShuffleInMemorySorterSuite {
+public class ShuffleInMemorySorterSuite {
 
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
     final byte[] strBytes = new byte[strLength];
@@ -40,8 +40,8 @@ public class UnsafeShuffleInMemorySorterSuite {
 
   @Test
   public void testSortingEmptyInput() {
-    final UnsafeShuffleInMemorySorter sorter = new UnsafeShuffleInMemorySorter(100);
-    final UnsafeShuffleInMemorySorter.UnsafeShuffleSorterIterator iter = sorter.getSortedIterator();
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(100);
+    final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
     assert(!iter.hasNext());
   }
 
@@ -63,7 +63,7 @@ public class UnsafeShuffleInMemorySorterSuite {
       new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048);
     final Object baseObject = dataPage.getBaseObject();
-    final UnsafeShuffleInMemorySorter sorter = new UnsafeShuffleInMemorySorter(4);
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(4);
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
 
     // Write the records into the data page and store pointers into the sorter
@@ -80,7 +80,7 @@ public class UnsafeShuffleInMemorySorterSuite {
     }
 
     // Sort the records
-    final UnsafeShuffleInMemorySorter.UnsafeShuffleSorterIterator iter = sorter.getSortedIterator();
+    final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
     int prevPartitionId = -1;
     Arrays.sort(dataToSort);
     for (int i = 0; i < dataToSort.length; i++) {
@@ -104,7 +104,7 @@ public class UnsafeShuffleInMemorySorterSuite {
 
   @Test
   public void testSortingManyNumbers() throws Exception {
-    UnsafeShuffleInMemorySorter sorter = new UnsafeShuffleInMemorySorter(4);
+    ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(4);
     int[] numbersToSort = new int[128000];
     Random random = new Random(16);
     for (int i = 0; i < numbersToSort.length; i++) {
@@ -113,7 +113,7 @@ public class UnsafeShuffleInMemorySorterSuite {
     }
     Arrays.sort(numbersToSort);
     int[] sorterResult = new int[numbersToSort.length];
-    UnsafeShuffleInMemorySorter.UnsafeShuffleSorterIterator iter = sorter.getSortedIterator();
+    ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
     int j = 0;
     while (iter.hasNext()) {
       iter.loadNext();

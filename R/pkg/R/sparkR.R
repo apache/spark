@@ -39,6 +39,14 @@ sparkR.stop <- function() {
       sc <- get(".sparkRjsc", envir = env)
       callJMethod(sc, "stop")
       rm(".sparkRjsc", envir = env)
+
+      if (exists(".sparkRSQLsc", envir = env)) {
+        rm(".sparkRSQLsc", envir = env)
+      }
+
+      if (exists(".sparkRHivesc", envir = env)) {
+        rm(".sparkRHivesc", envir = env)
+      }
     }
 
     if (exists(".backendLaunched", envir = env)) {

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.joins.{SortMergeJoin, CartesianProduct}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -848,6 +849,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row (4, "D", 4, "D") ::
       Row(null, null, 5, "E") ::
       Row(null, null, 6, "F") :: Nil)
+  }
+
+  test("SPARK-11111 null-safe join should not use cartesian product") {
+    val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
+    val cp = df.queryExecution.executedPlan.collect {
+      case cp: CartesianProduct => cp
+    }
+    assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
+    val smj = df.queryExecution.executedPlan.collect {
+      case smj: SortMergeJoin => smj
+    }
+    assert(smj.size > 0, "should use SortMergeJoin")
+    checkAnswer(df, Row(100) :: Nil)
   }
 
   test("SPARK-3349 partitioning after limit") {
@@ -1780,6 +1794,34 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("SELECT MAX(value) FROM src GROUP BY key + 1 ORDER BY (key + 1) * 2"),
         Seq(Row(1), Row(1)))
     }
+  }
+
+  test("run sql directly on files") {
+    val df = sqlContext.range(100)
+    withTempPath(f => {
+      df.write.json(f.getCanonicalPath)
+      checkAnswer(sql(s"select id from json.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select id from `org.apache.spark.sql.json`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select a.id from json.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+
+    val e1 = intercept[AnalysisException] {
+      sql("select * from in_valid_table")
+    }
+    assert(e1.message.contains("Table not found"))
+
+    val e2 = intercept[AnalysisException] {
+      sql("select * from no_db.no_table")
+    }
+    assert(e2.message.contains("Table not found"))
+
+    val e3 = intercept[AnalysisException] {
+      sql("select * from json.invalid_file")
+    }
+    assert(e3.message.contains("No input paths specified"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {

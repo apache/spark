@@ -835,8 +835,8 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def cast(to: DataType): Column = expr match {
-    // Lift alias out of cast so we can support col.as("name").cast(IntegerType)
-    case Alias(childExpr, name) => Alias(Cast(childExpr, to), name)()
+    // keeps the name of expression if possible when do cast.
+    case ne: NamedExpression => UnresolvedAlias(Cast(expr, to))
     case _ => Cast(expr, to)
   }
 

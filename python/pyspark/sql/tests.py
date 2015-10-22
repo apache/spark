@@ -174,6 +174,20 @@ class DataTypeTests(unittest.TestCase):
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
 
 
+class SQLContextTests(ReusedPySparkTestCase):
+    def test_get_or_create(self):
+        sqlCtx = SQLContext.getOrCreate(self.sc)
+        self.assertTrue(SQLContext.getOrCreate(self.sc) is sqlCtx)
+
+    def test_new_session(self):
+        sqlCtx = SQLContext.getOrCreate(self.sc)
+        sqlCtx.setConf("test_key", "a")
+        sqlCtx2 = sqlCtx.newSession()
+        sqlCtx2.setConf("test_key", "b")
+        self.assertEqual(sqlCtx.getConf("test_key", ""), "a")
+        self.assertEqual(sqlCtx2.getConf("test_key", ""), "b")
+
+
 class SQLTests(ReusedPySparkTestCase):
 
     @classmethod

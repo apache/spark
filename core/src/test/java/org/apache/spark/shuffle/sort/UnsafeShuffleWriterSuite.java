@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -54,6 +54,7 @@ import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.serializer.*;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.shuffle.sort.SerializedShuffleHandle;
 import org.apache.spark.storage.*;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -199,7 +200,7 @@ public class UnsafeShuffleWriterSuite {
       blockManager,
       shuffleBlockResolver,
       taskMemoryManager,
-      new UnsafeShuffleHandle<Object, Object>(0, 1, shuffleDep),
+      new SerializedShuffleHandle<Object, Object>(0, 1, shuffleDep),
       0, // map id
       taskContext,
       conf
@@ -458,7 +459,7 @@ public class UnsafeShuffleWriterSuite {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite =
       new ArrayList<Product2<Object, Object>>();
-    final byte[] bytes = new byte[(int) (UnsafeShuffleExternalSorter.DISK_WRITE_BUFFER_SIZE * 2.5)];
+    final byte[] bytes = new byte[(int) (ShuffleExternalSorter.DISK_WRITE_BUFFER_SIZE * 2.5)];
     new Random(42).nextBytes(bytes);
     dataToWrite.add(new Tuple2<Object, Object>(1, ByteBuffer.wrap(bytes)));
     writer.write(dataToWrite.iterator());
@@ -512,7 +513,7 @@ public class UnsafeShuffleWriterSuite {
         blockManager,
         shuffleBlockResolver,
         taskMemoryManager,
-        new UnsafeShuffleHandle<>(0, 1, shuffleDep),
+        new SerializedShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,
         conf);

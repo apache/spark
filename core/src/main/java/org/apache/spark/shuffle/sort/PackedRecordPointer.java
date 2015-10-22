@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import org.apache.spark.memory.TaskMemoryManager;
 

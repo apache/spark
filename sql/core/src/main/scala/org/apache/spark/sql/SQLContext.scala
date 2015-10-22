@@ -193,7 +193,7 @@ class SQLContext private[sql](
       override val extendedResolutionRules =
         ExtractPythonUDFs ::
         PreInsertCastAndRename ::
-        Nil
+        (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(
         datasources.PreWriteCheck(catalog)
