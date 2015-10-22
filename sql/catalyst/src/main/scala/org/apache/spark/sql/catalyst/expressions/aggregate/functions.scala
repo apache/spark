@@ -531,19 +531,19 @@ case class Corr(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate {
-  
+
   def children: Seq[Expression] = Seq(left, right)
-  
+
   def nullable: Boolean = false
-  
+
   def dataType: DataType = DoubleType
-  
+
   def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
-  
+
   def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-  
+
   def inputAggBufferAttributes: Seq[AttributeReference] = aggBufferAttributes.map(_.newInstance())
-  
+
   val aggBufferAttributes: Seq[AttributeReference] = Seq(
     AttributeReference("xAvg", DoubleType)(),
     AttributeReference("yAvg", DoubleType)(),
@@ -562,18 +562,18 @@ case class Corr(
     (0 until 5).map(idx => buffer.setDouble(mutableAggBufferOffset + idx, 0.0))
     buffer.setLong(mutableAggBufferOffset + 5, 0L)
   }
-  
+
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
     val x = left.eval(input).asInstanceOf[Double]
     val y = right.eval(input).asInstanceOf[Double]
-  
+
     var xAvg = buffer.getDouble(mutableAggBufferOffset)
     var yAvg = buffer.getDouble(mutableAggBufferOffset + 1)
     var Ck = buffer.getDouble(mutableAggBufferOffset + 2)
     var MkX = buffer.getDouble(mutableAggBufferOffset + 3)
     var MkY = buffer.getDouble(mutableAggBufferOffset + 4)
     var count = buffer.getLong(mutableAggBufferOffset + 5)
-  
+
     val deltaX = x - xAvg
     val deltaY = y - yAvg
     count += 1
@@ -582,7 +582,7 @@ case class Corr(
     Ck += deltaX * (y - yAvg)
     MkX += deltaX * (x - xAvg)
     MkY += deltaY * (y - yAvg)
-  
+
     buffer.setDouble(mutableAggBufferOffset, xAvg)
     buffer.setDouble(mutableAggBufferOffset + 1, yAvg)
     buffer.setDouble(mutableAggBufferOffset + 2, Ck)
@@ -590,10 +590,10 @@ case class Corr(
     buffer.setDouble(mutableAggBufferOffset + 4, MkY)
     buffer.setLong(mutableAggBufferOffset + 5, count)
   }
-  
+
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     val count2 = buffer2.getLong(inputAggBufferOffset + 5)
-  
+
     if (count2 > 0) {
       var xAvg = buffer1.getDouble(mutableAggBufferOffset)
       var yAvg = buffer1.getDouble(mutableAggBufferOffset + 1)
@@ -601,13 +601,13 @@ case class Corr(
       var MkX = buffer1.getDouble(mutableAggBufferOffset + 3)
       var MkY = buffer1.getDouble(mutableAggBufferOffset + 4)
       var count = buffer1.getLong(mutableAggBufferOffset + 5)
-  
+
       val xAvg2 = buffer2.getDouble(inputAggBufferOffset)
       val yAvg2 = buffer2.getDouble(inputAggBufferOffset + 1)
       val Ck2 = buffer2.getDouble(inputAggBufferOffset + 2)
       val MkX2 = buffer2.getDouble(inputAggBufferOffset + 3)
       val MkY2 = buffer2.getDouble(inputAggBufferOffset + 4)
-  
+
       val totalCount = count + count2
       val deltaX = xAvg - xAvg2
       val deltaY = yAvg - yAvg2
@@ -617,7 +617,7 @@ case class Corr(
       MkX += MkX2 + deltaX * deltaX * count / totalCount * count2
       MkY += MkY2 + deltaY * deltaY * count / totalCount * count2
       count = totalCount
-  
+
       buffer1.setDouble(mutableAggBufferOffset, xAvg)
       buffer1.setDouble(mutableAggBufferOffset + 1, yAvg)
       buffer1.setDouble(mutableAggBufferOffset + 2, Ck)
