@@ -175,7 +175,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
   // Prior to Spark 1.6, these policies were implemented in the ShuffleMemoryManager.
 
   /**
-   * Sets the page size, in bytes.
+   * The default page size, in bytes.
    *
    * If user didn't explicitly set "spark.buffer.pageSize", we figure out the default value
    * by looking at the number of cores available to the process, and the total amount of memory,
