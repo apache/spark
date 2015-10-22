@@ -18,7 +18,8 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.util.regex.{Matcher, Pattern}
+import java.util.regex.Matcher
+import java.util.regex.Pattern
 
 import scala.collection.mutable.HashMap
 import scala.reflect.runtime._
@@ -28,17 +29,16 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.{JobConf, Master}
+import org.apache.hadoop.mapred.{Master, JobConf}
 import org.apache.hadoop.security.token.Token
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
-import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.Client._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
