@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.tuning.bandit
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 import org.apache.spark.sql.DataFrame
-
-import scala.collection.mutable.ArrayBuffer
 
 abstract class Search {
   def search(

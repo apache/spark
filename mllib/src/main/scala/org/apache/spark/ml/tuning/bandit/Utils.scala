@@ -17,14 +17,9 @@
 
 package org.apache.spark.ml.tuning.bandit
 
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
-import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
-import org.apache.spark.util.random.BernoulliCellSampler
-
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
 import scala.util.Random
+
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 
 object Utils {
   /**

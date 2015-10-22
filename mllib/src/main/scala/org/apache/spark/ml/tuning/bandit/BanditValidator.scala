@@ -19,7 +19,8 @@ package org.apache.spark.ml.tuning.bandit
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
+import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.param.shared.HasMaxIter
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, _}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.ml.util.Identifiable
@@ -44,7 +45,7 @@ trait BanditValidatorParams extends ValidatorParams with HasMaxIter {
   /** @group getParam */
   final def getStepsPerPulling: Int = $(stepsPerPulling)
 
-/**
+  /**
    * Param for number of folds for cross validation.  Must be >= 2.
    * Default: 3
    * @group param
@@ -78,13 +79,32 @@ class BanditValidator(override val uid: String)
 
   def this() = this(Identifiable.randomUID("bandit validation"))
 
-  // TODO
   def transformSchema(schema: StructType): StructType = {
-    schema
+    $(estimator).transformSchema(schema)
   }
 
-  // TODO
-  def copy(extra: ParamMap): BanditValidator = ???
+  def copy(extra: ParamMap): BanditValidator = {
+    val copied = defaultCopy(extra).asInstanceOf[BanditValidator]
+    if (copied.isDefined(estimator)) {
+      copied.setEstimator(copied.getEstimator.copy(extra))
+    }
+    if (copied.isDefined(evaluator)) {
+      copied.setEvaluator(copied.getEvaluator.copy(extra))
+    }
+    copied
+  }
+
+  /** @group setParam */
+  def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
+
+  /** @group setParam */
+  def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
+
+  /** @group setParam */
+  def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
+
+  /** @group setParam */
+  def setNumFolds(value: Int): this.type = set(numFolds, value)
 
   /** @group setParam */
   def setSearchStrategy(value: Search): this.type = set(searchStrategy, value)
@@ -106,11 +126,14 @@ class BanditValidator(override val uid: String)
     val bestArms = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
       val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
-      // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       val arms = epm.map { parameter =>
-        val arm = new Arm().setMaxIter($(stepsPerPulling)).setEstimator(est).setEstimatorParamMap(parameter).setEvaluator(eval)
+        val arm = new Arm()
+          .setMaxIter($(stepsPerPulling))
+          .setEstimator(est)
+          .setEstimatorParamMap(parameter)
+          .setEvaluator(eval)
         arm
       }
 

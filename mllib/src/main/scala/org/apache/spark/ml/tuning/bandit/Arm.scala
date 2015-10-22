@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.tuning.bandit
 
-import org.apache.spark.ml.param.shared.HasMaxIter
-import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.param.shared.HasMaxIter
 import org.apache.spark.ml.param.{Param, _}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.sql.DataFrame
 
 trait ArmParams extends Params with HasMaxIter {
