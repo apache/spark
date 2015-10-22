@@ -135,10 +135,11 @@ private[r] object SQLUtils {
     val numRows = localDF.length
 
     val colArray = new Array[Array[Any]](numCols)
-    for (colNo <- 0 to (numCols - 1)) colArray.update(colNo, new Array[Any](numRows))
-
-    for (rowNo <- 0 to (numRows - 1); colNo <- 0 to (numCols - 1)) {
-      colArray(colNo).update(rowNo, localDF(rowNo).get(colNo))
+    for (colNo <- 0 until numCols) {
+      colArray(colNo) = new Array[Any](numRows)
+      for (rowNo <- 0 until numRows) {
+        colArray(colNo)(rowNo) = localDF(rowNo)(colNo)
+      }
     }
     colArray
   }
