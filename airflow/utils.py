@@ -200,7 +200,7 @@ def initdb():
         session.add(
             models.Connection(
                 conn_id='http_default', conn_type='http',
-                host='http://www.google.com'))
+                host='https://www.google.com'))
         session.commit()
 
     conn = session.query(C).filter(C.conn_id == 'mssql_default').first()

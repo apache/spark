@@ -196,6 +196,39 @@ class DagBag(object):
 
             self.file_last_changed[filepath] = dttm
 
+    @provide_session
+    def kill_zombies(self, session):
+        """
+        Fails tasks that haven't had a heartbeat in too long
+        """
+        from airflow.jobs import LocalTaskJob as LJ
+        logging.info("Finding 'running' jobs without a recent heartbeat")
+        secs = (conf.getint('scheduler', 'job_heartbeat_sec') * 3) + 120
+        limit_dttm = datetime.now() - timedelta(seconds=secs)
+        print("Failing jobs without heartbeat after {}".format(limit_dttm))
+        jobs = (
+            session
+            .query(LJ)
+            .filter(
+                LJ.state == State.RUNNING,
+                LJ.latest_heartbeat < limit_dttm)
+            .all()
+        )
+        for job in jobs:
+            ti = session.query(TaskInstance).filter_by(
+                job_id=job.id, state=State.RUNNING).first()
+            logging.info("Failing job_id '{}'".format(job.id))
+            if ti and ti.dag_id in self.dags:
+                dag = self.dags[ti.dag_id]
+                if ti.task_id in dag.task_ids:
+                    task = dag.get_task(ti.task_id)
+                    ti.task = task
+                    ti.handle_failure("{} killed as zombie".format(ti))
+                    logging.info('Marked zombie job {} as failed'.format(ti))
+            else:
+                job.state = State.FAILED
+        session.commit()
+
     def bag_dag(self, dag, parent_dag, root_dag):
         """
         Adds the DAG into the bag, recurses into sub dags.
@@ -482,19 +515,18 @@ class TaskInstance(Base):
         Index('ti_pool', pool, state, priority_weight),
     )
 
-    def __init__(self, task, execution_date, state=None, job=None):
+    def __init__(self, task, execution_date, state=None):
         self.dag_id = task.dag_id
         self.task_id = task.task_id
         self.execution_date = execution_date
-        self.state = state
         self.task = task
         self.queue = task.queue
         self.pool = task.pool
         self.priority_weight = task.priority_weight_total
         self.try_number = 1
         self.unixname = getpass.getuser()
-        if job:
-            self.job_id = job.id
+        if state:
+            self.state = state
 
     def command(
             self,
@@ -973,7 +1005,7 @@ class TaskInstance(Base):
         task_copy.dry_run()
 
 
-    def handle_failure(self, error, test_mode, context):
+    def handle_failure(self, error, test_mode=False, context=None):
         logging.exception(error)
         task = self.task
         session = settings.Session()
