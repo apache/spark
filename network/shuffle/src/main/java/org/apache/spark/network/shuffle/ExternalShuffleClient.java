@@ -22,6 +22,7 @@ import java.util.List;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +87,40 @@ public class ExternalShuffleClient extends ShuffleClient {
     clientFactory = context.createClientFactory(bootstraps);
   }
 
+  private class ConnectionListener implements BlockFetchingListener {
+
+    private final TransportClient client;
+    private final String[] blockIds;
+    private final BlockFetchingListener fetchingListener;
+
+    private int fetchSuccessCount;
+
+    public ConnectionListener(
+        TransportClient client,
+        String[] blockIds,
+        BlockFetchingListener fetchingListener) {
+      this.client = client;
+      this.blockIds = blockIds;
+      this.fetchingListener = fetchingListener;
+      fetchSuccessCount = 0;
+    }
+
+    @Override
+    public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
+      this.fetchingListener.onBlockFetchSuccess(blockId, data);
+      fetchSuccessCount += 1;
+      if (fetchSuccessCount == blockIds.length) {
+        client.close();
+      }
+    }
+
+    @Override
+    public void onBlockFetchFailure(String blockId, Throwable exception) {
+      client.close();
+      this.fetchingListener.onBlockFetchFailure(blockId, exception);
+    }
+  }
+
   @Override
   public void fetchBlocks(
       final String host,
@@ -101,8 +136,9 @@ public class ExternalShuffleClient extends ShuffleClient {
           @Override
           public void createAndStart(String[] blockIds, BlockFetchingListener listener)
               throws IOException {
-            TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId, blockIds, listener).start();
+            TransportClient client = clientFactory.createNewClient(host, port);
+            new OneForOneBlockFetcher(client, appId, execId, blockIds,
+              new ConnectionListener(client, blockIds, listener)).start();
           }
         };
 
@@ -137,9 +173,10 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       ExecutorShuffleInfo executorInfo) throws IOException {
     checkInit();
-    TransportClient client = clientFactory.createClient(host, port);
+    TransportClient client = clientFactory.createNewClient(host, port);
     byte[] registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteArray();
     client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
+    client.close();
   }
 
   @Override
