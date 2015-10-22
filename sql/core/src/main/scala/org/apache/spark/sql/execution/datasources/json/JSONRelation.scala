@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.CharArrayWriter
+import java.io.{IOException, CharArrayWriter}
 
 import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
@@ -98,7 +98,7 @@ private[sql] class JSONRelation(
     if (rddInputPaths.nonEmpty) {
       FileInputFormat.setInputPaths(job, rddInputPaths: _*)
     } else {
-      throw new RuntimeException("Input paths do not exist or are empty directories, "
+      throw new IOException("Input paths do not exist or are empty directories, "
             + "Input Paths=" + paths.mkString(","))
     }
 
