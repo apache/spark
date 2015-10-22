@@ -20,13 +20,13 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.JavaConverters._
-import scala.util.{Failure, Success}
+import scala.util.Failure
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{EventLoop, ThreadUtils}
+import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
@@ -162,16 +162,16 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       // correct "jobSet.processingStartTime".
       listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
     }
-    listenerBus.post(StreamingListenerOutputOperationStarted(
-      OutputOperationInfo(job.time, job.outputOpId, job.callSite, Some(startTime), None)))
+    job.setStartTime(startTime)
+    listenerBus.post(StreamingListenerOutputOperationStarted(job.toOutputOperationInfo))
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
   private def handleJobCompletion(job: Job, completedTime: Long) {
     val jobSet = jobSets.get(job.time)
     jobSet.handleJobCompletion(job)
-    listenerBus.post(StreamingListenerOutputOperationCompleted(
-      OutputOperationInfo(job.time, job.outputOpId, job.callSite, None, Some(completedTime))))
+    job.setEndTime(completedTime)
+    listenerBus.post(StreamingListenerOutputOperationCompleted(job.toOutputOperationInfo))
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
     if (jobSet.hasCompleted) {
       jobSets.remove(jobSet.time)

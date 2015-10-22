@@ -247,11 +247,13 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
         .setMaster("local")
         .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
         .set("spark.shuffle.compress", shuffleCompress.toString)
-        .set("spark.shuffle.memoryFraction", "0.001")
       resetSparkContext()
       sc = new SparkContext(myConf)
+      val diskBlockManager = sc.env.blockManager.diskBlockManager
       try {
-        sc.parallelize(0 until 100000).map(i => (i / 4, i)).groupByKey().collect()
+        assert(diskBlockManager.getAllFiles().isEmpty)
+        sc.parallelize(0 until 10).map(i => (i / 4, i)).groupByKey().collect()
+        assert(diskBlockManager.getAllFiles().nonEmpty)
       } catch {
         case e: Exception =>
           val errMsg = s"Failed with spark.shuffle.spill.compress=$shuffleSpillCompress," +
