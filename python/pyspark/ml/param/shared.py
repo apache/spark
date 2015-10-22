@@ -296,6 +296,33 @@ class HasOutputCol(Params):
         return self.getOrDefault(self.outputCol)
 
 
+class HasOutputCols(Params):
+    """
+    Mixin for param outputCols: output column names.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    outputCols = Param(Params._dummy(), "outputCols", "output column names")
+
+    def __init__(self):
+        super(HasOutputCols, self).__init__()
+        #: param for output column names
+        self.outputCols = Param(self, "outputCols", "output column names")
+
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        self._paramMap[self.outputCols] = value
+        return self
+
+    def getOutputCols(self):
+        """
+        Gets the value of outputCols or its default value.
+        """
+        return self.getOrDefault(self.outputCols)
+
+
 class HasNumFeatures(Params):
     """
     Mixin for param numFeatures: number of features.

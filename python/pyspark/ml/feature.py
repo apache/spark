@@ -1150,7 +1150,8 @@ class StandardScalerModel(JavaModel):
 
 
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
+class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid,
+                    HasInputCols, HasOutputCols):
     """
     .. note:: Experimental
 
@@ -1165,7 +1166,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels())
+    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels()[0])
     >>> itd = inverter.transform(td)
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
@@ -1173,9 +1174,11 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error"):
+    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
+                 inputCols=None, outputCols=None):
         """
-        __init__(self, inputCol=None, outputCol=None, handleInvalid="error")
+        __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
+                 inputCols=None, outputCols=None)
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
@@ -1184,13 +1187,20 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error"):
+    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
+                  inputCols=None, outputCols=None):
         """
-        setParams(self, inputCol=None, outputCol=None, handleInvalid="error")
+        setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
+                  inputCols=None, outputCols=None)
         Sets params for this StringIndexer.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set(**kwargs)
+        self._set(**kwargs)
+        if not self.isSet(self.inputCols):
+            self.setInputCols([inputCol])
+        if not self.isSet(self.outputCols):
+            self.setOutputCols([outputCol])
+        return self
 
     def _create_model(self, java_model):
         return StringIndexerModel(java_model)
