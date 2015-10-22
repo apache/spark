@@ -87,7 +87,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
         outputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
-        SparkEnv.createDriverEnv(conf, isLocal, listenerBus, Some(outputCommitCoordinator))
+        SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
+          SparkContext.numDriverCores(master), Some(outputCommitCoordinator))
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
