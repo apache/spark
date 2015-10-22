@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.ui.sql.{SQLMetricInfo, SparkPlanInfo}
+import org.apache.spark.ui.sql._
+import org.apache.spark.util.Utils
 
-object SparkPlanInfo {
+private[sql] object SparkPlanInfo {
 
     def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
-    //Todo correct the param
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.param.toString)
+      new SQLMetricInfo(metric.name.getOrElse(key), metric.id,
+        Utils.getFormattedClassName(metric.param))
     }
     val children = plan.children.map(fromSparkPlan)
 

@@ -19,6 +19,8 @@ package org.apache.spark.ui.sql
 
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.util.Utils
+
 import scala.collection.mutable
 
 /**
@@ -58,11 +60,9 @@ private[spark] object SparkPlanGraph {
       nodeIdGenerator: AtomicLong,
       nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
-    //TODO correct the metric Param
     val metrics = planInfo.metrics.map { metric =>
       SQLPlanMetric(metric.name, metric.accumulatorId,
-        LongSQLMetricParam.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
-      // metric.metricParam.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
+        SQLMetrics.getMetricParam(metric.metricParam))
     }
     val node = SparkPlanGraphNode(
       nodeIdGenerator.getAndIncrement(), planInfo.nodeName, planInfo.simpleString, metrics)
