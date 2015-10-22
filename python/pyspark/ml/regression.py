@@ -18,7 +18,6 @@
 from pyspark import since
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.ml.param import Params
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
 
@@ -299,7 +298,8 @@ class TreeRegressorParams(Params):
     # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
-                     "Supported options: " + ", ".join(self.supportedImpurities))
+                     "Supported options: " +
+                     ", ".join(supportedImpurities))
 
     def __init__(self):
         super(TreeRegressorParams, self).__init__()
@@ -333,7 +333,7 @@ class RandomForestParams(TreeEnsembleParams):
     featureSubsetStrategy = \
         Param(Params._dummy(), "featureSubsetStrategy",
               "The number of features to consider for splits at each tree node. Supported " +
-              "options: " + ", ".join(RandomForestParams.supportedFeatureSubsetStrategies))
+              "options: " + ", ".join(supportedFeatureSubsetStrategies))
 
     def __init__(self):
         super(RandomForestParams, self).__init__()
@@ -343,7 +343,7 @@ class RandomForestParams(TreeEnsembleParams):
         self.featureSubsetStrategy = \
             Param(self, "featureSubsetStrategy",
                   "The number of features to consider for splits at each tree node. Supported " +
-                  "options: " + ", ".join(RandomForestParams.supportedFeatureSubsetStrategies))
+                  "options: " + ", ".join(self.supportedFeatureSubsetStrategies))
 
     def setNumTrees(self, value):
         """
@@ -381,7 +381,7 @@ class GBTParams(TreeEnsembleParams):
 
 @inherit_doc
 class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            DecisionTreeParams, HasCheckpointInterval):
+                            DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for regression.
@@ -407,11 +407,6 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
-    impurity = Param(Params._dummy(), "impurity",
-                     "Criterion used for information gain calculation (case-insensitive). " +
-                     "Supported options: " + ", ".join(TreeRegressorParams.supportedImpurities))
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
@@ -424,11 +419,6 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid)
-        #: param for Criterion used for information gain calculation (case-insensitive).
-        self.impurity = \
-            Param(self, "impurity",
-                  "Criterion used for information gain calculation (case-insensitive). " +
-                  "Supported options: " + ", ".join(TreeRegressorParams.supportedImpurities))
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance")
@@ -452,21 +442,6 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
     def _create_model(self, java_model):
         return DecisionTreeRegressionModel(java_model)
-
-    @since("1.4.0")
-    def setImpurity(self, value):
-        """
-        Sets the value of :py:attr:`impurity`.
-        """
-        self._paramMap[self.impurity] = value
-        return self
-
-    @since("1.4.0")
-    def getImpurity(self):
-        """
-        Gets the value of impurity or its default value.
-        """
-        return self.getOrDefault(self.impurity)
 
 
 @inherit_doc
@@ -545,7 +520,6 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     .. versionadded:: 1.4.0
     """
 
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
@@ -601,7 +575,7 @@ class RandomForestRegressionModel(TreeEnsembleModels):
 
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize):
+                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for regression.
