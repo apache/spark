@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.pmml._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
 private[clustering] case class TestRow(features: Vector)
@@ -105,5 +106,14 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(clusters.size === k)
     assert(clusters === Set(0, 1, 2, 3, 4))
     assert(model.computeCost(dataset) < 0.1)
+  }
+
+  test("pmml export") {
+    val predictionColName = "kmeans_prediction"
+    val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
+    val model = kmeans.fit(dataset)
+    val pmmlStr = model.toPMML()
+    val pmmlModel = PMMLUtils.loadFromString(pmmlStr)
+    assert(pmmlModel.getDataDictionary.getNumberOfFields === 3)
   }
 }
