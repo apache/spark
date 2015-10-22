@@ -163,7 +163,7 @@ public class TaskMemoryManager {
       }
       return null;
     }
-    final MemoryBlock page = memoryManager.allocateMemoryBlock(size);
+    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(size);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
@@ -187,7 +187,7 @@ public class TaskMemoryManager {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
     long pageSize = page.size();
-    memoryManager.releaseMemoryBlock(page);
+    memoryManager.tungstenMemoryAllocator().free(page);
     releaseExecutionMemory(pageSize);
   }
 
@@ -202,7 +202,7 @@ public class TaskMemoryManager {
    */
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
     assert(size > 0) : "Size must be positive, but got " + size;
-    final MemoryBlock memory = memoryManager.allocateMemoryBlock(size);
+    final MemoryBlock memory = memoryManager.tungstenMemoryAllocator().allocate(size);
     synchronized(allocatedNonPageMemory) {
       allocatedNonPageMemory.add(memory);
     }
@@ -214,7 +214,7 @@ public class TaskMemoryManager {
    */
   public void free(MemoryBlock memory) {
     assert (memory.pageNumber == -1) : "Should call freePage() for pages, not free()";
-    memoryManager.releaseMemoryBlock(memory);
+    memoryManager.tungstenMemoryAllocator().free(memory);
     synchronized(allocatedNonPageMemory) {
       final boolean wasAlreadyRemoved = !allocatedNonPageMemory.remove(memory);
       assert (!wasAlreadyRemoved) : "Called free() on memory that was already freed!";
@@ -312,7 +312,7 @@ public class TaskMemoryManager {
         freedBytes += memory.size();
         // We don't call free() here because that calls Set.remove, which would lead to a
         // ConcurrentModificationException here.
-        memoryManager.releaseMemoryBlock(memory);
+        memoryManager.tungstenMemoryAllocator().free(memory);
         iter.remove();
       }
     }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.memory
 
-import java.lang.ref.WeakReference
-import java.util
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -27,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{SparkException, TaskContext, SparkConf, Logging}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.memory.{MemoryAllocator, MemoryBlock}
+import org.apache.spark.unsafe.memory.MemoryAllocator
 
 /**
  * An abstract memory manager that enforces how memory is shared between execution and storage.
@@ -313,72 +311,6 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
    * Allocates memory for use by Unsafe/Tungsten code. Exposed to enable untracked allocations of
    * temporary data structures.
    */
-  final val tungstenMemoryAllocator: MemoryAllocator =
+  private[memory] final val tungstenMemoryAllocator: MemoryAllocator =
     if (tungstenMemoryIsAllocatedInHeap) MemoryAllocator.HEAP else MemoryAllocator.UNSAFE
-
-  private val POOLING_THRESHOLD_BYTES: Int = 1024 * 1024
-
-  /**
-   * Returns true if allocations of the given size should go through the pooling mechanism and
-   * false otherwise.
-   */
-  private def shouldPool(size: Long): Boolean = {
-    // Very small allocations are less likely to benefit from pooling.
-    // At some point, we should explore supporting pooling for off-heap memory, but for now we'll
-    // ignore that case in the interest of simplicity.
-    size >= POOLING_THRESHOLD_BYTES && tungstenMemoryIsAllocatedInHeap
-  }
-
-  @GuardedBy("this")
-  private val bufferPoolsBySize: util.Map[Long, util.LinkedList[WeakReference[MemoryBlock]]] =
-    new util.HashMap[Long, util.LinkedList[WeakReference[MemoryBlock]]]
-
-  /**
-   * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed
-   * to be zeroed out (call `zero()` on the result if this is necessary). This method does
-   * not integrate with the memory bookkeeping system, so callers (i.e. TaskMemoryManager) should
-   * call those methods at appropirate times.
-   */
-  @throws(classOf[OutOfMemoryError])
-  private[memory] final def allocateMemoryBlock(size: Long): MemoryBlock = {
-    if (shouldPool(size)) {
-      this synchronized {
-        val pool: util.LinkedList[WeakReference[MemoryBlock]] = bufferPoolsBySize.get(size)
-        if (pool != null) {
-          while (!pool.isEmpty) {
-            val blockReference: WeakReference[MemoryBlock] = pool.pop
-            val memory: MemoryBlock = blockReference.get
-            if (memory != null) {
-              assert(memory.size == size)
-              return memory
-            }
-          }
-          bufferPoolsBySize.remove(size)
-        }
-      }
-      tungstenMemoryAllocator.allocate(size)
-    } else {
-      tungstenMemoryAllocator.allocate(size)
-    }
-  }
-
-  /**
-   * Releases the given memory block, either freeing it immediately or storing it in a pool for
-   * re-use by other tasks.
-   */
-  private[memory] final def releaseMemoryBlock(memory: MemoryBlock) {
-    val size: Long = memory.size
-    if (shouldPool(size)) {
-      this synchronized {
-        var pool: util.LinkedList[WeakReference[MemoryBlock]] = bufferPoolsBySize.get(size)
-        if (pool == null) {
-          pool = new util.LinkedList[WeakReference[MemoryBlock]]
-          bufferPoolsBySize.put(size, pool)
-        }
-        pool.add(new WeakReference[MemoryBlock](memory))
-      }
-    } else {
-      tungstenMemoryAllocator.free(memory)
-    }
-  }
 }
