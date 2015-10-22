@@ -23,6 +23,7 @@ import java.util.*;
 
 import scala.*;
 import scala.collection.Iterator;
+import scala.collection.Seq;
 import scala.runtime.AbstractFunction1;
 
 import com.google.common.collect.Iterators;
@@ -48,6 +49,7 @@ import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZ4CompressionCodec;
 import org.apache.spark.io.LZFCompressionCodec;
 import org.apache.spark.io.SnappyCompressionCodec;
+import org.apache.spark.shuffle.ShuffleOutputCoordinator;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.network.util.LimitedInputStream;
@@ -71,7 +73,7 @@ public class UnsafeShuffleWriterSuite {
   File mergedOutputFile;
   File tempDir;
   long[] partitionSizesInMergedFile;
-  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  final LinkedList<File> tmpShuffleFilesCreated = new LinkedList<File>();
   SparkConf conf;
   final Serializer serializer = new KryoSerializer(new SparkConf());
   TaskMetrics taskMetrics;
@@ -109,8 +111,10 @@ public class UnsafeShuffleWriterSuite {
     MockitoAnnotations.initMocks(this);
     tempDir = Utils.createTempDir("test", "test");
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
+    // the ShuffleOutputCoordinator requires that this file does not exist
+    mergedOutputFile.delete();
     partitionSizesInMergedFile = null;
-    spillFilesCreated.clear();
+    tmpShuffleFilesCreated.clear();
     conf = new SparkConf().set("spark.buffer.pageSize", "128m");
     taskMetrics = new TaskMetrics();
 
@@ -169,11 +173,11 @@ public class UnsafeShuffleWriterSuite {
     );
 
     when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
-    doAnswer(new Answer<Void>() {
+    doAnswer(new Answer<File>() {
       @Override
-      public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public File answer(InvocationOnMock invocationOnMock) throws Throwable {
         partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
-        return null;
+        return diskBlockManager.createTempShuffleBlock()._2();
       }
     }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), any(long[].class));
 
@@ -184,10 +188,22 @@ public class UnsafeShuffleWriterSuite {
           InvocationOnMock invocationOnMock) throws Throwable {
           TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
           File file = File.createTempFile("spillFile", ".spill", tempDir);
-          spillFilesCreated.add(file);
+          tmpShuffleFilesCreated.add(file);
           return Tuple2$.MODULE$.apply(blockId, file);
         }
       });
+
+    when(diskBlockManager.getFile(any(BlockId.class))).thenAnswer(
+      new Answer<File>() {
+        @Override
+        public File answer(InvocationOnMock invocationOnMock) throws Throwable {
+          File f = File.createTempFile("shuffleFile",".index", tempDir);
+          // the ShuffleOutputCoordinator requires that this file does not exist
+          f.delete();
+          return f;
+        }
+      }
+    );
 
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
     when(taskContext.internalMetricsToAccumulators()).thenReturn(null);
@@ -212,7 +228,7 @@ public class UnsafeShuffleWriterSuite {
   }
 
   private void assertSpillFilesWereCleanedUp() {
-    for (File spillFile : spillFilesCreated) {
+    for (File spillFile : tmpShuffleFilesCreated) {
       assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
         spillFile.exists());
     }
@@ -274,8 +290,9 @@ public class UnsafeShuffleWriterSuite {
   @Test
   public void writeEmptyIterator() throws Exception {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
+    Seq<Tuple2<File, File>> files = writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
     assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
@@ -294,8 +311,9 @@ public class UnsafeShuffleWriterSuite {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(dataToWrite.iterator());
+    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
 
@@ -339,11 +357,13 @@ public class UnsafeShuffleWriterSuite {
     writer.forceSorterToSpill();
     writer.insertRecordIntoSorter(dataToWrite.get(4));
     writer.insertRecordIntoSorter(dataToWrite.get(5));
-    writer.closeAndWriteOutput();
+    Seq<Tuple2<File, File>> files = writer.closeAndWriteOutput();
     final Option<MapStatus> mapStatus = writer.stop(true);
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
-    assertEquals(2, spillFilesCreated.size());
+    // this includes the tmp index & data files, before the output is committed
+    assertEquals(4, tmpShuffleFilesCreated.size());
 
     long sumOfPartitionSizes = 0;
     for (long size: partitionSizesInMergedFile) {
@@ -416,10 +436,12 @@ public class UnsafeShuffleWriterSuite {
     for (int i = 0; i < 128 + 1; i++) {
       dataToWrite.add(new Tuple2<Object, Object>(i, bigByteArray));
     }
-    writer.write(dataToWrite.iterator());
+    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
     verify(shuffleMemoryManager, times(5)).tryToAcquire(anyLong());
-    assertEquals(2, spillFilesCreated.size());
+    // this includes the tmp index & data files, before the output is committed
+    assertEquals(4, tmpShuffleFilesCreated.size());
     writer.stop(true);
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files);
     readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
@@ -442,10 +464,12 @@ public class UnsafeShuffleWriterSuite {
     for (int i = 0; i < UnsafeShuffleWriter.INITIAL_SORT_BUFFER_SIZE; i++) {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
-    writer.write(dataToWrite.iterator());
+    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
     verify(shuffleMemoryManager, times(5)).tryToAcquire(anyLong());
-    assertEquals(2, spillFilesCreated.size());
+    // this includes the tmp index & data files, before the output is committed
+    assertEquals(4, tmpShuffleFilesCreated.size());
     writer.stop(true);
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files);
     readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
@@ -464,8 +488,9 @@ public class UnsafeShuffleWriterSuite {
     final byte[] bytes = new byte[(int) (ShuffleExternalSorter.DISK_WRITE_BUFFER_SIZE * 2.5)];
     new Random(42).nextBytes(bytes);
     dataToWrite.add(new Tuple2<Object, Object>(1, ByteBuffer.wrap(bytes)));
-    writer.write(dataToWrite.iterator());
+    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
     writer.stop(true);
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files);
     assertEquals(
       HashMultiset.create(dataToWrite),
       HashMultiset.create(readRecordsFromFile()));
@@ -485,8 +510,9 @@ public class UnsafeShuffleWriterSuite {
     final byte[] exceedsMaxRecordSize = new byte[writer.maxRecordSizeBytes() + 1];
     new Random(42).nextBytes(exceedsMaxRecordSize);
     dataToWrite.add(new Tuple2<Object, Object>(3, ByteBuffer.wrap(exceedsMaxRecordSize)));
-    writer.write(dataToWrite.iterator());
+    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
     writer.stop(true);
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files);
     assertEquals(
       HashMultiset.create(dataToWrite),
       HashMultiset.create(readRecordsFromFile()));

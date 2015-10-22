@@ -166,8 +166,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * This convenience method should only be called in test code.
    */
   @VisibleForTesting
-  public void write(Iterator<Product2<K, V>> records) throws IOException {
-    write(JavaConverters.asScalaIteratorConverter(records).asScala());
+  public Seq<Tuple2<File, File>> write(Iterator<Product2<K, V>> records) throws IOException {
+    return write(JavaConverters.asScalaIteratorConverter(records).asScala());
   }
 
   @Override
