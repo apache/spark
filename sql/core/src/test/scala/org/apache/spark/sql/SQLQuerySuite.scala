@@ -729,39 +729,55 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  private[this] def checkAnswerWithTol(dataFrame: DataFrame,
+      expectedAnswer: Array[Double],
+      absTol: Double = 0.0): Unit = {
+
+    val sparkAnswer = dataFrame.first().toSeq
+    require(sparkAnswer.length == expectedAnswer.length,
+      s"spark and expected answer lengths should" +
+        s" be equal: ${sparkAnswer.length} != ${expectedAnswer.length}")
+
+    sparkAnswer.zip(expectedAnswer).foreach {
+      case (spark: Double, expected: Double) =>
+        assert(math.abs(spark - expected) < absTol,
+          s"actual answer $spark not within $absTol of correct answer $expected")
+    }
+  }
+
   test("var_samp") {
-    checkAnswer(
-      sql("SELECT VAR_SAMP(a) FROM testData2"),
-      Row(4/5.0)
-    )
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT VAR_SAMP(a) FROM testData2")
+    val expectedAnswer = Array(4.0 / 5.0)
+    checkAnswerWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
   test("variance") {
-    checkAnswer(
-      sql("SELECT VARIANCE(a) FROM testData2"),
-      Row(4/5.0)
-    )
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT VARIANCE(a) FROM testData2")
+    val expectedAnswer = Array(4.0 / 5.0)
+    checkAnswerWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
   test("var_pop") {
-    checkAnswer(
-      sql("SELECT VAR_POP(a) FROM testData2"),
-      Row(4/6.0)
-    )
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT VAR_POP(a) FROM testData2")
+    val expectedAnswer = Array(4.0 / 6.0)
+    checkAnswerWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
   test("skewness") {
-    checkAnswer(
-      sql("SELECT skewness(a) FROM testData2"),
-      Row(0.0)
-    )
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT skewness(a) FROM testData2")
+    val expectedAnswer = Array(0.0)
+    checkAnswerWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
   test("kurtosis") {
-    checkAnswer(
-      sql("SELECT kurtosis(a) FROM testData2"),
-      Row(-1.5)
-    )
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT kurtosis(a) FROM testData2")
+    val expectedAnswer = Array(-1.5)
+    checkAnswerWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
   test("stddev agg") {
