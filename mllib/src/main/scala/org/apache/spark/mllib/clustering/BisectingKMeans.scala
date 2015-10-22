@@ -19,7 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.{Map, mutable}
 
-import breeze.linalg.{SparseVector => BSV, Vector => BV, any => breezeAny, norm => breezeNorm}
+import breeze.linalg
+  .{SparseVector => BSV, Vector => BV, any => breezeAny, norm => breezeNorm, sum => breezeSum}
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Since
@@ -393,9 +394,7 @@ private[clustering] object BisectingKMeans {
       stats = eachStats.toMap
 
       totalStd = stats.map { case (idx, (sum, n, sumOfSquares)) =>
-        sum.toArray.zip(sumOfSquares.toArray).map { case (s, ss) =>
-          math.pow(ss / n - math.pow(s / n, 2), 2.0)
-        }.sum
+        breezeSum((sumOfSquares :/ n) :- breezeNorm(sum :/ n, 2.0))
       }.sum
       relativeError = math.abs(oldTotalStd - totalStd) / totalStd
       oldTotalStd = totalStd
