@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.MutablePair
@@ -310,4 +312,81 @@ case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPl
   def children: Seq[SparkPlan] = child :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = child.execute()
+}
+
+/**
+ * Applies the given function to each input row and encodes the result.
+ */
+case class MapPartitions[T, U](
+    func: Iterator[T] => Iterator[U],
+    tEncoder: Encoder[T],
+    uEncoder: Encoder[U],
+    output: Seq[Attribute],
+    child: SparkPlan) extends UnaryNode {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitions { iter =>
+      val tBoundEncoder = tEncoder.bind(child.output)
+      func(iter.map(tBoundEncoder.fromRow)).map(uEncoder.toRow)
+    }
+  }
+}
+
+/**
+ * Applies the given function to each input row, appending the encoded result at the end of the row.
+ */
+case class AppendColumns[T, U](
+    func: T => U,
+    tEncoder: Encoder[T],
+    uEncoder: Encoder[U],
+    newColumns: Seq[Attribute],
+    child: SparkPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output ++ newColumns
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitions { iter =>
+      val tBoundEncoder = tEncoder.bind(child.output)
+      val combiner = GenerateUnsafeRowJoiner.create(tEncoder.schema, uEncoder.schema)
+      iter.map { row =>
+        val newColumns = uEncoder.toRow(func(tBoundEncoder.fromRow(row)))
+        combiner.join(row.asInstanceOf[UnsafeRow], newColumns.asInstanceOf[UnsafeRow]): InternalRow
+      }
+    }
+  }
+}
+
+/**
+ * Groups the input rows together and calls the function with each group and an iterator containing
+ * all elements in the group.  The result of this function is encoded and flattened before
+ * being output.
+ */
+case class MapGroups[K, T, U](
+    func: (K, Iterator[T]) => Iterator[U],
+    kEncoder: Encoder[K],
+    tEncoder: Encoder[T],
+    uEncoder: Encoder[U],
+    groupingAttributes: Seq[Attribute],
+    output: Seq[Attribute],
+    child: SparkPlan) extends UnaryNode {
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(groupingAttributes) :: Nil
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitions { iter =>
+      val grouped = GroupedIterator(iter, groupingAttributes, child.output)
+      val groupKeyEncoder = kEncoder.bind(groupingAttributes)
+
+      grouped.flatMap { case (key, rowIter) =>
+        val result = func(
+          groupKeyEncoder.fromRow(key),
+          rowIter.map(tEncoder.fromRow))
+        result.map(uEncoder.toRow)
+      }
+    }
+  }
 }

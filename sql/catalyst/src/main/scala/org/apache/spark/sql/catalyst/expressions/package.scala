@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * A set of classes that can be used to represent trees of relational expressions.  A key goal of
@@ -79,5 +80,16 @@ package object expressions  {
 
     /** Uses the given row to store the output of the projection. */
     def target(row: MutableRow): MutableProjection
+  }
+
+
+  /**
+   * Helper functions for working with `Seq[Attribute]`.
+   */
+  implicit class AttributeSeq(attrs: Seq[Attribute]) {
+    /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
+    def toStructType: StructType = {
+      StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable)))
+    }
   }
 }
