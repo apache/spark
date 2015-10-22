@@ -166,9 +166,9 @@ class Analyzer(
         if g.child.resolved && g.aggregations.exists(_.isInstanceOf[UnresolvedAlias]) =>
         g.withNewAggs(assignAliases(g.aggregations))
 
-      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregate, child)
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child)
         if child.resolved && groupByExprs.exists(_.isInstanceOf[UnresolvedAlias]) =>
-        Pivot(assignAliases(groupByExprs), pivotColumn, pivotValues, aggregate, child)
+        Pivot(assignAliases(groupByExprs), pivotColumn, pivotValues, aggregates, child)
 
       case Project(projectList, child)
         if child.resolved && projectList.exists(_.isInstanceOf[UnresolvedAlias]) =>
@@ -256,21 +256,31 @@ class Analyzer(
   object ResolvePivot extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: Pivot if !p.childrenResolved => p
-      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregate, child) => aggregate match {
-        case u: UnaryExpression if u.isInstanceOf[AggregateExpression] =>
-          val pivotAggregates = pivotValues.map { value =>
-            val filteredAggregate = u.withNewChildren(Seq(
-              If(EqualTo(pivotColumn, Literal(value)), u.child, Literal(null))
-            ))
-            Alias(filteredAggregate, value)()
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
+        val singleAgg = aggregates.size == 1
+        val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap{ value =>
+          aggregates.map{ aggregate =>
+            val filteredAggregate = aggregate.transformDown{
+              case u: UnaryExpression if u.isInstanceOf[AggregateExpression] =>
+                u.withNewChildren(Seq(
+                  If(EqualTo(pivotColumn, Literal(value)), u.child, Literal(null))
+                ))
+              case other: AggregateExpression =>
+                throw new AnalysisException(
+                  s"Pivot does not support non unary aggregate expressions, found $other")
+            }
+            if(filteredAggregate.fastEquals(aggregate))
+              throw new AnalysisException(
+                s"Unary aggregate expression required for pivot, found '$aggregate'")
+            val name = if(singleAgg) value else value + " " + aggregate.prettyString
+            Alias(filteredAggregate, name)()
           }
-          val newGroupByExprs = groupByExprs.map {
-            case UnresolvedAlias(e) => e
-            case e => e
-          }
-          Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
-        case unknown => throw new AnalysisException(s"$unknown is not an aggregate expression")
-      }
+        }
+        val newGroupByExprs = groupByExprs.map {
+          case UnresolvedAlias(e) => e
+          case e => e
+        }
+        Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
     }
   }
 

@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
+//import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFramePivotSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class DataFramePivotSuite extends QueryTest with SharedSQLContext{
+  import testImplicits._
 
   test("pivot courses") {
     checkAnswer(
@@ -39,4 +38,33 @@ class DataFramePivotSuite extends QueryTest {
     )
   }
 
+  test("pivot courses groupBy") {
+    checkAnswer(
+      courseSales.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings")),
+      Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("pivot year groupBy") {
+    checkAnswer(
+      courseSales.groupBy($"course").pivot($"year", "2012", "2013").agg(sum($"earnings")),
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("pivot courses groupBy multiple") {
+    checkAnswer(
+      courseSales.groupBy($"year").pivot($"course", "dotNET", "Java")
+        .agg(sum($"earnings"), avg($"earnings")),
+      Row(2012, 15000.0, 7500.0, 20000.0, 20000.0) ::
+        Row(2013, 48000.0, 48000.0, 30000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("pivot year groupBy with strings") {
+    checkAnswer(
+      courseSales.groupBy("course").pivot("year", "2012", "2013").sum("earnings"),
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
+    )
+  }
 }

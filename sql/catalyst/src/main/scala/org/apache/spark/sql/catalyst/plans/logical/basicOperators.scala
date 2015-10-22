@@ -379,10 +379,14 @@ case class Pivot(
     groupByExprs: Seq[NamedExpression],
     pivotColumn: Expression,
     pivotValues: Seq[String],
-    aggregate: Expression,
+    aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] =
-    groupByExprs.map(_.toAttribute) ++ pivotValues.map(AttributeReference(_, aggregate.dataType)())
+  override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
+    case aggregate :: Nil => pivotValues.map(AttributeReference(_, aggregate.dataType)())
+    case _ => pivotValues.flatMap{ value =>
+      aggregates.map(agg => AttributeReference(value + " " + agg.prettyString, agg.dataType)())
+    }
+  }
 }
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {

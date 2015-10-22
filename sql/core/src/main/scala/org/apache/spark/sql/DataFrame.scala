@@ -951,7 +951,7 @@ class DataFrame private[sql](
    * @param aggregate Aggregate expression to preform for each combination of groupBy and
    *                  pivotValues.
    * @group dfops
-   * @since 1.5.0
+   * @since 1.6.0
    */
   def pivot(
       groupBy: Seq[Column],
@@ -969,7 +969,7 @@ class DataFrame private[sql](
     }
 
     new DataFrame(sqlContext,
-      Pivot(aliasedGroupBy, pivotColumn.expr, pivotValues, aggregate.expr, this.logicalPlan))
+      Pivot(aliasedGroupBy, pivotColumn.expr, pivotValues, Seq(aggregate.expr), this.logicalPlan))
   }
 
   /**

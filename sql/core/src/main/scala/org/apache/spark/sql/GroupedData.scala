@@ -23,7 +23,7 @@ import scala.language.implicitConversions
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
+import org.apache.spark.sql.catalyst.plans.logical.{Pivot, Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
 
 /**
@@ -34,7 +34,7 @@ private[sql] object GroupedData {
       df: DataFrame,
       groupingExprs: Seq[Expression],
       groupType: GroupType): GroupedData = {
-    new GroupedData(df, groupingExprs, groupType: GroupType)
+    new GroupedData(df, groupingExprs, groupType)
   }
 
   /**
@@ -56,6 +56,11 @@ private[sql] object GroupedData {
    * To indicate it's the ROLLUP
    */
   private[sql] object RollupType extends GroupType
+
+  /**
+   * To indicate it's the PIVOT
+   */
+  private[sql] case class PivotType(pivotCol: Expression, values: Seq[String]) extends GroupType
 }
 
 /**
@@ -77,14 +82,8 @@ class GroupedData protected[sql](
       aggExprs
     }
 
-    val aliasedAgg = aggregates.map {
-      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-      // make it a NamedExpression.
-      case u: UnresolvedAttribute => UnresolvedAlias(u)
-      case expr: NamedExpression => expr
-      case expr: Expression => Alias(expr, expr.prettyString)()
-    }
+    val aliasedAgg = aggregates.map(alias)
+
     groupType match {
       case GroupedData.GroupByType =>
         DataFrame(
@@ -95,7 +94,20 @@ class GroupedData protected[sql](
       case GroupedData.CubeType =>
         DataFrame(
           df.sqlContext, Cube(groupingExprs, df.logicalPlan, aliasedAgg))
+      case GroupedData.PivotType(pivotCol, values) =>
+        val aliasedGrps = groupingExprs.map(alias)
+        DataFrame(
+          df.sqlContext, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
     }
+  }
+
+  // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+  // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+  // make it a NamedExpression.
+  private[this] def alias(expr: Expression): NamedExpression = expr match {
+    case u: UnresolvedAttribute => UnresolvedAlias(u)
+    case expr: NamedExpression => expr
+    case expr: Expression => Alias(expr, expr.prettyString)()
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => Expression)
@@ -332,5 +344,44 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Sum)
+  }
+
+  /**
+   * (Scala-specific) Pivots a column of the current [[DataFrame]] and preform the specified
+   * aggregation.
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column.
+   *   df.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings"))
+   * }}}
+   * @param pivotColumn Column to pivot
+   * @param values Values of pivotColumn that will be translated to columns in the output data
+   *                    frame.
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def pivot(pivotColumn: Column, values: String*): GroupedData = groupType match {
+    case _: GroupedData.PivotType =>
+      throw new UnsupportedOperationException("repeated pivots are not supported")
+    case GroupedData.GroupByType =>
+      new GroupedData(df, groupingExprs, GroupedData.PivotType(pivotColumn.expr, values.toSeq))
+    case _ =>
+      throw new UnsupportedOperationException("pivot is only supported after a groupBy")
+  }
+
+  /**
+   * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column.
+   *   df.groupBy("year").pivot("course", "dotNET", "Java").sum("earnings")
+   * }}}
+   * @param pivotColumn Column to pivot
+   * @param values Values of pivotColumn that will be translated to columns in the output data
+   *                    frame.
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def pivot(pivotColumn: String, values: String*): GroupedData = {
+    val resolvedPivotColumn = Column(df.resolve(pivotColumn))
+    pivot(resolvedPivotColumn, values: _*)
   }
 }
