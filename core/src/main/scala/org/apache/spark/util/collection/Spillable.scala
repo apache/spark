@@ -106,7 +106,8 @@ private[spark] trait Spillable[C] extends Logging {
    */
   private def releaseMemoryForThisThread(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
-    memoryManager.release(myMemoryThreshold - initialMemoryThreshold, TaskContext.get.taskAttemptId())
+    memoryManager.release(
+      myMemoryThreshold - initialMemoryThreshold, TaskContext.get.taskAttemptId())
     myMemoryThreshold = initialMemoryThreshold
   }
 
