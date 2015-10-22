@@ -32,10 +32,19 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
  *
  * In this context, execution memory refers to that used for computation in shuffles, joins,
  * sorts and aggregations, while storage memory refers to that used for caching and propagating
- * internal data across the cluster. There exists one of these per JVM.
+ * internal data across the cluster. There exists one MemoryManager per JVM.
+ *
+ * The MemoryManager abstract base class itself implements policies for sharing execution memory
+ * between tasks; it tries to ensure that each task gets a reasonable share of memory, instead of
+ * some task ramping up to a large amount first and then causing others to spill to disk repeatedly.
+ * If there are N tasks, it ensures that each task can acquire at least 1 / 2N of the memory
+ * before it has to spill, and at most 1 / N. Because N varies dynamically, we keep track of the
+ * set of active tasks and redo the calculations of 1 / 2N and 1 / N in waiting tasks whenever
+ * this set changes. This is all done by synchronizing access to mutable state and using wait() and
+ * notifyAll() to signal changes to callers.
  */
-// TODO(josh) pass in numCores
 private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) extends Logging {
+  // TODO(josh) pass in numCores
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
@@ -162,22 +171,8 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
     _storageMemoryUsed
   }
 
-  // -- The code formerly known as ShuffleMemoryManager --------------------------------------------
-
-  /*
-   * Allocates a pool of memory to tasks for use in shuffle operations. Each disk-spilling
-   * collection (ExternalAppendOnlyMap or ExternalSorter) used by these tasks can acquire memory
-   * from this pool and release it as it spills data out. When a task ends, all its memory will be
-   * released by the Executor.
-   *
-   * This class tries to ensure that each task gets a reasonable share of memory, instead of some
-   * task ramping up to a large amount first and then causing others to spill to disk repeatedly.
-   * If there are N tasks, it ensures that each tasks can acquire at least 1 / 2N of the memory
-   * before it has to spill, and at most 1 / N. Because N varies dynamically, we keep track of the
-   * set of active tasks and redo the calculations of 1 / 2N and 1 / N in waiting tasks whenever
-   * this set changes. This is all done by synchronizing access to `memoryManager` to mutate state
-   * and using wait() and notifyAll() to signal changes.
-   */
+  // -- Policies for arbitrating execution memory across tasks -------------------------------------
+  // Prior to Spark 1.6, these policies were implemented in the ShuffleMemoryManager.
 
   /**
    * Sets the page size, in bytes.
@@ -196,7 +191,6 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
     val default = math.min(maxPageSize, math.max(minPageSize, size))
     conf.getSizeAsBytes("spark.buffer.pageSize", default)
   }
-
 
   private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
 

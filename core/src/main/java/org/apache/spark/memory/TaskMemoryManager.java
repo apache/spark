@@ -117,7 +117,6 @@ public class TaskMemoryManager {
 
   /**
    * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return number of bytes successfully granted (<= N).
    */
   public long acquireExecutionMemory(long size) {
