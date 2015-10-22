@@ -1812,6 +1812,10 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             model.extra = json.dumps(extra)
 
     @classmethod
+    def alert_fernet_key(cls):
+        return not conf.has_option('core', 'fernet_key')
+
+    @classmethod
     def is_secure(self):
         """
         Used to display a message in the Connection list view making it clear

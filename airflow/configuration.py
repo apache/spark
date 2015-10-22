@@ -398,21 +398,3 @@ def test_mode():
 
 conf = ConfigParserWithDefaults(defaults)
 conf.read(AIRFLOW_CONFIG)
-if 'cryptography' in sys.modules and not conf.has_option('core', 'fernet_key'):
-    logging.warning(textwrap.dedent("""
-
-        Your system supports encrypted passwords for Airflow connections but is
-        currently storing them in plaintext! To turn on encryption, add a
-        "fernet_key" option to the "core" section of your airflow.cfg file,
-        like this:
-
-            [core]
-            fernet_key = <YOUR FERNET KEY>
-
-        Your airflow.cfg file is located at: {cfg}.
-        If you need to generate a fernet key, you can run this code:
-
-            from airflow.configuration import generate_fernet_key
-            generate_fernet_key()
-
-        """.format(cfg=AIRFLOW_CONFIG)))
