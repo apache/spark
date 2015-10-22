@@ -132,13 +132,15 @@ private[r] object SQLUtils {
   def dfToCols(df: DataFrame): Array[Array[Any]] = {
     val localDF: Array[Row] = df.collect()
     val numCols = df.columns.length
+    val numRows = localDF.length
 
-    // result is Array[Array[Any]]
-    (0 until numCols).map { colIdx =>
-      localDF.map { row =>
-        row(colIdx)
-      }
-    }.toArray
+    val colArray = new Array[Array[Any]](numCols)
+    for (colNo <- 0 to (numCols - 1)) colArray.update(colNo, new Array[Any](numRows))
+
+    for (rowNo <- 0 to (numRows - 1); colNo <- 0 to (numCols - 1)) {
+      colArray(colNo).update(rowNo, localDF(rowNo).get(colNo))
+    }
+    colArray
   }
 
   def saveMode(mode: String): SaveMode = {
