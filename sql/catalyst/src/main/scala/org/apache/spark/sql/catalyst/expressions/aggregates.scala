@@ -993,53 +993,13 @@ case class StddevFunction(
 }
 
 // placeholder
-abstract class CentralMomentAgg1(child: Expression)
-  extends UnaryExpression with PartialAggregate1 {
+case class Kurtosis(child: Expression) extends UnaryExpression with AggregateExpression {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
-  override def dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(precision, scale) =>
-      // Add 4 digits after decimal point, like Hive
-      DecimalType.bounded(precision + 4, scale + 4)
-    case _ =>
-      DoubleType
-  }
+  override def dataType: DoubleType.type = DoubleType
 
-  override def asPartial: SplitEvaluation = {
-    child.dataType match {
-      case DecimalType.Fixed(precision, scale) =>
-        val partialSum = Alias(Sum(child), "PartialSum")()
-        val partialCount = Alias(Count(child), "PartialCount")()
-
-        // partialSum already increase the precision by 10
-        val castedSum = Cast(Sum(partialSum.toAttribute), partialSum.dataType)
-        val castedCount = Cast(Sum(partialCount.toAttribute), partialSum.dataType)
-        SplitEvaluation(
-          Cast(Divide(castedSum, castedCount), dataType),
-          partialCount :: partialSum :: Nil)
-
-      case _ =>
-        val partialSum = Alias(Sum(child), "PartialSum")()
-        val partialCount = Alias(Count(child), "PartialCount")()
-
-//        val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
-        val castedSum = Cast(Literal(0.0), dataType)
-        val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
-        SplitEvaluation(
-          Divide(castedSum, castedCount),
-          partialCount :: partialSum :: Nil)
-    }
-  }
-
-  override def newInstance(): AverageFunction = new AverageFunction(child, this)
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function average")
-}
-
-// placeholder
-case class Kurtosis(child: Expression) extends CentralMomentAgg1(child) {
+  override def foldable: Boolean = false
 
   override def prettyName: String = "kurtosis"
 
@@ -1047,7 +1007,13 @@ case class Kurtosis(child: Expression) extends CentralMomentAgg1(child) {
 }
 
 // placeholder
-case class Skewness(child: Expression) extends CentralMomentAgg1(child) {
+case class Skewness(child: Expression) extends UnaryExpression with AggregateExpression {
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
 
   override def prettyName: String = "skewness"
 
@@ -1055,7 +1021,13 @@ case class Skewness(child: Expression) extends CentralMomentAgg1(child) {
 }
 
 // placeholder
-case class Variance(child: Expression) extends CentralMomentAgg1(child) {
+case class Variance(child: Expression) extends UnaryExpression with AggregateExpression {
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
 
   override def prettyName: String = "variance"
 
@@ -1063,7 +1035,13 @@ case class Variance(child: Expression) extends CentralMomentAgg1(child) {
 }
 
 // placeholder
-case class VariancePop(child: Expression) extends CentralMomentAgg1(child) {
+case class VariancePop(child: Expression) extends UnaryExpression with AggregateExpression {
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
 
   override def prettyName: String = "variance_pop"
 
@@ -1071,7 +1049,13 @@ case class VariancePop(child: Expression) extends CentralMomentAgg1(child) {
 }
 
 // placeholder
-case class VarianceSamp(child: Expression) extends CentralMomentAgg1(child) {
+case class VarianceSamp(child: Expression) extends UnaryExpression with AggregateExpression {
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
 
   override def prettyName: String = "variance_samp"
 

@@ -223,13 +223,26 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("moments") {
-    checkAnswer(
-      testData2.agg(skewness('a)),
-      Row(0.0))
+    val absTol = 1e-8
 
-    checkAnswer(
-      testData2.agg(kurtosis('a)),
-      Row(-1.5))
+    val sparkVariance = testData2.agg(variance('a))
+    val expectedVariance = Row(4.0 / 5.0)
+    checkAggregatesWithTol(sparkVariance, expectedVariance, absTol)
+    val sparkVarianceSamp = testData2.agg(var_samp('a))
+    checkAggregatesWithTol(sparkVarianceSamp, expectedVariance, absTol)
+
+    val sparkVariancePop = testData2.agg(var_pop('a))
+    val expectedVariancePop = Row(4.0 / 6.0)
+    checkAggregatesWithTol(sparkVariancePop, expectedVariancePop, absTol)
+
+    val sparkSkewness= testData2.agg(skewness('a))
+    val expectedSkewness = Row(0.0)
+    checkAggregatesWithTol(sparkSkewness, expectedSkewness, absTol)
+
+    val sparkKurtosis = testData2.agg(kurtosis('a))
+    val expectedKurtosis = Row(-1.5)
+    checkAggregatesWithTol(sparkKurtosis, expectedKurtosis, absTol)
+
   }
 
   test("zero moments") {
@@ -237,12 +250,24 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(emptyTableData.count() === 1)
 
     checkAnswer(
+      emptyTableData.agg(variance('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_samp('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_pop('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
       emptyTableData.agg(skewness('a)),
-      Row(0.0))
+      Row(Double.NaN))
 
     checkAnswer(
       emptyTableData.agg(kurtosis('a)),
-      Row(-3.0))
+      Row(Double.NaN))
   }
 
   test("null moments") {
@@ -250,11 +275,23 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(emptyTableData.count() === 0)
 
     checkAnswer(
+      emptyTableData.agg(variance('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_samp('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_pop('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
       emptyTableData.agg(skewness('a)),
-      Row(null))
+      Row(Double.NaN))
 
     checkAnswer(
       emptyTableData.agg(kurtosis('a)),
-      Row(null))
+      Row(Double.NaN))
   }
 }
