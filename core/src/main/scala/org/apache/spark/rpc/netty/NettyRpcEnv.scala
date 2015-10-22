@@ -81,7 +81,7 @@ private[netty] class NettyRpcEnv(
 
   /**
    * A map for [[RpcAddress]] and [[Outbox]]. When we are connecting to a remote [[RpcAddress]],
-   * we just put messages to its [[Outbox]] to implement a non-block `send` method.
+   * we just put messages to its [[Outbox]] to implement a non-blocking `send` method.
    */
   private val outboxes = new ConcurrentHashMap[RpcAddress, Outbox]()
 
