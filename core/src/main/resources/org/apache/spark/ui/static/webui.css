@@ -226,5 +226,7 @@ a.expandbutton {
 }
 
 .threaddump-td-mouseover {
-  font-weight: bold;
+  background-color: #49535a !important;
+  color: white;
+  cursor:pointer;
 }

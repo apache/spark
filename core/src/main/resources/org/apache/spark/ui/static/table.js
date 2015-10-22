@@ -82,7 +82,14 @@ function onSearchStringChange() {
     } else {
         $('tr').each(function(){
             if($(this).attr('id') && $(this).attr('id').match(/thread_[0-9]+_tr/) ) {
-                if ($(this).children().eq(3).text().toLowerCase().indexOf(searchString) >= 0) {
+                var children = $(this).children()
+                var found = false
+                for (i = 0; i < children.length; i++) {
+                    if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
+                        found = true
+                    }
+                }
+                if (found) {
                     $(this).removeClass('hidden')
                 } else {
                     $(this).addClass('hidden')
