@@ -130,7 +130,7 @@ class SparkHadoopUtil extends Logging {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
 
-  def addCredentialsToCurrentUser(credentials: Credentials, hadoopConf: Configuration): Unit ={
+  def addCredentialsToCurrentUser(credentials: Credentials, freshHadoopConf: Configuration): Unit ={
     UserGroupInformation.getCurrentUser.addCredentials(credentials)
 
     // HACK:
@@ -142,7 +142,7 @@ class SparkHadoopUtil extends Logging {
     // So:
     // We create a new HDFS Client, so that the new HDFS Client will generate and update the
     // private tokens for each NameNode.
-    FileSystem.newInstance(hadoopConf).close()
+    FileSystem.get(freshHadoopConf).close()
   }
 
   /**
