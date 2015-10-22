@@ -630,12 +630,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Loading a JSON dataset primativesAsString returns schema with primative types as strings") {
+  test("Loading a JSON dataset primitivesAsString returns schema with primitive types as strings") {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
-    val jsonDF = sqlContext.read.option("primativesAsString", "true").json(path)
+    val jsonDF = sqlContext.read.option("primitivesAsString", "true").json(path)
 
     val expectedSchema = StructType(
       StructField("bigInteger", DecimalType(20, 0), true) ::
@@ -991,9 +991,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val jsonDF = sqlContext.read.json(primitiveFieldAndType)
     val primTable = sqlContext.read.json(jsonDF.toJSON)
-    primTable.registerTempTable("primativeTable")
+    primTable.registerTempTable("primitiveTable")
     checkAnswer(
-        sql("select * from primativeTable"),
+        sql("select * from primitiveTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,

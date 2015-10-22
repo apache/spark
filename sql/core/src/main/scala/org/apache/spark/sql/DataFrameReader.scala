@@ -244,12 +244,12 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
-    val primativesAsString = extraOptions.getOrElse("primativesAsString", "false").toBoolean
+    val primitivesAsString = extraOptions.getOrElse("primitivesAsString", "false").toBoolean
     sqlContext.baseRelationToDataFrame(
       new JSONRelation(
         Some(jsonRDD),
         samplingRatio,
-        primativesAsString,
+        primitivesAsString,
         userSpecifiedSchema,
         None,
         None)(sqlContext))
