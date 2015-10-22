@@ -402,7 +402,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+    final int size = (int) offsetAndSize;
     return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
@@ -413,7 +413,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final int size = (int) offsetAndSize;
       final byte[] bytes = new byte[size];
       Platform.copyMemory(
         baseObject,
@@ -446,7 +446,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final int size = (int) offsetAndSize;
       final UnsafeRow row = new UnsafeRow();
       row.pointTo(baseObject, baseOffset + offset, numFields, size);
       return row;
@@ -460,7 +460,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final int size = (int) offsetAndSize;
       final UnsafeArrayData array = new UnsafeArrayData();
       array.pointTo(baseObject, baseOffset + offset, size);
       return array;
@@ -474,7 +474,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final int size = (int) offsetAndSize;
       final UnsafeMapData map = new UnsafeMapData();
       map.pointTo(baseObject, baseOffset + offset, size);
       return map;
@@ -616,6 +616,27 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     int pos = buffer.position();
     writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
     buffer.position(pos + sizeInBytes);
+  }
+
+  /**
+   * Write the bytes of var-length field into ByteBuffer
+   *
+   * Note: only work with HeapByteBuffer
+   */
+  public void writeFieldTo(int ordinal, ByteBuffer buffer) {
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
+
+    buffer.putInt(size);
+    int pos = buffer.position();
+    buffer.position(pos + size);
+    Platform.copyMemory(
+      baseObject,
+      baseOffset + offset,
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + pos,
+      size);
   }
 
   @Override

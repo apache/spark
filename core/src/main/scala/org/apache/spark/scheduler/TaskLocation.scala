@@ -80,7 +80,7 @@ private[spark] object TaskLocation {
         new HostTaskLocation(str)
       }
     } else {
-      new HostTaskLocation(hstr)
+      new HDFSCacheTaskLocation(hstr)
     }
   }
 }
