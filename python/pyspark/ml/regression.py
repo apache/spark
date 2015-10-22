@@ -305,7 +305,8 @@ class TreeRegressorParams(Params):
         super(TreeRegressorParams, self).__init__()
         #: param for Criterion used for information gain calculation (case-insensitive).
         self.impurity = Param(self, "impurity", "Criterion used for information " +
-                              "gain calculation (case-insensitive). Supported options: variance")
+                              "gain calculation (case-insensitive). Supported options: " +
+                              ", ".join(self.supportedImpurities))
 
     def setImpurity(self, value):
         """
@@ -519,7 +520,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel):
 
 @inherit_doc
 class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                            RandomForestParams, HasCheckpointInterval):
+                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
     learning algorithm for regression.
