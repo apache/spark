@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import org.apache.spark.util.collection.SortDataFormat;
 
-final class UnsafeShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, long[]> {
+final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, long[]> {
 
-  public static final UnsafeShuffleSortDataFormat INSTANCE = new UnsafeShuffleSortDataFormat();
+  public static final ShuffleSortDataFormat INSTANCE = new ShuffleSortDataFormat();
 
-  private UnsafeShuffleSortDataFormat() { }
+  private ShuffleSortDataFormat() { }
 
   @Override
   public PackedRecordPointer getKey(long[] data, int pos) {
