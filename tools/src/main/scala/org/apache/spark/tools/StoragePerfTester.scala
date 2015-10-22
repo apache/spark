@@ -64,9 +64,9 @@ object StoragePerfTester {
         new KryoSerializer(sc.conf), new ShuffleWriteMetrics())
       val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
-        writers(i % numOutputSplits).write(writeKey, writeValue)
+        writers(i % numOutputSplits)._1.write(writeKey, writeValue)
       }
-      writers.map { w =>
+      writers.map { case (w, _) =>
         w.commitAndClose()
         total.addAndGet(w.fileSegment().length)
       }
