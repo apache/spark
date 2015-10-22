@@ -1,7 +1,6 @@
 package org.apache.spark.sql.api.r
 
 import org.apache.spark.sql.test.SharedSQLContext
-import org.scalatest.{Matchers, FlatSpec}
 
 class SQLUtilsSuite extends SharedSQLContext {
 
