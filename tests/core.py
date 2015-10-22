@@ -257,9 +257,9 @@ class WebUiTests(unittest.TestCase):
         assert "Ad Hoc Query" in response.data.decode('utf-8')
         response = self.app.get(
             "/admin/queryview/?"
-            "conn_id=presto_default&"
-            "sql=SELECT+COUNT%281%29+FROM+airflow.static_babynames")
-        assert "Ad Hoc Query" in response.data.decode('utf-8')
+            "conn_id=airflow_db&"
+            "sql=SELECT+COUNT%281%29+as+TEST+FROM+task_instance")
+        assert "TEST" in response.data.decode('utf-8')
 
     def test_health(self):
         response = self.app.get('/health')

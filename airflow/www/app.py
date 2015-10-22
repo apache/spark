@@ -1556,7 +1556,8 @@ class QueryView(wwwutils.DataProfilingMixin, BaseView):
                 has_data = len(df) > 0
                 df = df.fillna('')
                 results = df.to_html(
-                    classes="table table-bordered table-striped no-wrap",
+                    classes=[
+                        'table', 'table-bordered', 'table-striped', 'no-wrap'],
                     index=False,
                     na_rep='',
                 ) if has_data else ''
