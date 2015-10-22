@@ -24,6 +24,9 @@ import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.sql.DataFrame
 
+/**
+ * Params for [[Arm]].
+ */
 trait ArmParams extends Params with HasMaxIter {
   /**
    * param for the estimator to be validated

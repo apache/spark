@@ -36,14 +36,13 @@ trait BanditValidatorParams extends ValidatorParams with HasMaxIter {
 
   /**
    * Step control for one pulling of an arm.
-   *
    * @group param
    */
-  final val stepsPerPulling: IntParam =
+  val stepsPerPulling: IntParam =
     new IntParam(this, "stepsPerPulling", "the count of iterative steps in one pulling")
 
   /** @group getParam */
-  final def getStepsPerPulling: Int = $(stepsPerPulling)
+  def getStepsPerPulling: Int = $(stepsPerPulling)
 
   /**
    * Param for number of folds for cross validation.  Must be >= 2.
@@ -57,11 +56,12 @@ trait BanditValidatorParams extends ValidatorParams with HasMaxIter {
   def getNumFolds: Int = $(numFolds)
 
   /**
-   * An array of search strategies to use.
-   *
+   * Multi-arm bandit search strategy to be used in the validator. All strategies are listed in
+   * [[Search]]. Different strategy has different behavior when it pulling arms.
    * @group param
    */
-  val searchStrategy: Param[Search] = new Param(this, "searchStrategies", "")
+  val searchStrategy: Param[Search] =
+    new Param(this, "searchStrategy", "search strategy to pull arms")
 
   /** @group getParam */
   def getSearchStrategy: Search = $(searchStrategy)
@@ -71,7 +71,7 @@ trait BanditValidatorParams extends ValidatorParams with HasMaxIter {
 
 /**
  * :: Experimental ::
- * K-fold cross validation.
+ * Multi-arm bandit hyper-parameters selection.
  */
 @Experimental
 class BanditValidator(override val uid: String)
@@ -144,12 +144,16 @@ class BanditValidator(override val uid: String)
     val bestArm = bestArms.minBy(_._2)._1
     val bestModel = bestArm.getModel
 
-
     copyValues(new BanditValidatorModel(uid, bestModel).setParent(this))
   }
 }
 
-
+/**
+ * :: Experimental ::
+ * Model from multi-arm bandit validation.
+ *
+ * @param bestModel The best model selected from multi-arm bandit validation.
+ */
 class BanditValidatorModel private[ml] (
     override val uid: String,
     val bestModel: Model[_])
