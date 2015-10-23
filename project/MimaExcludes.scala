@@ -615,6 +615,11 @@ object MimaExcludes {
       MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++
       Seq(
         // MiMa does not deal properly with sealed traits
+        // [SPARK-11262][ML] Unit test for gradient, loss layers, memory management
+        // for multilayer perceptron.
+        // This class is marked as `private`.
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.ann.SoftmaxFunction")
+      ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticRegressionSummary.featuresCol")
       ) ++ Seq(
