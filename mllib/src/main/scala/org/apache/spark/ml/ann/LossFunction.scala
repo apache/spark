@@ -46,8 +46,8 @@ private[ann] class SigmoidLayerWithSquaredError extends Layer {
     new SigmoidLayerModelWithSquaredError()
 }
 
-private[ann] class SigmoidLayerModelWithSquaredError extends FunctionalLayerModel(new SigmoidFunction)
-with LossFunction {
+private[ann] class SigmoidLayerModelWithSquaredError
+  extends FunctionalLayerModel(new SigmoidFunction) with LossFunction {
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
     UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
     val error = Bsum(delta :* delta) / 2 / output.cols

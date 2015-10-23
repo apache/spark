@@ -438,7 +438,9 @@ private[ml] object FeedForwardTopology {
    *                Softmax is default
    * @return multilayer perceptron topology
    */
-  def multiLayerPerceptron(layerSizes: Array[Int], softmaxOnTop: Boolean = true): FeedForwardTopology = {
+  def multiLayerPerceptron(
+    layerSizes: Array[Int],
+    softmaxOnTop: Boolean = true): FeedForwardTopology = {
     val layers = new Array[Layer]((layerSizes.length - 1) * 2)
     for(i <- 0 until layerSizes.length - 1){
       layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
