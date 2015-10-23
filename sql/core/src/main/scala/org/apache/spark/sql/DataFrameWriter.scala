@@ -322,7 +322,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   /**
    * Saves the content of the [[DataFrame]] in a text file at the specified path.
    * The DataFrame must have only one column that is of string type.
-   * Each row becomes a new line in the output file.
+   * Each row becomes a new line in the output file. For example:
+   * {{{
+   *   // Scala:
+   *   df.write.text("/path/to/output")
+   *
+   *   // Java:
+   *   df.write().text("/path/to/output")
+   * }}}
    *
    * @since 1.6.0
    */
