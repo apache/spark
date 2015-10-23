@@ -223,7 +223,7 @@ Option[String]) extends TaskFailedReason {
     val exitBehavior = if (isNormalExit) "normally" else "abnormally"
     s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})" +
     reason.fold(""){
-      r => s"Reason: ${r}"
+      r => s" Reason: ${r}"
     }
   }
 
