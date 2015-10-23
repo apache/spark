@@ -94,7 +94,7 @@ private[spark] class UnifiedMemoryManager(
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return number of bytes successfully granted (<= N).
    */
-  override def acquireExecutionMemory(
+  private[memory] override def doAcquireExecutionMemory(
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
     assert(numBytes >= 0)

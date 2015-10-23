@@ -23,7 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
 class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf) {
-  override def acquireExecutionMemory(
+  private[memory] override def doAcquireExecutionMemory(
     numBytes: Long,
     evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
   override def acquireStorageMemory(
@@ -34,7 +34,7 @@ class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf) 
     blockId: BlockId,
     numBytes: Long,
     evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def releaseExecutionMemory(numBytes: Long): Unit = { }
+  override def releaseExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = { }
   override def releaseStorageMemory(numBytes: Long): Unit = { }
   override def maxExecutionMemory: Long = Long.MaxValue
   override def maxStorageMemory: Long = Long.MaxValue

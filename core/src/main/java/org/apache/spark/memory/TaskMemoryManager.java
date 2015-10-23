@@ -120,14 +120,14 @@ public class TaskMemoryManager {
    * @return number of bytes successfully granted (<= N).
    */
   public long acquireExecutionMemory(long size) {
-    return memoryManager.tryToAcquire(size, taskAttemptId);
+    return memoryManager.acquireExecutionMemory(size, taskAttemptId);
   }
 
   /**
    * Release N bytes of execution memory.
    */
   public void releaseExecutionMemory(long size) {
-    memoryManager.release(size, taskAttemptId);
+    memoryManager.releaseExecutionMemory(size, taskAttemptId);
   }
 
   public long pageSizeBytes() {
@@ -317,7 +317,7 @@ public class TaskMemoryManager {
     }
 
     freedBytes += memoryManager.getMemoryConsumptionForTask(taskAttemptId);
-    memoryManager.releaseMemoryForTask(taskAttemptId);
+    memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
 
     return freedBytes;
   }

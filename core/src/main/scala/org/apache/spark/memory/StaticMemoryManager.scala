@@ -52,7 +52,7 @@ private[spark] class StaticMemoryManager(
    * Acquire N bytes of memory for execution.
    * @return number of bytes successfully granted (<= N).
    */
-  override def acquireExecutionMemory(
+  override def doAcquireExecutionMemory(
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
     assert(numBytes >= 0)
