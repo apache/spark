@@ -138,6 +138,7 @@ object JdbcDialects {
   registerDialect(PostgresDialect)
   registerDialect(DB2Dialect)
   registerDialect(MsSqlServerDialect)
+  registerDialect(DerbyDialect)
 
 
   /**
@@ -197,15 +198,15 @@ case object PostgresDialect extends JdbcDialect {
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
-      Some(BinaryType)
+      Option(BinaryType)
     } else if (sqlType == Types.OTHER && typeName.equals("cidr")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("json")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
-      Some(StringType)
+      Option(StringType)
     } else None
   }
 
@@ -235,9 +236,9 @@ case object MySQLDialect extends JdbcDialect {
       // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
       // byte arrays instead of longs.
       md.putLong("binarylong", 1)
-      Some(LongType)
+      Option(LongType)
     } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
-      Some(BooleanType)
+      Option(BooleanType)
     } else None
   }
 
@@ -278,7 +279,7 @@ case object MsSqlServerDialect extends JdbcDialect {
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (typeName.contains("datetimeoffset")) {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
-      Some(StringType)
+      Option(StringType)
     } else None
   }
 
@@ -287,3 +288,30 @@ case object MsSqlServerDialect extends JdbcDialect {
     case _ => None
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ * Default Apache Derby dialect, mapping real on read
+ * and string/byte/short/boolean/decimal on write.
+ */
+@DeveloperApi
+case object DerbyDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:derby")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (sqlType == Types.REAL) Option(FloatType) else None
+  }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
+    case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
+    // 31 is the maximum precision and 5 is the default scale for a Derby DECIMAL
+    case (t: DecimalType) if (t.precision > 31) =>
+      Some(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
+    case _ => None
+  }
+
+}
+

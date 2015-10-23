@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
@@ -24,6 +26,7 @@ import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -68,7 +71,7 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
-class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
+class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {
   import testImplicits._
 
   private lazy val pointsRDD = Seq(
@@ -98,17 +101,28 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
       Seq(Row(true), Row(true)))
   }
 
-
-  test("UDTs with Parquet") {
-    val tempDir = Utils.createTempDir()
-    tempDir.delete()
-    pointsRDD.write.parquet(tempDir.getCanonicalPath)
+  testStandardAndLegacyModes("UDTs with Parquet") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      pointsRDD.write.parquet(path)
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Seq(
+          Row(1.0, new MyDenseVector(Array(0.1, 1.0))),
+          Row(0.0, new MyDenseVector(Array(0.2, 2.0)))))
+    }
   }
 
-  test("Repartition UDTs with Parquet") {
-    val tempDir = Utils.createTempDir()
-    tempDir.delete()
-    pointsRDD.repartition(1).write.parquet(tempDir.getCanonicalPath)
+  testStandardAndLegacyModes("Repartition UDTs with Parquet") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      pointsRDD.repartition(1).write.parquet(path)
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Seq(
+          Row(1.0, new MyDenseVector(Array(0.1, 1.0))),
+          Row(0.0, new MyDenseVector(Array(0.2, 2.0)))))
+    }
   }
 
   // Tests to make sure that all operators correctly convert types on the way out.

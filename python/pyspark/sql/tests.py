@@ -31,6 +31,10 @@ import time
 import datetime
 
 import py4j
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -172,6 +176,20 @@ class DataTypeTests(unittest.TestCase):
     def test_datetype_equal_zero(self):
         dt = DateType()
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
+
+
+class SQLContextTests(ReusedPySparkTestCase):
+    def test_get_or_create(self):
+        sqlCtx = SQLContext.getOrCreate(self.sc)
+        self.assertTrue(SQLContext.getOrCreate(self.sc) is sqlCtx)
+
+    def test_new_session(self):
+        sqlCtx = SQLContext.getOrCreate(self.sc)
+        sqlCtx.setConf("test_key", "a")
+        sqlCtx2 = sqlCtx.newSession()
+        sqlCtx2.setConf("test_key", "b")
+        self.assertEqual(sqlCtx.getConf("test_key", ""), "a")
+        self.assertEqual(sqlCtx2.getConf("test_key", ""), "b")
 
 
 class SQLTests(ReusedPySparkTestCase):
@@ -1208,4 +1226,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()

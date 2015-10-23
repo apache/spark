@@ -17,13 +17,37 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.{Catalog, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation, InsertableRelation}
+import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
+
+/**
+ * Try to replaces [[UnresolvedRelation]]s with [[ResolvedDataSource]].
+ */
+private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
+      try {
+        val resolved = ResolvedDataSource(
+          sqlContext,
+          userSpecifiedSchema = None,
+          partitionColumns = Array(),
+          provider = u.tableIdentifier.database.get,
+          options = Map("path" -> u.tableIdentifier.table))
+        val plan = LogicalRelation(resolved.relation)
+        u.alias.map(a => Subquery(u.alias.get, plan)).getOrElse(plan)
+      } catch {
+        case e: ClassNotFoundException => u
+        case e: Exception =>
+          // the provider is valid, but failed to create a logical plan
+          u.failAnalysis(e.getMessage)
+      }
+  }
+}
 
 /**
  * A rule to do pre-insert data type casting and field renaming. Before we insert into
@@ -143,9 +167,9 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
       case CreateTableUsingAsSelect(tableIdent, _, _, partitionColumns, mode, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (mode == SaveMode.Overwrite && catalog.tableExists(tableIdent.toSeq)) {
+        if (mode == SaveMode.Overwrite && catalog.tableExists(tableIdent)) {
           // Need to remove SubQuery operator.
-          EliminateSubQueries(catalog.lookupRelation(tableIdent.toSeq)) match {
+          EliminateSubQueries(catalog.lookupRelation(tableIdent)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation, _) =>

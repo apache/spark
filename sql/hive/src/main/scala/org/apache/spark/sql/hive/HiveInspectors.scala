@@ -28,7 +28,7 @@ import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.unsafe.types.UTF8String
@@ -50,8 +50,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *     java.sql.Date
  *     java.sql.Timestamp
  *  Complex Types =>
- *    Map: [[org.apache.spark.sql.types.MapData]]
- *    List: [[org.apache.spark.sql.types.ArrayData]]
+ *    Map: [[MapData]]
+ *    List: [[ArrayData]]
  *    Struct: [[org.apache.spark.sql.catalyst.InternalRow]]
  *    Union: NOT SUPPORTED YET
  *  The Complex types plays as a container, which can hold arbitrary data types.
@@ -723,6 +723,10 @@ private[hive] trait HiveInspectors {
         inspectorToDataType(m.getMapValueObjectInspector))
     case _: WritableStringObjectInspector => StringType
     case _: JavaStringObjectInspector => StringType
+    case _: WritableHiveVarcharObjectInspector => StringType
+    case _: JavaHiveVarcharObjectInspector => StringType
+    case _: WritableHiveCharObjectInspector => StringType
+    case _: JavaHiveCharObjectInspector => StringType
     case _: WritableIntObjectInspector => IntegerType
     case _: JavaIntObjectInspector => IntegerType
     case _: WritableDoubleObjectInspector => DoubleType
