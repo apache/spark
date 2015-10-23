@@ -36,9 +36,23 @@ import org.apache.spark.util.MutablePair
 /**
  * Performs a shuffle that will result in the desired `newPartitioning`.
  */
-case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
+case class Exchange(
+    var newPartitioning: Partitioning,
+    child: SparkPlan,
+    @transient coordinator: Option[ExchangeCoordinator]) extends UnaryNode {
 
-  override def nodeName: String = if (tungstenMode) "TungstenExchange" else "Exchange"
+  override def nodeName: String = {
+    val extraInfo = coordinator match {
+      case Some(exchangeCoordinator) if exchangeCoordinator.isEstimated =>
+        "Shuffle"
+      case Some(exchangeCoordinator) if !exchangeCoordinator.isEstimated =>
+        "May shuffle"
+      case None => "Shuffle without coordinator"
+    }
+
+    val simpleNodeName = if (tungstenMode) "TungstenExchange" else "Exchange"
+    s"$simpleNodeName($extraInfo)"
+  }
 
   /**
    * Returns true iff we can support the data type, and we are not doing range partitioning.
@@ -129,8 +143,29 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     }
   }
 
-  private def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
+  override protected def doPrepare(): Unit = {
+    // If an ExchangeCoordinator is needed, we register this Exchange operator
+    // to the coordinator when we do prepare. It is important to make sure
+    // we register this operator right before the execution instead of register it
+    // in the constructor.
+    coordinator match {
+      case Some(exchangeCoordinator) => exchangeCoordinator.registerExchange(this)
+      case None =>
+    }
+  }
+
+  def prepareShuffleDependency(
+      newNumPreShufflePartitions: Option[Int] = None)
+  : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val rdd = child.execute()
+    // If the number of pre-shuffle partitions is specified,
+    // we change the newPartitioning to use that number first.
+    // newNumPreShufflePartitions is only allowed when newPartitioning
+    // is a HashPartitioning.
+    newNumPreShufflePartitions.foreach { numPartitions =>
+      assert(newPartitioning.isInstanceOf[HashPartitioning])
+      newPartitioning = newPartitioning.withNumPartitions(numPartitions)
+    }
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
@@ -194,15 +229,35 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     dependency
   }
 
-  private def preparePostShuffleRDD(
-      shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow]): RDD[InternalRow] = {
-    new ShuffledRowRDD(shuffleDependency)
+  def preparePostShuffleRDD(
+      shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
+      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
+    // If an array of partition start indices is provided, we need to use this array
+    // to create the ShuffledRowRDD. Also, we need to update newPartitioning to
+    // update the number of post-shuffle partitions.
+    specifiedPartitionStartIndices.foreach { indices =>
+      assert(newPartitioning.isInstanceOf[HashPartitioning])
+      newPartitioning = newPartitioning.withNumPartitions(indices.length)
+    }
+    new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
-    val shuffleDependency = prepareShuffleDependency()
+    coordinator match {
+      case Some(exchangeCoordinator) =>
+        val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
+        assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
+        shuffleRDD
+      case None =>
+        val shuffleDependency = prepareShuffleDependency()
+        preparePostShuffleRDD(shuffleDependency)
+    }
+  }
+}
 
-    preparePostShuffleRDD(shuffleDependency)
+object Exchange {
+  def apply(newPartitioning: Partitioning, child: SparkPlan): Exchange = {
+    Exchange(newPartitioning, child, None: Option[ExchangeCoordinator])
   }
 }
 
@@ -214,8 +269,16 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  * input partition ordering requirements are met.
  */
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
-  // TODO: Determine the number of partitions.
-  private def numPartitions: Int = sqlContext.conf.numShufflePartitions
+  private def numPreShufflePartitions: Int = sqlContext.conf.numShufflePartitions
+
+  private def targetPostShuffleInputSize: Long = sqlContext.conf.targetPostShuffleInputSize
+
+  private def adaptiveExecutionEnabled: Boolean = sqlContext.conf.adaptiveExecutionEnabled
+
+  private def minNumPostShufflePartitions: Option[Int] = {
+    val minNumPostShufflePartitions = sqlContext.conf.minNumPostShufflePartitions
+    if (minNumPostShufflePartitions > 0) Some(minNumPostShufflePartitions) else None
+  }
 
   /**
    * Given a required distribution, returns a partitioning that satisfies that distribution.
@@ -223,10 +286,101 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   private def canonicalPartitioning(requiredDistribution: Distribution): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
-      case ClusteredDistribution(clustering) => HashPartitioning(clustering, numPartitions)
-      case OrderedDistribution(ordering) => RangePartitioning(ordering, numPartitions)
+      case ClusteredDistribution(clustering) =>
+        HashPartitioning(clustering, numPreShufflePartitions)
+      case OrderedDistribution(ordering) => RangePartitioning(ordering, numPreShufflePartitions)
       case dist => sys.error(s"Do not know how to satisfy distribution $dist")
     }
+  }
+
+  private def withExchangeCoordinator(
+      children: Seq[SparkPlan],
+      requiredChildDistributions: Seq[Distribution]): Seq[SparkPlan] = {
+    val needsCoordinator =
+      if (children.exists(_.isInstanceOf[Exchange])) {
+        // Right now, ExchangeCoordinator only support HashPartitionings.
+        children.forall {
+          case e @ Exchange(hash: HashPartitioning, _, _) => true
+          case child =>
+            child.outputPartitioning match {
+              case hash: HashPartitioning => true
+              case collection: PartitioningCollection =>
+                collection.partitionings.exists(_.isInstanceOf[HashPartitioning])
+              case _ => false
+            }
+        }
+      } else {
+        // In this case, although we do not have Exchange operators, we may still need to
+        // shuffle data when we have more than one children because data generated by
+        // these children may not be partitioned in the same way.
+        // Please see the comment in withCoordinator for more details.
+        val supportsDistribution =
+          requiredChildDistributions.forall(_.isInstanceOf[ClusteredDistribution])
+        children.length > 1 && supportsDistribution
+      }
+
+    val withCoordinator =
+      if (adaptiveExecutionEnabled && needsCoordinator) {
+        val coordinator =
+          new ExchangeCoordinator(
+            children.length,
+            targetPostShuffleInputSize,
+            minNumPostShufflePartitions)
+        children.zip(requiredChildDistributions).map {
+          case (e: Exchange, _) =>
+            // This child is an Exchange, we need to add the coordinator.
+            e.copy(coordinator = Some(coordinator))
+          case (child, distribution) =>
+            // If this child is not an Exchange, we need to add an Exchange for now.
+            // Ideally, we can try to avoid this Exchange. However, when we reach here,
+            // there are at least two children operators (because if there is a single child
+            // and we can avoid Exchange, this method will not be called). Although we can
+            // make two children have the same number of post-shuffle partitions. Their
+            // numbers of pre-shuffle partitions may be different. For example, let's say
+            // we have the following plan
+            //         Join
+            //         /  \
+            //       Agg  Exchange
+            //       /      \
+            //    Exchange  t2
+            //      /
+            //     t1
+            // In this case, because a post-shuffle partition can include multiple pre-shuffle
+            // partitions, a HashPartitioning will not be strictly partitioned by the hashcodes
+            // after shuffle. So, even we can use the child Exchange operator of the Join to
+            // have a number of post-shuffle partitions that matches the number of partitions of
+            // Agg, we cannot say these two children are partitioned in the same way.
+            // Here is another case
+            //         Join
+            //         /  \
+            //       Agg1  Agg2
+            //       /      \
+            //   Exchange1  Exchange2
+            //       /       \
+            //      t1       t2
+            // In this case, two Aggs shuffle data with the same column of the join condition.
+            // After we use ExchangeCoordinator, these two Aggs may not be partitioned in the same
+            // way. Let's say that Agg1 and Agg2 both have 5 pre-shuffle partitions and 2
+            // post-shuffle partitions. However, Agg1 fetches those pre-shuffle partitions by
+            // using a partitionStartIndices [0, 3]. But, Agg1 fetches those pre-shuffle
+            // partitions by using another partitionStartIndices [0, 4]. So, Agg1 and Agg2
+            // are actually not partitioned in the same way. So, we need to add Exchanges at here.
+            //
+            // It will be great to introduce a new Partitioning to represent the post-shuffle
+            // partitions when one post-shuffle partition includes multiple pre-shuffle partitions.
+
+            // Because originally we do not have an Exchange operator, we can just use this child
+            // operator's outputPartitioning to shuffle data.
+            val targetPartitioning = canonicalPartitioning(distribution)
+            assert(targetPartitioning.isInstanceOf[HashPartitioning])
+            Exchange(targetPartitioning, child, Some(coordinator))
+        }
+      } else {
+        // If we do not need ExchangeCoordinator, the original children are returned.
+        children
+      }
+
+    withCoordinator
   }
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
@@ -260,6 +414,9 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       }
     }
 
+    // Now, we need to add ExchangeCoordinator if necessary.
+    children = withExchangeCoordinator(children, requiredChildDistributions)
+
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
       if (requiredOrdering.nonEmpty) {
@@ -281,3 +438,4 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     case operator: SparkPlan => ensureDistributionAndOrdering(operator)
   }
 }
+

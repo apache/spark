@@ -102,11 +102,12 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  *
  * When `specifiedPartitionStartIndices` is defined, `specifiedPartitionStartIndices.length`
  * will be the number of post-shuffle partitions. For this case, the `i`th post-shuffle
- * partition includes `specifiedPartitionStartIndices[i]` to `specifiedPartitionStartIndices[i+1] - 1`
- * (inclusive).
+ * partition includes `specifiedPartitionStartIndices[i]` to
+ * `specifiedPartitionStartIndices[i+1] - 1` (inclusive).
  *
- * When `specifiedPartitionStartIndices` is not defined, there will be `dependency.partitioner.numPartitions`
- * post-shuffle partitions. For this case, every post-shuffle partition is a pre-shuffle partition.
+ * When `specifiedPartitionStartIndices` is not defined, there will be
+ * `dependency.partitioner.numPartitions` post-shuffle partitions. For this case,
+ * every post-shuffle partition is a pre-shuffle partition.
  */
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
@@ -152,6 +153,8 @@ class ShuffledRowRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val shuffledRowPartition = split.asInstanceOf[ShuffledRowRDDPartition]
+    // The range of pre-shuffle partitions that we are fetching at here is
+    // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
     val reader =
       SparkEnv.get.shuffleManager.getReader(
         dependency.shuffleHandle,
