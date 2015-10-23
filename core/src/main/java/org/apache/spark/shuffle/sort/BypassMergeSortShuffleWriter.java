@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -41,12 +42,15 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
+import org.apache.spark.shuffle.IndexShuffleBlockResolver$;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
+import scala.collection.JavaConverters;
+import scala.collection.Seq;
 
 /**
  * This class implements sort-based shuffle's hash-style shuffle fallback path. This write path
@@ -121,13 +125,26 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   @Override
-  public void write(Iterator<Product2<K, V>> records) throws IOException {
+  public Seq<Tuple2<File, File>> write(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
+    File indexFile = blockManager.diskBlockManager().getFile(new ShuffleIndexBlockId(
+        shuffleId, mapId, IndexShuffleBlockResolver$.MODULE$.NOOP_REDUCE_ID())
+    );
+    File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];
-      shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+      File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+      if (tmpIndexFile == indexFile) {
+        throw new RuntimeException("oops, index files equal");
+      }
       mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
-      return;
+      // create an empty data file
+      File tmpDataFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
+      tmpDataFile.createNewFile();
+      return JavaConverters.asScalaBufferConverter(Arrays.asList(
+        new Tuple2<>(tmpIndexFile, indexFile),
+        new Tuple2<>(tmpDataFile, dataFile)
+      )).asScala();
     }
     final SerializerInstance serInstance = serializer.newInstance();
     final long openStartTime = System.nanoTime();
@@ -155,10 +172,16 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       writer.commitAndClose();
     }
 
-    partitionLengths =
-      writePartitionedFile(shuffleBlockResolver.getDataFile(shuffleId, mapId));
-    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    File tmpDataFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
+
+    partitionLengths = writePartitionedFile(tmpDataFile);
+    File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    return JavaConverters.asScalaBufferConverter(Arrays.asList(
+      new Tuple2<>(tmpIndexFile, indexFile),
+      new Tuple2<>(tmpDataFile, dataFile)
+    )).asScala();
+
   }
 
   @VisibleForTesting
