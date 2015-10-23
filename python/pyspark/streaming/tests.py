@@ -43,7 +43,7 @@ from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPar
 from pyspark.streaming.flume import FlumeUtils
 from pyspark.streaming.mqtt import MQTTUtils
 from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
-from pyspark.streaming.listener import StreamingListener
+from pyspark.streaming.listener import StreamingListener, BatchInfo
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -432,28 +432,29 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         self.assertEqual(len(batchInfosSubmitted), 4)
 
         for info in batchInfosSubmitted:
-            self.assertEqual(info.schedulingDelay().getClass().getSimpleName(), u'None$')
-            self.assertEqual(info.processingDelay().getClass().getSimpleName(), u'None$')
-            self.assertEqual(info.totalDelay().getClass().getSimpleName(), u'None$')
+
+            self.assertIsNone(info.schedulingDelay())
+            self.assertIsNone(info.processingDelay())
+            self.assertIsNone(info.totalDelay())
 
         batchInfosStarted = batch_collector.batchInfosStarted
         self.assertEqual(len(batchInfosStarted), 4)
         for info in batchInfosStarted:
-            self.assertNotEqual(info.schedulingDelay().getClass().getSimpleName(), u'None$')
-            self.assertGreaterEqual(info.schedulingDelay().get(), 0)
-            self.assertEqual(info.processingDelay().getClass().getSimpleName(), u'None$')
-            self.assertEqual(info.totalDelay().getClass().getSimpleName(), u'None$')
+            self.assertIsNotNone(info.schedulingDelay())
+            self.assertGreaterEqual(info.schedulingDelay(), 0)
+            self.assertIsNone(info.processingDelay())
+            self.assertIsNone(info.totalDelay())
 
         batchInfosCompleted = batch_collector.batchInfosCompleted
         self.assertEqual(len(batchInfosCompleted), 4)
 
         for info in batchInfosCompleted:
-            self.assertNotEqual(info.schedulingDelay().getClass().getSimpleName(), u'None$')
-            self.assertNotEqual(info.processingDelay().getClass().getSimpleName(), u'None$')
-            self.assertNotEqual(info.totalDelay().getClass().getSimpleName(), u'None$')
-            self.assertGreaterEqual(info.schedulingDelay().get(), 0)
-            self.assertGreaterEqual(info.processingDelay().get(), 0)
-            self.assertGreaterEqual(info.totalDelay().get(), 0)
+            self.assertIsNotNone(info.schedulingDelay())
+            self.assertIsNotNone(info.processingDelay())
+            self.assertIsNotNone(info.totalDelay())
+            self.assertGreaterEqual(info.schedulingDelay(), 0)
+            self.assertGreaterEqual(info.processingDelay(), 0)
+            self.assertGreaterEqual(info.totalDelay(), 0)
 
 
 class WindowFunctionTests(PySparkStreamingTestCase):
