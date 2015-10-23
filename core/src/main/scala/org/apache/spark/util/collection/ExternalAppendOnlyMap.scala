@@ -27,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.{BlockId, BlockManager}
@@ -34,6 +35,7 @@ import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
 import org.apache.spark.executor.ShuffleWriteMetrics
 
 /**
+ * :: DeveloperApi ::
  * An append-only map that spills sorted content to disk when there is insufficient space for it
  * to grow.
  *
@@ -48,6 +50,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics
  * writes. This may lead to a performance regression compared to the normal case of using the
  * non-spilling AppendOnlyMap.
  */
+@DeveloperApi
 class ExternalAppendOnlyMap[K, V, C](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
@@ -63,6 +66,16 @@ class ExternalAppendOnlyMap[K, V, C](
   if (context == null) {
     throw new IllegalStateException(
       "Spillable collections should not be instantiated outside of tasks")
+  }
+
+  // Backwards-compatibility constructor for binary compatibility
+  def this(
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      serializer: Serializer = SparkEnv.get.serializer,
+      blockManager: BlockManager = SparkEnv.get.blockManager) {
+    this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager)
   }
 
   override protected[this] def taskMemoryManager: TaskMemoryManager = context.taskMemoryManager()
