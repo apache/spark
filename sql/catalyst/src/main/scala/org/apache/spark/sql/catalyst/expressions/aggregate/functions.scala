@@ -939,8 +939,9 @@ object HyperLogLogPlusPlus {
  * This class implements online, one-pass algorithms for computing the central moments of a set of
  * points.
  *
- * Returns `Double.NaN` when N = 0 or N = 1
- *  -third and fourth moments return `Double.NaN` when second moment is zero
+ * Behavior:
+ *  - null values are ignored
+ *  - returns `Double.NaN` when the column contains `Double.NaN` values
  *
  * References:
  *  - Xiangrui Meng.  "Simpler Online Updates for Arbitrary-Order Central Moments."
@@ -1024,6 +1025,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
       val updateValue = v match {
         case d: Double => d
       }
+
       n = buffer.getDouble(nOffset)
       mean = buffer.getDouble(meanOffset)
 
@@ -1078,8 +1080,8 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
     n = n1 + n2
     buffer1.setDouble(nOffset, n)
     delta = mean2 - mean1
-    deltaN = delta / n
-    mean = mean1 + deltaN * n
+    deltaN = if (n == 0.0) 0.0 else delta / n
+    mean = mean1 + deltaN * n2
     buffer1.setDouble(mutableAggBufferOffset + 1, mean)
 
     // higher order moments computed according to:
@@ -1112,8 +1114,8 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
 
   /**
    * Compute aggregate statistic from sufficient moments.
-   * @param centralMoments Length `momentOrder + 1` array of central moments needed to
-   *                       compute the aggregate stat.
+   * @param centralMoments Length `momentOrder + 1` array of central moments (un-normalized)
+   *                       needed to compute the aggregate stat.
    */
   def getStatistic(n: Double, mean: Double, centralMoments: Array[Double]): Double
 
@@ -1121,8 +1123,8 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
     val n = buffer.getDouble(nOffset)
     val mean = buffer.getDouble(meanOffset)
     val moments = Array.ofDim[Double](momentOrder + 1)
-    moments(0) = n
-    moments(1) = mean
+    moments(0) = 1.0
+    moments(1) = 0.0
     if (momentOrder >= 2) {
       moments(2) = buffer.getDouble(secondMomentOffset)
     }
@@ -1199,7 +1201,7 @@ case class VariancePop(child: Expression,
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
 
-    if (n == 0.0 || n == 1.0) Double.NaN else moments(2) / n
+    if (n == 0.0) Double.NaN else moments(2) / n
   }
 }
 

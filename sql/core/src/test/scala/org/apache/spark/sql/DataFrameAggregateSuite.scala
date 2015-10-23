@@ -259,7 +259,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(var_pop('a)),
-      Row(Double.NaN))
+      Row(0.0))
 
     checkAnswer(
       emptyTableData.agg(skewness('a)),
