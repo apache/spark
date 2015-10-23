@@ -39,7 +39,7 @@ import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
@@ -163,8 +163,8 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     val ratingType = schema($(ratingCol)).dataType
-    require(ratingType == FloatType || ratingType == DoubleType)
-    SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
+    require(ratingType == DoubleType)
+    SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
 }
 
@@ -196,11 +196,11 @@ class ALSModel private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
-    val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
+    val predict = udf { (userFeatures: Seq[Double], itemFeatures: Seq[Double]) =>
       if (userFeatures != null && itemFeatures != null) {
-        blas.sdot(rank, userFeatures.toArray, 1, itemFeatures.toArray, 1)
+        blas.ddot(rank, userFeatures.toArray, 1, itemFeatures.toArray, 1)
       } else {
-        Float.NaN
+        Double.NaN
       }
     }
     dataset
@@ -213,7 +213,7 @@ class ALSModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
-    SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
+    SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
 
   override def copy(extra: ParamMap): ALSModel = {
@@ -314,11 +314,11 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
 
   override def fit(dataset: DataFrame): ALSModel = {
     import dataset.sqlContext.implicits._
-    val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
+    val r = if ($(ratingCol) != "") col($(ratingCol)).cast(DoubleType) else lit(1.0f)
     val ratings = dataset
       .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
       .map { row =>
-        Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
+        Rating(row.getInt(0), row.getInt(1), row.getDouble(2))
       }
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
@@ -354,12 +354,12 @@ object ALS extends Logging {
    * Rating class for better code readability.
    */
   @DeveloperApi
-  case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
+  case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Double)
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
     /** Solves a least squares problem with regularization (possibly with other constraints). */
-    def solve(ne: NormalEquation, lambda: Double): Array[Float]
+    def solve(ne: NormalEquation, lambda: Double): Array[Double]
   }
 
   /** Cholesky solver for least square problems. */
@@ -374,7 +374,7 @@ object ALS extends Logging {
      * @param lambda regularization constant
      * @return the solution x
      */
-    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
+    override def solve(ne: NormalEquation, lambda: Double): Array[Double] = {
       val k = ne.k
       // Add scaled lambda to the diagonals of AtA.
       var i = 0
@@ -385,10 +385,10 @@ object ALS extends Logging {
         j += 1
       }
       CholeskyDecomposition.solve(ne.ata, ne.atb)
-      val x = new Array[Float](k)
+      val x = new Array[Double](k)
       i = 0
       while (i < k) {
-        x(i) = ne.atb(i).toFloat
+        x(i) = ne.atb(i).toDouble
         i += 1
       }
       ne.reset()
@@ -420,13 +420,13 @@ object ALS extends Logging {
      *   min_x_  norm(A x - b)^2^ + lambda * n * norm(x)^2^
      *   subject to x >= 0
      */
-    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
+    override def solve(ne: NormalEquation, lambda: Double): Array[Double] = {
       val rank = ne.k
       initialize(rank)
       fillAtA(ne.ata, lambda)
       val x = NNLS.solve(ata, ne.atb, workspace)
       ne.reset()
-      x.map(x => x.toFloat)
+      x.map(x => x.toDouble)
     }
 
     /**
@@ -473,7 +473,7 @@ object ALS extends Logging {
     private val da = new Array[Double](k)
     private val upper = "U"
 
-    private def copyToDouble(a: Array[Float]): Unit = {
+    private def copyToDouble(a: Array[Double]): Unit = {
       var i = 0
       while (i < k) {
         da(i) = a(i)
@@ -482,7 +482,7 @@ object ALS extends Logging {
     }
 
     /** Adds an observation. */
-    def add(a: Array[Float], b: Double, c: Double = 1.0): this.type = {
+    def add(a: Array[Double], b: Double, c: Double = 1.0): this.type = {
       require(c >= 0.0)
       require(a.length == k)
       copyToDouble(a)
@@ -527,7 +527,7 @@ object ALS extends Logging {
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       checkpointInterval: Int = 10,
       seed: Long = 0L)(
-      implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
+      implicit ord: Ordering[ID]): (RDD[(ID, Array[Double])], RDD[(ID, Array[Double])]) = {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
     val sc = ratings.sparkContext
@@ -636,9 +636,9 @@ object ALS extends Logging {
   }
 
   /**
-   * Factor block that stores factors (Array[Float]) in an Array.
+   * Factor block that stores factors (Array[Double]) in an Array.
    */
-  private type FactorBlock = Array[Array[Float]]
+  private type FactorBlock = Array[Array[Double]]
 
   /**
    * Out-link block that stores, for each dst (item/user) block, which src (user/item) factors to
@@ -656,7 +656,7 @@ object ALS extends Logging {
    *
    * {srcId: 0, dstBlockId: 2, dstLocalIndex: 3, rating: 5.0},
    *
-   * and assume that the dst factors are stored as dstFactors: Map[Int, Array[Array[Float]]], which
+   * and assume that the dst factors are stored as dstFactors: Map[Int, Array[Array[Double]]], which
    * is a blockId to dst factors map, the corresponding dst factor of the record is dstFactor(2)(3).
    *
    * We use a CSC-like (compressed sparse column) format to store the in-link information. So we can
@@ -674,7 +674,7 @@ object ALS extends Logging {
       srcIds: Array[ID],
       dstPtrs: Array[Int],
       dstEncodedIndices: Array[Int],
-      ratings: Array[Float]) {
+      ratings: Array[Double]) {
     /** Size of the block. */
     def size: Int = ratings.length
     require(dstEncodedIndices.length == size)
@@ -700,9 +700,9 @@ object ALS extends Logging {
     inBlocks.map { case (srcBlockId, inBlock) =>
       val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
       val factors = Array.fill(inBlock.srcIds.length) {
-        val factor = Array.fill(rank)(random.nextGaussian().toFloat)
-        val nrm = blas.snrm2(rank, factor, 1)
-        blas.sscal(rank, 1.0f / nrm, factor, 1)
+        val factor = Array.fill(rank)(random.nextGaussian().toDouble)
+        val nrm = blas.dnrm2(rank, factor, 1)
+        blas.dscal(rank, 1.0f / nrm, factor, 1)
         factor
       }
       (srcBlockId, factors)
@@ -715,7 +715,7 @@ object ALS extends Logging {
   private[recommendation] case class RatingBlock[@specialized(Int, Long) ID: ClassTag](
       srcIds: Array[ID],
       dstIds: Array[ID],
-      ratings: Array[Float]) {
+      ratings: Array[Double]) {
     /** Size of the block. */
     def size: Int = srcIds.length
     require(dstIds.length == srcIds.length)
@@ -730,7 +730,7 @@ object ALS extends Logging {
 
     private val srcIds = mutable.ArrayBuilder.make[ID]
     private val dstIds = mutable.ArrayBuilder.make[ID]
-    private val ratings = mutable.ArrayBuilder.make[Float]
+    private val ratings = mutable.ArrayBuilder.make[Double]
     var size = 0
 
     /** Adds a rating. */
@@ -820,7 +820,7 @@ object ALS extends Logging {
 
     private val srcIds = mutable.ArrayBuilder.make[ID]
     private val dstEncodedIndices = mutable.ArrayBuilder.make[Int]
-    private val ratings = mutable.ArrayBuilder.make[Float]
+    private val ratings = mutable.ArrayBuilder.make[Double]
 
     /**
      * Adds a dst block of (srcId, dstLocalIndex, rating) tuples.
@@ -834,7 +834,7 @@ object ALS extends Logging {
         dstBlockId: Int,
         srcIds: Array[ID],
         dstLocalIndices: Array[Int],
-        ratings: Array[Float]): this.type = {
+        ratings: Array[Double]): this.type = {
       val sz = srcIds.length
       require(dstLocalIndices.length == sz)
       require(ratings.length == sz)
@@ -860,7 +860,7 @@ object ALS extends Logging {
   private[recommendation] class UncompressedInBlock[@specialized(Int, Long) ID: ClassTag](
       val srcIds: Array[ID],
       val dstEncodedIndices: Array[Int],
-      val ratings: Array[Float])(
+      val ratings: Array[Double])(
       implicit ord: Ordering[ID]) {
 
     /** Size the of block. */
@@ -968,7 +968,7 @@ object ALS extends Logging {
       getKey(data, pos, null)
     }
 
-    private def swapElements[@specialized(Int, Float) T](
+    private def swapElements[@specialized(Int, Double) T](
         data: Array[T],
         pos0: Int,
         pos1: Int): Unit = {
@@ -996,7 +996,7 @@ object ALS extends Logging {
 
     override def allocate(length: Int): UncompressedInBlock[ID] = {
       new UncompressedInBlock(
-        new Array[ID](length), new Array[Int](length), new Array[Float](length))
+        new Array[ID](length), new Array[Int](length), new Array[Double](length))
     }
 
     override def copyElement(
@@ -1128,7 +1128,7 @@ object ALS extends Logging {
         srcFactors.foreach { case (srcBlockId, factors) =>
           sortedSrcFactors(srcBlockId) = factors
         }
-        val dstFactors = new Array[Array[Float]](dstIds.length)
+        val dstFactors = new Array[Array[Double]](dstIds.length)
         var j = 0
         val ls = new NormalEquation(rank)
         while (j < dstIds.length) {

@@ -184,7 +184,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     assert(compressed.size === 5)
     assert(compressed.srcIds.toSeq === Seq(0, 1, 2, 3))
     assert(compressed.dstPtrs.toSeq === Seq(0, 2, 3, 4, 5))
-    var decompressed = ArrayBuffer.empty[(Int, Int, Int, Float)]
+    var decompressed = ArrayBuffer.empty[(Int, Int, Int, Double)]
     var i = 0
     while (i < compressed.srcIds.size) {
       var j = compressed.dstPtrs(i)
@@ -226,10 +226,10 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
       val x = random.nextDouble()
       if (x < totalFraction) {
-        val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
+        val rating = blas.ddot(rank, userFactor, 1, itemFactor, 1)
         if (x < trainingFraction) {
           val noise = noiseStd * random.nextGaussian()
-          training += Rating(userId, itemId, rating + noise.toFloat)
+          training += Rating(userId, itemId, rating + noise.toDouble)
         } else {
           test += Rating(userId, itemId, rating)
         }
@@ -268,7 +268,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     val training = ArrayBuffer.empty[Rating[Int]]
     val test = ArrayBuffer.empty[Rating[Int]]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
-      val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
+      val rating = blas.ddot(rank, userFactor, 1, itemFactor, 1)
       val threshold = if (rating > 0) positiveFraction else negativeFraction
       val observed = random.nextDouble() < threshold
       if (observed) {
@@ -276,7 +276,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
         if (x < totalFraction) {
           if (x < trainingFraction) {
             val noise = noiseStd * random.nextGaussian()
-            training += Rating(userId, itemId, rating + noise.toFloat)
+            training += Rating(userId, itemId, rating + noise.toDouble)
           } else {
             test += Rating(userId, itemId, rating)
           }
@@ -301,8 +301,8 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
       size: Int,
       rank: Int,
       random: Random,
-      a: Float = -1.0f,
-      b: Float = 1.0f): Seq[(Int, Array[Float])] = {
+      a: Double = -1.0f,
+      b: Double = 1.0f): Seq[(Int, Array[Double])] = {
     require(size > 0 && size < Int.MaxValue / 3)
     require(b > a)
     val ids = mutable.Set.empty[Int]
@@ -310,7 +310,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
       ids += random.nextInt()
     }
     val width = b - a
-    ids.toSeq.sorted.map(id => (id, Array.fill(rank)(a + random.nextFloat() * width)))
+    ids.toSeq.sorted.map(id => (id, Array.fill(rank)(a + random.nextDouble() * width)))
   }
 
   /**
@@ -348,7 +348,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     val model = als.fit(training.toDF())
     val predictions = model.transform(test.toDF())
       .select("rating", "prediction")
-      .map { case Row(rating: Float, prediction: Float) =>
+      .map { case Row(rating: Double, prediction: Double) =>
         (rating.toDouble, prediction.toDouble)
       }
     val rmse =
@@ -439,7 +439,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     val (userFactors, itemFactors) =
       ALS.train(ratings, rank = 2, maxIter = 4, nonnegative = true, seed = 0)
-    def isNonnegative(factors: RDD[(Int, Array[Float])]): Boolean = {
+    def isNonnegative(factors: RDD[(Int, Array[Double])]): Boolean = {
       factors.values.map { _.forall(_ >= 0.0) }.reduce(_ && _)
     }
     assert(isNonnegative(userFactors))
