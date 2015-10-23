@@ -28,41 +28,34 @@ import org.apache.spark.Logging
 object ShuffleOutputCoordinator extends Logging {
 
   /**
-   * if all of the destination files do not exist, then move all of the temporary files to their
-   * destinations.  If any destination files exist, then simply delete all temporary files
+   * if any of the destination files do not exist, then move all of the temporary files to their
+   * destinations.  If all destination files exist, then delete all temporary files.
    *
    * @param tmpToDest pairs of (temporary, destination) file pairs
    * @return
    */
   def commitOutputs(
       shuffleId: Int,
-      partitionId: Int, tmpToDest: Seq[(File, File)]): Boolean = synchronized {
-    logInfo(s"renaming: $tmpToDest")
+      partitionId: Int,
+      tmpToDest: Seq[(File, File)]): Boolean = synchronized {
 
-    // HashShuffleWriter might not write any records to some of its files -- that's OK, we only
-    // move the files that do exist
+    // There might not even be zero-length files for some of the temp files -- that's OK,
+    // we just ignore those
     val toMove = tmpToDest.filter{_._1.exists()}
 
     val destAlreadyExists = toMove.forall(_._2.exists)
     if (!destAlreadyExists) {
-      // if any of the renames fail, delete all the dest files.  otherwise, future
-      // attempts have no hope of succeeding
-      val renamesSucceeded = toMove.map { case (tmp, dest) =>
+      toMove.foreach { case (tmp, dest) =>
+        // If *some* of the destination files exist, but not all of them, then its not clear
+        // what to do.  There could be a task already reading from this dest file when we delete
+        // it -- but then again, something in that taskset would be doomed to fail in any case when
+        // it got to the missing files.  Better to just put consistent output into place
         if (dest.exists()) {
           dest.delete()
         }
-        val r = tmp.renameTo(dest)
-        if (!r) {
-          logInfo(s"failed to rename $tmp to $dest.  ${tmp.exists()}; ${dest.exists()}")
-        }
-        r
-      }.forall{identity}
-      if (!renamesSucceeded) {
-        toMove.foreach { case (tmp, dest) => if (dest.exists()) dest.delete() }
-        false
-      } else {
-        true
+        tmp.renameTo(dest)
       }
+      true
     } else {
       logInfo(s"shuffle output for shuffle $shuffleId, partition $partitionId already exists, " +
         s"not overwriting.  Another task must have created this shuffle output.")
