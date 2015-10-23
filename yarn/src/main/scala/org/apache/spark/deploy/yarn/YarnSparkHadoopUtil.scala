@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.{Method, InvocationTargetException}
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -204,27 +204,39 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
     // Check for local metastore
     if (metastore_uri.nonEmpty) {
-      val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
-      val hive = hiveClass.getMethod("get", hiveConfClass).invoke(null, hiveConf)
-
+      if (username.isEmpty) {
+        throw new IllegalArgumentException(s"Username undefined")
+      }
       val metastore_kerberos_principal_key = "hive.metastore.kerberos.principal"
       val principal = hiveConf.getTrimmed(metastore_kerberos_principal_key, "")
       if (principal.isEmpty) {
         throw new IllegalArgumentException(s"Hive principal" +
             s" $metastore_kerberos_principal_key undefined")
       }
-      if (username.isEmpty) {
-        throw new IllegalArgumentException(s"Username undefined")
-      }
       logDebug(s"Getting Hive delegation token for user $username against $metastore_uri")
-      val tokenStr = hiveClass.getMethod("getDelegationToken",
-        classOf[java.lang.String], classOf[java.lang.String])
-          .invoke(hive, username, principal).asInstanceOf[java.lang.String]
+      val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
+      var closeCurrent: Option[Method] = None
+      try {
+        // get all the instance methods before invoking any
+        val getDelegationToken = hiveClass.getMethod("getDelegationToken",
+          classOf[String], classOf[String])
+        val getHive = hiveClass.getMethod("get", hiveConfClass)
+        closeCurrent = Some(hiveClass.getMethod("closeCurrent"))
 
-      val hive2Token = new Token[DelegationTokenIdentifier]()
-      hive2Token.decodeFromUrlString(tokenStr)
-      hiveClass.getMethod("closeCurrent").invoke(null)
-      Some(hive2Token)
+        // invoke
+        val hive = getHive.invoke(null, hiveConf)
+        val tokenStr = getDelegationToken.invoke(hive, username, principal)
+            .asInstanceOf[java.lang.String]
+        val hive2Token = new Token[DelegationTokenIdentifier]()
+        hive2Token.decodeFromUrlString(tokenStr)
+        Some(hive2Token)
+      } finally {
+        try {
+          closeCurrent.foreach(_.invoke(null))
+        } catch {
+          case e: Exception => logWarning("In Hive.closeCurrent()", e)
+        }
+      }
     } else {
       logDebug("HiveMetaStore configured in localmode")
       None
@@ -232,7 +244,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 }
 
-object YarnSparkHadoopUtil extends Logging {
+object YarnSparkHadoopUtil {
   // Additional memory overhead
   // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
   // the common cases. Memory overhead tends to grow with container size.
