@@ -157,6 +157,7 @@ public class TaskMemoryManager {
     }
     final long acquiredExecutionMemory = acquireExecutionMemory(size);
     if (acquiredExecutionMemory != size) {
+      releaseExecutionMemory(acquiredExecutionMemory);
       synchronized (this) {
         allocatedPages.clear(pageNumber);
       }
