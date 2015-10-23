@@ -248,12 +248,16 @@ class ProductEncoderSuite extends SparkFunSuite {
         val types =
           convertedBack.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
 
-        val encodedData = convertedData.toSeq(encoder.schema).zip(encoder.schema).map {
-          case (a: ArrayData, StructField(_, at: ArrayType, _, _)) =>
-            a.toArray[Any](at.elementType).toSeq
-          case (other, _) =>
-            other
-        }.mkString("[", ",", "]")
+        val encodedData = try {
+          convertedData.toSeq(encoder.schema).zip(encoder.schema).map {
+            case (a: ArrayData, StructField(_, at: ArrayType, _, _)) =>
+              a.toArray[Any](at.elementType).toSeq
+            case (other, _) =>
+              other
+          }.mkString("[", ",", "]")
+        } catch {
+          case e: Throwable => s"Failed to toSeq: $e"
+        }
 
         fail(
           s"""Encoded/Decoded data does not match input data
@@ -272,8 +276,9 @@ class ProductEncoderSuite extends SparkFunSuite {
              |Construct Expressions:
              |${boundEncoder.constructExpression.treeString}
              |
-           """.stripMargin)
+         """.stripMargin)
+        }
       }
-    }
+
   }
 }

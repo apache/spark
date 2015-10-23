@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.shuffle.sort;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -48,7 +48,7 @@ import org.apache.spark.util.Utils;
  * <p>
  * Incoming records are appended to data pages. When all records have been inserted (or when the
  * current thread's shuffle memory limit is reached), the in-memory records are sorted according to
- * their partition ids (using a {@link UnsafeShuffleInMemorySorter}). The sorted records are then
+ * their partition ids (using a {@link ShuffleInMemorySorter}). The sorted records are then
  * written to a single output file (or multiple files, if we've spilled). The format of the output
  * files is the same as the format of the final output file written by
  * {@link org.apache.spark.shuffle.sort.SortShuffleWriter}: each output partition's records are
@@ -59,9 +59,9 @@ import org.apache.spark.util.Utils;
  * spill files. Instead, this merging is performed in {@link UnsafeShuffleWriter}, which uses a
  * specialized merge procedure that avoids extra serialization/deserialization.
  */
-final class UnsafeShuffleExternalSorter {
+final class ShuffleExternalSorter {
 
-  private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleExternalSorter.class);
+  private final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
@@ -76,6 +76,10 @@ final class UnsafeShuffleExternalSorter {
   private final BlockManager blockManager;
   private final TaskContext taskContext;
   private final ShuffleWriteMetrics writeMetrics;
+  private long numRecordsInsertedSinceLastSpill = 0;
+
+  /** Force this sorter to spill when there are this many elements in memory. For testing only */
+  private final long numElementsForSpillThreshold;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSizeBytes;
@@ -94,12 +98,12 @@ final class UnsafeShuffleExternalSorter {
   private long peakMemoryUsedBytes;
 
   // These variables are reset after spilling:
-  @Nullable private UnsafeShuffleInMemorySorter inMemSorter;
+  @Nullable private ShuffleInMemorySorter inMemSorter;
   @Nullable private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
   private long freeSpaceInCurrentPage = 0;
 
-  public UnsafeShuffleExternalSorter(
+  public ShuffleExternalSorter(
       TaskMemoryManager memoryManager,
       ShuffleMemoryManager shuffleMemoryManager,
       BlockManager blockManager,
@@ -117,6 +121,8 @@ final class UnsafeShuffleExternalSorter {
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    this.numElementsForSpillThreshold =
+      conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MAX_VALUE);
     this.pageSizeBytes = (int) Math.min(
       PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, shuffleMemoryManager.pageSizeBytes());
     this.maxRecordSizeBytes = pageSizeBytes - 4;
@@ -140,7 +146,8 @@ final class UnsafeShuffleExternalSorter {
       throw new IOException("Could not acquire " + memoryRequested + " bytes of memory");
     }
 
-    this.inMemSorter = new UnsafeShuffleInMemorySorter(initialSize);
+    this.inMemSorter = new ShuffleInMemorySorter(initialSize);
+    numRecordsInsertedSinceLastSpill = 0;
   }
 
   /**
@@ -166,7 +173,7 @@ final class UnsafeShuffleExternalSorter {
     }
 
     // This call performs the actual sort.
-    final UnsafeShuffleInMemorySorter.UnsafeShuffleSorterIterator sortedRecords =
+    final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
       inMemSorter.getSortedIterator();
 
     // Currently, we need to open a new DiskBlockObjectWriter for each partition; we can avoid this
@@ -406,6 +413,10 @@ final class UnsafeShuffleExternalSorter {
       int lengthInBytes,
       int partitionId) throws IOException {
 
+    if (numRecordsInsertedSinceLastSpill > numElementsForSpillThreshold) {
+      spill();
+    }
+
     growPointerArrayIfNecessary();
     // Need 4 bytes to store the record length.
     final int totalSpaceRequired = lengthInBytes + 4;
@@ -453,6 +464,7 @@ final class UnsafeShuffleExternalSorter {
       recordBaseObject, recordBaseOffset, dataPageBaseObject, dataPagePosition, lengthInBytes);
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, partitionId);
+    numRecordsInsertedSinceLastSpill += 1;
   }
 
   /**

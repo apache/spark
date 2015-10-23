@@ -15,23 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.sql.catalyst.encoders
 
-import java.io.File;
+import org.apache.spark.SparkFunSuite
 
-import org.apache.spark.storage.TempShuffleBlockId;
+class PrimitiveEncoderSuite extends SparkFunSuite {
+  test("long encoder") {
+    val enc = new LongEncoder()
+    val row = enc.toRow(10)
+    assert(row.getLong(0) == 10)
+    assert(enc.fromRow(row) == 10)
+  }
 
-/**
- * Metadata for a block of data written by {@link UnsafeShuffleExternalSorter}.
- */
-final class SpillInfo {
-  final long[] partitionLengths;
-  final File file;
-  final TempShuffleBlockId blockId;
+  test("int encoder") {
+    val enc = new IntEncoder()
+    val row = enc.toRow(10)
+    assert(row.getInt(0) == 10)
+    assert(enc.fromRow(row) == 10)
+  }
 
-  public SpillInfo(int numPartitions, File file, TempShuffleBlockId blockId) {
-    this.partitionLengths = new long[numPartitions];
-    this.file = file;
-    this.blockId = blockId;
+  test("string encoder") {
+    val enc = new StringEncoder()
+    val row = enc.toRow("test")
+    assert(row.getString(0) == "test")
+    assert(enc.fromRow(row) == "test")
   }
 }
