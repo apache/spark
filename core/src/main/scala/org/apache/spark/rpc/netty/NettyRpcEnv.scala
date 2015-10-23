@@ -21,6 +21,7 @@ import java.lang.{Boolean => JBoolean}
 import java.net.{InetSocketAddress, URI}
 import java.nio.ByteBuffer
 import java.util.concurrent._
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -89,6 +90,7 @@ private[netty] class NettyRpcEnv(
       RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher))
   }
 
+  @Nullable
   override lazy val address: RpcAddress = {
     if (server != null) RpcAddress(host, server.getPort()) else null
   }
@@ -186,12 +188,12 @@ private[netty] class NettyRpcEnv(
         clientConnectionExecutor.execute(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             val client = try {
-                getTransportClient(message.receiver)
-              } catch {
-                case NonFatal(e) =>
-                  promise.tryFailure(e)
-                  throw e
-              }
+              getTransportClient(message.receiver)
+            } catch {
+              case NonFatal(e) =>
+                promise.tryFailure(e)
+                throw e
+            }
             client.sendRpc(serialize(message), new RpcResponseCallback {
 
               override def onFailure(e: Throwable): Unit = {
