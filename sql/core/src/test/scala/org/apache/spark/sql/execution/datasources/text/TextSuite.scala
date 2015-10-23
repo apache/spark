@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.debug
+package org.apache.spark.sql.execution.datasources.text
 
-import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.sql.{DataFrame, Row, QueryTest}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.util.Utils
 
 
@@ -42,6 +42,20 @@ class TextSuite extends QueryTest with SharedSQLContext {
     verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath))
 
     Utils.deleteRecursively(tempFile)
+  }
+
+  test("error handling for invalid schema") {
+    val tempFile = Utils.createTempDir()
+    tempFile.delete()
+
+    val df = sqlContext.range(2)
+    intercept[AnalysisException] {
+      df.write.text(tempFile.getCanonicalPath)
+    }
+
+    intercept[AnalysisException] {
+      sqlContext.range(2).select(df("id"), df("id") + 1).write.text(tempFile.getCanonicalPath)
+    }
   }
 
   private def testFile: String = {

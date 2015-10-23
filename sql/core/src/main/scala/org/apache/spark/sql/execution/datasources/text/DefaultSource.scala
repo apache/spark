@@ -30,7 +30,7 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -47,10 +47,23 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
+    dataSchema.foreach(verifySchema)
     new TextRelation(None, partitionColumns, paths)(sqlContext)
   }
 
   override def shortName(): String = "text"
+
+  private def verifySchema(schema: StructType): Unit = {
+    if (schema.size != 1) {
+      throw new AnalysisException(
+        s"Text data source supports only a single column, and you have ${schema.size} columns.")
+    }
+    val tpe = schema(0).dataType
+    if (tpe != StringType) {
+      throw new AnalysisException(
+        s"Text data source supports only a string column, but you have ${tpe.simpleString}.")
+    }
+  }
 }
 
 private[sql] class TextRelation(
