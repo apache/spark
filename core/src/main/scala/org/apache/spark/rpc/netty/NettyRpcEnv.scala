@@ -83,7 +83,7 @@ private[netty] class NettyRpcEnv(
       } else {
         java.util.Collections.emptyList()
       }
-    server = transportContext.createServer(port, bootstraps)
+    server = transportContext.createServer(host, port, bootstraps)
     dispatcher.registerRpcEndpoint(
       RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher))
   }
@@ -296,10 +296,10 @@ private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
       new NettyRpcEnv(sparkConf, javaSerializerInstance, config.host, config.securityManager)
     val startNettyRpcEnv: Int => (NettyRpcEnv, Int) = { actualPort =>
       nettyEnv.start(actualPort)
-      (nettyEnv, actualPort)
+      (nettyEnv, nettyEnv.address.port)
     }
     try {
-      Utils.startServiceOnPort(config.port, startNettyRpcEnv, sparkConf, "NettyRpcEnv")._1
+      Utils.startServiceOnPort(config.port, startNettyRpcEnv, sparkConf, config.name)._1
     } catch {
       case NonFatal(e) =>
         nettyEnv.shutdown()
