@@ -100,19 +100,27 @@ public class UnsafeRowWriter {
   }
 
   public void write(int ordinal, boolean value) {
-    Platform.putBoolean(holder.buffer, getFieldOffset(ordinal), value);
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putBoolean(holder.buffer, offset, value);
   }
 
   public void write(int ordinal, byte value) {
-    Platform.putByte(holder.buffer, getFieldOffset(ordinal), value);
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putByte(holder.buffer, offset, value);
   }
 
   public void write(int ordinal, short value) {
-    Platform.putShort(holder.buffer, getFieldOffset(ordinal), value);
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putShort(holder.buffer, offset, value);
   }
 
   public void write(int ordinal, int value) {
-    Platform.putInt(holder.buffer, getFieldOffset(ordinal), value);
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putInt(holder.buffer, offset, value);
   }
 
   public void write(int ordinal, long value) {
@@ -123,7 +131,9 @@ public class UnsafeRowWriter {
     if (Float.isNaN(value)) {
       value = Float.NaN;
     }
-    Platform.putFloat(holder.buffer, getFieldOffset(ordinal), value);
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putFloat(holder.buffer, offset, value);
   }
 
   public void write(int ordinal, double value) {
