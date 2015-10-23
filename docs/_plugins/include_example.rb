@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 require 'liquid'
 require 'pygments'
 
@@ -29,11 +46,11 @@ module Jekyll
     def trim_codeblock(lines)
       # Select the minimum indention of the current code block.
       min_start_spaces = lines
-        .select{ |l| l.strip.size !=0 }
-        .map{ |l| l[/\A */].size }
+        .select { |l| l.strip.size !=0 }
+        .map { |l| l[/\A */].size }
         .min
 
-      lines.map{ |l| l[min_start_spaces .. -1] }
+      lines.map { |l| l[min_start_spaces .. -1] }
     end
 
     # Select lines according to labels in code. Currently we use "$example on$" and "$example off$"
@@ -44,14 +61,14 @@ module Jekyll
       # Select the array of start labels from code.
       startIndices = lines
         .each_with_index
-        .select{ |l, i| l.include? "$example on$" }
-        .map{ |l, i| i }
+        .select { |l, i| l.include? "$example on$" }
+        .map { |l, i| i }
 
       # Select the array of end labels from code.
       endIndices = lines
         .each_with_index
-        .select{ |l, i| l.include? "$example off$" }
-        .map{ |l, i| i }
+        .select { |l, i| l.include? "$example off$" }
+        .map { |l, i| i }
 
       raise "Start indices amount is not equal to end indices amount, please check the code." \
         unless startIndices.size == endIndices.size
