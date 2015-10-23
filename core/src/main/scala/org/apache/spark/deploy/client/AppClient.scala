@@ -77,6 +77,16 @@ private[spark] class AppClient(
     private val registrationRetryThread =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("appclient-registration-retry-thread")
 
+    private val receiveAndReplyMaxPoolSize = conf.getInt(
+      "spark.appclient.receiveAndReply.maxThreads", 3)
+
+    private val receiveAndReplyThreadPool = new ThreadPoolExecutor(
+      1,
+      receiveAndReplyMaxPoolSize,
+      60L, TimeUnit.SECONDS,
+      new SynchronousQueue[Runnable](),
+      ThreadUtils.namedThreadFactory("appclient-receive-and-reply-threadpool"))
+
     override def onStart(): Unit = {
       try {
         registerWithMaster(1)
@@ -200,7 +210,18 @@ private[spark] class AppClient(
 
       case r: RequestExecutors =>
         master match {
-          case Some(m) => context.reply(m.askWithRetry[Boolean](r))
+          case Some(m) =>
+            receiveAndReplyThreadPool.execute(new Runnable {
+              override def run(): Unit = {
+                try {
+                  context.reply(m.askWithRetry[Boolean](r))
+                } catch {
+                  case ie: InterruptedException => // Cancelled
+                  case NonFatal(t) =>
+                    context.sendFailure(t)
+                }
+              }
+            })
           case None =>
             logWarning("Attempted to request executors before registering with Master.")
             context.reply(false)
@@ -208,7 +229,18 @@ private[spark] class AppClient(
 
       case k: KillExecutors =>
         master match {
-          case Some(m) => context.reply(m.askWithRetry[Boolean](k))
+          case Some(m) =>
+            receiveAndReplyThreadPool.execute(new Runnable {
+              override def run(): Unit = {
+                try {
+                  context.reply(m.askWithRetry[Boolean](k))
+                } catch {
+                  case ie: InterruptedException => // Cancelled
+                  case NonFatal(t) =>
+                    context.sendFailure(t)
+                }
+              }
+            })
           case None =>
             logWarning("Attempted to kill executors before registering with Master.")
             context.reply(false)
@@ -252,6 +284,7 @@ private[spark] class AppClient(
       registrationRetryThread.shutdownNow()
       registerMasterFutures.foreach(_.cancel(true))
       registerMasterThreadPool.shutdownNow()
+      receiveAndReplyThreadPool.shutdownNow()
     }
 
   }
