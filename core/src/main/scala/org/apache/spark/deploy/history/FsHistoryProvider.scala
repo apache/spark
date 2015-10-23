@@ -391,7 +391,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       def shouldCleanMeta(fs: FileSystem, appId: String): (Boolean, Path) = {
         val metaFile = appId.replaceAll("part\\d+", "meta")
-        val metaPath =  new Path(logDir, metaFile)
+        val metaPath = new Path(logDir, metaFile)
         val appPrefix = appId.split("-part")(0)
         if (fs.exists(metaPath) && applications.keySet.filter(_.contains(appPrefix)).size == 0) {
           (true, metaPath)

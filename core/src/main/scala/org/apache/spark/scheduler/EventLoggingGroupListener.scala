@@ -135,7 +135,9 @@ private[spark] class EventLoggingGroupListener (
       hadoopDataStream: Option[FSDataOutputStream],
       json: JValue,
       flushLogger: Boolean = false) {
+    // scalastyle:off println
     writer.foreach(_.println(compact(render(json))))
+    // scalastyle:on println
     if (flushLogger) {
       writer.foreach(_.flush())
       hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
@@ -144,7 +146,9 @@ private[spark] class EventLoggingGroupListener (
 
   /** Log meta event as JSON to meta file. */
   private def logMetaEvent(json: JValue, flushLogger: Boolean = false): Unit = {
+    // scalastyle:off println
     metaWriter.println(compact(render(json)))
+    // scalastyle:on println
     if (flushLogger) {
       metaWriter.flush()
       metaHadoopDataStream.foreach(hadoopFlushMethod.invoke(_))

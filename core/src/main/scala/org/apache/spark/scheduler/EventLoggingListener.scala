@@ -187,7 +187,7 @@ private[spark] class EventLoggingListener(
     logPath
   }
 
-  override def getLoggedEvent: ArrayBuffer[JValue]= {
+  override def getLoggedEvent: ArrayBuffer[JValue] = {
     loggedEvents
   }
 }

@@ -111,7 +111,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       Utils.resolveURI("/base-dir"), "app1", None))
     // with compression
     assert(s"file:/base-dir/app1.lzf" ===
-      EventLoggingWriterListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None, Some("lzf")))
+      EventLoggingWriterListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None,
+        Some("lzf")))
     // illegal characters in app ID
     assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
       EventLoggingWriterListener.getLogPath(Utils.resolveURI("/base-dir"),
@@ -200,7 +201,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     eventExistenceListener.assertAllCallbacksInvoked()
 
     // Make sure expected events exist in the log file.
-    val logData = EventLoggingWriterListener.openEventLog(new Path(eventLogger.getFilePath()), fileSystem)
+    val logData = EventLoggingWriterListener.openEventLog(new Path(eventLogger.getFilePath()),
+      fileSystem)
     val logStart = SparkListenerLogStart(SPARK_VERSION)
     val lines = readLines(logData)
     val eventSet = mutable.Set(
@@ -238,7 +240,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    * A listener that asserts certain events are logged by the given EventLoggingListener.
    * This is necessary because events are posted asynchronously in a different thread.
    */
-  private class EventExistenceListener(eventLogger: EventLoggingWriterListener) extends SparkListener {
+  private class EventExistenceListener(eventLogger: EventLoggingWriterListener)
+    extends SparkListener {
     var jobStarted = false
     var jobEnded = false
     var appEnded = false
