@@ -322,10 +322,8 @@ private[spark] class Client(
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
     val distributedUris = new HashSet[String]
-    if (isClusterMode) {
-      obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
-      obtainTokenForHBase(sparkConf, hadoopConf, credentials)
-    }
+    obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
+    obtainTokenForHBase(sparkConf, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
