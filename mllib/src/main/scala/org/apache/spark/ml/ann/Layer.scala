@@ -47,18 +47,27 @@ private[ann] trait Layer extends Serializable {
   def outputSize(inputSize: Int): Int
 
   /**
+   * If true, the memory is not allocated for the output of this layer.
+   * The memory allocated to the previous layer is used to write the output of this layer.
+   * Developer can set this to true if computing delta of a previous layer
+   * does not involve its output, so the current layer can write there.
+   * This also mean that both layers have the same number of outputs.
+   */
+  val inPlace: Boolean
+
+  /**
    * Returns the instance of the layer based on weights provided
    * @param weights vector with layer weights
    * @return the layer model
    */
-  def instance(weights: BDV[Double]): LayerModel
+  def model(weights: BDV[Double]): LayerModel
   /**
    * Returns the instance of the layer with random generated weights
    * @param weights vector for weights initialization
    * @param random random number generator
    * @return the layer model
    */
-  def initInstance(weights: BDV[Double], random: Random): LayerModel
+  def initModel(weights: BDV[Double], random: Random): LayerModel
 }
 
 /**
@@ -111,11 +120,13 @@ private[ann] class AffineLayer(val numIn: Int, val numOut: Int) extends Layer {
 
   override def outputSize(inputSize: Int): Int = numOut
 
-  override def instance(weights: BDV[Double]): LayerModel = {
+  override val inPlace = false
+
+  override def model(weights: BDV[Double]): LayerModel = {
     AffineLayerModel(this, weights)
   }
 
-  override def initInstance(weights: BDV[Double], random: Random): LayerModel = {
+  override def initModel(weights: BDV[Double], random: Random): LayerModel = {
     AffineLayerModel(this, weights, random)
   }
 }
@@ -218,8 +229,11 @@ private[ann] object AffineLayerModel {
    * @param random random number generator
    * @return (matrix A, vector b)
    */
-  def randomWeights(numIn: Int, numOut: Int, weights: BDV[Double], random: Random):
-  (BDM[Double], BDV[Double]) = {
+  def randomWeights(
+    numIn: Int,
+    numOut: Int,
+    weights: BDV[Double],
+    random: Random): (BDM[Double], BDV[Double]) = {
     var i = 0
     while (i < weights.length) {
       weights(i) = (random.nextDouble * 4.8 - 2.4) / numIn
@@ -301,10 +315,12 @@ private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) 
 
   override def outputSize(inputSize: Int): Int = inputSize
 
-  override def instance(weights: BDV[Double]): LayerModel = FunctionalLayerModel(this)
+  override val inPlace = true
 
-  override def initInstance(weights: BDV[Double], random: Random): LayerModel =
-    instance(weights)
+  override def model(weights: BDV[Double]): LayerModel = FunctionalLayerModel(this)
+
+  override def initModel(weights: BDV[Double], random: Random): LayerModel =
+    model(weights)
 }
 
 /**
@@ -312,7 +328,7 @@ private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) 
  * @param activationFunction activation function
  */
 private[ann] class FunctionalLayerModel protected (val activationFunction: ActivationFunction)
-  extends LayerModel with InPlace {
+  extends LayerModel {
 
   // empty weights
   private lazy val emptyWeights = new Array[Double](0)
@@ -342,7 +358,7 @@ private[ann] object FunctionalLayerModel {
 /**
  * Trait for the artificial neural network (ANN) topology properties
  */
-private[ann] trait Topology extends Serializable{
+private[ann] trait Topology extends Serializable {
   def getInstance(weights: Vector): TopologyModel
   def getInstance(seed: Long): TopologyModel
 }
@@ -350,7 +366,7 @@ private[ann] trait Topology extends Serializable{
 /**
  * Trait for ANN topology model
  */
-private[ann] trait TopologyModel extends Serializable{
+private[ann] trait TopologyModel extends Serializable {
   /**
    * Array of layers
    */
@@ -418,17 +434,17 @@ private[ml] object FeedForwardTopology {
   /**
    * Creates a multi-layer perceptron
    * @param layerSizes sizes of layers including input and output size
-   * @param softmax wether to use SoftMax or Sigmoid function for an output layer.
+   * @param softmaxOnTop wether to use SoftMax or Sigmoid function for an output layer.
    *                Softmax is default
    * @return multilayer perceptron topology
    */
-  def multiLayerPerceptron(layerSizes: Array[Int], softmax: Boolean = true): FeedForwardTopology = {
+  def multiLayerPerceptron(layerSizes: Array[Int], softmaxOnTop: Boolean = true): FeedForwardTopology = {
     val layers = new Array[Layer]((layerSizes.length - 1) * 2)
     for(i <- 0 until layerSizes.length - 1){
       layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
       layers(i * 2 + 1) =
         if (i == layerSizes.length - 2) {
-          if (softmax) {
+          if (softmaxOnTop) {
             new SoftmaxLayerWithCrossEntropyLoss()
           } else {
             // TODO: squared error is more natural but converges slower
@@ -460,16 +476,15 @@ private[ml] class FeedForwardModel private(
     val currentBatchSize = data.cols
     // TODO: allocate outputs as one big array and then create BDMs from it
     if (outputs == null || outputs(0).cols != currentBatchSize) {
-      outputs = new Array[BDM[Double]](layerModels.length)
+      outputs = new Array[BDM[Double]](layers.length)
       var inputSize = data.rows
-      for (i <- 0 until layerModels.length) {
-        layerModels(i) match {
-          case inPlace: InPlace => outputs(i) = outputs(i - 1)
-          case _ => {
-            val outputSize = layers(i).outputSize(inputSize)
-            outputs(i) = new BDM[Double](outputSize, currentBatchSize)
-            inputSize = outputSize
-          }
+      for (i <- 0 until layers.length) {
+        if (layers(i).inPlace) {
+          outputs(i) = outputs(i - 1)
+        } else {
+          val outputSize = layers(i).outputSize(inputSize)
+          outputs(i) = new BDM[Double](outputSize, currentBatchSize)
+          inputSize = outputSize
         }
       }
     }
@@ -480,10 +495,11 @@ private[ml] class FeedForwardModel private(
     outputs
   }
 
-  override def computeGradient(data: BDM[Double],
-                               target: BDM[Double],
-                               cumGradient: Vector,
-                               realBatchSize: Int): Double = {
+  override def computeGradient(
+    data: BDM[Double],
+    target: BDM[Double],
+    cumGradient: Vector,
+    realBatchSize: Int): Double = {
     val outputs = forward(data)
     val currentBatchSize = data.cols
     // TODO: allocate deltas as one big array and then create BDMs from it
@@ -491,9 +507,9 @@ private[ml] class FeedForwardModel private(
       deltas = new Array[BDM[Double]](layerModels.length)
       var inputSize = data.rows
       for (i <- 0 until layerModels.length - 1) {
-          val outputSize = layers(i).outputSize(inputSize)
-          deltas(i) = new BDM[Double](outputSize, currentBatchSize)
-          inputSize = outputSize
+        val outputSize = layers(i).outputSize(inputSize)
+        deltas(i) = new BDM[Double](outputSize, currentBatchSize)
+        inputSize = outputSize
       }
     }
     val L = layerModels.length - 1
@@ -504,7 +520,7 @@ private[ml] class FeedForwardModel private(
         throw new UnsupportedOperationException("Top layer is required to have objective.")
     }
     for (i <- (L - 2) to (0, -1)) {
-       layerModels(i + 1).prevDelta(deltas(i + 1), outputs(i + 1), deltas(i))
+      layerModels(i + 1).prevDelta(deltas(i + 1), outputs(i + 1), deltas(i))
     }
     val cumGradientArray = cumGradient.toArray
     var offset = 0
@@ -557,7 +573,7 @@ private[ann] object FeedForwardModel {
     val layerModels = new Array[LayerModel](layers.length)
     var offset = 0
     for (i <- 0 until layers.length) {
-      layerModels(i) = layers(i).instance(
+      layerModels(i) = layers(i).model(
         new BDV[Double](weights.toArray, offset, 1, layers(i).weightSize))
       offset += layers(i).weightSize
     }
@@ -582,7 +598,7 @@ private[ann] object FeedForwardModel {
     val random = new XORShiftRandom(seed)
     for(i <- 0 until layers.length){
       layerModels(i) = layers(i).
-        initInstance(new BDV[Double](weights.data, offset, 1, layers(i).weightSize), random)
+        initModel(new BDV[Double](weights.data, offset, 1, layers(i).weightSize), random)
       offset += layers(i).weightSize
     }
     new FeedForwardModel(layerModels, layers)

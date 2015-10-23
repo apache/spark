@@ -26,7 +26,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 /**
  * Trait for loss function
  */
-trait LossFunction {
+private[ann] trait LossFunction {
   /**
    * Loss function
    * @param output actual output
@@ -37,19 +37,16 @@ trait LossFunction {
   def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double
 }
 
-trait InPlace {
-
-}
-
-class SigmoidLayerWithSquaredError extends Layer {
+private[ann] class SigmoidLayerWithSquaredError extends Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
-  override def instance(weights: BDV[Double]): LayerModel = new SigmoidLayerModelWithSquaredError()
-  override def initInstance(weights: BDV[Double], random: Random): LayerModel =
+  override val inPlace = true
+  override def model(weights: BDV[Double]): LayerModel = new SigmoidLayerModelWithSquaredError()
+  override def initModel(weights: BDV[Double], random: Random): LayerModel =
     new SigmoidLayerModelWithSquaredError()
 }
 
-class SigmoidLayerModelWithSquaredError extends FunctionalLayerModel(new SigmoidFunction)
+private[ann] class SigmoidLayerModelWithSquaredError extends FunctionalLayerModel(new SigmoidFunction)
 with LossFunction {
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
     UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
@@ -59,16 +56,17 @@ with LossFunction {
   }
 }
 
-class SoftmaxLayerWithCrossEntropyLoss extends Layer {
+private[ann] class SoftmaxLayerWithCrossEntropyLoss extends Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
-  override def instance(weights: BDV[Double]): LayerModel =
+  override val inPlace = true
+  override def model(weights: BDV[Double]): LayerModel =
     new SoftmaxLayerModelWithCrossEntropyLoss()
-  override def initInstance(weights: BDV[Double], random: Random): LayerModel =
+  override def initModel(weights: BDV[Double], random: Random): LayerModel =
     new SoftmaxLayerModelWithCrossEntropyLoss()
 }
 
-class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with LossFunction {
+private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with LossFunction {
 
   private lazy val emptyWeights = new Array[Double](0)
 

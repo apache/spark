@@ -78,7 +78,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val topology = FeedForwardTopology.multiLayerPerceptron(layerSizes, false)
     val initialWeights = FeedForwardModel(topology, 23124).weights()
     val trainer = new FeedForwardTrainer(topology, 2, 2)
-    //trainer.SGDOptimizer.setNumIterations(2000)
+    // TODO: add a test for SGD
     trainer.LBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(20)
     trainer.setWeights(initialWeights).setStackSize(1)
     val model = trainer.train(rddData)
