@@ -52,14 +52,23 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+    val primitivesAsString = parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
 
-    new JSONRelation(None, samplingRatio, dataSchema, None, partitionColumns, paths)(sqlContext)
+    new JSONRelation(
+      None,
+      samplingRatio,
+      primitivesAsString,
+      dataSchema,
+      None,
+      partitionColumns,
+      paths)(sqlContext)
   }
 }
 
 private[sql] class JSONRelation(
     val inputRDD: Option[RDD[String]],
     val samplingRatio: Double,
+    val primitivesAsString: Boolean,
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
@@ -105,7 +114,8 @@ private[sql] class JSONRelation(
       InferSchema(
         inputRDD.getOrElse(createBaseRdd(files)),
         samplingRatio,
-        sqlContext.conf.columnNameOfCorruptRecord)
+        sqlContext.conf.columnNameOfCorruptRecord,
+        primitivesAsString)
     }
     checkConstraints(jsonSchema)
 
