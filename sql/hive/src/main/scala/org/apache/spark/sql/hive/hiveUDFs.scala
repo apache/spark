@@ -64,7 +64,10 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
       // don't satisfy the hive UDF, such as type mismatch, input number mismatch, etc. Here we
       // catch the exception and throw AnalysisException instead.
       try {
-        if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
+        if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
+          HiveGenericUDF(
+            new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF), children)
+        } else if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
           HiveSimpleUDF(new HiveFunctionWrapper(functionClassName), children)
         } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
           HiveGenericUDF(new HiveFunctionWrapper(functionClassName), children)
@@ -553,10 +556,16 @@ private[hive] case class HiveGenericUDTF(
 private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
-    isUDAFBridgeRequired: Boolean = false)
+    isUDAFBridgeRequired: Boolean = false,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate with HiveInspectors {
 
-  def this() = this(null, null)
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   @transient
   private lazy val resolver =
@@ -614,7 +623,11 @@ private[hive] case class HiveUDAFFunction(
     buffer = function.getNewAggregationBuffer
   }
 
-  override def aggBufferAttributes: Seq[AttributeReference] = Nil
+  override val aggBufferAttributes: Seq[AttributeReference] = Nil
+
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
+  override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
   // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
   // catalyst type checking framework.
