@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types.decimal
+package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.Decimal
 import org.scalatest.PrivateMethodTester
 
 import scala.language.postfixOps

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog

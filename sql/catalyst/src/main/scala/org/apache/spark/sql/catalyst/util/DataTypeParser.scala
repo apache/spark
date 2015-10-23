@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.catalyst.util
 
 import scala.language.implicitConversions
 import scala.util.matching.Regex
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 
 import org.apache.spark.sql.catalyst.SqlLexical
+import org.apache.spark.sql.types._
 
 /**
  * This is a data type parser that can be used to parse string representations of data types

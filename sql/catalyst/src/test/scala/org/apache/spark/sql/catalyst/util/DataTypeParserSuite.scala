@@ -15,9 +15,10 @@
 * limitations under the License.
 */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types._
 
 class DataTypeParserSuite extends SparkFunSuite {
 
