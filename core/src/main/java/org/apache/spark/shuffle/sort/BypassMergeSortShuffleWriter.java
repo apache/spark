@@ -127,23 +127,16 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public Seq<Tuple2<File, File>> write(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
-    File indexFile = blockManager.diskBlockManager().getFile(new ShuffleIndexBlockId(
+    final File indexFile = blockManager.diskBlockManager().getFile(new ShuffleIndexBlockId(
         shuffleId, mapId, IndexShuffleBlockResolver$.MODULE$.NOOP_REDUCE_ID())
     );
-    File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];
       File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
-      if (tmpIndexFile == indexFile) {
-        throw new RuntimeException("oops, index files equal");
-      }
       mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
-      // create an empty data file
-      File tmpDataFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
-      tmpDataFile.createNewFile();
       return JavaConverters.asScalaBufferConverter(Arrays.asList(
-        new Tuple2<>(tmpIndexFile, indexFile),
-        new Tuple2<>(tmpDataFile, dataFile)
+        new Tuple2<>(tmpIndexFile, indexFile)
       )).asScala();
     }
     final SerializerInstance serInstance = serializer.newInstance();

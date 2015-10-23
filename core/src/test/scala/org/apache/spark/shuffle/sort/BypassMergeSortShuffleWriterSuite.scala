@@ -33,7 +33,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{TaskMetrics, ShuffleWriteMetrics}
-import org.apache.spark.shuffle.{ShuffleOutputCoordinator, IndexShuffleBlockResolver$, IndexShuffleBlockResolver}
+import org.apache.spark.shuffle.{ShuffleOutputCoordinator, IndexShuffleBlockResolver}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -142,12 +142,14 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     )
     val files = writer.write(Iterator.empty)
     writer.stop( /* success = */ true)
-    assert(files.map{_._2}.contains(outputFile))
     assert(ShuffleOutputCoordinator.commitOutputs(0, 0, files))
     assert(writer.getPartitionLengths.sum === 0)
-    assert(outputFile.exists())
-    assert(outputFile.length() === 0)
-    assert(temporaryFilesCreated.size === 2)
+    if (outputFile.exists()) {
+      assert(outputFile.length() === 0)
+      assert(temporaryFilesCreated.size === 2)
+    } else {
+      assert(temporaryFilesCreated.size === 1)
+    }
     val shuffleWriteMetrics = taskContext.taskMetrics().shuffleWriteMetrics.get
     assert(shuffleWriteMetrics.shuffleBytesWritten === 0)
     assert(shuffleWriteMetrics.shuffleRecordsWritten === 0)
