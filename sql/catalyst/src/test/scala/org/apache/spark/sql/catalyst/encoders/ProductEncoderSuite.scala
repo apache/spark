@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.util
-
-import org.apache.spark.sql.types.{StructField, ArrayType, ArrayData}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.types.{StructField, ArrayType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -166,43 +164,43 @@ class ProductEncoderSuite extends SparkFunSuite {
     null: Array[Byte]))
   encodeDecodeTestCustom(("Array[Byte]",
     Array[Byte](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Int] null",
     null: Array[Int]))
   encodeDecodeTestCustom(("Array[Int]",
     Array[Int](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Long] null",
     null: Array[Long]))
   encodeDecodeTestCustom(("Array[Long]",
     Array[Long](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Double] null",
     null: Array[Double]))
   encodeDecodeTestCustom(("Array[Double]",
     Array[Double](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Float] null",
     null: Array[Float]))
   encodeDecodeTestCustom(("Array[Float]",
     Array[Float](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Boolean] null",
     null: Array[Boolean]))
   encodeDecodeTestCustom(("Array[Boolean]",
     Array[Boolean](true, false)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Short] null",
     null: Array[Short]))
   encodeDecodeTestCustom(("Array[Short]",
     Array[Short](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTestCustom(("java.sql.Timestamp",
     new java.sql.Timestamp(1)))
