@@ -398,12 +398,12 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void writeEnoughDataToTriggerSpill() throws Exception {
-    // TODO(Josh)
-//    when(shuffleMemoryManager.tryToAcquire(anyLong()))
-//      .then(returnsFirstArg()) // Allocate initial sort buffer
-//      .then(returnsFirstArg()) // Allocate initial data page
-//      .thenReturn(0L) // Deny request to allocate new data page
-//      .then(returnsFirstArg());  // Grant new sort buffer and data page.
+    taskMemoryManager = spy(taskMemoryManager);
+    doCallRealMethod() // initialize sort buffer
+      .doCallRealMethod() // allocate initial data page
+      .doReturn(0L) // deny request to allocate new page
+      .doCallRealMethod() // grant new sort buffer and data page
+      .when(taskMemoryManager).acquireExecutionMemory(anyLong());
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<Product2<Object, Object>>();
     final byte[] bigByteArray = new byte[PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES / 128];
@@ -411,7 +411,7 @@ public class UnsafeShuffleWriterSuite {
       dataToWrite.add(new Tuple2<Object, Object>(i, bigByteArray));
     }
     writer.write(dataToWrite.iterator());
-    // TODO(josh) verify(shuffleMemoryManager, times(5)).tryToAcquire(anyLong());
+    verify(taskMemoryManager, times(5)).acquireExecutionMemory(anyLong());
     assertEquals(2, spillFilesCreated.size());
     writer.stop(true);
     readRecordsFromFile();
@@ -426,19 +426,19 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
-    // TODO(josh)
-//    when(shuffleMemoryManager.tryToAcquire(anyLong()))
-//      .then(returnsFirstArg()) // Allocate initial sort buffer
-//      .then(returnsFirstArg()) // Allocate initial data page
-//      .thenReturn(0L) // Deny request to grow sort buffer
-//      .then(returnsFirstArg());  // Grant new sort buffer and data page.
+    taskMemoryManager = spy(taskMemoryManager);
+    doCallRealMethod() // initialize sort buffer
+      .doCallRealMethod() // allocate initial data page
+      .doReturn(0L) // deny request to allocate new page
+      .doCallRealMethod() // grant new sort buffer and data page
+      .when(taskMemoryManager).acquireExecutionMemory(anyLong());
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
-    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<Product2<Object, Object>>();
+    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     for (int i = 0; i < UnsafeShuffleWriter.INITIAL_SORT_BUFFER_SIZE; i++) {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
     writer.write(dataToWrite.iterator());
-//  TODO(josh)   verify(shuffleMemoryManager, times(5)).tryToAcquire(anyLong());
+    verify(taskMemoryManager, times(5)).acquireExecutionMemory(anyLong());
     assertEquals(2, spillFilesCreated.size());
     writer.stop(true);
     readRecordsFromFile();
@@ -504,7 +504,8 @@ public class UnsafeShuffleWriterSuite {
     final long recordLengthBytes = 8;
     final long pageSizeBytes = 256;
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
-    // TODO(josh) when(shuffleMemoryManager.pageSizeBytes()).thenReturn(pageSizeBytes);
+    taskMemoryManager = spy(taskMemoryManager);
+    when(taskMemoryManager.pageSizeBytes()).thenReturn(pageSizeBytes);
     final UnsafeShuffleWriter<Object, Object> writer =
       new UnsafeShuffleWriter<Object, Object>(
         blockManager,
