@@ -316,8 +316,7 @@ public class TaskMemoryManager {
       }
     }
 
-    freedBytes += memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
-    memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
+    freedBytes += memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
 
     return freedBytes;
   }

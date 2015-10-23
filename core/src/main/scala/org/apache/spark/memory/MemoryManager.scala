@@ -207,22 +207,31 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
   /**
    * Release numBytes of execution memory belonging to the given task.
    */
-  def releaseExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
+  final def releaseExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
+    println(s"Releasing $numBytes for task $taskAttemptId")
     val curMem = memoryConsumptionForTask.getOrElse(taskAttemptId, 0L)
-    if (curMem < numBytes && taskAttemptId != -1) { // -1 is a dummy id used in some tests
+    if (curMem < numBytes) {
       throw new SparkException(
         s"Internal error: release called on $numBytes bytes but task only has $curMem")
     }
     if (memoryConsumptionForTask.contains(taskAttemptId)) {
       memoryConsumptionForTask(taskAttemptId) -= numBytes
+      if (memoryConsumptionForTask(taskAttemptId) <= 0) {
+        memoryConsumptionForTask.remove(taskAttemptId)
+      }
       releaseExecutionMemory(numBytes)
     }
     notifyAll() // Notify waiters in tryToAcquire that memory has been freed
   }
 
-  /** Release all memory for the given task and mark it as inactive (e.g. when a task ends). */
-  private[memory] def releaseAllExecutionMemoryForTask(taskAttemptId: Long): Unit = synchronized {
-    releaseExecutionMemory(getExecutionMemoryUsageForTask(taskAttemptId), taskAttemptId)
+  /**
+   * Release all memory for the given task and mark it as inactive (e.g. when a task ends).
+   * @return the number of bytes freed.
+   */
+  private[memory] def releaseAllExecutionMemoryForTask(taskAttemptId: Long): Long = synchronized {
+    val numBytesToFree = getExecutionMemoryUsageForTask(taskAttemptId)
+    releaseExecutionMemory(numBytesToFree, taskAttemptId)
+    numBytesToFree
   }
 
   /**

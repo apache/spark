@@ -34,7 +34,6 @@ class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, 
     blockId: BlockId,
     numBytes: Long,
     evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def releaseExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = { }
   override def releaseStorageMemory(numBytes: Long): Unit = { }
   override def maxExecutionMemory: Long = Long.MaxValue
   override def maxStorageMemory: Long = Long.MaxValue
