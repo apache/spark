@@ -259,13 +259,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     val primitivesAsString = extraOptions.getOrElse("primitivesAsString", "false").toBoolean
     sqlContext.baseRelationToDataFrame(
       sqlContext.baseRelationToDataFrame(
-      new JSONRelation(
-        Some(jsonRDD),
-        samplingRatio,
-        primitivesAsString,
-        userSpecifiedSchema,
-        None,
-        None)(sqlContext))
+        new JSONRelation(
+          Some(jsonRDD),
+          samplingRatio,
+          primitivesAsString,
+          userSpecifiedSchema,
+          None,
+          None)(sqlContext)
+      )
+    )
   }
 
   /**
