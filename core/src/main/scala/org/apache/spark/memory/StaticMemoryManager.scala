@@ -33,14 +33,16 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
 private[spark] class StaticMemoryManager(
     conf: SparkConf,
     override val maxExecutionMemory: Long,
-    override val maxStorageMemory: Long)
-  extends MemoryManager(conf) {
+    override val maxStorageMemory: Long,
+    numCores: Int)
+  extends MemoryManager(conf, numCores) {
 
-  def this(conf: SparkConf) {
+  def this(conf: SparkConf, numCores: Int) {
     this(
       conf,
       StaticMemoryManager.getMaxExecutionMemory(conf),
-      StaticMemoryManager.getMaxStorageMemory(conf))
+      StaticMemoryManager.getMaxStorageMemory(conf),
+      numCores)
   }
 
   // Max number of bytes worth of blocks to evict when unrolling

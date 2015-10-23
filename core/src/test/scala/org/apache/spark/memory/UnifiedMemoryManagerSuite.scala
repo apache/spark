@@ -34,7 +34,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
    * Make a [[UnifiedMemoryManager]] and a [[MemoryStore]] with limited class dependencies.
    */
   private def makeThings(maxMemory: Long): (UnifiedMemoryManager, MemoryStore) = {
-    val mm = new UnifiedMemoryManager(conf, maxMemory)
+    val mm = new UnifiedMemoryManager(conf, maxMemory, numCores = 1)
     val ms = makeMemoryStore(mm)
     (mm, ms)
   }

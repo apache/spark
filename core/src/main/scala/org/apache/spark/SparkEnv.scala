@@ -334,9 +334,9 @@ object SparkEnv extends Logging {
     val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
     val memoryManager: MemoryManager =
       if (useLegacyMemoryManager) {
-        new StaticMemoryManager(conf)
+        new StaticMemoryManager(conf, numUsableCores)
       } else {
-        new UnifiedMemoryManager(conf)
+        new UnifiedMemoryManager(conf, numUsableCores)
       }
 
     val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)

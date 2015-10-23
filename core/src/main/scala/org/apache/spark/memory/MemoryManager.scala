@@ -46,8 +46,7 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
  * notifyAll() to signal changes to callers. Prior to Spark 1.6, this arbitration of memory across
  * tasks was performed by the ShuffleMemoryManager.
  */
-private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) extends Logging {
-  // TODO(josh) pass in numCores
+private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) extends Logging {
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 

@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
-class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf) {
+class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 1) {
   private[memory] override def doAcquireExecutionMemory(
     numBytes: Long,
     evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
