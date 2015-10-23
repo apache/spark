@@ -126,7 +126,7 @@ case class Aggregate(
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
     if (groupingExpressions.isEmpty) {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsInternal { iter =>
         val buffer = newAggregateBuffer()
         var currentRow: InternalRow = null
         while (iter.hasNext) {
@@ -151,7 +151,7 @@ case class Aggregate(
         Iterator(resultProjection(aggregateResults))
       }
     } else {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsInternal { iter =>
         val hashTable = new HashMap[InternalRow, Array[AggregateFunction1]]
         val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)
 
