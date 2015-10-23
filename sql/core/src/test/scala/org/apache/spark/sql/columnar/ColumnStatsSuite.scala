@@ -18,7 +18,6 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.types._
 
@@ -76,11 +75,11 @@ class ColumnStatsSuite extends SparkFunSuite {
   def testDecimalColumnStats[T <: AtomicType, U <: ColumnStats](
       initialStatistics: GenericInternalRow): Unit = {
 
-    val columnStatsName = classOf[FixedDecimalColumnStats].getSimpleName
-    val columnType = FIXED_DECIMAL(15, 10)
+    val columnStatsName = classOf[DecimalColumnStats].getSimpleName
+    val columnType = COMPACT_DECIMAL(15, 10)
 
     test(s"$columnStatsName: empty") {
-      val columnStats = new FixedDecimalColumnStats(15, 10)
+      val columnStats = new DecimalColumnStats(15, 10)
       columnStats.collectedStatistics.values.zip(initialStatistics.values).foreach {
         case (actual, expected) => assert(actual === expected)
       }
@@ -89,7 +88,7 @@ class ColumnStatsSuite extends SparkFunSuite {
     test(s"$columnStatsName: non-empty") {
       import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
-      val columnStats = new FixedDecimalColumnStats(15, 10)
+      val columnStats = new DecimalColumnStats(15, 10)
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 

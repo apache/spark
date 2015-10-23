@@ -20,6 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -35,7 +36,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).numElements();")
+    nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).numElements();")
   }
 }
 
@@ -173,7 +174,7 @@ case class ArrayContains(left: Expression, right: Expression)
           ${ev.isNull} = true;
         } else if (${ctx.genEqual(right.dataType, value, getValue)}) {
           ${ev.isNull} = false;
-          ${ev.primitive} = true;
+          ${ev.value} = true;
           break;
         }
       }

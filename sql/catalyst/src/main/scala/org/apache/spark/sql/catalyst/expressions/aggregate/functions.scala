@@ -21,12 +21,14 @@ import java.lang.{Long => JLong}
 import java.util
 
 import com.clearspring.analytics.hash.MurmurHash
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
-case class Average(child: Expression) extends AlgebraicAggregate {
+case class Average(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -57,7 +59,7 @@ case class Average(child: Expression) extends AlgebraicAggregate {
   private val currentSum = AttributeReference("currentSum", sumDataType)()
   private val currentCount = AttributeReference("currentCount", LongType)()
 
-  override val bufferAttributes = currentSum :: currentCount :: Nil
+  override val aggBufferAttributes = currentSum :: currentCount :: Nil
 
   override val initialValues = Seq(
     /* currentSum = */ Cast(Literal(0), sumDataType),
@@ -88,7 +90,7 @@ case class Average(child: Expression) extends AlgebraicAggregate {
   }
 }
 
-case class Count(child: Expression) extends AlgebraicAggregate {
+case class Count(child: Expression) extends DeclarativeAggregate {
   override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = false
@@ -101,7 +103,7 @@ case class Count(child: Expression) extends AlgebraicAggregate {
 
   private val currentCount = AttributeReference("currentCount", LongType)()
 
-  override val bufferAttributes = currentCount :: Nil
+  override val aggBufferAttributes = currentCount :: Nil
 
   override val initialValues = Seq(
     /* currentCount = */ Literal(0L)
@@ -118,7 +120,23 @@ case class Count(child: Expression) extends AlgebraicAggregate {
   override val evaluateExpression = Cast(currentCount, LongType)
 }
 
-case class First(child: Expression) extends AlgebraicAggregate {
+/**
+ * Returns the first value of `child` for a group of rows. If the first value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on a already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
+ * @param child
+ */
+case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -135,24 +153,61 @@ case class First(child: Expression) extends AlgebraicAggregate {
 
   private val first = AttributeReference("first", child.dataType)()
 
-  override val bufferAttributes = first :: Nil
+  private val valueSet = AttributeReference("valueSet", BooleanType)()
+
+  override val aggBufferAttributes = first :: valueSet :: Nil
 
   override val initialValues = Seq(
-    /* first = */ Literal.create(null, child.dataType)
+    /* first = */ Literal.create(null, child.dataType),
+    /* valueSet = */ Literal.create(false, BooleanType)
   )
 
-  override val updateExpressions = Seq(
-    /* first = */ If(IsNull(first), child, first)
-  )
+  override val updateExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* first = */ If(Or(valueSet, IsNull(child)), first, child),
+        /* valueSet = */ Or(valueSet, IsNotNull(child))
+      )
+    } else {
+      Seq(
+        /* first = */ If(valueSet, first, child),
+        /* valueSet = */ Literal.create(true, BooleanType)
+      )
+    }
+  }
 
-  override val mergeExpressions = Seq(
-    /* first = */ If(IsNull(first.left), first.right, first.left)
-  )
+  override val mergeExpressions = {
+    // For first, we can just check if valueSet.left is set to true. If it is set
+    // to true, we use first.right. If not, we use first.right (even if valueSet.right is
+    // false, we are safe to do so because first.right will be null in this case).
+    Seq(
+      /* first = */ If(valueSet.left, first.left, first.right),
+      /* valueSet = */ Or(valueSet.left, valueSet.right)
+    )
+  }
 
   override val evaluateExpression = first
+
+  override def toString: String = s"FIRST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 }
 
-case class Last(child: Expression) extends AlgebraicAggregate {
+/**
+ * Returns the last value of `child` for a group of rows. If the last value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[Last]] is used on a already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
+ * @param child
+ */
+case class Last(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -169,24 +224,42 @@ case class Last(child: Expression) extends AlgebraicAggregate {
 
   private val last = AttributeReference("last", child.dataType)()
 
-  override val bufferAttributes = last :: Nil
+  override val aggBufferAttributes = last :: Nil
 
   override val initialValues = Seq(
     /* last = */ Literal.create(null, child.dataType)
   )
 
-  override val updateExpressions = Seq(
-    /* last = */ If(IsNull(child), last, child)
-  )
+  override val updateExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* last = */ If(IsNull(child), last, child)
+      )
+    } else {
+      Seq(
+        /* last = */ child
+      )
+    }
+  }
 
-  override val mergeExpressions = Seq(
-    /* last = */ If(IsNull(last.right), last.left, last.right)
-  )
+  override val mergeExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* last = */ If(IsNull(last.right), last.left, last.right)
+      )
+    } else {
+      Seq(
+        /* last = */ last.right
+      )
+    }
+  }
 
   override val evaluateExpression = last
+
+  override def toString: String = s"LAST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 }
 
-case class Max(child: Expression) extends AlgebraicAggregate {
+case class Max(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -200,7 +273,7 @@ case class Max(child: Expression) extends AlgebraicAggregate {
 
   private val max = AttributeReference("max", child.dataType)()
 
-  override val bufferAttributes = max :: Nil
+  override val aggBufferAttributes = max :: Nil
 
   override val initialValues = Seq(
     /* max = */ Literal.create(null, child.dataType)
@@ -220,7 +293,7 @@ case class Max(child: Expression) extends AlgebraicAggregate {
   override val evaluateExpression = max
 }
 
-case class Min(child: Expression) extends AlgebraicAggregate {
+case class Min(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -234,7 +307,7 @@ case class Min(child: Expression) extends AlgebraicAggregate {
 
   private val min = AttributeReference("min", child.dataType)()
 
-  override val bufferAttributes = min :: Nil
+  override val aggBufferAttributes = min :: Nil
 
   override val initialValues = Seq(
     /* min = */ Literal.create(null, child.dataType)
@@ -277,7 +350,7 @@ case class StddevSamp(child: Expression) extends StddevAgg(child) {
 
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
+abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -304,7 +377,7 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
   private val currentAvg = AttributeReference("currentAvg", resultType)()
   private val currentMk = AttributeReference("currentMk", resultType)()
 
-  override val bufferAttributes = preCount :: currentCount :: preAvg ::
+  override val aggBufferAttributes = preCount :: currentCount :: preAvg ::
                                   currentAvg :: currentMk :: Nil
 
   override val initialValues = Seq(
@@ -397,7 +470,7 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
   }
 }
 
-case class Sum(child: Expression) extends AlgebraicAggregate {
+case class Sum(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -429,7 +502,7 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
 
   private val zero = Cast(Literal(0), sumDataType)
 
-  override val bufferAttributes = currentSum :: Nil
+  override val aggBufferAttributes = currentSum :: Nil
 
   override val initialValues = Seq(
     /* currentSum = */ Literal.create(null, sumDataType)
@@ -472,9 +545,19 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
  * @param relativeSD the maximum estimation error allowed.
  */
 // scalastyle:on
-case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
-    extends AggregateFunction2 {
+case class HyperLogLogPlusPlus(
+    child: Expression,
+    relativeSD: Double = 0.05,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate {
   import HyperLogLogPlusPlus._
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   /**
    * HLL++ uses 'p' bits for addressing. The more addressing bits we use, the more precise the
@@ -531,28 +614,31 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    */
   private[this] val numWords = m / REGISTERS_PER_WORD + 1
 
-  def children: Seq[Expression] = Seq(child)
+  override def children: Seq[Expression] = Seq(child)
 
-  def nullable: Boolean = false
+  override def nullable: Boolean = false
 
-  def dataType: DataType = LongType
+  override def dataType: DataType = LongType
 
-  def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
-
-  def cloneBufferAttributes: Seq[Attribute] = bufferAttributes.map(_.newInstance())
+  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /** Allocate enough words to store all registers. */
-  val bufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
     AttributeReference(s"MS[$i]", LongType)()
   }
 
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
   /** Fill all words with zeros. */
-  def initialize(buffer: MutableRow): Unit = {
+  override def initialize(buffer: MutableRow): Unit = {
     var word = 0
     while (word < numWords) {
-      buffer.setLong(mutableBufferOffset + word, 0)
+      buffer.setLong(mutableAggBufferOffset + word, 0)
       word += 1
     }
   }
@@ -562,7 +648,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    *
    * Variable names in the HLL++ paper match variable names in the code.
    */
-  def update(buffer: MutableRow, input: InternalRow): Unit = {
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
     val v = child.eval(input)
     if (v != null) {
       // Create the hashed value 'x'.
@@ -576,7 +662,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
 
       // Get the word containing the register we are interested in.
       val wordOffset = idx / REGISTERS_PER_WORD
-      val word = buffer.getLong(mutableBufferOffset + wordOffset)
+      val word = buffer.getLong(mutableAggBufferOffset + wordOffset)
 
       // Extract the M[J] register value from the word.
       val shift = REGISTER_SIZE * (idx - (wordOffset * REGISTERS_PER_WORD))
@@ -585,7 +671,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
 
       // Assign the maximum number of leading zeros to the register.
       if (pw > Midx) {
-        buffer.setLong(mutableBufferOffset + wordOffset, (word & ~mask) | (pw << shift))
+        buffer.setLong(mutableAggBufferOffset + wordOffset, (word & ~mask) | (pw << shift))
       }
     }
   }
@@ -594,12 +680,12 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    * Merge the HLL buffers by iterating through the registers in both buffers and select the
    * maximum number of leading zeros for each register.
    */
-  def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
-      val word1 = buffer1.getLong(mutableBufferOffset + wordOffset)
-      val word2 = buffer2.getLong(inputBufferOffset + wordOffset)
+      val word1 = buffer1.getLong(mutableAggBufferOffset + wordOffset)
+      val word2 = buffer2.getLong(inputAggBufferOffset + wordOffset)
       var word = 0L
       var i = 0
       var mask = REGISTER_WORD_MASK
@@ -609,7 +695,7 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
         i += 1
         idx += 1
       }
-      buffer1.setLong(mutableBufferOffset + wordOffset, word)
+      buffer1.setLong(mutableAggBufferOffset + wordOffset, word)
       wordOffset += 1
     }
   }
@@ -664,14 +750,14 @@ case class HyperLogLogPlusPlus(child: Expression, relativeSD: Double = 0.05)
    *
    * Variable names in the HLL++ paper match variable names in the code.
    */
-  def eval(buffer: InternalRow): Any = {
+  override def eval(buffer: InternalRow): Any = {
     // Compute the inverse of indicator value 'z' and count the number of zeros 'V'.
     var zInverse = 0.0d
     var V = 0.0d
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
-      val word = buffer.getLong(mutableBufferOffset + wordOffset)
+      val word = buffer.getLong(mutableAggBufferOffset + wordOffset)
       var i = 0
       var shift = 0
       while (idx < m && i < REGISTERS_PER_WORD) {

@@ -25,10 +25,12 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.tags.ExtendedHiveTest
 
 /**
  * Runs the test cases that are included in the hive distribution.
  */
+@ExtendedHiveTest
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
   private lazy val hiveQueryDir = TestHive.getHiveFile(
@@ -682,6 +684,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_file_with_space_in_the_name",
     "loadpart1",
     "louter_join_ppr",
+    "macro",
     "mapjoin_distinct",
     "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
 import org.apache.spark.sql.types._
 
 class TestNullableColumnBuilder[JvmType](columnType: ColumnType[JvmType])
@@ -35,11 +36,13 @@ object TestNullableColumnBuilder {
 }
 
 class NullableColumnBuilderSuite extends SparkFunSuite {
-  import ColumnarTestUtils._
+  import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
   Seq(
     BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
-    STRING, BINARY, FIXED_DECIMAL(15, 10), GENERIC(ArrayType(StringType)))
+    STRING, BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
+    STRUCT(StructType(StructField("a", StringType) :: Nil)),
+    ARRAY(ArrayType(IntegerType)), MAP(MapType(IntegerType, StringType)))
     .foreach {
     testNullableColumnBuilder(_)
   }
@@ -48,6 +51,9 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       columnType: ColumnType[JvmType]): Unit = {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
+    val dataType = columnType.dataType
+    val proj = UnsafeProjection.create(Array[DataType](dataType))
+    val converter = CatalystTypeConverters.createToScalaConverter(dataType)
 
     test(s"$typeName column builder: empty column") {
       val columnBuilder = TestNullableColumnBuilder(columnType)
@@ -62,7 +68,7 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       val randomRow = makeRandomRow(columnType)
 
       (0 until 4).foreach { _ =>
-        columnBuilder.appendFrom(randomRow, 0)
+        columnBuilder.appendFrom(proj(randomRow), 0)
       }
 
       val buffer = columnBuilder.build()
@@ -76,8 +82,8 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       val nullRow = makeNullRow(1)
 
       (0 until 4).foreach { _ =>
-        columnBuilder.appendFrom(randomRow, 0)
-        columnBuilder.appendFrom(nullRow, 0)
+        columnBuilder.appendFrom(proj(randomRow), 0)
+        columnBuilder.appendFrom(proj(nullRow), 0)
       }
 
       val buffer = columnBuilder.build()
@@ -88,14 +94,10 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       (1 to 7 by 2).foreach(assertResult(_, "Wrong null position")(buffer.getInt()))
 
       // For non-null values
+      val actual = new GenericMutableRow(new Array[Any](1))
       (0 until 4).foreach { _ =>
-        val actual = if (columnType.isInstanceOf[GENERIC]) {
-          SparkSqlSerializer.deserialize[Any](columnType.extract(buffer).asInstanceOf[Array[Byte]])
-        } else {
-          columnType.extract(buffer)
-        }
-
-        assert(actual === randomRow.get(0, columnType.dataType),
+        columnType.extract(buffer, actual, 0)
+        assert(converter(actual.get(0, dataType)) === converter(randomRow.get(0, dataType)),
           "Extracted value didn't equal to the original one")
       }
 

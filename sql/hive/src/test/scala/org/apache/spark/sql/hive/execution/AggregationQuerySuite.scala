@@ -323,6 +323,44 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(11.125) :: Nil)
   }
 
+  test("first_value and last_value") {
+    // We force to use a single partition for the sort and aggregate to make result
+    // deterministic.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT
+            |  first_valUE(key),
+            |  lasT_value(key),
+            |  firSt(key),
+            |  lASt(key),
+            |  first_valUE(key, true),
+            |  lasT_value(key, true),
+            |  firSt(key, true),
+            |  lASt(key, true)
+            |FROM (SELECT key FROM agg1 ORDER BY key) tmp
+          """.stripMargin),
+        Row(null, 3, null, 3, 1, 3, 1, 3) :: Nil)
+
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT
+            |  first_valUE(key),
+            |  lasT_value(key),
+            |  firSt(key),
+            |  lASt(key),
+            |  first_valUE(key, true),
+            |  lasT_value(key, true),
+            |  firSt(key, true),
+            |  lASt(key, true)
+            |FROM (SELECT key FROM agg1 ORDER BY key DESC) tmp
+          """.stripMargin),
+        Row(3, null, 3, null, 3, 1, 3, 1) :: Nil)
+    }
+  }
+
   test("udaf") {
     checkAnswer(
       sqlContext.sql(
@@ -343,7 +381,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, null, 110.0, null, null, 10.0) :: Nil)
   }
 
-  test("non-AlgebraicAggregate aggreguate function") {
+  test("interpreted aggregate function") {
     checkAnswer(
       sqlContext.sql(
         """
@@ -368,7 +406,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(null) :: Nil)
   }
 
-  test("non-AlgebraicAggregate and AlgebraicAggregate aggreguate function") {
+  test("interpreted and expression-based aggregation functions") {
     checkAnswer(
       sqlContext.sql(
         """

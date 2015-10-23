@@ -294,7 +294,11 @@ abstract class RDD[T: ClassTag](
    */
   private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
   {
-    if (isCheckpointed) firstParent[T].iterator(split, context) else compute(split, context)
+    if (isCheckpointedAndMaterialized) {
+      firstParent[T].iterator(split, context)
+    } else {
+      compute(split, context)
+    }
   }
 
   /**
@@ -1520,19 +1524,36 @@ abstract class RDD[T: ClassTag](
       persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
     }
 
-    checkpointData match {
-      case Some(reliable: ReliableRDDCheckpointData[_]) => logWarning(
-        "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
-      case _ =>
+    // If this RDD is already checkpointed and materialized, its lineage is already truncated.
+    // We must not override our `checkpointData` in this case because it is needed to recover
+    // the checkpointed data. If it is overridden, next time materializing on this RDD will
+    // cause error.
+    if (isCheckpointedAndMaterialized) {
+      logWarning("Not marking RDD for local checkpoint because it was already " +
+        "checkpointed and materialized")
+    } else {
+      // Lineage is not truncated yet, so just override any existing checkpoint data with ours
+      checkpointData match {
+        case Some(_: ReliableRDDCheckpointData[_]) => logWarning(
+          "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
+        case _ =>
+      }
+      checkpointData = Some(new LocalRDDCheckpointData(this))
     }
-    checkpointData = Some(new LocalRDDCheckpointData(this))
     this
   }
 
   /**
-   * Return whether this RDD is marked for checkpointing, either reliably or locally.
+   * Return whether this RDD is checkpointed and materialized, either reliably or locally.
    */
   def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
+
+  /**
+   * Return whether this RDD is checkpointed and materialized, either reliably or locally.
+   * This is introduced as an alias for `isCheckpointed` to clarify the semantics of the
+   * return value. Exposed for testing.
+   */
+  private[spark] def isCheckpointedAndMaterialized: Boolean = isCheckpointed
 
   /**
    * Return whether this RDD is marked for local checkpointing.

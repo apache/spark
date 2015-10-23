@@ -188,10 +188,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // Load the properties file and check whether spark-submit will be running the app's driver
     // or just launching a cluster app. When running the driver, the JVM's argument will be
     // modified to cover the driver's configuration.
-    Properties props = loadPropertiesFile();
-    boolean isClientMode = isClientMode(props);
-    String extraClassPath = isClientMode ?
-      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;
+    Map<String, String> config = getEffectiveConfig();
+    boolean isClientMode = isClientMode(config);
+    String extraClassPath = isClientMode ? config.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH) : null;
 
     List<String> cmd = buildJavaCommand(extraClassPath);
     // Take Thrift Server as daemon
@@ -212,14 +211,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // Take Thrift Server as daemon
       String tsMemory =
         isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
-      String memory = firstNonEmpty(tsMemory,
-        firstNonEmptyValue(SparkLauncher.DRIVER_MEMORY, conf, props),
+      String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
-      addOptionString(cmd, firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
+      addOptionString(cmd, config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS));
       mergeEnvPathList(env, getLibPathEnvName(),
-        firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+        config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
     addPermGenSizeOpt(cmd);
@@ -281,9 +279,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private void constructEnvVarArgs(
       Map<String, String> env,
       String submitArgsEnvVariable) throws IOException {
-    Properties props = loadPropertiesFile();
     mergeEnvPathList(env, getLibPathEnvName(),
-      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+      getEffectiveConfig().get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
 
     StringBuilder submitArgs = new StringBuilder();
     for (String arg : buildSparkSubmitArgs()) {
@@ -295,9 +292,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     env.put(submitArgsEnvVariable, submitArgs.toString());
   }
 
-
-  private boolean isClientMode(Properties userProps) {
-    String userMaster = firstNonEmpty(master, (String) userProps.get(SparkLauncher.SPARK_MASTER));
+  private boolean isClientMode(Map<String, String> userProps) {
+    String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
     // Default master is "local[*]", so assume client mode in that case.
     return userMaster == null ||
       "client".equals(deployMode) ||

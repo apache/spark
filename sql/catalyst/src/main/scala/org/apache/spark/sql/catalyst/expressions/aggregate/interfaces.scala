@@ -69,9 +69,6 @@ private[sql] case object NoOp extends Expression with Unevaluable {
 /**
  * A container for an [[AggregateFunction2]] with its [[AggregateMode]] and a field
  * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
- * @param aggregateFunction
- * @param mode
- * @param isDistinct
  */
 private[sql] case class AggregateExpression2(
     aggregateFunction: AggregateFunction2,
@@ -86,7 +83,7 @@ private[sql] case class AggregateExpression2(
   override def references: AttributeSet = {
     val childReferences = mode match {
       case Partial | Complete => aggregateFunction.references.toSeq
-      case PartialMerge | Final => aggregateFunction.bufferAttributes
+      case PartialMerge | Final => aggregateFunction.aggBufferAttributes
     }
 
     AttributeSet(childReferences)
@@ -95,98 +92,201 @@ private[sql] case class AggregateExpression2(
   override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
 }
 
-abstract class AggregateFunction2
-  extends Expression with ImplicitCastInputTypes {
+/**
+ * AggregateFunction2 is the superclass of two aggregation function interfaces:
+ *
+ *  - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
+ *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
+ *  - [[DeclarativeAggregate]] is for aggregation functions that are specified using
+ *    Catalyst expressions.
+ *
+ * In both interfaces, aggregates must define the schema ([[aggBufferSchema]]) and attributes
+ * ([[aggBufferAttributes]]) of an aggregation buffer which is used to hold partial aggregate
+ * results. At runtime, multiple aggregate functions are evaluated by the same operator using a
+ * combined aggregation buffer which concatenates the aggregation buffers of the individual
+ * aggregate functions.
+ *
+ * Code which accepts [[AggregateFunction2]] instances should be prepared to handle both types of
+ * aggregate functions.
+ */
+sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInputTypes {
 
   /** An aggregate function is not foldable. */
   final override def foldable: Boolean = false
 
-  /**
-   * The offset of this function's start buffer value in the
-   * underlying shared mutable aggregation buffer.
-   * For example, we have two aggregate functions `avg(x)` and `avg(y)`, which share
-   * the same aggregation buffer. In this shared buffer, the position of the first
-   * buffer value of `avg(x)` will be 0 and the position of the first buffer value of `avg(y)`
-   * will be 2.
-   */
-  protected var mutableBufferOffset: Int = 0
-
-  def withNewMutableBufferOffset(newMutableBufferOffset: Int): Unit = {
-    mutableBufferOffset = newMutableBufferOffset
-  }
-
-  /**
-   * The offset of this function's start buffer value in the
-   * underlying shared input aggregation buffer. An input aggregation buffer is used
-   * when we merge two aggregation buffers and it is basically the immutable one
-   * (we merge an input aggregation buffer and a mutable aggregation buffer and
-   * then store the new buffer values to the mutable aggregation buffer).
-   * Usually, an input aggregation buffer also contain extra elements like grouping
-   * keys at the beginning. So, mutableBufferOffset and inputBufferOffset are often
-   * different.
-   * For example, we have a grouping expression `key``, and two aggregate functions
-   * `avg(x)` and `avg(y)`. In this shared input aggregation buffer, the position of the first
-   * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
-   * will be 3 (position 0 is used for the value of key`).
-   */
-  protected var inputBufferOffset: Int = 0
-
-  def withNewInputBufferOffset(newInputBufferOffset: Int): Unit = {
-    inputBufferOffset = newInputBufferOffset
-  }
-
   /** The schema of the aggregation buffer. */
-  def bufferSchema: StructType
+  def aggBufferSchema: StructType
 
-  /** Attributes of fields in bufferSchema. */
-  def bufferAttributes: Seq[AttributeReference]
-
-  /** Clones bufferAttributes. */
-  def cloneBufferAttributes: Seq[Attribute]
+  /** Attributes of fields in aggBufferSchema. */
+  def aggBufferAttributes: Seq[AttributeReference]
 
   /**
-   * Initializes its aggregation buffer located in `buffer`.
-   * It will use bufferOffset to find the starting point of
-   * its buffer in the given `buffer` shared with other functions.
+   * Attributes of fields in input aggregation buffers (immutable aggregation buffers that are
+   * merged with mutable aggregation buffers in the merge() function or merge expressions).
+   * These attributes are created automatically by cloning the [[aggBufferAttributes]].
    */
-  def initialize(buffer: MutableRow): Unit
-
-  /**
-   * Updates its aggregation buffer located in `buffer` based on the given `input`.
-   * It will use bufferOffset to find the starting point of its buffer in the given `buffer`
-   * shared with other functions.
-   */
-  def update(buffer: MutableRow, input: InternalRow): Unit
-
-  /**
-   * Updates its aggregation buffer located in `buffer1` by combining intermediate results
-   * in the current buffer and intermediate results from another buffer `buffer2`.
-   * It will use bufferOffset to find the starting point of its buffer in the given `buffer1`
-   * and `buffer2`.
-   */
-  def merge(buffer1: MutableRow, buffer2: InternalRow): Unit
-
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+  def inputAggBufferAttributes: Seq[AttributeReference]
 
   /**
    * Indicates if this function supports partial aggregation.
    * Currently Hive UDAF is the only one that doesn't support partial aggregation.
    */
   def supportsPartial: Boolean = true
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 
 /**
- * A helper class for aggregate functions that can be implemented in terms of catalyst expressions.
+ * API for aggregation functions that are expressed in terms of imperative initialize(), update(),
+ * and merge() functions which operate on Row-based aggregation buffers.
+ *
+ * Within these functions, code should access fields of the mutable aggregation buffer by adding the
+ * bufferSchema-relative field number to `mutableAggBufferOffset` then using this new field number
+ * to access the buffer Row. This is necessary because this aggregation function's buffer is
+ * embedded inside of a larger shared aggregation buffer when an aggregation operator evaluates
+ * multiple aggregate functions at the same time.
+ *
+ * We need to perform similar field number arithmetic when merging multiple intermediate
+ * aggregate buffers together in `merge()` (in this case, use `inputAggBufferOffset` when accessing
+ * the input buffer).
+ *
+ * Correct ImperativeAggregate evaluation depends on the correctness of `mutableAggBufferOffset` and
+ * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
+ * and `inputAggBufferAttributes`.
  */
-abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable with Unevaluable {
+abstract class ImperativeAggregate extends AggregateFunction2 {
 
+  /**
+   * The offset of this function's first buffer value in the underlying shared mutable aggregation
+   * buffer.
+   *
+   * For example, we have two aggregate functions `avg(x)` and `avg(y)`, which share the same
+   * aggregation buffer. In this shared buffer, the position of the first buffer value of `avg(x)`
+   * will be 0 and the position of the first buffer value of `avg(y)` will be 2:
+   *
+   *          avg(x) mutableAggBufferOffset = 0
+   *                  |
+   *                  v
+   *                  +--------+--------+--------+--------+
+   *                  |  sum1  | count1 |  sum2  | count2 |
+   *                  +--------+--------+--------+--------+
+   *                                    ^
+   *                                    |
+   *                     avg(y) mutableAggBufferOffset = 2
+   *
+   */
+  protected val mutableAggBufferOffset: Int
+
+  /**
+   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   * This new copy's attributes may have different ids than the original.
+   */
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate
+
+  /**
+   * The offset of this function's start buffer value in the underlying shared input aggregation
+   * buffer. An input aggregation buffer is used when we merge two aggregation buffers together in
+   * the `update()` function and is immutable (we merge an input aggregation buffer and a mutable
+   * aggregation buffer and then store the new buffer values to the mutable aggregation buffer).
+   *
+   * An input aggregation buffer may contain extra fields, such as grouping keys, at its start, so
+   * mutableAggBufferOffset and inputAggBufferOffset are often different.
+   *
+   * For example, say we have a grouping expression, `key`, and two aggregate functions,
+   * `avg(x)` and `avg(y)`. In the shared input aggregation buffer, the position of the first
+   * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
+   * will be 3 (position 0 is used for the value of `key`):
+   *
+   *          avg(x) inputAggBufferOffset = 1
+   *                   |
+   *                   v
+   *          +--------+--------+--------+--------+--------+
+   *          |  key   |  sum1  | count1 |  sum2  | count2 |
+   *          +--------+--------+--------+--------+--------+
+   *                                     ^
+   *                                     |
+   *                       avg(y) inputAggBufferOffset = 3
+   *
+   */
+  protected val inputAggBufferOffset: Int
+
+  /**
+   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   * This new copy's attributes may have different ids than the original.
+   */
+  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate
+
+  // Note: although all subclasses implement inputAggBufferAttributes by simply cloning
+  // aggBufferAttributes, that common clone code cannot be placed here in the abstract
+  // ImperativeAggregate class, since that will lead to initialization ordering issues.
+
+  /**
+   * Initializes the mutable aggregation buffer located in `mutableAggBuffer`.
+   *
+   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
+   */
+  def initialize(mutableAggBuffer: MutableRow): Unit
+
+  /**
+   * Updates its aggregation buffer, located in `mutableAggBuffer`, based on the given `inputRow`.
+   *
+   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
+   */
+  def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit
+
+  /**
+   * Combines new intermediate results from the `inputAggBuffer` with the existing intermediate
+   * results in the `mutableAggBuffer.`
+   *
+   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
+   * Use `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
+   */
+  def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit
+}
+
+/**
+ * API for aggregation functions that are expressed in terms of Catalyst expressions.
+ *
+ * When implementing a new expression-based aggregate function, start by implementing
+ * `bufferAttributes`, defining attributes for the fields of the mutable aggregation buffer. You
+ * can then use these attributes when defining `updateExpressions`, `mergeExpressions`, and
+ * `evaluateExpressions`.
+ */
+abstract class DeclarativeAggregate
+  extends AggregateFunction2
+  with Serializable
+  with Unevaluable {
+
+  /**
+   * Expressions for initializing empty aggregation buffers.
+   */
   val initialValues: Seq[Expression]
+
+  /**
+   * Expressions for updating the mutable aggregation buffer based on an input row.
+   */
   val updateExpressions: Seq[Expression]
+
+  /**
+   * A sequence of expressions for merging two aggregation buffers together. When defining these
+   * expressions, you can use the syntax `attributeName.left` and `attributeName.right` to refer
+   * to the attributes corresponding to each of the buffers being merged (this magic is enabled
+   * by the [[RichAttribute]] implicit class).
+   */
   val mergeExpressions: Seq[Expression]
+
+  /**
+   * An expression which returns the final value for this aggregate function. Its data type should
+   * match this expression's [[dataType]].
+   */
   val evaluateExpression: Expression
 
-  override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
+  /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
+  final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+
+  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
 
   /**
    * A helper class for representing an attribute used in merging two
@@ -194,33 +294,13 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable w
    * we merge buffer values and then update bufferLeft. A [[RichAttribute]]
    * of an [[AttributeReference]] `a` has two functions `left` and `right`,
    * which represent `a` in `bufferLeft` and `bufferRight`, respectively.
-   * @param a
    */
   implicit class RichAttribute(a: AttributeReference) {
     /** Represents this attribute at the mutable buffer side. */
     def left: AttributeReference = a
 
     /** Represents this attribute at the input buffer side (the data value is read-only). */
-    def right: AttributeReference = cloneBufferAttributes(bufferAttributes.indexOf(a))
+    def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
-
-  /** An AlgebraicAggregate's bufferSchema is derived from bufferAttributes. */
-  override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
-
-  override def initialize(buffer: MutableRow): Unit = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's initialize should not be called directly")
-  }
-
-  override final def update(buffer: MutableRow, input: InternalRow): Unit = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's update should not be called directly")
-  }
-
-  override final def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's merge should not be called directly")
-  }
-
 }
 

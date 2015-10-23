@@ -55,7 +55,7 @@ abstract class LeafMathExpression(c: Double, name: String)
 abstract class UnaryMathExpression(val f: Double => Double, name: String)
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(DoubleType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
@@ -89,7 +89,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = java.lang.Math.${funcName}($c);
+          ${ev.value} = java.lang.Math.${funcName}($c);
         }
       """
     )
@@ -153,13 +153,28 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
 case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
-  override def dataType: DataType = LongType
-  protected override def nullSafeEval(input: Any): Any = {
-    f(input.asInstanceOf[Double]).toLong
+  override def dataType: DataType = child.dataType match {
+    case dt @ DecimalType.Fixed(_, 0) => dt
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType.bounded(precision - scale + 1, 0)
+    case _ => LongType
+  }
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, DecimalType))
+
+  protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case DoubleType => f(input.asInstanceOf[Double]).toLong
+    case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+    child.dataType match {
+      case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
+      case DecimalType.Fixed(precision, scale) =>
+        defineCodeGen(ctx, ev, c => s"$c.ceil()")
+      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+    }
   }
 }
 
@@ -191,8 +206,8 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
-       ${ev.primitive} = $numconv.convert($num.getBytes(), $from, $to);
-       if (${ev.primitive} == null) {
+       ${ev.value} = $numconv.convert($num.getBytes(), $from, $to);
+       if (${ev.value} == null) {
          ${ev.isNull} = true;
        }
        """
@@ -205,13 +220,28 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
-  override def dataType: DataType = LongType
-  protected override def nullSafeEval(input: Any): Any = {
-    f(input.asInstanceOf[Double]).toLong
+  override def dataType: DataType = child.dataType match {
+    case dt @ DecimalType.Fixed(_, 0) => dt
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType.bounded(precision - scale + 1, 0)
+    case _ => LongType
+  }
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, DecimalType))
+
+  protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case DoubleType => f(input.asInstanceOf[Double]).toLong
+    case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+    child.dataType match {
+      case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
+      case DecimalType.Fixed(precision, scale) =>
+        defineCodeGen(ctx, ev, c => s"$c.floor()")
+      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+    }
   }
 }
 
@@ -270,7 +300,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
         if ($eval > 20 || $eval < 0) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} =
+          ${ev.value} =
             org.apache.spark.sql.catalyst.expressions.Factorial.factorial($eval);
         }
       """
@@ -288,7 +318,7 @@ case class Log2(child: Expression)
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = java.lang.Math.log($c) / java.lang.Math.log(2);
+          ${ev.value} = java.lang.Math.log($c) / java.lang.Math.log(2);
         }
       """
     )
@@ -432,7 +462,7 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (c) => {
       val hex = Hex.getClass.getName.stripSuffix("$")
-      s"${ev.primitive} = " + (child.dataType match {
+      s"${ev.value} = " + (child.dataType match {
         case StringType => s"""$hex.hex($c.getBytes());"""
         case _ => s"""$hex.hex($c);"""
       })
@@ -458,8 +488,8 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
     nullSafeCodeGen(ctx, ev, (c) => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       s"""
-        ${ev.primitive} = $hex.unhex($c.getBytes());
-        ${ev.isNull} = ${ev.primitive} == null;
+        ${ev.value} = $hex.unhex($c.getBytes());
+        ${ev.isNull} = ${ev.value} == null;
        """
     })
   }
@@ -605,7 +635,7 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-            ${ev.primitive} = java.lang.Math.log($c2);
+            ${ev.value} = java.lang.Math.log($c2);
           }
         """)
     } else {
@@ -614,7 +644,7 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c1 <= 0.0 || $c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-            ${ev.primitive} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
+            ${ev.value} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
           }
         """)
     }
@@ -727,74 +757,74 @@ case class Round(child: Expression, scale: Expression)
     val evaluationCode = child.dataType match {
       case _: DecimalType =>
         s"""
-        if (${ce.primitive}.changePrecision(${ce.primitive}.precision(), ${_scale})) {
-          ${ev.primitive} = ${ce.primitive};
+        if (${ce.value}.changePrecision(${ce.value}.precision(), ${_scale})) {
+          ${ev.value} = ${ce.value};
         } else {
           ${ev.isNull} = true;
         }"""
       case ByteType =>
         if (_scale < 0) {
           s"""
-          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+          ${ev.value} = new java.math.BigDecimal(${ce.value}).
             setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).byteValue();"""
         } else {
-          s"${ev.primitive} = ${ce.primitive};"
+          s"${ev.value} = ${ce.value};"
         }
       case ShortType =>
         if (_scale < 0) {
           s"""
-          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+          ${ev.value} = new java.math.BigDecimal(${ce.value}).
             setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).shortValue();"""
         } else {
-          s"${ev.primitive} = ${ce.primitive};"
+          s"${ev.value} = ${ce.value};"
         }
       case IntegerType =>
         if (_scale < 0) {
           s"""
-          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+          ${ev.value} = new java.math.BigDecimal(${ce.value}).
             setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).intValue();"""
         } else {
-          s"${ev.primitive} = ${ce.primitive};"
+          s"${ev.value} = ${ce.value};"
         }
       case LongType =>
         if (_scale < 0) {
           s"""
-          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+          ${ev.value} = new java.math.BigDecimal(${ce.value}).
             setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).longValue();"""
         } else {
-          s"${ev.primitive} = ${ce.primitive};"
+          s"${ev.value} = ${ce.value};"
         }
       case FloatType => // if child eval to NaN or Infinity, just return it.
         if (_scale == 0) {
           s"""
-            if (Float.isNaN(${ce.primitive}) || Float.isInfinite(${ce.primitive})){
-              ${ev.primitive} = ${ce.primitive};
+            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})){
+              ${ev.value} = ${ce.value};
             } else {
-              ${ev.primitive} = Math.round(${ce.primitive});
+              ${ev.value} = Math.round(${ce.value});
             }"""
         } else {
           s"""
-            if (Float.isNaN(${ce.primitive}) || Float.isInfinite(${ce.primitive})){
-              ${ev.primitive} = ${ce.primitive};
+            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})){
+              ${ev.value} = ${ce.value};
             } else {
-              ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
+              ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
                 setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).floatValue();
             }"""
         }
       case DoubleType => // if child eval to NaN or Infinity, just return it.
         if (_scale == 0) {
           s"""
-            if (Double.isNaN(${ce.primitive}) || Double.isInfinite(${ce.primitive})){
-              ${ev.primitive} = ${ce.primitive};
+            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})){
+              ${ev.value} = ${ce.value};
             } else {
-              ${ev.primitive} = Math.round(${ce.primitive});
+              ${ev.value} = Math.round(${ce.value});
             }"""
         } else {
           s"""
-            if (Double.isNaN(${ce.primitive}) || Double.isInfinite(${ce.primitive})){
-              ${ev.primitive} = ${ce.primitive};
+            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})){
+              ${ev.value} = ${ce.value};
             } else {
-              ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
+              ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
                 setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).doubleValue();
             }"""
         }
@@ -803,13 +833,13 @@ case class Round(child: Expression, scale: Expression)
     if (scaleV == null) { // if scale is null, no need to eval its child at all
       s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       """
     } else {
       s"""
         ${ce.code}
         boolean ${ev.isNull} = ${ce.isNull};
-        ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         if (!${ev.isNull}) {
           $evaluationCode
         }

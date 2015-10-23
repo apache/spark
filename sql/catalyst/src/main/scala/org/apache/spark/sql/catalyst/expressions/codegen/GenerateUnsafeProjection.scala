@@ -39,6 +39,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
+    case dt: OpenHashSetUDT => false  // it's not a standard UDT
+    case udt: UserDefinedType[_] => canSupport(udt.sqlType)
     case _ => false
   }
 
@@ -60,7 +62,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     s"""
       if ($input instanceof UnsafeRow) {
-        $rowWriterClass.directWrite($bufferHolder, (UnsafeRow) $input);
+        ${writeUnsafeData(ctx, s"((UnsafeRow) $input)", bufferHolder)}
       } else {
         ${writeExpressionsToBuffer(ctx, input, fieldEvals, fieldTypes, bufferHolder)}
       }
@@ -77,13 +79,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     ctx.addMutableState(rowWriterClass, rowWriter, s"this.$rowWriter = new $rowWriterClass();")
 
     val writeFields = inputs.zip(inputTypes).zipWithIndex.map {
-      case ((input, dt), index) =>
+      case ((input, dataType), index) =>
+        val dt = dataType match {
+          case udt: UserDefinedType[_] => udt.sqlType
+          case other => other
+        }
         val tmpCursor = ctx.freshName("tmpCursor")
 
         val setNull = dt match {
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
             // Can't call setNullAt() for DecimalType with precision larger than 18.
-            s"$rowWriter.write($index, null, ${t.precision}, ${t.scale});"
+            s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
@@ -93,7 +99,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
               final int $tmpCursor = $bufferHolder.cursor;
-              ${writeStructToBuffer(ctx, input.primitive, t.map(_.dataType), bufferHolder)}
+              ${writeStructToBuffer(ctx, input.value, t.map(_.dataType), bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
             """
 
@@ -102,7 +108,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
               final int $tmpCursor = $bufferHolder.cursor;
-              ${writeArrayToBuffer(ctx, input.primitive, et, bufferHolder)}
+              ${writeArrayToBuffer(ctx, input.value, et, bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
               $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
             """
@@ -112,29 +118,22 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
               final int $tmpCursor = $bufferHolder.cursor;
-              ${writeMapToBuffer(ctx, input.primitive, kt, vt, bufferHolder)}
+              ${writeMapToBuffer(ctx, input.value, kt, vt, bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
               $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
             """
 
           case _ if ctx.isPrimitiveType(dt) =>
-            val fieldOffset = ctx.freshName("fieldOffset")
             s"""
-              final long $fieldOffset = $rowWriter.getFieldOffset($index);
-              Platform.putLong($bufferHolder.buffer, $fieldOffset, 0L);
-              ${writePrimitiveType(ctx, input.primitive, dt, s"$bufferHolder.buffer", fieldOffset)}
+              $rowWriter.write($index, ${input.value});
             """
 
-          case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
-            s"$rowWriter.writeCompactDecimal($index, ${input.primitive}, " +
-              s"${t.precision}, ${t.scale});"
-
           case t: DecimalType =>
-            s"$rowWriter.write($index, ${input.primitive}, ${t.precision}, ${t.scale});"
+            s"$rowWriter.write($index, ${input.value}, ${t.precision}, ${t.scale});"
 
           case NullType => ""
 
-          case _ => s"$rowWriter.write($index, ${input.primitive});"
+          case _ => s"$rowWriter.write($index, ${input.value});"
         }
 
         s"""
@@ -158,8 +157,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodeGenContext,
       input: String,
       elementType: DataType,
-      bufferHolder: String,
-      needHeader: Boolean = true): String = {
+      bufferHolder: String): String = {
     val arrayWriter = ctx.freshName("arrayWriter")
     ctx.addMutableState(arrayWriterClass, arrayWriter,
       s"this.$arrayWriter = new $arrayWriterClass();")
@@ -167,15 +165,20 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val index = ctx.freshName("index")
     val element = ctx.freshName("element")
 
-    val jt = ctx.javaType(elementType)
+    val et = elementType match {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case other => other
+    }
 
-    val fixedElementSize = elementType match {
+    val jt = ctx.javaType(et)
+
+    val fixedElementSize = et match {
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS => 8
-      case _ if ctx.isPrimitiveType(jt) => elementType.defaultSize
+      case _ if ctx.isPrimitiveType(jt) => et.defaultSize
       case _ => 0
     }
 
-    val writeElement = elementType match {
+    val writeElement = et match {
       case t: StructType =>
         s"""
           $arrayWriter.setOffset($index);
@@ -194,20 +197,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}
         """
 
-      case _ if ctx.isPrimitiveType(elementType) =>
-        // Should we do word align?
-        val dataSize = elementType.defaultSize
-
-        s"""
-          $arrayWriter.setOffset($index);
-          ${writePrimitiveType(ctx, element, elementType,
-            s"$bufferHolder.buffer", s"$bufferHolder.cursor")}
-          $bufferHolder.cursor += $dataSize;
-        """
-
-      case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
-        s"$arrayWriter.writeCompactDecimal($index, $element, ${t.precision}, ${t.scale});"
-
       case t: DecimalType =>
         s"$arrayWriter.write($index, $element, ${t.precision}, ${t.scale});"
 
@@ -216,28 +205,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
-    val writeHeader = if (needHeader) {
-      // If header is required, we need to write the number of elements into first 4 bytes.
-      s"""
-        $bufferHolder.grow(4);
-        Platform.putInt($bufferHolder.buffer, $bufferHolder.cursor, $numElements);
-        $bufferHolder.cursor += 4;
-      """
-    } else ""
-
     s"""
-      final int $numElements = $input.numElements();
-      $writeHeader
       if ($input instanceof UnsafeArrayData) {
-        $arrayWriterClass.directWrite($bufferHolder, (UnsafeArrayData) $input);
+        ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
       } else {
+        final int $numElements = $input.numElements();
         $arrayWriter.initialize($bufferHolder, $numElements, $fixedElementSize);
 
         for (int $index = 0; $index < $numElements; $index++) {
           if ($input.isNullAt($index)) {
             $arrayWriter.setNullAt($index);
           } else {
-            final $jt $element = ${ctx.getValue(input, elementType, index)};
+            final $jt $element = ${ctx.getValue(input, et, index)};
             $writeElement
           }
         }
@@ -259,56 +238,41 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     // Writes out unsafe map according to the format described in `UnsafeMapData`.
     s"""
-      final ArrayData $keys = $input.keyArray();
-      final ArrayData $values = $input.valueArray();
+      if ($input instanceof UnsafeMapData) {
+        ${writeUnsafeData(ctx, s"((UnsafeMapData) $input)", bufferHolder)}
+      } else {
+        final ArrayData $keys = $input.keyArray();
+        final ArrayData $values = $input.valueArray();
 
-      $bufferHolder.grow(8);
+        // preserve 4 bytes to write the key array numBytes later.
+        $bufferHolder.grow(4);
+        $bufferHolder.cursor += 4;
 
-      // Write the numElements into first 4 bytes.
-      Platform.putInt($bufferHolder.buffer, $bufferHolder.cursor, $keys.numElements());
+        // Remember the current cursor so that we can write numBytes of key array later.
+        final int $tmpCursor = $bufferHolder.cursor;
 
-      $bufferHolder.cursor += 8;
-      // Remember the current cursor so that we can write numBytes of key array later.
-      final int $tmpCursor = $bufferHolder.cursor;
+        ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
+        // Write the numBytes of key array into the first 4 bytes.
+        Platform.putInt($bufferHolder.buffer, $tmpCursor - 4, $bufferHolder.cursor - $tmpCursor);
 
-      ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder, needHeader = false)}
-      // Write the numBytes of key array into second 4 bytes.
-      Platform.putInt($bufferHolder.buffer, $tmpCursor - 4, $bufferHolder.cursor - $tmpCursor);
-
-      ${writeArrayToBuffer(ctx, values, valueType, bufferHolder, needHeader = false)}
+        ${writeArrayToBuffer(ctx, values, valueType, bufferHolder)}
+      }
     """
   }
 
-  private def writePrimitiveType(
-      ctx: CodeGenContext,
-      input: String,
-      dt: DataType,
-      buffer: String,
-      offset: String) = {
-    assert(ctx.isPrimitiveType(dt))
-
-    val putMethod = s"put${ctx.primitiveTypeName(dt)}"
-
-    dt match {
-      case FloatType | DoubleType =>
-        val normalized = ctx.freshName("normalized")
-        val boxedType = ctx.boxedType(dt)
-        val handleNaN =
-          s"""
-            final ${ctx.javaType(dt)} $normalized;
-            if ($boxedType.isNaN($input)) {
-              $normalized = $boxedType.NaN;
-            } else {
-              $normalized = $input;
-            }
-          """
-
-        s"""
-          $handleNaN
-          Platform.$putMethod($buffer, $offset, $normalized);
-        """
-      case _ => s"Platform.$putMethod($buffer, $offset, $input);"
-    }
+  /**
+   * If the input is already in unsafe format, we don't need to go through all elements/fields,
+   * we can directly write it.
+   */
+  private def writeUnsafeData(ctx: CodeGenContext, input: String, bufferHolder: String) = {
+    val sizeInBytes = ctx.freshName("sizeInBytes")
+    s"""
+      final int $sizeInBytes = $input.getSizeInBytes();
+      // grow the global buffer before writing data.
+      $bufferHolder.grow($sizeInBytes);
+      $input.writeToMemory($bufferHolder.buffer, $bufferHolder.cursor);
+      $bufferHolder.cursor += $sizeInBytes;
+    """
   }
 
   def createCode(ctx: CodeGenContext, expressions: Seq[Expression]): GeneratedExpressionCode = {
@@ -324,7 +288,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val code =
       s"""
         $bufferHolder.reset();
-        ${writeExpressionsToBuffer(ctx, "i", exprEvals, exprTypes, bufferHolder)}
+        ${writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, bufferHolder)}
         $result.pointTo($bufferHolder.buffer, ${expressions.length}, $bufferHolder.totalSize());
       """
     GeneratedExpressionCode(code, "false", result)
@@ -363,9 +327,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           return apply((InternalRow) row);
         }
 
-        public UnsafeRow apply(InternalRow i) {
+        public UnsafeRow apply(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
-          return ${eval.primitive};
+          return ${eval.value};
         }
       }
       """

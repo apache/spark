@@ -869,8 +869,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
         (1 to 10).map(i => Row(1, i, f"${i}_string")))
     }
 
-    // Re-enable this after SPARK-5508 is fixed
-    ignore(s"SPARK-5775 read array from $table") {
+    test(s"SPARK-5775 read array from $table") {
       checkAnswer(
         sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
         (1 to 10).map(i => Row(1 to i, 1)))

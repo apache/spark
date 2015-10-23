@@ -19,7 +19,7 @@ package org.apache.spark.sql.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.catalyst.expressions.MutableRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.types._
 
@@ -61,6 +61,10 @@ private[sql] abstract class BasicColumnAccessor[JvmType](
   protected def underlyingBuffer = buffer
 }
 
+private[sql] class NullColumnAccessor(buffer: ByteBuffer)
+  extends BasicColumnAccessor[Any](buffer, NULL)
+  with NullableColumnAccessor
+
 private[sql] abstract class NativeColumnAccessor[T <: AtomicType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
@@ -96,11 +100,23 @@ private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
 
-private[sql] class FixedDecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
-  extends NativeColumnAccessor(buffer, FIXED_DECIMAL(precision, scale))
+private[sql] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
+  extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
 
-private[sql] class GenericColumnAccessor(buffer: ByteBuffer, dataType: DataType)
-  extends BasicColumnAccessor[Array[Byte]](buffer, GENERIC(dataType))
+private[sql] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
+  extends BasicColumnAccessor[Decimal](buffer, LARGE_DECIMAL(dataType))
+  with NullableColumnAccessor
+
+private[sql] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
+  extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(dataType))
+  with NullableColumnAccessor
+
+private[sql] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
+  extends BasicColumnAccessor[UnsafeArrayData](buffer, ARRAY(dataType))
+  with NullableColumnAccessor
+
+private[sql] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
+  extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
@@ -108,6 +124,7 @@ private[sql] object ColumnAccessor {
     val buf = buffer.order(ByteOrder.nativeOrder)
 
     dataType match {
+      case NullType => new NullColumnAccessor(buf)
       case BooleanType => new BooleanColumnAccessor(buf)
       case ByteType => new ByteColumnAccessor(buf)
       case ShortType => new ShortColumnAccessor(buf)
@@ -117,9 +134,15 @@ private[sql] object ColumnAccessor {
       case DoubleType => new DoubleColumnAccessor(buf)
       case StringType => new StringColumnAccessor(buf)
       case BinaryType => new BinaryColumnAccessor(buf)
-      case DecimalType.Fixed(precision, scale) if precision < 19 =>
-        new FixedDecimalColumnAccessor(buf, precision, scale)
-      case other => new GenericColumnAccessor(buf, other)
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+        new CompactDecimalColumnAccessor(buf, dt)
+      case dt: DecimalType => new DecimalColumnAccessor(buf, dt)
+      case struct: StructType => new StructColumnAccessor(buf, struct)
+      case array: ArrayType => new ArrayColumnAccessor(buf, array)
+      case map: MapType => new MapColumnAccessor(buf, map)
+      case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
+      case other =>
+        throw new Exception(s"not support type: $other")
     }
   }
 }
