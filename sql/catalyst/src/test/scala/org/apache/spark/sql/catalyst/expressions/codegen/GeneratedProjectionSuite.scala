@@ -100,7 +100,8 @@ class GeneratedProjectionSuite extends SparkFunSuite {
   }
 
   test("padding bytes should be zeroed out") {
-    val types = Seq(BooleanType, ByteType, ShortType, IntegerType, FloatType, BinaryType, StringType)
+    val types = Seq(BooleanType, ByteType, ShortType, IntegerType, FloatType, BinaryType,
+      StringType)
     val struct = StructType(types.map(StructField("", _, true)))
     val fields = Array[DataType](StringType, struct)
     val unsafeProj = UnsafeProjection.create(fields)
