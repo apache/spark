@@ -49,7 +49,6 @@ if you may.
 
 Currently **officially** using Airflow:
 
-
 * Agari [@r39132](https://github.com/r39132)
 * Airbnb [@mistercrunch]
 * BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
