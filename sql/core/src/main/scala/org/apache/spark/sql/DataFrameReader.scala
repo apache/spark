@@ -302,6 +302,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     DataFrame(sqlContext, sqlContext.catalog.lookupRelation(TableIdentifier(tableName)))
   }
 
+  /**
+   * Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+   * Each line in the text file is a new row in the resulting DataFrame.
+   *
+   * @param path input path
+   * @since 1.6.0
+   */
+  def text(path: String): DataFrame = format("text").load(path)
+
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////

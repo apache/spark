@@ -1,0 +1,64 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.debug
+
+import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.{DataFrame, Row, QueryTest}
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.Utils
+
+
+class TextSuite extends QueryTest with SharedSQLContext {
+
+  test("reading text file") {
+    verifyFrame(sqlContext.read.format("text").load(testFile))
+  }
+
+  test("SQLContext.read.text() API") {
+    verifyFrame(sqlContext.read.text(testFile))
+  }
+
+  test("writing") {
+    val df = sqlContext.read.text(testFile)
+
+    val tempFile = Utils.createTempDir()
+    tempFile.delete()
+    df.write.text(tempFile.getCanonicalPath)
+    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath))
+
+    Utils.deleteRecursively(tempFile)
+  }
+
+  private def testFile: String = {
+    Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
+  }
+
+  /** Verifies data and schema. */
+  private def verifyFrame(df: DataFrame): Unit = {
+    // schema
+    assert(df.schema == new StructType().add("text", StringType))
+
+    // verify content
+    val data = df.collect()
+    assert(data(0) == Row("This is a test file for the text data source"))
+    assert(data(1) == Row("1+1"))
+    assert(data(2) == Row("数据砖头"))
+    assert(data(3) == Row("\"doh\""))
+    assert(data.length == 4)
+  }
+}

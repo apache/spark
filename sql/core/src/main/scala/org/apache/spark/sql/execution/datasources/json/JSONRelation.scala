@@ -161,11 +161,10 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with SparkHadoopMapRedUtil with Logging {
 
-  val writer = new CharArrayWriter()
+  private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
-  val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
-
-  val result = new Text()
+  private[this] val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+  private[this] val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
