@@ -370,7 +370,7 @@ private[spark] object JsonProtocol {
       case ExecutorLostFailure(executorId, isNormalExit, reason) =>
         if (reason.isDefined) {
           ("Executor ID" -> executorId) ~
-          ("Normal Exit" -> isNormalExit)
+          ("Normal Exit" -> isNormalExit) ~
           ("Loss Reason" -> reason.get.toString)
         } else {
           ("Executor ID" -> executorId) ~
