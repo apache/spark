@@ -1,128 +1,50 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+import sys
 
-from builtins import str
-from past.builtins import basestring
-from past.utils import old_div
-import copy
-from datetime import datetime, timedelta
-import dateutil.parser
-from functools import wraps
-import inspect
-from itertools import chain, product
-import json
-import logging
 import os
 import socket
-import sys
-import time
+
+from functools import wraps
+from datetime import datetime, timedelta
+import dateutil.parser
+import copy
+from itertools import chain, product
+from past.utils import old_div
+import inspect
 import traceback
 
-from flask._compat import PY2
-from flask import (
-    Flask, url_for, Markup, Blueprint, redirect,
-    flash, Response, render_template)
-from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
-from flask.ext.admin.form import DateTimePickerWidget
-from flask.ext.admin import base
-from flask.ext.admin.contrib.sqla import ModelView
-from flask.ext.cache import Cache
-from flask import request
 import sqlalchemy as sqla
-from wtforms import (
-    widgets,
-    Form, DateTimeField, SelectField, TextAreaField, PasswordField, StringField)
+
+from flask import Flask
+from flask import redirect, url_for, request, Markup, Response, current_app, render_template
+from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
+from flask.ext.login import current_user, flash, logout_user
+from flask._compat import PY2
+
+import jinja2
+import markdown
+import json
 
 from pygments import highlight, lexers
 from pygments.formatters import HtmlFormatter
 
-import chartkick
-import jinja2
-import markdown
-from sqlalchemy import or_
-
-import airflow
-from airflow import jobs, login, models, settings, utils
-from airflow.configuration import conf
-from airflow.models import State
+from airflow import models
 from airflow.settings import Session
+from airflow import login
+from airflow.configuration import conf, AirflowConfigException
+from airflow import utils
 from airflow.utils import AirflowException
 from airflow.www import utils as wwwutils
+from airflow import settings
+from airflow.models import State
 
-
-login_required = login.login_required
-current_user = login.current_user
-logout_user = login.logout_user
-
-
-from airflow import default_login as login
-if conf.getboolean('webserver', 'AUTHENTICATE'):
-    try:
-        # Environment specific login
-        import airflow_login as login
-    except ImportError as e:
-        logging.error(
-            "authenticate is set to True in airflow.cfg, "
-            "but airflow_login failed to import %s" % e)
-login_required = login.login_required
-current_user = login.current_user
-logout_user = login.logout_user
-
-AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
-if AUTHENTICATE is False:
-    login_required = lambda x: x
+from airflow.www.forms import DateTimeForm, TreeForm, GraphForm
 
 FILTER_BY_OWNER = False
-if conf.getboolean('webserver', 'FILTER_BY_OWNER'):
-    # filter_by_owner if authentication is enabled and filter_by_owner is true
-    FILTER_BY_OWNER = AUTHENTICATE
-
-class VisiblePasswordInput(widgets.PasswordInput):
-    def __init__(self, hide_value=False):
-        self.hide_value = hide_value
-
-
-class VisiblePasswordField(PasswordField):
-    widget = VisiblePasswordInput()
-
-
-def superuser_required(f):
-    '''
-    Decorator for views requiring superuser access
-    '''
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if (
-            not AUTHENTICATE or
-            (not current_user.is_anonymous() and current_user.is_superuser())
-        ):
-            return f(*args, **kwargs)
-        else:
-            flash("This page requires superuser privileges", "error")
-            return redirect(url_for('admin.index'))
-    return decorated_function
-
-
-def data_profiling_required(f):
-    '''
-    Decorator for views requiring data profiling access
-    '''
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if (
-            not AUTHENTICATE or
-            (not current_user.is_anonymous() and current_user.data_profiling())
-        ):
-            return f(*args, **kwargs)
-        else:
-            flash("This page requires data profiling privileges", "error")
-            return redirect(url_for('admin.index'))
-    return decorated_function
-
+AUTHENTICATE = False
 QUERY_LIMIT = 100000
 CHART_LIMIT = 200000
+
+dagbag = models.DagBag(os.path.expanduser(conf.get('core', 'DAGS_FOLDER')))
 
 
 def pygment_html_render(s, lexer=lexers.TextLexer):
@@ -132,9 +54,6 @@ def pygment_html_render(s, lexer=lexers.TextLexer):
         HtmlFormatter(linenos=True),
     )
 
-
-def wrapped_markdown(s):
-    return '<div class="rich_doc">' + markdown.markdown(s) + "</div>"
 
 def render(obj, lexer):
     out = ""
@@ -151,6 +70,10 @@ def render(obj, lexer):
     return out
 
 
+def wrapped_markdown(s):
+    return '<div class="rich_doc">' + markdown.markdown(s) + "</div>"
+
+
 attr_renderer = {
     'bash_command': lambda x: render(x, lexers.BashLexer),
     'hql': lambda x: render(x, lexers.SqlLexer),
@@ -164,191 +87,21 @@ attr_renderer = {
         inspect.getsource(x), lexers.PythonLexer),
 }
 
-
-dagbag = models.DagBag(os.path.expanduser(conf.get('core', 'DAGS_FOLDER')))
-utils.pessimistic_connection_handling()
-
-app = Flask(__name__)
-app.config['SQLALCHEMY_POOL_RECYCLE'] = 3600
-app.secret_key = conf.get('webserver', 'SECRET_KEY')
-
-login.login_manager.init_app(app)
-
-cache = Cache(
-    app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})
-
-# Init for chartkick, the python wrapper for highcharts
-ck = Blueprint(
-    'ck_page', __name__,
-    static_folder=chartkick.js(), static_url_path='/static')
-app.register_blueprint(ck, url_prefix='/ck')
-app.jinja_env.add_extension("chartkick.ext.charts")
-
-
-@app.context_processor
-def jinja_globals():
-    return {
-        'hostname': socket.gethostname(),
-    }
-
-
-class DateTimeForm(Form):
-    # Date filter form needed for gantt and graph view
-    execution_date = DateTimeField(
-        "Execution date", widget=DateTimePickerWidget())
-
-
-class GraphForm(Form):
-    execution_date = DateTimeField(
-        "Execution date", widget=DateTimePickerWidget())
-    arrange = SelectField("Layout", choices=(
-        ('LR', "Left->Right"),
-        ('RL', "Right->Left"),
-        ('TB', "Top->Bottom"),
-        ('BT', "Bottom->Top"),
-    ))
-
-
-class TreeForm(Form):
-    base_date = DateTimeField(
-        "Anchor date", widget=DateTimePickerWidget(), default=datetime.now())
-    num_runs = SelectField("Number of runs", default=25, choices=(
-        (5, "5"),
-        (25, "25"),
-        (50, "50"),
-        (100, "100"),
-        (365, "365"),
-    ))
-
-
-@app.route('/')
-def index():
-    return redirect(url_for('admin.index'))
-
-
-@app.route('/health')
-def health():
-    """ We can add an array of tests here to check the server's health """
-    content = Markup(markdown.markdown("The server is healthy!"))
-    return content
-
-
-@app.teardown_appcontext
-def shutdown_session(exception=None):
-    settings.Session.remove()
-
-
-def dag_link(v, c, m, p):
-    url = url_for(
-        'airflow.graph',
-        dag_id=m.dag_id)
-    return Markup(
-        '<a href="{url}">{m.dag_id}</a>'.format(**locals()))
-
-
-class DagModelView(wwwutils.SuperUserMixin, ModelView):
-    column_list = ('dag_id', 'owners')
-    column_editable_list = ('is_paused',)
-    form_excluded_columns = ('is_subdag', 'is_active')
-    column_searchable_list = ('dag_id',)
-    column_filters = (
-        'dag_id', 'owners', 'is_paused', 'is_active', 'is_subdag',
-        'last_scheduler_run', 'last_expired')
-    form_widget_args = {
-        'last_scheduler_run': {'disabled': True},
-        'fileloc': {'disabled': True},
-        'is_paused': {'disabled': True},
-        'last_pickled': {'disabled': True},
-        'pickle_id': {'disabled': True},
-        'last_loaded': {'disabled': True},
-        'last_expired': {'disabled': True},
-        'pickle_size': {'disabled': True},
-        'scheduler_lock': {'disabled': True},
-        'owners': {'disabled': True},
-    }
-    column_formatters = dict(
-        dag_id=dag_link,
-    )
-    can_delete = False
-    can_create = False
-    page_size = 50
-    list_template = 'airflow/list_dags.html'
-    named_filter_urls = True
-
-    def get_query(self):
-        """
-        Default filters for model
-        """
-        return (
-            super(DagModelView, self)
-            .get_query()
-            .filter(or_(models.DagModel.is_active, models.DagModel.is_paused))
-            .filter(~models.DagModel.is_subdag)
-        )
-
-    def get_count_query(self):
-        """
-        Default filters for model
-        """
-        return (
-            super(DagModelView, self)
-            .get_count_query()
-            .filter(models.DagModel.is_active)
-            .filter(~models.DagModel.is_subdag)
-        )
-
-
-class HomeView(AdminIndexView):
-    @expose("/")
-    @login_required
-    def index(self):
-        session = Session()
-        DM = models.DagModel
-        qry = None
-        # filter the dags if filter_by_owner and current user is not superuser
-        do_filter = FILTER_BY_OWNER and (not current_user.is_superuser())
-        if do_filter:
-            qry = (
-                session.query(DM)
-                .filter(
-                    ~DM.is_subdag, DM.is_active,
-                    DM.owners == current_user.username)
-                .all()
-            )
+def data_profiling_required(f):
+    '''
+    Decorator for views requiring data profiling access
+    '''
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if (
+                    not AUTHENTICATE or
+                    (not current_user.is_anonymous() and current_user.data_profiling())
+        ):
+            return f(*args, **kwargs)
         else:
-            qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
-        orm_dags = {dag.dag_id: dag for dag in qry}
-        import_errors = session.query(models.ImportError).all()
-        for ie in import_errors:
-            flash(
-                "Broken DAG: [{ie.filename}] {ie.stacktrace}".format(ie=ie),
-                "error")
-        session.expunge_all()
-        session.commit()
-        session.close()
-        dags = dagbag.dags.values()
-        if do_filter:
-            dags = {
-                dag.dag_id: dag
-                for dag in dags
-                if (
-                    dag.owner == current_user.username and (not dag.parent_dag)
-                )
-            }
-        else:
-            dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
-        all_dag_ids = sorted(set(orm_dags.keys()) | set(dags.keys()))
-        return self.render(
-            'airflow/dags.html',
-            dags=dags,
-            orm_dags=orm_dags,
-            all_dag_ids=all_dag_ids)
-
-admin = Admin(
-    app,
-    name="Airflow",
-    index_view=HomeView(name="DAGs"),
-    template_mode='bootstrap3')
+            flash("This page requires data profiling privileges", "error")
+            return redirect(url_for('admin.index'))
+    return decorated_function
 
 
 class Airflow(BaseView):
@@ -357,7 +110,7 @@ class Airflow(BaseView):
         return False
 
     @expose('/')
-    @login_required
+    #@login_required
     def index(self):
         return self.render('airflow/dags.html')
 
@@ -427,15 +180,15 @@ class Airflow(BaseView):
         if not payload['error'] and len(df) == 0:
             payload['error'] += "Empty result set. "
         elif (
-                not payload['error'] and
-                chart.sql_layout == 'series' and
-                chart.chart_type != "datatable" and
-                len(df.columns) < 3):
+                            not payload['error'] and
+                                chart.sql_layout == 'series' and
+                            chart.chart_type != "datatable" and
+                        len(df.columns) < 3):
             payload['error'] += "SQL needs to return at least 3 columns. "
         elif (
-                not payload['error'] and
-                chart.sql_layout == 'columns'and
-                len(df.columns) < 2):
+                        not payload['error'] and
+                            chart.sql_layout == 'columns'and
+                        len(df.columns) < 2):
             payload['error'] += "SQL needs to return at least 2 columns. "
         elif not payload['error']:
             import numpy as np
@@ -668,7 +421,7 @@ class Airflow(BaseView):
             embed=embed)
 
     @expose('/dag_stats')
-    @login_required
+    #@login_required
     def dag_stats(self):
         states = [
             State.SUCCESS,
@@ -688,9 +441,9 @@ class Airflow(BaseView):
         session = Session()
         qry = (
             session.query(TI.dag_id, TI.state, sqla.func.count(TI.task_id))
-            .filter(TI.task_id.in_(task_ids))
-            .filter(TI.dag_id.in_(dag_ids))
-            .group_by(TI.dag_id, TI.state)
+                .filter(TI.task_id.in_(task_ids))
+                .filter(TI.dag_id.in_(dag_ids))
+                .group_by(TI.dag_id, TI.state)
         )
 
         data = {}
@@ -721,7 +474,7 @@ class Airflow(BaseView):
             status=200, mimetype="application/json")
 
     @expose('/code')
-    @login_required
+    #@login_required
     def code(self):
         dag_id = request.args.get('dag_id')
         dag = dagbag.get_dag(dag_id)
@@ -734,18 +487,18 @@ class Airflow(BaseView):
             root=request.args.get('root'),
             demo_mode=conf.getboolean('webserver', 'demo_mode'))
 
-    @app.errorhandler(404)
+    #@current_app.errorhandler(404)
     def circles(self):
         return render_template(
             'airflow/circles.html', hostname=socket.gethostname()), 404
 
-    @app.errorhandler(500)
+    #@current_app.errorhandler(500)
     def show_traceback(self):
         return render_template(
             'airflow/traceback.html', info=traceback.format_exc()), 500
 
     @expose('/sandbox')
-    @login_required
+    #@login_required
     def sandbox(self):
         from airflow import configuration
         title = "Sandbox Suggested Configuration"
@@ -788,7 +541,7 @@ class Airflow(BaseView):
         return redirect(url_for('admin.index'))
 
     @expose('/rendered')
-    @login_required
+    #@login_required
     def rendered(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -822,7 +575,7 @@ class Airflow(BaseView):
             title=title,)
 
     @expose('/log')
-    @login_required
+    #@login_required
     def log(self):
         BASE_LOG_FOLDER = os.path.expanduser(
             conf.get('core', 'BASE_LOG_FOLDER'))
@@ -877,7 +630,7 @@ class Airflow(BaseView):
             execution_date=execution_date, form=form)
 
     @expose('/task')
-    @login_required
+    #@login_required
     def task(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -902,7 +655,7 @@ class Airflow(BaseView):
             if not attr_name.startswith('_'):
                 attr = getattr(task, attr_name)
                 if type(attr) != type(self.task) and \
-                        attr_name not in attr_renderer:
+                                attr_name not in attr_renderer:
                     attributes.append((attr_name, str(attr)))
 
         title = "Task Details"
@@ -923,7 +676,7 @@ class Airflow(BaseView):
             dag=dag, title=title)
 
     @expose('/action')
-    @login_required
+    #@login_required
     def action(self):
         action = request.args.get('action')
         dag_id = request.args.get('dag_id')
@@ -1089,7 +842,7 @@ class Airflow(BaseView):
                 return response
 
     @expose('/tree')
-    @login_required
+    #@login_required
     @wwwutils.gzipped
     def tree(self):
         dag_id = request.args.get('dag_id')
@@ -1173,9 +926,9 @@ class Airflow(BaseView):
                 'instances': [
                     utils.alchemy_to_dict(
                         task_instances.get((task.task_id, d))) or {
-                            'execution_date': d.isoformat(),
-                            'task_id': task.task_id
-                        }
+                        'execution_date': d.isoformat(),
+                        'task_id': task.task_id
+                    }
                     for d in dates],
                 children_key: children,
                 'num_dep': len(task.upstream_list),
@@ -1216,7 +969,7 @@ class Airflow(BaseView):
             dag=dag, data=data, blur=blur)
 
     @expose('/graph')
-    @login_required
+    #@login_required
     @wwwutils.gzipped
     def graph(self):
         session = settings.Session()
@@ -1271,14 +1024,14 @@ class Airflow(BaseView):
         task_instances = {
             ti.task_id: utils.alchemy_to_dict(ti)
             for ti in dag.get_task_instances(session, dttm, dttm)
-        }
+            }
         tasks = {
             t.task_id: {
                 'dag_id': t.dag_id,
                 'task_type': t.task_type,
             }
             for t in dag.tasks
-        }
+            }
         if not tasks:
             flash("No tasks found", "error")
         session.commit()
@@ -1306,7 +1059,7 @@ class Airflow(BaseView):
             edges=json.dumps(edges, indent=2),)
 
     @expose('/duration')
-    @login_required
+    #@login_required
     def duration(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
@@ -1348,7 +1101,7 @@ class Airflow(BaseView):
         )
 
     @expose('/landing_times')
-    @login_required
+    #@login_required
     def landing_times(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
@@ -1371,9 +1124,9 @@ class Airflow(BaseView):
                 if ti.end_date:
                     data.append([
                         ti.execution_date.isoformat(), old_div((
-                            ti.end_date - (
-                                ti.execution_date + task.schedule_interval)
-                        ).total_seconds(),(60*60))
+                                                                   ti.end_date - (
+                                                                       ti.execution_date + task.schedule_interval)
+                                                               ).total_seconds(),(60*60))
                     ])
             all_data.append({'data': data, 'name': task.task_id})
 
@@ -1391,7 +1144,7 @@ class Airflow(BaseView):
         )
 
     @expose('/paused')
-    @login_required
+    #@login_required
     def paused(self):
         DagModel = models.DagModel
         dag_id = request.args.get('dag_id')
@@ -1410,7 +1163,7 @@ class Airflow(BaseView):
         return "OK"
 
     @expose('/refresh')
-    @login_required
+    #@login_required
     def refresh(self):
         DagModel = models.DagModel
         dag_id = request.args.get('dag_id')
@@ -1429,14 +1182,14 @@ class Airflow(BaseView):
         return redirect('/')
 
     @expose('/refresh_all')
-    @login_required
+    #@login_required
     def refresh_all(self):
         dagbag.collect_dags(only_if_updated=False)
         flash("All DAGs are now up to date")
         return redirect('/')
 
     @expose('/gantt')
-    @login_required
+    #@login_required
     def gantt(self):
 
         session = settings.Session()
@@ -1516,7 +1269,7 @@ class Airflow(BaseView):
         )
 
     @expose('/variables/<form>', methods=["GET", "POST"])
-    @login_required
+    #@login_required
     def variables(self, form):
         try:
             if request.method == 'POST':
@@ -1536,599 +1289,67 @@ class Airflow(BaseView):
                     "not found.").format(form), 404
 
 
-admin.add_view(Airflow(name='DAGs'))
-
-
-class QueryView(wwwutils.DataProfilingMixin, BaseView):
-    @expose('/')
-    @wwwutils.gzipped
-    def query(self):
-        session = settings.Session()
-        dbs = session.query(models.Connection).order_by(
-            models.Connection.conn_id).all()
-        session.expunge_all()
-        db_choices = list(
-            ((db.conn_id, db.conn_id) for db in dbs if db.get_hook()))
-        conn_id_str = request.args.get('conn_id')
-        csv = request.args.get('csv') == "true"
-        sql = request.args.get('sql')
-
-        class QueryForm(Form):
-            conn_id = SelectField("Layout", choices=db_choices)
-            sql = TextAreaField("SQL", widget=wwwutils.AceEditorWidget())
-        data = {
-            'conn_id': conn_id_str,
-            'sql': sql,
-        }
-        results = None
-        has_data = False
-        error = False
-        if conn_id_str:
-            db = [db for db in dbs if db.conn_id == conn_id_str][0]
-            hook = db.get_hook()
-            try:
-                df = hook.get_pandas_df(wwwutils.limit_sql(sql, QUERY_LIMIT, conn_type=db.conn_type))
-                # df = hook.get_pandas_df(sql)
-                has_data = len(df) > 0
-                df = df.fillna('')
-                results = df.to_html(
-                    classes=[
-                        'table', 'table-bordered', 'table-striped', 'no-wrap'],
-                    index=False,
-                    na_rep='',
-                ) if has_data else ''
-            except Exception as e:
-                flash(str(e), 'error')
-                error = True
-
-        if has_data and len(df) == QUERY_LIMIT:
+class HomeView(AdminIndexView):
+    @expose("/")
+    #@login.login_required
+    def index(self):
+        session = Session()
+        DM = models.DagModel
+        qry = None
+        # filter the dags if filter_by_owner and current user is not superuser
+        do_filter = FILTER_BY_OWNER and (not current_user.is_superuser())
+        if do_filter:
+            qry = (
+                session.query(DM)
+                    .filter(
+                    ~DM.is_subdag, DM.is_active,
+                    DM.owners == current_user.username)
+                    .all()
+            )
+        else:
+            qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
+        orm_dags = {dag.dag_id: dag for dag in qry}
+        import_errors = session.query(models.ImportError).all()
+        for ie in import_errors:
             flash(
-                "Query output truncated at " + str(QUERY_LIMIT) +
-                " rows", 'info')
-
-        if not has_data and error:
-            flash('No data', 'error')
-
-        if csv:
-            return Response(
-                response=df.to_csv(index=False),
-                status=200,
-                mimetype="application/text")
-
-        form = QueryForm(request.form, data=data)
+                "Broken DAG: [{ie.filename}] {ie.stacktrace}".format(ie=ie),
+                "error")
+        session.expunge_all()
         session.commit()
         session.close()
-        return self.render(
-            'airflow/query.html', form=form,
-            title="Ad Hoc Query",
-            results=results or '',
-            has_data=has_data)
-admin.add_view(QueryView(name='Ad Hoc Query', category="Data Profiling"))
-
-
-class AirflowModelView(ModelView):
-    list_template = 'airflow/model_list.html'
-    edit_template = 'airflow/model_edit.html'
-    create_template = 'airflow/model_create.html'
-    page_size = 500
-
-
-class ModelViewOnly(wwwutils.LoginMixin, AirflowModelView):
-    """
-    Modifying the base ModelView class for non edit, browse only operations
-    """
-    named_filter_urls = True
-    can_create = False
-    can_edit = False
-    can_delete = False
-    column_display_pk = True
-
-
-def log_link(v, c, m, p):
-    url = url_for(
-        'airflow.log',
-        dag_id=m.dag_id,
-        task_id=m.task_id,
-        execution_date=m.execution_date.isoformat())
-    return Markup(
-        '<a href="{url}">'
-        '    <span class="glyphicon glyphicon-book" aria-hidden="true">'
-        '</span></a>').format(**locals())
-
-
-def task_instance_link(v, c, m, p):
-    url = url_for(
-        'airflow.task',
-        dag_id=m.dag_id,
-        task_id=m.task_id,
-        execution_date=m.execution_date.isoformat())
-    url_root = url_for(
-        'airflow.graph',
-        dag_id=m.dag_id,
-        root=m.task_id,
-        execution_date=m.execution_date.isoformat())
-    return Markup(
-        """
-        <span style="white-space: nowrap;">
-        <a href="{url}">{m.task_id}</a>
-        <a href="{url_root}" title="Filter on this task and upstream">
-        <span class="glyphicon glyphicon-filter" style="margin-left: 0px;"
-            aria-hidden="true"></span>
-        </a>
-        </span>
-        """.format(**locals()))
-
-
-def state_f(v, c, m, p):
-    color = State.color(m.state)
-    return Markup(
-        '<span class="label" style="background-color:{color};">'
-        '{m.state}</span>'.format(**locals()))
-
-
-def duration_f(v, c, m, p):
-    if m.end_date and m.duration:
-        return timedelta(seconds=m.duration)
-
-
-def datetime_f(v, c, m, p):
-    attr = getattr(m, p)
-    dttm = attr.isoformat() if attr else ''
-    if datetime.now().isoformat()[:4] == dttm[:4]:
-        dttm = dttm[5:]
-    return Markup("<nobr>{}</nobr>".format(dttm))
-
-
-def nobr_f(v, c, m, p):
-    return Markup("<nobr>{}</nobr>".format(getattr(m, p)))
-
-
-
-
-class JobModelView(ModelViewOnly):
-    verbose_name_plural = "jobs"
-    verbose_name = "job"
-    column_default_sort = ('start_date', True)
-    column_filters = (
-        'job_type', 'dag_id', 'state',
-        'unixname', 'hostname', 'start_date', 'end_date', 'latest_heartbeat')
-    column_formatters = dict(
-        start_date=datetime_f,
-        end_date=datetime_f,
-        hostname=nobr_f,
-        state=state_f,
-        latest_heartbeat=datetime_f)
-mv = JobModelView(jobs.BaseJob, Session, name="Jobs", category="Browse")
-admin.add_view(mv)
-
-
-class LogModelView(ModelViewOnly):
-    verbose_name_plural = "logs"
-    verbose_name = "log"
-    column_default_sort = ('dttm', True)
-    column_filters = ('dag_id', 'task_id', 'execution_date')
-    column_formatters = dict(
-        dttm=datetime_f, execution_date=datetime_f, dag_id=dag_link)
-mv = LogModelView(
-    models.Log, Session, name="Logs", category="Browse")
-admin.add_view(mv)
-
-
-class TaskInstanceModelView(ModelViewOnly):
-    verbose_name_plural = "task instances"
-    verbose_name = "task instance"
-    column_filters = (
-        'state', 'dag_id', 'task_id', 'execution_date', 'hostname',
-        'queue', 'pool', 'operator', 'start_date', 'end_date')
-    named_filter_urls = True
-    column_formatters = dict(
-        log=log_link, task_id=task_instance_link,
-        hostname=nobr_f,
-        state=state_f,
-        execution_date=datetime_f,
-        start_date=datetime_f,
-        end_date=datetime_f,
-        queued_dttm=datetime_f,
-        dag_id=dag_link, duration=duration_f)
-    column_searchable_list = ('dag_id', 'task_id', 'state')
-    column_default_sort = ('start_date', True)
-    column_list = (
-        'state', 'dag_id', 'task_id', 'execution_date', 'operator',
-        'start_date', 'end_date', 'duration', 'job_id', 'hostname',
-        'unixname', 'priority_weight', 'queue', 'queued_dttm', 'log')
-    can_delete = True
-    page_size = 500
-mv = TaskInstanceModelView(
-    models.TaskInstance, Session, name="Task Instances", category="Browse")
-admin.add_view(mv)
-
-mv = DagModelView(
-    models.DagModel, Session, name=None)
-admin.add_view(mv)
-# Hack to not add this view to the menu
-admin._menu = admin._menu[:-1]
-
-class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
-    create_template = 'airflow/conn_create.html'
-    edit_template = 'airflow/conn_edit.html'
-    list_template = 'airflow/conn_list.html'
-    form_columns = (
-        'conn_id',
-        'conn_type',
-        'host',
-        'schema',
-        'login',
-        'password',
-        'port',
-        'extra',
-        'extra__jdbc__drv_path',
-        'extra__jdbc__drv_clsname',
-    )
-    verbose_name = "Connection"
-    verbose_name_plural = "Connections"
-    column_default_sort = ('conn_id', False)
-    column_list = ('conn_id', 'conn_type', 'host', 'port', 'is_encrypted',)
-    form_overrides = dict(_password=VisiblePasswordField)
-    form_widget_args = {
-        'is_encrypted': {'disabled': True},
-    }
-    # Used to customized the form, the forms elements get rendered
-    # and results are stored in the extra field as json. All of these
-    # need to be prefixed with extra__ and then the conn_type ___ as in
-    # extra__{conn_type}__name. You can also hide form elements and rename
-    # others from the connection_form.js file
-    form_extra_fields = {
-        'extra__jdbc__drv_path' : StringField('Driver Path'),
-        'extra__jdbc__drv_clsname': StringField('Driver Class'),
-    }
-    form_choices = {
-        'conn_type': [
-            ('ftp', 'FTP',),
-            ('hdfs', 'HDFS',),
-            ('http', 'HTTP',),
-            ('hive_cli', 'Hive Client Wrapper',),
-            ('hive_metastore', 'Hive Metastore Thrift',),
-            ('hiveserver2', 'Hive Server 2 Thrift',),
-            ('jdbc', 'Jdbc Connection',),
-            ('mysql', 'MySQL',),
-            ('postgres', 'Postgres',),
-            ('oracle', 'Oracle',),
-            ('vertica', 'Vertica',),
-            ('presto', 'Presto',),
-            ('s3', 'S3',),
-            ('samba', 'Samba',),
-            ('sqlite', 'Sqlite',),
-            ('mssql', 'Microsoft SQL Server'),
-            ('mesos_framework-id', 'Mesos Framework ID'),
-        ]
-    }
-
-    def on_model_change(self, form, model, is_created):
-        formdata = form.data
-        if formdata['conn_type'] in ['jdbc']:
-            extra = {
-                key:formdata[key]
-                for key in self.form_extra_fields.keys() if key in formdata}
-            model.extra = json.dumps(extra)
-
-    @classmethod
-    def alert_fernet_key(cls):
-        return not conf.has_option('core', 'fernet_key')
-
-    @classmethod
-    def is_secure(self):
-        """
-        Used to display a message in the Connection list view making it clear
-        that the passwords can't be encrypted.
-        """
-        is_secure = False
-        try:
-            import cryptography
-            conf.get('core', 'fernet_key')
-            is_secure = True
-        except:
-            pass
-        return is_secure
-
-    def on_form_prefill(self, form, id):
-        try:
-            d = json.loads(form.data.get('extra', '{}'))
-        except Exception as e:
-            d = {}
-
-        for field in list(self.form_extra_fields.keys()):
-            value = d.get(field, '')
-            if value:
-                field = getattr(form, field)
-                field.data = value
-
-mv = ConnectionModelView(
-    models.Connection, Session,
-    name="Connections", category="Admin")
-admin.add_view(mv)
-
-class UserModelView(wwwutils.SuperUserMixin, AirflowModelView):
-    verbose_name = "User"
-    verbose_name_plural = "Users"
-    column_default_sort = 'username'
-mv = UserModelView(models.User, Session, name="Users", category="Admin")
-admin.add_view(mv)
-
-
-class ConfigurationView(wwwutils.SuperUserMixin, BaseView):
-    @expose('/')
-    def conf(self):
-        from airflow import configuration
-        raw = request.args.get('raw') == "true"
-        title = "Airflow Configuration"
-        subtitle = configuration.AIRFLOW_CONFIG
-        if conf.getboolean("webserver", "expose_config"):
-            with open(configuration.AIRFLOW_CONFIG, 'r') as f:
-                config = f.read()
-        else:
-            config = (
-                "# You Airflow administrator chose not to expose the "
-                "configuration, most likely for security reasons.")
-        if raw:
-            return Response(
-                response=config,
-                status=200,
-                mimetype="application/text")
-        else:
-            code_html = Markup(highlight(
-                config,
-                lexers.IniLexer(),  # Lexer call
-                HtmlFormatter(noclasses=True))
-            )
-            return self.render(
-                'airflow/code.html',
-                pre_subtitle=settings.HEADER + "  v" + airflow.__version__,
-                code_html=code_html, title=title, subtitle=subtitle)
-admin.add_view(ConfigurationView(name='Configuration', category="Admin"))
-
-
-def label_link(v, c, m, p):
-    try:
-        default_params = eval(m.default_params)
-    except:
-        default_params = {}
-    url = url_for(
-        'airflow.chart', chart_id=m.id, iteration_no=m.iteration_no,
-        **default_params)
-    return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
-
-
-class ChartModelView(wwwutils.DataProfilingMixin, AirflowModelView):
-    verbose_name = "chart"
-    verbose_name_plural = "charts"
-    form_columns = (
-        'label',
-        'owner',
-        'conn_id',
-        'chart_type',
-        'show_datatable',
-        'x_is_date',
-        'y_log_scale',
-        'show_sql',
-        'height',
-        'sql_layout',
-        'sql',
-        'default_params',)
-    column_list = (
-        'label', 'conn_id', 'chart_type', 'owner', 'last_modified',)
-    column_formatters = dict(label=label_link, last_modified=datetime_f)
-    column_default_sort = ('last_modified', True)
-    create_template = 'airflow/chart/create.html'
-    edit_template = 'airflow/chart/edit.html'
-    column_filters = ('label', 'owner.username', 'conn_id')
-    column_searchable_list = ('owner.username', 'label', 'sql')
-    column_descriptions = {
-        'label': "Can include {{ templated_fields }} and {{ macros }}",
-        'chart_type': "The type of chart to be displayed",
-        'sql': "Can include {{ templated_fields }} and {{ macros }}.",
-        'height': "Height of the chart, in pixels.",
-        'conn_id': "Source database to run the query against",
-        'x_is_date': (
-            "Whether the X axis should be casted as a date field. Expect most "
-            "intelligible date formats to get casted properly."
-        ),
-        'owner': (
-            "The chart's owner, mostly used for reference and filtering in "
-            "the list view."
-        ),
-        'show_datatable':
-            "Whether to display an interactive data table under the chart.",
-        'default_params': (
-            'A dictionary of {"key": "values",} that define what the '
-            'templated fields (parameters) values should be by default. '
-            'To be valid, it needs to "eval" as a Python dict. '
-            'The key values will show up in the url\'s querystring '
-            'and can be altered there.'
-        ),
-        'show_sql': "Whether to display the SQL statement as a collapsible "
-            "section in the chart page.",
-        'y_log_scale': "Whether to use a log scale for the Y axis.",
-        'sql_layout': (
-            "Defines the layout of the SQL that the application should "
-            "expect. Depending on the tables you are sourcing from, it may "
-            "make more sense to pivot / unpivot the metrics."
-        ),
-    }
-    column_labels = {
-        'sql': "SQL",
-        'height': "Chart Height",
-        'sql_layout': "SQL Layout",
-        'show_sql': "Display the SQL Statement",
-        'default_params': "Default Parameters",
-    }
-    form_choices = {
-        'chart_type': [
-            ('line', 'Line Chart'),
-            ('spline', 'Spline Chart'),
-            ('bar', 'Bar Chart'),
-            ('para', 'Parallel Coordinates'),
-            ('column', 'Column Chart'),
-            ('area', 'Overlapping Area Chart'),
-            ('stacked_area', 'Stacked Area Chart'),
-            ('percent_area', 'Percent Area Chart'),
-            ('heatmap', 'Heatmap'),
-            ('datatable', 'No chart, data table only'),
-        ],
-        'sql_layout': [
-            ('series', 'SELECT series, x, y FROM ...'),
-            ('columns', 'SELECT x, y (series 1), y (series 2), ... FROM ...'),
-        ],
-        'conn_id': [
-            (c.conn_id, c.conn_id)
-            for c in (
-                Session().query(models.Connection.conn_id)
-                .group_by(models.Connection.conn_id)
+        dags = dagbag.dags.values()
+        if do_filter:
+            dags = {
+                dag.dag_id: dag
+                for dag in dags
+                if (
+                    dag.owner == current_user.username and (not dag.parent_dag)
                 )
-            ]
-    }
-
-    def on_model_change(self, form, model, is_created=True):
-        if model.iteration_no is None:
-            model.iteration_no = 0
+                }
         else:
-            model.iteration_no += 1
-        if AUTHENTICATE and not model.user_id and current_user:
-            model.user_id = current_user.id
-        model.last_modified = datetime.now()
-
-mv = ChartModelView(
-    models.Chart, Session,
-    name="Charts", category="Data Profiling")
-admin.add_view(mv)
-
-admin.add_link(
-    base.MenuLink(
-        category='Docs',
-        name='Documentation',
-        url='http://pythonhosted.org/airflow/'))
-admin.add_link(
-    base.MenuLink(
-        category='Docs',
-        name='Github',
-        url='https://github.com/airbnb/airflow'))
+            dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
+        all_dag_ids = sorted(set(orm_dags.keys()) | set(dags.keys()))
+        return self.render(
+            'airflow/dags.html',
+            dags=dags,
+            orm_dags=orm_dags,
+            all_dag_ids=all_dag_ids)
 
 
-class KnowEventView(wwwutils.DataProfilingMixin, AirflowModelView):
-    verbose_name = "known event"
-    verbose_name_plural = "known events"
-    form_columns = (
-        'label',
-        'event_type',
-        'start_date',
-        'end_date',
-        'reported_by',
-        'description')
-    column_list = (
-        'label', 'event_type', 'start_date', 'end_date', 'reported_by')
-    column_default_sort = ("start_date", True)
-mv = KnowEventView(
-    models.KnownEvent, Session, name="Known Events", category="Data Profiling")
-admin.add_view(mv)
+def create_app(config):
+    app = Flask(__name__)
+    app.secret_key = "XXX" #conf.get('webserver', 'SECRET_KEY')
+    #app.config = config
+    login.login_manager.init_app(app)
+
+    admin = Admin(
+        app, name='Airflow',
+        static_url_path='/admin',
+        index_view=HomeView(endpoint='', url='/'),
+        template_mode='bootstrap3',
+    )
+
+    admin.add_view(Airflow(name='DAGs'))
 
 
-class KnowEventTypeView(wwwutils.DataProfilingMixin, AirflowModelView):
-    pass
-
-'''
-# For debugging / troubleshooting
-mv = KnowEventTypeView(
-    models.KnownEventType,
-    Session, name="Known Event Types", category="Manage")
-admin.add_view(mv)
-class DagPickleView(SuperUserMixin, ModelView):
-    pass
-mv = DagPickleView(
-    models.DagPickle,
-    Session, name="Pickles", category="Manage")
-admin.add_view(mv)
-'''
-
-
-class VariableView(wwwutils.LoginMixin, AirflowModelView):
-    verbose_name = "Variable"
-    verbose_name_plural = "Variables"
-    column_list = ('key',)
-    column_filters = ('key', 'val')
-    column_searchable_list = ('key', 'val')
-    form_widget_args = {
-        'val': {
-            'rows': 20,
-        }
-    }
-
-mv = VariableView(
-    models.Variable, Session, name="Variables", category="Admin")
-admin.add_view(mv)
-
-
-def pool_link(v, c, m, p):
-    url = '/admin/taskinstance/?flt1_pool_equals=' + m.pool
-    return Markup("<a href='{url}'>{m.pool}</a>".format(**locals()))
-
-
-def fused_slots(v, c, m, p):
-    url = (
-        '/admin/taskinstance/' +
-        '?flt1_pool_equals=' + m.pool +
-        '&flt2_state_equals=running')
-    return Markup("<a href='{0}'>{1}</a>".format(url, m.used_slots()))
-
-
-def fqueued_slots(v, c, m, p):
-    url = (
-        '/admin/taskinstance/' +
-        '?flt1_pool_equals=' + m.pool +
-        '&flt2_state_equals=queued&sort=10&desc=1')
-    return Markup("<a href='{0}'>{1}</a>".format(url, m.queued_slots()))
-
-
-class PoolModelView(wwwutils.SuperUserMixin, AirflowModelView):
-    column_list = ('pool', 'slots', 'used_slots', 'queued_slots')
-    column_formatters = dict(
-        pool=pool_link, used_slots=fused_slots, queued_slots=fqueued_slots)
-    named_filter_urls = True
-mv = PoolModelView(models.Pool, Session, name="Pools", category="Admin")
-admin.add_view(mv)
-
-
-class SlaMissModelView(wwwutils.SuperUserMixin, ModelViewOnly):
-    verbose_name_plural = "SLA misses"
-    verbose_name = "SLA miss"
-    column_list = (
-        'dag_id', 'task_id', 'execution_date', 'email_sent', 'timestamp')
-    column_formatters = dict(
-        task_id=task_instance_link,
-        execution_date=datetime_f,
-        timestamp=datetime_f,
-        dag_id=dag_link)
-    named_filter_urls = True
-    column_searchable_list = ('dag_id', 'task_id',)
-    column_filters = (
-        'dag_id', 'task_id', 'email_sent', 'timestamp', 'execution_date')
-    form_widget_args = {
-        'email_sent': {'disabled': True},
-        'timestamp': {'disabled': True},
-    }
-mv = SlaMissModelView(
-    models.SlaMiss, Session, name="SLA Misses", category="Browse")
-admin.add_view(mv)
-
-
-def integrate_plugins():
-    """Integrate plugins to the context"""
-    from airflow.plugins_manager import (
-        admin_views, flask_blueprints, menu_links)
-    for v in admin_views:
-        admin.add_view(v)
-    for bp in flask_blueprints:
-        print(bp)
-        app.register_blueprint(bp)
-    for ml in menu_links:
-        admin.add_link(ml)
-
-integrate_plugins()
+    return app

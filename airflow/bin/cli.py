@@ -248,7 +248,8 @@ def clear(args):
 def webserver(args):
     print(settings.HEADER)
     log_to_stdout()
-    from airflow.www.app import app
+    from airflow.www.app import create_app
+    app = create_app(conf)
     threads = args.threads or conf.get('webserver', 'threads')
     if args.debug:
         print(
@@ -262,7 +263,7 @@ def webserver(args):
             '{args.port}...'.format(**locals()))
         sp = subprocess.Popen([
             'gunicorn', '-w', str(args.threads), '-t', '120', '-b',
-            args.hostname + ':' + str(args.port), 'airflow.www.app:app'])
+            args.hostname + ':' + str(args.port), 'app'])
         sp.wait()
 
 
