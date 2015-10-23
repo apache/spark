@@ -275,6 +275,9 @@ private[parquet] class CatalystRowConverter(
         val parquetTypeForUDT = new CatalystSchemaConverter().convertField(field)
         newConverter(parquetTypeForUDT, catalystTypeForUDT, updater)
 
+      case NullType =>
+        new CatalystStringConverter(updater)
+
       case _ =>
         throw new RuntimeException(
           s"Unable to create Parquet converter for data type ${catalystType.json}")

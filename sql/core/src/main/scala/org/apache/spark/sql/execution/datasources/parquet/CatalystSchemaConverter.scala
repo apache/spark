@@ -520,8 +520,11 @@ private[parquet] class CatalystSchemaConverter(
       case udt: UserDefinedType[_] =>
         convertField(field.copy(dataType = udt.sqlType))
 
+      case NullType =>
+        Types.primitive(BINARY, repetition).named(field.name)
+
       case _ =>
-        throw new AnalysisException(s"Unsupported data type $field.dataType")
+        throw new AnalysisException(s"Unsupported data type ${field.dataType}")
     }
   }
 }

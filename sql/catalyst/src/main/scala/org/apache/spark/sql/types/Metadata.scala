@@ -157,7 +157,7 @@ object Metadata {
           }
         }
       case (key, JNull) =>
-        builder.putNone(key)
+        builder.putNull(key)
       case (key, other) =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
@@ -183,8 +183,6 @@ object Metadata {
         JString(x)
       case x: Metadata =>
         toJsonValue(x.map)
-      case None =>
-        JNull
       case other =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
@@ -232,8 +230,9 @@ class MetadataBuilder {
     map ++= metadata.map
     this
   }
-  /** Puts a Long. */
-  def putNone(key: String): this.type = put(key, None)
+
+  /** Puts a null. */
+  def putNull(key: String): this.type = put(key, null)
 
   /** Puts a Long. */
   def putLong(key: String, value: Long): this.type = put(key, value)

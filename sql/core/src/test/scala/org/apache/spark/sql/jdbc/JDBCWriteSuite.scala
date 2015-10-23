@@ -21,11 +21,11 @@ import java.sql.DriverManager
 import java.util.Properties
 
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
 
 class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
