@@ -434,15 +434,182 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 <div class="codetabs">
 
 <div data-lang="scala">
-{% include_example scala/org/apache/spark/examples/ml/CrossValidatorExample.scala %}
+{% highlight scala %}
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.sql.Row
+
+// Prepare training documents from a list of (id, text, label) tuples.
+val training = sqlContext.createDataFrame(Seq(
+  (0L, "a b c d e spark", 1.0),
+  (1L, "b d", 0.0),
+  (2L, "spark f g h", 1.0),
+  (3L, "hadoop mapreduce", 0.0)
+)).toDF("id", "text", "label")
+
+// Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
+val tokenizer = new Tokenizer()
+  .setInputCol("text")
+  .setOutputCol("words")
+val hashingTF = new HashingTF()
+  .setNumFeatures(1000)
+  .setInputCol(tokenizer.getOutputCol)
+  .setOutputCol("features")
+val lr = new LogisticRegression()
+  .setMaxIter(10)
+  .setRegParam(0.01)
+val pipeline = new Pipeline()
+  .setStages(Array(tokenizer, hashingTF, lr))
+
+// Fit the pipeline to training documents.
+val model = pipeline.fit(training)
+
+// Prepare test documents, which are unlabeled (id, text) tuples.
+val test = sqlContext.createDataFrame(Seq(
+  (4L, "spark i j k"),
+  (5L, "l m n"),
+  (6L, "mapreduce spark"),
+  (7L, "apache hadoop")
+)).toDF("id", "text")
+
+// Make predictions on test documents.
+model.transform(test)
+  .select("id", "text", "probability", "prediction")
+  .collect()
+  .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
+  }
+
+{% endhighlight %}
 </div>
 
 <div data-lang="java">
-{% include_example java/org/apache/spark/examples/ml/JavaCrossValidatorExample.java %}
+{% highlight java %}
+import java.util.Arrays;
+import java.util.List;
+
+import org.apache.spark.ml.Pipeline;
+import org.apache.spark.ml.PipelineModel;
+import org.apache.spark.ml.PipelineStage;
+import org.apache.spark.ml.classification.LogisticRegression;
+import org.apache.spark.ml.feature.HashingTF;
+import org.apache.spark.ml.feature.Tokenizer;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+
+// Labeled and unlabeled instance types.
+// Spark SQL can infer schema from Java Beans.
+public class Document implements Serializable {
+  private long id;
+  private String text;
+
+  public Document(long id, String text) {
+    this.id = id;
+    this.text = text;
+  }
+
+  public long getId() { return this.id; }
+  public void setId(long id) { this.id = id; }
+
+  public String getText() { return this.text; }
+  public void setText(String text) { this.text = text; }
+}
+
+public class LabeledDocument extends Document implements Serializable {
+  private double label;
+
+  public LabeledDocument(long id, String text, double label) {
+    super(id, text);
+    this.label = label;
+  }
+
+  public double getLabel() { return this.label; }
+  public void setLabel(double label) { this.label = label; }
+}
+
+// Prepare training documents, which are labeled.
+DataFrame training = sqlContext.createDataFrame(Arrays.asList(
+  new LabeledDocument(0L, "a b c d e spark", 1.0),
+  new LabeledDocument(1L, "b d", 0.0),
+  new LabeledDocument(2L, "spark f g h", 1.0),
+  new LabeledDocument(3L, "hadoop mapreduce", 0.0)
+), LabeledDocument.class);
+
+// Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
+Tokenizer tokenizer = new Tokenizer()
+  .setInputCol("text")
+  .setOutputCol("words");
+HashingTF hashingTF = new HashingTF()
+  .setNumFeatures(1000)
+  .setInputCol(tokenizer.getOutputCol())
+  .setOutputCol("features");
+LogisticRegression lr = new LogisticRegression()
+  .setMaxIter(10)
+  .setRegParam(0.01);
+Pipeline pipeline = new Pipeline()
+  .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
+
+// Fit the pipeline to training documents.
+PipelineModel model = pipeline.fit(training);
+
+// Prepare test documents, which are unlabeled.
+DataFrame test = sqlContext.createDataFrame(Arrays.asList(
+  new Document(4L, "spark i j k"),
+  new Document(5L, "l m n"),
+  new Document(6L, "mapreduce spark"),
+  new Document(7L, "apache hadoop")
+), Document.class);
+
+// Make predictions on test documents.
+DataFrame predictions = model.transform(test);
+for (Row r: predictions.select("id", "text", "probability", "prediction").collect()) {
+  System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
+      + ", prediction=" + r.get(3));
+}
+
+{% endhighlight %}
 </div>
 
 <div data-lang="python">
-{% include_example python/ml/cross_validator.py %}
+{% highlight python %}
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.feature import HashingTF, Tokenizer
+from pyspark.sql import Row
+
+# Prepare training documents from a list of (id, text, label) tuples.
+LabeledDocument = Row("id", "text", "label")
+training = sqlContext.createDataFrame([
+    (0L, "a b c d e spark", 1.0),
+    (1L, "b d", 0.0),
+    (2L, "spark f g h", 1.0),
+    (3L, "hadoop mapreduce", 0.0)], ["id", "text", "label"])
+
+# Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
+tokenizer = Tokenizer(inputCol="text", outputCol="words")
+hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+lr = LogisticRegression(maxIter=10, regParam=0.01)
+pipeline = Pipeline(stages=[tokenizer, hashingTF, lr])
+
+# Fit the pipeline to training documents.
+model = pipeline.fit(training)
+
+# Prepare test documents, which are unlabeled (id, text) tuples.
+test = sqlContext.createDataFrame([
+    (4L, "spark i j k"),
+    (5L, "l m n"),
+    (6L, "mapreduce spark"),
+    (7L, "apache hadoop")], ["id", "text"])
+
+# Make predictions on test documents and print columns of interest.
+prediction = model.transform(test)
+selected = prediction.select("id", "text", "prediction")
+for row in selected.collect():
+    print(row)
+
+{% endhighlight %}
 </div>
 
 </div>
