@@ -187,7 +187,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           try {
             getModificationTime(entry).map { time =>
               time >= lastScanTime
-            }.getOrElse(false)
+            }.getOrElse(false) &&
+            !entry.getPath.getName.endsWith(TEMP_IMPORT_LOG_DIR_SUFFIX)
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
@@ -301,25 +302,25 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def readEventLogs(zipStream: ZipInputStream): Unit = {
     val fs = FileSystem.get(hadoopConf)
+    val tmpPath = new Path(logDir, UUID.randomUUID().toString + TEMP_IMPORT_LOG_DIR_SUFFIX)
     var zipEntry = zipStream.getNextEntry
 
     try {
+      // Create tmp dir to store unzipped files temporarily
+      // Reason to put unzipped files in this temporary file is to avoid contention state when
+      // checkForLogs is occurred during unzipping.
+      fs.mkdirs(tmpPath)
+
       while (zipEntry != null) {
         logInfo(s"Unzipping ${zipEntry.getName}")
-        val importedPath = {
-          val s = zipEntry.getName.replaceAll(Path.SEPARATOR, IMPORTED_LOG_SUFFIX + Path.SEPARATOR)
-          if (!s.endsWith(Path.SEPARATOR)) {
-            new Path(logDir, s + IMPORTED_LOG_SUFFIX)
-          } else {
-            new Path(logDir, s)
-          }
-        }
+        val path = new Path(tmpPath, zipEntry.getName)
         if (zipEntry.isDirectory) {
-          fs.mkdirs(importedPath)
+          // this could possibly be legacy history log
+          fs.mkdirs(path)
         } else {
           var out: OutputStream = null
           Utils.tryWithSafeFinally {
-            out = fs.create(importedPath, true, 1 * 1024 * 1024)
+            out = fs.create(path, true, 1 * 1024 * 1024)
             Utils.copyStream(zipStream, out)
           } {
             if (out != null) {
@@ -332,11 +333,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         zipEntry = zipStream.getNextEntry
       }
 
+      // Move all the event logs from temp dir to event log dir
+      fs.listStatus(tmpPath).foreach { s =>
+        val oldPath = s.getPath
+        fs.rename(oldPath, new Path(logDir, oldPath.getName + IMPORTED_LOG_SUFFIX))
+      }
+
       // Calling checkForLogs to load newly import logs.
+      // TODO. this is not thread-safe
       checkForLogs()
     } catch {
       case e: Exception => throw new SparkException(s"Exception while unzipping imported file", e)
     } finally {
+      fs.delete(tmpPath, true)
       zipStream.close()
     }
   }
@@ -638,7 +647,10 @@ private[history] object FsHistoryProvider {
   val SPARK_VERSION_PREFIX = EventLoggingListener.SPARK_VERSION_KEY + "_"
   val COMPRESSION_CODEC_PREFIX = EventLoggingListener.COMPRESSION_CODEC_KEY + "_"
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
-  val IMPORTED_LOG_SUFFIX = "-imported"
+
+  // File name suffix for imported event log
+  val IMPORTED_LOG_SUFFIX = EventLoggingListener.IMPORTED_LOG_SUFFIX
+  val TEMP_IMPORT_LOG_DIR_SUFFIX = "-IMPORTING"
 }
 
 private class FsApplicationAttemptInfo(

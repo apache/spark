@@ -21,7 +21,7 @@ import java.io.{BufferedOutputStream, ByteArrayInputStream, ByteArrayOutputStrea
   FileOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.TimeUnit
-import java.util.zip.{ZipInputStream, ZipOutputStream}
+import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
 
 import scala.io.Source
 
@@ -404,6 +404,75 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       list.size should be (2)
       list(0).id should be ("v10Log")
       list(1).id should be ("v11Log")
+    }
+  }
+
+  test("read zipped event log") {
+    val provider = new FsHistoryProvider(createTestConf())
+    (1 to 2).map { i =>
+      val log = newLogFile("testApp1", Some(s"attempt$i"), inProgress = false)
+      writeFile(log, true, None,
+        SparkListenerApplicationStart(
+          "testApp1", Some("testApp1"), 5000 * i, "test", Some(s"attempt$i")),
+        SparkListenerApplicationEnd(5001 * i)
+      )
+      log
+    }
+    provider.checkForLogs()
+
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      list(0).attempts.size should be (2)
+      list(0).id should be ("testApp1")
+    }
+
+    val bout = new ByteArrayOutputStream()
+    val zout = new ZipOutputStream(bout)
+    provider.writeEventLogs("testApp1", None, zout)
+    zout.close()
+
+    // Test reading in correct zip file
+    val zin = new ZipInputStream(new ByteArrayInputStream(bout.toByteArray))
+    provider.readEventLogs(zin)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (2)
+      list(0).attempts.size should be (2)
+      list(1).attempts.size should be (2)
+      list.map(_.id).toSet should be
+        Set("testApp1", s"testApp1${FsHistoryProvider.IMPORTED_LOG_SUFFIX}")
+    }
+
+    // Test reading in corrupted zip stream
+    val randBytes = Array.tabulate(10)(i => i.toByte)
+    val corruptedZipIn = new ZipInputStream(new ByteArrayInputStream(randBytes))
+    provider.readEventLogs(corruptedZipIn)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (2)
+      list(0).attempts.size should be (2)
+      list(1).attempts.size should be (2)
+      list.map(_.id).toSet should be
+        Set("testApp1", s"testApp1${FsHistoryProvider.IMPORTED_LOG_SUFFIX}")
+    }
+
+    // Test reading in non event log zip file
+    val nonEventBout = new ByteArrayOutputStream()
+    val nonEventZout = new ZipOutputStream(nonEventBout)
+    nonEventZout.putNextEntry(new ZipEntry("test_file"))
+    nonEventZout.write(randBytes)
+    nonEventZout.closeEntry()
+    nonEventZout.close()
+
+    val nonEventZin = new ZipInputStream(new ByteArrayInputStream(nonEventBout.toByteArray))
+    provider.readEventLogs(nonEventZin)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (2)
+      list(0).attempts.size should be (2)
+      list(1).attempts.size should be (2)
+      list.map(_.id).toSet should be
+        Set("testApp1", s"testApp1${FsHistoryProvider.IMPORTED_LOG_SUFFIX}")
     }
   }
 

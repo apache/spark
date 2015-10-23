@@ -236,6 +236,7 @@ private[spark] object EventLoggingListener extends Logging {
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
   val SPARK_VERSION_KEY = "SPARK_VERSION"
   val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"
+  val IMPORTED_LOG_SUFFIX = ".import"
 
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
@@ -305,9 +306,12 @@ private[spark] object EventLoggingListener extends Logging {
 
     val in = new BufferedInputStream(fs.open(log))
 
+    // Remove the ".import" suffix if this event log is imported
+    val strippedName = log.getName.replaceAll(IMPORTED_LOG_SUFFIX, "")
+
     // Compression codec is encoded as an extension, e.g. app_123.lzf
     // Since we sanitize the app ID to not include periods, it is safe to split on it
-    val logName = log.getName.stripSuffix(IN_PROGRESS)
+    val logName = strippedName.stripSuffix(IN_PROGRESS)
     val codecName: Option[String] = logName.split("\\.").tail.lastOption
     val codec = codecName.map { c =>
       codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
