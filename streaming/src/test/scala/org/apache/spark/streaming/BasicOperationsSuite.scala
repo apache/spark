@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.{State, TrackStateSpec, DStream, WindowedDStream}
+import org.apache.spark.streaming.dstream.{TrackStateSpec, DStream, WindowedDStream}
 import org.apache.spark.util.{Clock, ManualClock}
 import org.apache.spark.{HashPartitioner, SparkConf, SparkException}
 

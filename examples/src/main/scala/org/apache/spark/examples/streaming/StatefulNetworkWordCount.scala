@@ -19,8 +19,8 @@
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
+import org.apache.spark.HashPartitioner
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.SessionSpec
 
 /**
  * Counts words cumulatively in UTF8 encoded, '\n' delimited text received from the network every
@@ -44,7 +44,6 @@ object StatefulNetworkWordCount {
 
     StreamingExamples.setStreamingLogLevels()
 
-    /*
     val updateFunc = (values: Seq[Int], state: Option[Int]) => {
       val currentCount = values.sum
 
@@ -56,11 +55,10 @@ object StatefulNetworkWordCount {
     val newUpdateFunc = (iterator: Iterator[(String, Seq[Int], Option[Int])]) => {
       iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
     }
-    */
 
     val sparkConf = new SparkConf().setAppName("StatefulNetworkWordCount")
     // Create the context with a 1 second batch size
-    val ssc = new StreamingContext(sparkConf, Milliseconds(2000))
+    val ssc = new StreamingContext(sparkConf, Seconds(1))
     ssc.checkpoint(".")
 
     // Initial RDD input to updateStateByKey
@@ -74,13 +72,8 @@ object StatefulNetworkWordCount {
 
     // Update the cumulative count using updateStateByKey
     // This will give a Dstream made of state (which is the cumulative count of the words)
-
-    val updateFunc = (value: Int, sessionData: Option[Int]) => {
-      Option(value + sessionData.getOrElse(0))
-    }
-
-    val stateDstream = wordDstream.sessionByKey[Int](
-      SessionSpec.create(updateFunc).reportAllSession(true))
+    val stateDstream = wordDstream.updateStateByKey[Int](newUpdateFunc,
+      new HashPartitioner (ssc.sparkContext.defaultParallelism), true, initialRDD)
     stateDstream.print()
     ssc.start()
     ssc.awaitTermination()

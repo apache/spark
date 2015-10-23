@@ -24,11 +24,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
-import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.streaming.StreamingContext.rddToFileName
+import org.apache.spark.streaming.{Duration, Time, TrackStateSpec, TrackStateSpecImpl}
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf}
+import org.apache.spark.{HashPartitioner, Partitioner}
 
 /**
  * Extra functions available on DStream of (key, value) pairs through an implicit conversion.
@@ -350,7 +350,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   }
 
   def trackStateByKey[S: ClassTag, T: ClassTag](spec: TrackStateSpec[K, V, S, T]): DStream[T] = {
-    new TrackStateDStream[K, V, S, T](
+    new TrackedStateDStream[K, V, S, T](
       self,
       spec.asInstanceOf[TrackStateSpecImpl[K, V, S, T]]
     ).mapPartitions { partitionIter =>
