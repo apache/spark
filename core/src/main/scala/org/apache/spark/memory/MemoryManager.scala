@@ -133,6 +133,8 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    */
   def acquireExecutionMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
     assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
+    println(s"ACQUIRING $numBytes")
+    Thread.dumpStack()
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
     // of active tasks, to let other tasks ramp down their memory in calls to tryToAcquire
@@ -208,7 +210,6 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    * Release numBytes of execution memory belonging to the given task.
    */
   final def releaseExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
-    println(s"Releasing $numBytes for task $taskAttemptId")
     val curMem = memoryConsumptionForTask.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
       throw new SparkException(

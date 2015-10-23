@@ -39,7 +39,6 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.junit.Assert.*;
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
@@ -54,7 +53,6 @@ import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.serializer.*;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.shuffle.sort.SerializedShuffleHandle;
 import org.apache.spark.storage.*;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -63,8 +61,7 @@ import org.apache.spark.util.Utils;
 public class UnsafeShuffleWriterSuite {
 
   static final int NUM_PARTITITONS = 4;
-  final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(
-    new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
+  TaskMemoryManager taskMemoryManager;
   final HashPartitioner hashPartitioner = new HashPartitioner(NUM_PARTITITONS);
   File mergedOutputFile;
   File tempDir;
@@ -108,11 +105,11 @@ public class UnsafeShuffleWriterSuite {
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
     partitionSizesInMergedFile = null;
     spillFilesCreated.clear();
-    conf = new SparkConf().set("spark.buffer.pageSize", "128m");
+    conf = new SparkConf()
+      .set("spark.buffer.pageSize", "128m")
+      .set("spark.unsafe.offHeap", "false");
     taskMetrics = new TaskMetrics();
-
-    // TODO(josh) when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
-    // TODO(josh) when(shuffleMemoryManager.pageSizeBytes()).thenReturn(128L * 1024 * 1024);
+    taskMemoryManager =  new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
 
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(blockManager.getDiskWriter(

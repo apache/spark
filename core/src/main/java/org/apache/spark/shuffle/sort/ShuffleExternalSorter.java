@@ -268,6 +268,7 @@ final class ShuffleExternalSorter {
    */
   @VisibleForTesting
   void spill() throws IOException {
+    assert(inMemSorter != null);
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
       Utils.bytesToString(getMemoryUsage()),
@@ -314,6 +315,11 @@ final class ShuffleExternalSorter {
       taskMemoryManager.freePage(block);
       memoryFreed += block.size();
     }
+    if (inMemSorter != null) {
+      long sorterMemoryUsage = inMemSorter.getMemoryUsage();
+      inMemSorter = null;
+      taskMemoryManager.releaseExecutionMemory(sorterMemoryUsage);
+    }
     allocatedPages.clear();
     currentPage = null;
     currentPagePosition = -1;
@@ -332,8 +338,9 @@ final class ShuffleExternalSorter {
       }
     }
     if (inMemSorter != null) {
-      taskMemoryManager.releaseExecutionMemory(inMemSorter.getMemoryUsage());
+      long sorterMemoryUsage = inMemSorter.getMemoryUsage();
       inMemSorter = null;
+      taskMemoryManager.releaseExecutionMemory(sorterMemoryUsage);
     }
   }
 
@@ -358,7 +365,7 @@ final class ShuffleExternalSorter {
       }
     }
   }
-  
+
   /**
    * Allocates more memory in order to insert an additional record. This will request additional
    * memory from the memory manager and spill if the requested memory can not be obtained.
