@@ -223,7 +223,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
 
   /** Release all memory for the given task and mark it as inactive (e.g. when a task ends). */
   private[memory] def releaseAllExecutionMemoryForTask(taskAttemptId: Long): Unit = synchronized {
-    releaseExecutionMemory(getMemoryConsumptionForTask(taskAttemptId), taskAttemptId)
+    releaseExecutionMemory(getExecutionMemoryUsageForTask(taskAttemptId), taskAttemptId)
   }
 
   /**
@@ -267,8 +267,10 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
     _storageMemoryUsed
   }
 
-  /** Returns the memory consumption, in bytes, for the current task */
-  private[memory] def getMemoryConsumptionForTask(taskAttemptId: Long): Long = synchronized {
+  /**
+   * Returns the execution memory consumption, in bytes, for the given task.
+   */
+  private[memory] def getExecutionMemoryUsageForTask(taskAttemptId: Long): Long = synchronized {
     memoryConsumptionForTask.getOrElse(taskAttemptId, 0L)
   }
 

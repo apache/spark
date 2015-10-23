@@ -316,7 +316,7 @@ public class TaskMemoryManager {
       }
     }
 
-    freedBytes += memoryManager.getMemoryConsumptionForTask(taskAttemptId);
+    freedBytes += memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
     memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
 
     return freedBytes;
@@ -326,6 +326,6 @@ public class TaskMemoryManager {
    * Returns the memory consumption, in bytes, for the current task
    */
   public long getMemoryConsumptionForThisTask() {
-    return memoryManager.getMemoryConsumptionForTask(taskAttemptId);
+    return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
   }
 }
