@@ -215,13 +215,12 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       }
       logDebug(s"Getting Hive delegation token for user $username against $metastore_uri")
       val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
-      var closeCurrent: Option[Method] = None
+      val closeCurrent = hiveClass.getMethod("closeCurrent")
       try {
         // get all the instance methods before invoking any
         val getDelegationToken = hiveClass.getMethod("getDelegationToken",
           classOf[String], classOf[String])
         val getHive = hiveClass.getMethod("get", hiveConfClass)
-        closeCurrent = Some(hiveClass.getMethod("closeCurrent"))
 
         // invoke
         val hive = getHive.invoke(null, hiveConf)
@@ -232,7 +231,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         Some(hive2Token)
       } finally {
         try {
-          closeCurrent.foreach(_.invoke(null))
+          closeCurrent.invoke(null)
         } catch {
           case e: Exception => logWarning("In Hive.closeCurrent()", e)
         }
