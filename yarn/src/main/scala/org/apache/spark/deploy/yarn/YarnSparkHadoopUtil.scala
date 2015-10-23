@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.lang.reflect.{Method, InvocationTargetException}
+import java.lang.reflect.InvocationTargetException
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -42,7 +42,7 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 
 /**
  * Contains util methods to interact with Hadoop from spark.
@@ -147,14 +147,15 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-   * Obtains token for the Hive metastore. Exceptions are caught and logged
+   * Obtains token for the Hive metastore, using the current user as the principal.
+   * Some exceptions are caught and downgraded to a log message.
+   * @param conf hadoop configuration; the Hive configuration will be based on this
+   * @return a token, or `None` if there's no need for a token (no metastore URI or principal
+   *         in the config), or if a binding exception was caught and downgraded.
    */
-  def obtainTokenForHiveMetastore(
-      sparkConf: SparkConf,
-      conf: Configuration): Option[Token[DelegationTokenIdentifier]] = {
+  def obtainTokenForHiveMetastore(conf: Configuration): Option[Token[DelegationTokenIdentifier]] = {
     try {
-      obtainTokenForHiveMetastoreInner(sparkConf, conf,
-        UserGroupInformation.getCurrentUser().getUserName)
+      obtainTokenForHiveMetastoreInner(conf, UserGroupInformation.getCurrentUser().getUserName)
     } catch {
       case e: NoSuchMethodException =>
         logInfo("Hive Method not found", e)
@@ -185,10 +186,11 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   /**
    * Inner routine to obtains token for the Hive metastore; exceptions are raised on any problem.
+   * @param conf hadoop configuration; the Hive configuration will be based on this.
+   * @param username the username of the principal requesting the delegating token.
+   * @return a delegation token
    */
-  private[yarn] def obtainTokenForHiveMetastoreInner(
-      sparkConf: SparkConf,
-      conf: Configuration,
+  private[yarn] def obtainTokenForHiveMetastoreInner(conf: Configuration,
       username: String): Option[Token[DelegationTokenIdentifier]] = {
     val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
