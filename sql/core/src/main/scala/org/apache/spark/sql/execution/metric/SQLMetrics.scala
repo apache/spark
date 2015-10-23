@@ -67,7 +67,19 @@ private[sql] trait SQLMetricValue[T] extends Serializable {
 private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetricValue[Long] {
 
   def add(incr: Long): LongSQLMetricValue = {
-    _value += incr
+    // Some LongSQLMetric will use -1 as initial value, so if the accumulator is never updated,
+    // we can filter it out later.  However, when `add` is called, the accumulator is valid, we
+    // should turn -1 to 0.
+    if (_value < 0) {
+      _value = 0
+    }
+
+    // Some LongSQLMetric will use -1 as initial value, when we merge accumulator updates at driver
+    // side, we should ignore these -1 values.
+    if (incr > 0) {
+      _value += incr
+    }
+
     this
   }
 

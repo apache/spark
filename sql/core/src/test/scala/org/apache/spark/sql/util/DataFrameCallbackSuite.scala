@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.util
 
-import org.apache.spark.SparkException
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark._
 import org.apache.spark.sql.{functions, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.test.SharedSQLContext
-
-import scala.collection.mutable.ArrayBuffer
 
 class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -81,7 +81,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0)._3.getMessage == e.getMessage)
   }
 
-  test("get metrics by callback") {
+  test("get numRows metrics by callback") {
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
@@ -102,5 +102,44 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0) == 1)
     assert(metrics(1) == 1)
     assert(metrics(2) == 2)
+  }
+
+  test("get size metrics by callback") {
+    val metrics = ArrayBuffer.empty[Long]
+    val listener = new QueryExecutionListener {
+      // Only test successful case here, so no need to implement `onFailure`
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        metrics += qe.executedPlan.longMetric("dataSize").value.value
+        val bottomAgg = qe.executedPlan.children(0).children(0)
+        metrics += bottomAgg.longMetric("dataSize").value.value
+      }
+    }
+    sqlContext.listenerManager.register(listener)
+
+    val sparkListener = new SaveInfoListener
+    sqlContext.sparkContext.addSparkListener(sparkListener)
+
+    val df = (1 to 100).map(i => i -> i.toString).toDF("i", "j")
+    df.groupBy("i").count().collect()
+
+    def getPeakExecutionMemory(stageId: Int): Long = {
+      val peakMemoryAccumulator = sparkListener.getCompletedStageInfos(stageId).accumulables
+        .filter(_._2.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
+
+      assert(peakMemoryAccumulator.size == 1)
+      peakMemoryAccumulator.head._2.value.toLong
+    }
+
+    assert(sparkListener.getCompletedStageInfos.length == 2)
+    val bottomAggDataSize = getPeakExecutionMemory(0)
+    val topAggDataSize = getPeakExecutionMemory(1)
+
+    // For this simple case, the peakExecutionMemory of a stage should be the data size of the
+    // aggregate operator, as we only have one memory consuming operator per stage.
+    assert(metrics.length == 2)
+    assert(metrics(0) == topAggDataSize)
+    assert(metrics(1) == bottomAggDataSize)
   }
 }
