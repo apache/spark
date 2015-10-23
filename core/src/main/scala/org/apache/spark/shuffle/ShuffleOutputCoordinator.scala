@@ -38,12 +38,19 @@ object ShuffleOutputCoordinator extends Logging {
       shuffleId: Int,
       partitionId: Int, tmpToDest: Seq[(File, File)]): Boolean = synchronized {
     logInfo(s"renaming: $tmpToDest")
-    val someDestAlreadyExists = tmpToDest.exists(_._2.exists)
-    if (!someDestAlreadyExists) {
+
+    // HashShuffleWriter might not write any records to some of its files -- that's OK, we only
+    // move the files that do exist
+    val toMove = tmpToDest.filter{_._1.exists()}
+
+    val destAlreadyExists = toMove.forall(_._2.exists)
+    if (!destAlreadyExists) {
       // if any of the renames fail, delete all the dest files.  otherwise, future
       // attempts have no hope of succeeding
-      val renamesSucceeded = tmpToDest.map { case (tmp, dest) =>
-        logInfo(s"trying to rename: $tmp -> $dest.  ${tmp.exists()}; ${dest.exists()}")
+      val renamesSucceeded = toMove.map { case (tmp, dest) =>
+        if (dest.exists()) {
+          dest.delete()
+        }
         val r = tmp.renameTo(dest)
         if (!r) {
           logInfo(s"failed to rename $tmp to $dest.  ${tmp.exists()}; ${dest.exists()}")
@@ -51,16 +58,15 @@ object ShuffleOutputCoordinator extends Logging {
         r
       }.forall{identity}
       if (!renamesSucceeded) {
-        tmpToDest.foreach { case (tmp, dest) => if (dest.exists()) dest.delete() }
+        toMove.foreach { case (tmp, dest) => if (dest.exists()) dest.delete() }
         false
       } else {
         true
       }
     } else {
       logInfo(s"shuffle output for shuffle $shuffleId, partition $partitionId already exists, " +
-        s"not overwriting.  Another task must have created this shuffle output:" +
-        tmpToDest.map{_._2}.filter{_.exists()})
-      tmpToDest.foreach{ case (tmp, _) => tmp.delete()}
+        s"not overwriting.  Another task must have created this shuffle output.")
+      toMove.foreach{ case (tmp, _) => tmp.delete()}
       false
     }
   }
