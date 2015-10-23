@@ -18,16 +18,21 @@
 #' @include generics.R column.R
 NULL
 
-#' Creates a \code{Column} of literal value.
+#' lit
 #'
-#' The passed in object is returned directly if it is already a \linkS4class{Column}.
-#' If the object is a Scala Symbol, it is converted into a \linkS4class{Column} also.
-#' Otherwise, a new \linkS4class{Column} is created to represent the literal value.
+#' A new \linkS4class{Column} is created to represent the literal value.
+#' If the parameter is a \linkS4class{Column}, it is returned unchanged.
 #'
 #' @family normal_funcs
 #' @rdname lit
 #' @name lit
 #' @export
+#' @examples
+#' \dontrun{
+#' lit(df$name)
+#' select(df, lit("x"))
+#' select(df, lit("2015-01-01"))
+#'}
 setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
