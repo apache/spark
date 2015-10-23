@@ -265,7 +265,6 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema,
         None,
         None)(sqlContext)
-      )
     )
   }
 
