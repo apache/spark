@@ -133,8 +133,6 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    */
   def acquireExecutionMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
     assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
-    println(s"ACQUIRING $numBytes")
-    Thread.dumpStack()
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
     // of active tasks, to let other tasks ramp down their memory in calls to tryToAcquire
