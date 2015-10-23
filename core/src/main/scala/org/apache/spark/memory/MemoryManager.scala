@@ -174,23 +174,6 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
   // -- Policies for arbitrating execution memory across tasks -------------------------------------
   // Prior to Spark 1.6, these policies were implemented in the ShuffleMemoryManager.
 
-  /**
-   * The default page size, in bytes.
-   *
-   * If user didn't explicitly set "spark.buffer.pageSize", we figure out the default value
-   * by looking at the number of cores available to the process, and the total amount of memory,
-   * and then divide it by a factor of safety.
-   */
-  val pageSizeBytes: Long = {
-    val minPageSize = 1L * 1024 * 1024   // 1MB
-    val maxPageSize = 64L * minPageSize  // 64MB
-    val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
-    // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
-    val safetyFactor = 16
-    val size = ByteArrayMethods.nextPowerOf2(maxExecutionMemory / cores / safetyFactor)
-    val default = math.min(maxPageSize, math.max(minPageSize, size))
-    conf.getSizeAsBytes("spark.buffer.pageSize", default)
-  }
 
   private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
 
@@ -293,6 +276,24 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int = 1) 
   }
 
   // -- Methods related to Tungsten managed memory -------------------------------------------------
+
+  /**
+   * The default page size, in bytes.
+   *
+   * If user didn't explicitly set "spark.buffer.pageSize", we figure out the default value
+   * by looking at the number of cores available to the process, and the total amount of memory,
+   * and then divide it by a factor of safety.
+   */
+  val pageSizeBytes: Long = {
+    val minPageSize = 1L * 1024 * 1024   // 1MB
+    val maxPageSize = 64L * minPageSize  // 64MB
+    val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
+    // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
+    val safetyFactor = 16
+    val size = ByteArrayMethods.nextPowerOf2(maxExecutionMemory / cores / safetyFactor)
+    val default = math.min(maxPageSize, math.max(minPageSize, size))
+    conf.getSizeAsBytes("spark.buffer.pageSize", default)
+  }
 
   /**
    * Tracks whether Tungsten memory will be allocated on the JVM heap or off-heap using
