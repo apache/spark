@@ -524,7 +524,7 @@ private[parquet] class CatalystSchemaConverter(
         Types.primitive(BINARY, repetition).named(field.name)
 
       case _ =>
-        throw new AnalysisException(s"Unsupported data type ${field.dataType}")
+        throw new AnalysisException(s"Unsupported data type $field.dataType")
     }
   }
 }
