@@ -83,7 +83,7 @@ private[sql] class TextRelation(
   override def buildScan(inputPaths: Array[FileStatus]): RDD[Row] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
     val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
-    val paths = inputPaths.map(_.getPath)
+    val paths = inputPaths.map(_.getPath).sorted
 
     if (paths.nonEmpty) {
       FileInputFormat.setInputPaths(job, paths: _*)
