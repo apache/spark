@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectOutputStream}
@@ -11,48 +28,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.util.StateMap
 import org.apache.spark.util.Utils
-
-
-// ==================================================
-// ==================================================
-// ================= PUBLIC CLASSES =================
-// ==================================================
-// ==================================================
-
-
-
-
-
-
-
-
-
-// ===============================================
-// ===============================================
-// ============== PRIVATE CLASSES ================
-// ===============================================
-// ===============================================
-
-
-
-
-
-
-
-
-// -----------------------------------------------
-// --------------- StateMap stuff --------------
-// -----------------------------------------------
-
-
-
-
-
-
-
-// -----------------------------------------------
-// --------------- StateRDD stuff --------------
-// -----------------------------------------------
 
 private[streaming] case class TrackStateRDDRecord[K: ClassTag, S: ClassTag, T: ClassTag](
     stateMap: StateMap[K, S], emittedRecords: Seq[T])
@@ -118,15 +93,15 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
     val newStateMap = prevStateRDDIterator.next().stateMap.copy()
     val emittedRecords = new ArrayBuffer[T]
 
-    val stateWrapper = new StateImpl[S]()
+    val wrappedState = new StateImpl[S]()
 
     dataIterator.foreach { case (key, value) =>
-      stateWrapper.wrap(newStateMap.get(key))
-      val emittedRecord = trackingFunction(key, Some(value), stateWrapper)
-      if (stateWrapper.isRemoved()) {
+      wrappedState.wrap(newStateMap.get(key))
+      val emittedRecord = trackingFunction(key, Some(value), wrappedState)
+      if (wrappedState.isRemoved) {
         newStateMap.remove(key)
-      } else if (stateWrapper.isUpdated()) {
-        newStateMap.put(key, stateWrapper.get(), currentTime)
+      } else if (wrappedState.isUpdated) {
+        newStateMap.put(key, wrappedState.get(), currentTime)
       }
       emittedRecords ++= emittedRecord
     }
@@ -134,8 +109,8 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
     if (doFullScan) {
       if (timeoutThresholdTime.isDefined) {
         newStateMap.getByTime(timeoutThresholdTime.get).foreach { case (key, state, _) =>
-          stateWrapper.wrapTiminoutState(state)
-          val emittedRecord = trackingFunction(key, None, stateWrapper)
+          wrappedState.wrapTiminoutState(state)
+          val emittedRecord = trackingFunction(key, None, wrappedState)
           emittedRecords ++= emittedRecord
         }
       }
@@ -178,7 +153,7 @@ private[streaming] object TrackStateRDD {
 // -----------------------------------------------
 
 
-private[streaming] class TrackedStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
+private[streaming] class TrackeStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
     parent: DStream[(K, V)], spec: TrackStateSpecImpl[K, V, S, T])
   extends DStream[TrackStateRDDRecord[K, S, T]](parent.context) {
 

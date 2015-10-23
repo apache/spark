@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.streaming.util
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
@@ -14,7 +31,7 @@ private[streaming] abstract class StateMap[K: ClassTag, S: ClassTag] extends Ser
   /** Get the state for a key if it exists */
   def get(key: K): Option[S]
 
-  /** Get all the keys and states whose updated time is older than the give threshold time */
+  /** Get all the keys and states whose updated time is older than the given threshold time */
   def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)]
 
   /** Get all the keys and states in this map. */
@@ -187,7 +204,8 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     // Write the parentStateMap while consolidating
     val doCompaction = shouldCompact
     val newParentSessionStore = if (doCompaction) {
-      new OpenHashMapBasedStateMap[K, S](initialCapacity = approxSize, deltaChainThreshold)
+      val initCapacity = if (approxSize > 0) approxSize else 64
+      new OpenHashMapBasedStateMap[K, S](initialCapacity = initCapacity, deltaChainThreshold)
     } else { null }
 
     val iterOfActiveSessions = parentStateMap.getAll()

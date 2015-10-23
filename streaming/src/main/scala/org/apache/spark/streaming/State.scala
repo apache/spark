@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.streaming
 
 /**
@@ -32,9 +49,14 @@ sealed abstract class State[S] {
   /** Is the state going to be timed out by the system after this batch interval */
   def isTimingOut(): Boolean
 
+  @inline final def getOption(): Option[S] = Option(get())
+
   /** Get the state if it exists, otherwise return the default value */
-  @inline final def getOrElse[S1 >: S](default: => S1): S1 =
-    if (exists) default else this.get
+  @inline final def getOrElse[S1 >: S](default: => S1): S1 = {
+    if (exists) this.get else default
+  }
+
+  @inline final override def toString() = getOption.map { _.toString }.getOrElse("<state not set>")
 }
 
 /** Internal implementation of the [[State]] interface */
@@ -52,14 +74,14 @@ private[streaming] class StateImpl[S] extends State[S] {
   }
 
   def get(): S = {
-    null.asInstanceOf[S]
+    state
   }
 
   def update(newState: S): Unit = {
     require(!removed, "Cannot update the state after it has been removed")
     require(!timingOut, "Cannot update the state that is timing out")
-    updated = true
     state = newState
+    updated = true
   }
 
   def isTimingOut(): Boolean = {

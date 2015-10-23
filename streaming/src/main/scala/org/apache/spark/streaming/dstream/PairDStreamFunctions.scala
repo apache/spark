@@ -350,7 +350,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   }
 
   def trackStateByKey[S: ClassTag, T: ClassTag](spec: TrackStateSpec[K, V, S, T]): DStream[T] = {
-    new TrackedStateDStream[K, V, S, T](
+    new TrackeStateDStream[K, V, S, T](
       self,
       spec.asInstanceOf[TrackStateSpecImpl[K, V, S, T]]
     ).mapPartitions { partitionIter =>

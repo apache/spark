@@ -651,17 +651,17 @@ class BasicOperationsSuite extends TestSuiteBase {
         Seq()
       )
 
-    val sessionOperation = (s: DStream[String]) => {
+    val trackStateOp = (s: DStream[String]) => {
       val updateFunc = (key: String, value: Option[Int], state: State[Int]) => {
         val sum = value.getOrElse(0) + state.getOrElse(0)
         val output = (key, sum)
         state.update(sum)
         Some(output)
       }
-      s.map(x => (x, 1)).trackStateByKey(TrackStateSpec.create(updateFunc))
+      s.map(x => (x, 1)).trackStateByKey(TrackStateSpec(updateFunc))
     }
 
-    testOperation(inputData, sessionOperation, outputData, true)
+    testOperation(inputData, trackStateOp, outputData, true)
   }
 
 
