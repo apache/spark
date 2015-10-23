@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.pmml
+package org.apache.spark.ml.util
 
 import java.io.StringReader
 import javax.xml.bind.Unmarshaller
@@ -25,14 +25,15 @@ import org.jpmml.model.{ImportFilter, JAXBUtil}
 import org.xml.sax.InputSource
 
 /**
- * Utils for working with PMML.
+ * Testing utils for working with PMML.
  * Predictive Model Markup Language (PMML) is an XML-based file format
  * developed by the Data Mining Group (www.dmg.org).
  */
 private[spark] object PMMLUtils {
   /**
    * :: Experimental ::
-   * Load a PMML model from a string
+   * Load a PMML model from a string. Note: for testing only, PMML model evaluation is supported
+   * through external spark-packages.
    */
   def loadFromString(input: String): PMML = {
     val is = new StringReader(input)
