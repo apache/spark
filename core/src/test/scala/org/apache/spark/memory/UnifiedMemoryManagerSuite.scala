@@ -39,6 +39,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     (mm, ms)
   }
 
+  override protected def createMemoryManager(maxMemory: Long): MemoryManager = {
+    new UnifiedMemoryManager(conf, maxMemory, numCores = 1)
+  }
+
   private def getStorageRegionSize(mm: UnifiedMemoryManager): Long = {
     mm invokePrivate PrivateMethod[Long]('storageRegionSize)()
   }

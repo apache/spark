@@ -41,6 +41,14 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     (mm, ms)
   }
 
+  override protected def createMemoryManager(maxMemory: Long): MemoryManager = {
+    new StaticMemoryManager(
+      conf,
+      maxExecutionMemory = maxMemory,
+      maxStorageMemory = 0,
+      numCores = 1)
+  }
+
   test("basic execution memory") {
     val maxExecutionMem = 1000L
     val (mm, _) = makeThings(maxExecutionMem, Long.MaxValue)
