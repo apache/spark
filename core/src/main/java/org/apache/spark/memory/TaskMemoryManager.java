@@ -89,12 +89,6 @@ public class TaskMemoryManager {
    */
   private final BitSet allocatedPages = new BitSet(PAGE_TABLE_SIZE);
 
-  /**
-   * Tracks memory allocated with {@link TaskMemoryManager#allocate(long)}, used to detect / clean
-   * up leaked memory.
-   */
-  private final HashSet<MemoryBlock> allocatedNonPageMemory = new HashSet<MemoryBlock>();
-
   private final MemoryManager memoryManager;
 
   private final long taskAttemptId;
@@ -136,7 +130,7 @@ public class TaskMemoryManager {
 
   /**
    * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
-   * intended for allocating large blocks of memory that will be shared between operators.
+   * intended for allocating large blocks of Tungsten memory that will be shared between operators.
    *
    * Returns `null` if there was not enough memory to allocate the page.
    */
@@ -192,40 +186,10 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed
-   * to be zeroed out (call `zero()` on the result if this is necessary). This method is intended
-   * to be used for allocating operators' internal data structures. For data pages that you want to
-   * exchange between operators, consider using {@link TaskMemoryManager#allocatePage(long)}, since
-   * that will enable intra-memory pointers (see
-   * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)} and this class's
-   * top-level Javadoc for more details).
-   */
-  public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    assert(size > 0) : "Size must be positive, but got " + size;
-    final MemoryBlock memory = memoryManager.tungstenMemoryAllocator().allocate(size);
-    synchronized(allocatedNonPageMemory) {
-      allocatedNonPageMemory.add(memory);
-    }
-    return memory;
-  }
-
-  /**
-   * Free memory allocated by {@link TaskMemoryManager#allocate(long)}.
-   */
-  public void free(MemoryBlock memory) {
-    assert (memory.pageNumber == -1) : "Should call freePage() for pages, not free()";
-    memoryManager.tungstenMemoryAllocator().free(memory);
-    synchronized(allocatedNonPageMemory) {
-      final boolean wasAlreadyRemoved = !allocatedNonPageMemory.remove(memory);
-      assert (!wasAlreadyRemoved) : "Called free() on memory that was already freed!";
-    }
-  }
-
-  /**
    * Given a memory page and offset within that page, encode this address into a 64-bit long.
    * This address will remain valid as long as the corresponding page has not been freed.
    *
-   * @param page a data page allocated by {@link TaskMemoryManager#allocate(long)}.
+   * @param page a data page allocated by {@link TaskMemoryManager#allocatePage(long)}/
    * @param offsetInPage an offset in this page which incorporates the base offset. In other words,
    *                     this should be the value that you would pass as the base offset into an
    *                     UNSAFE call (e.g. page.baseOffset() + something).
@@ -302,18 +266,6 @@ public class TaskMemoryManager {
       if (page != null) {
         freedBytes += page.size();
         freePage(page);
-      }
-    }
-
-    synchronized (allocatedNonPageMemory) {
-      final Iterator<MemoryBlock> iter = allocatedNonPageMemory.iterator();
-      while (iter.hasNext()) {
-        final MemoryBlock memory = iter.next();
-        freedBytes += memory.size();
-        // We don't call free() here because that calls Set.remove, which would lead to a
-        // ConcurrentModificationException here.
-        memoryManager.tungstenMemoryAllocator().free(memory);
-        iter.remove();
       }
     }
 

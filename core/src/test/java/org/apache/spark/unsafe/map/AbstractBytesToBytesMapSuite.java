@@ -23,12 +23,8 @@ import java.util.*;
 
 import org.apache.spark.memory.TaskMemoryManager;
 import org.junit.*;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.*;
-import static org.mockito.AdditionalMatchers.geq;
-import static org.mockito.Mockito.*;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
@@ -42,7 +38,6 @@ public abstract class AbstractBytesToBytesMapSuite {
   private final Random rand = new Random(42);
 
   private TaskMemoryManager taskMemoryManager;
-  private TaskMemoryManager sizeLimitedTaskMemoryManager;
   private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
   @Before
@@ -50,20 +45,6 @@ public abstract class AbstractBytesToBytesMapSuite {
     taskMemoryManager = new TaskMemoryManager(
       new GrantEverythingMemoryManager(
         new SparkConf().set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator())), 0);
-    // Mocked memory manager for tests that check the maximum array size, since actually allocating
-    // such large arrays will cause us to run out of memory in our tests.
-    sizeLimitedTaskMemoryManager = mock(TaskMemoryManager.class);
-    when(sizeLimitedTaskMemoryManager.allocate(geq(1L << 20))).thenAnswer(
-      new Answer<MemoryBlock>() {
-        @Override
-        public MemoryBlock answer(InvocationOnMock invocation) throws Throwable {
-          if (((Long) invocation.getArguments()[0] / 8) > Integer.MAX_VALUE) {
-            throw new OutOfMemoryError("Requested array size exceeds VM limit");
-          }
-          return new MemoryBlock(null, 0, (Long) invocation.getArguments()[0]);
-        }
-      }
-    );
   }
 
   @After
@@ -473,7 +454,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void initialCapacityBoundsChecking() {
     try {
-      new BytesToBytesMap(sizeLimitedTaskMemoryManager, 0, PAGE_SIZE_BYTES);
+      new BytesToBytesMap(taskMemoryManager, 0, PAGE_SIZE_BYTES);
       Assert.fail("Expected IllegalArgumentException to be thrown");
     } catch (IllegalArgumentException e) {
       // expected exception
@@ -481,34 +462,13 @@ public abstract class AbstractBytesToBytesMapSuite {
 
     try {
       new BytesToBytesMap(
-        sizeLimitedTaskMemoryManager,
+        taskMemoryManager,
         BytesToBytesMap.MAX_CAPACITY + 1,
         PAGE_SIZE_BYTES);
       Assert.fail("Expected IllegalArgumentException to be thrown");
     } catch (IllegalArgumentException e) {
       // expected exception
     }
-
-    // Ignored because this can OOM now that we allocate the long array w/o a TaskMemoryManager
-    // Can allocate _at_ the max capacity
-    //    BytesToBytesMap map = new BytesToBytesMap(
-    //      sizeLimitedTaskMemoryManager,
-    //      shuffleMemoryManager,
-    //      BytesToBytesMap.MAX_CAPACITY,
-    //      PAGE_SIZE_BYTES);
-    //    map.free();
-  }
-
-  // Ignored because this can OOM now that we allocate the long array w/o a TaskMemoryManager
-  @Ignore
-  public void resizingLargeMap() {
-    // As long as a map's capacity is below the max, we should be able to resize up to the max
-    BytesToBytesMap map = new BytesToBytesMap(
-      sizeLimitedTaskMemoryManager,
-      BytesToBytesMap.MAX_CAPACITY - 64,
-      PAGE_SIZE_BYTES);
-    map.growAndRehash();
-    map.free();
   }
 
   @Test

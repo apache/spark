@@ -26,14 +26,6 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 public class TaskMemoryManagerSuite {
 
   @Test
-  public void leakedNonPageMemoryIsDetected() {
-    final TaskMemoryManager manager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
-    manager.allocate(1024);  // leak memory
-    Assert.assertEquals(1024, manager.cleanUpAllAllocatedMemory());
-  }
-
-  @Test
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
