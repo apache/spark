@@ -152,7 +152,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
     testTaskEndReason(TaskCommitDenied(2, 3, 4))
-    testTaskEndReason(ExecutorLostFailure("100", true, Some("Unknown")))
+    testTaskEndReason(ExecutorLostFailure("100", true, Some("Induced failure")))
     testTaskEndReason(UnknownReason)
 
     // BlockId
