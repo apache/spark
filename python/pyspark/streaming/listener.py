@@ -109,7 +109,6 @@ class BatchInfo(object):
 
         self.outputOperationInfos = self._map2dict(javaBatchInfo.outputOperationInfos())
 
-
     def schedulingDelay(self):
         """
         Time taken for the first job of this batch to start processing from the time this batch

@@ -401,6 +401,8 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
 class StreamingListenerTests(PySparkStreamingTestCase):
 
+    duration = .5
+
     class BatchInfoCollector(StreamingListener):
 
         def __init__(self):
@@ -427,6 +429,9 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             return dstream.map(int)
         expected = [[1], [2], [3], [4]]
         self._test_func(input, func, expected)
+
+        # Test occasionally fails without a delay
+        time.sleep(.1)
 
         batchInfosSubmitted = batch_collector.batchInfosSubmitted
         self.assertEqual(len(batchInfosSubmitted), 4)
