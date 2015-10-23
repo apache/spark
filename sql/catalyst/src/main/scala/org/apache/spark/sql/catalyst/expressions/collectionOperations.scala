@@ -109,7 +109,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def nullSafeEval(array: Any, ascending: Any): Any = {
     val elementType = base.dataType.asInstanceOf[ArrayType].elementType
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
-    java.util.Arrays.sort(data, if (ascending.asInstanceOf[Boolean]) lt else gt)
+    if (elementType != NullType) {
+      java.util.Arrays.sort(data, if (ascending.asInstanceOf[Boolean]) lt else gt)
+    }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 
