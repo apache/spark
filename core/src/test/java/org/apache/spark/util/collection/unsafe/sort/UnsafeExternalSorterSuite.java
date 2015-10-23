@@ -56,8 +56,9 @@ import org.apache.spark.util.Utils;
 public class UnsafeExternalSorterSuite {
 
   final LinkedList<File> spillFilesCreated = new LinkedList<File>();
-  final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(
-    new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
+  final GrantEverythingMemoryManager memoryManager =
+    new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"));
+  final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {
     @Override
@@ -225,12 +226,16 @@ public class UnsafeExternalSorterSuite {
 
   @Test
   public void spillingOccursInResponseToMemoryPressure() throws Exception {
-    // TODO(josh): shuffleMemoryManager = ShuffleMemoryManager.create(pageSizeBytes * 2, pageSizeBytes);
     final UnsafeExternalSorter sorter = newSorter();
-    final int numRecords = (int) pageSizeBytes / 4;
-    for (int i = 0; i <= numRecords; i++) {
+    // This should be enough records to completely fill up a data page:
+    final int numRecords = (int) (pageSizeBytes / (4 + 4));
+    for (int i = 0; i < numRecords; i++) {
       insertNumber(sorter, numRecords - i);
     }
+    assertEquals(1, sorter.getNumberOfAllocatedPages());
+    memoryManager.markExecutionAsOutOfMemory();
+    // The insertion of this record should trigger a spill:
+    insertNumber(sorter, 0);
     // Ensure that spill files were created
     assertThat(tempDir.listFiles().length, greaterThanOrEqualTo(1));
     // Read back the sorted data:
@@ -244,6 +249,7 @@ public class UnsafeExternalSorterSuite {
       assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
       i++;
     }
+    assertEquals(numRecords + 1, i);
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
   }

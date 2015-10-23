@@ -24,17 +24,31 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
 
 class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 1) {
   private[memory] override def doAcquireExecutionMemory(
-    numBytes: Long,
-    evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = numBytes
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
+    if (oom) {
+      oom = false
+      0
+    } else {
+      _executionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
+      numBytes
+    }
+  }
   override def acquireStorageMemory(
-    blockId: BlockId,
-    numBytes: Long,
-    evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
   override def acquireUnrollMemory(
-    blockId: BlockId,
-    numBytes: Long,
-    evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
   override def releaseStorageMemory(numBytes: Long): Unit = { }
   override def maxExecutionMemory: Long = Long.MaxValue
   override def maxStorageMemory: Long = Long.MaxValue
+
+  private var oom = false
+
+  def markExecutionAsOutOfMemory(): Unit = {
+    oom = true
+  }
 }

@@ -48,6 +48,7 @@ class UnsafeFixedWidthAggregationMapSuite
   private def emptyAggregationBuffer: InternalRow = InternalRow(0)
   private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
+  private var memoryManager: GrantEverythingMemoryManager = null
   private var taskMemoryManager: TaskMemoryManager = null
 
   def testWithMemoryLeakDetection(name: String)(f: => Unit) {
@@ -61,7 +62,8 @@ class UnsafeFixedWidthAggregationMapSuite
 
     test(name) {
       val conf = new SparkConf().set("spark.unsafe.offHeap", "false")
-      taskMemoryManager = new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0)
+      memoryManager = new GrantEverythingMemoryManager(conf)
+      taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
 
       TaskContext.setTaskContext(new TaskContextImpl(
         stageId = 0,
@@ -206,7 +208,7 @@ class UnsafeFixedWidthAggregationMapSuite
       sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
 
       if ((i % 100) == 0) {
-        // TODO(josh): Fix shuffleMemoryManager.markAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemory()
         sorter.closeCurrentPage()
       }
     }
@@ -249,7 +251,7 @@ class UnsafeFixedWidthAggregationMapSuite
       sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
 
       if ((i % 100) == 0) {
-        // TODO(josh): FIX shuffleMemoryManager.markAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemory()
         sorter.closeCurrentPage()
       }
     }
@@ -301,7 +303,7 @@ class UnsafeFixedWidthAggregationMapSuite
       sorter.insertKV(UnsafeRow.createFromByteArray(0, 0), UnsafeRow.createFromByteArray(0, 0))
 
       if ((i % 100) == 0) {
-        // TODO(josh): fix shuffleMemoryManager.markAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemory()
         sorter.closeCurrentPage()
       }
     }
@@ -322,34 +324,28 @@ class UnsafeFixedWidthAggregationMapSuite
   }
 
   testWithMemoryLeakDetection("convert to external sorter under memory pressure (SPARK-10474)") {
-    // TODO(josh) val smm = ShuffleMemoryManager.createForTesting(65536)
     val pageSize = 4096
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
       taskMemoryManager,
-      // smm, // TODO(josh): needs to be updated.
       128, // initial capacity
       pageSize,
       false // disable perf metrics
     )
 
-    // Insert into the map until we've run out of space
     val rand = new Random(42)
-    var hasSpace = true
-    while (hasSpace) {
+    for (i <- 1 to 100) {
       val str = rand.nextString(1024)
       val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
-      if (buf == null) {
-        hasSpace = false
-      } else {
-        buf.setInt(0, str.length)
-      }
+      buf.setInt(0, str.length)
     }
-
-    // Ensure we're actually maxed out by asserting that we can't acquire even just 1 byte
-    // TODO(josh): fix assert(smm.tryToAcquire(1) === 0)
+    // Simulate running out of space
+    memoryManager.markExecutionAsOutOfMemory()
+    val str = rand.nextString(1024)
+    val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+    assert(buf == null)
 
     // Convert the map into a sorter. This used to fail before the fix for SPARK-10474
     // because we would try to acquire space for the in-memory sorter pointer array before

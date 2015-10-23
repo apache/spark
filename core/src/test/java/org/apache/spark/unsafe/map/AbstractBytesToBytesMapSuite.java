@@ -37,14 +37,16 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private final Random rand = new Random(42);
 
+  private GrantEverythingMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
   private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
   @Before
   public void setup() {
-    taskMemoryManager = new TaskMemoryManager(
+    memoryManager =
       new GrantEverythingMemoryManager(
-        new SparkConf().set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator())), 0);
+        new SparkConf().set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator()));
+    taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   }
 
   @After
@@ -413,8 +415,9 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToAllocateFirstPage() {
-    // TODO(josh)     shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024);
+    memoryManager.markExecutionAsOutOfMemory();
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, PAGE_SIZE_BYTES);
+    memoryManager.markExecutionAsOutOfMemory();
     try {
       final long[] emptyArray = new long[0];
       final BytesToBytesMap.Location loc =
@@ -430,12 +433,14 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToGrow() {
-    // TODO(josh) shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024 * 10);
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, 1024);
     try {
       boolean success = true;
       int i;
-      for (i = 0; i < 1024; i++) {
+      for (i = 0; i < 127; i++) {
+        if (i > 0) {
+          memoryManager.markExecutionAsOutOfMemory();
+        }
         final long[] arr = new long[]{i};
         final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
         success =
