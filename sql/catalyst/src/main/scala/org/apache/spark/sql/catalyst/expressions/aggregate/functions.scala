@@ -939,6 +939,9 @@ object HyperLogLogPlusPlus {
  * This class implements online, one-pass algorithms for computing the central moments of a set of
  * points.
  *
+ * Returns `Double.NaN` when N = 0 or N = 1
+ *  -third and fourth moments return `Double.NaN` when second moment is zero
+ *
  * References:
  *  - Xiangrui Meng.  "Simpler Online Updates for Arbitrary-Order Central Moments."
  *      2015. http://arxiv.org/abs/1510.04923
@@ -951,14 +954,9 @@ object HyperLogLogPlusPlus {
 abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate with Serializable {
 
   /**
-   * The maximum central moment order to be computed.
+   * The central moment order to be computed.
    */
   protected def momentOrder: Int
-
-  /**
-   * Array of sufficient moments need to compute the aggregate statistic.
-   */
-  protected def sufficientMoments: Array[Int]
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -977,11 +975,11 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /**
-   * The number of central moments to store in the buffer.
+   * Size of aggregation buffer.
    */
-  private[this] val numMoments = 5
+  private[this] val bufferSize = 5
 
-  override val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(numMoments) { i =>
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(bufferSize) { i =>
     AttributeReference(s"M$i", DoubleType)()
   }
 
@@ -990,20 +988,32 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
-  /**
-   * Initialize all moments to zero.
-   */
-  override def initialize(buffer: MutableRow): Unit = {
-    for (aggIndex <- 0 until numMoments) {
-      buffer.setDouble(mutableAggBufferOffset + aggIndex, 0.0)
-    }
-  }
+  // buffer offsets
+  private[this] val nOffset = mutableAggBufferOffset
+  private[this] val meanOffset = mutableAggBufferOffset + 1
+  private[this] val secondMomentOffset = mutableAggBufferOffset + 2
+  private[this] val thirdMomentOffset = mutableAggBufferOffset + 3
+  private[this] val fourthMomentOffset = mutableAggBufferOffset + 4
 
   // frequently used values for online updates
   private[this] var delta = 0.0
   private[this] var deltaN = 0.0
   private[this] var delta2 = 0.0
   private[this] var deltaN2 = 0.0
+  private[this] var n = 0.0
+  private[this] var mean = 0.0
+  private[this] var m2 = 0.0
+  private[this] var m3 = 0.0
+  private[this] var m4 = 0.0
+
+  /**
+   * Initialize all moments to zero.
+   */
+  override def initialize(buffer: MutableRow): Unit = {
+    for (aggIndex <- 0 until bufferSize) {
+      buffer.setDouble(mutableAggBufferOffset + aggIndex, 0.0)
+    }
+  }
 
   /**
    * Update the central moments buffer.
@@ -1013,40 +1023,36 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
     if (v != null) {
       val updateValue = v match {
         case d: Double => d
-        case _ => 0.0
       }
-      var n = buffer.getDouble(mutableAggBufferOffset)
-      var mean = buffer.getDouble(mutableAggBufferOffset + 1)
-      var m2 = 0.0
-      var m3 = 0.0
-      var m4 = 0.0
+      n = buffer.getDouble(nOffset)
+      mean = buffer.getDouble(meanOffset)
 
       n += 1.0
+      buffer.setDouble(nOffset, n)
       delta = updateValue - mean
       deltaN = delta / n
       mean += deltaN
-      buffer.setDouble(mutableAggBufferOffset, n)
-      buffer.setDouble(mutableAggBufferOffset + 1, mean)
+      buffer.setDouble(meanOffset, mean)
 
       if (momentOrder >= 2) {
-        m2 = buffer.getDouble(mutableAggBufferOffset + 2)
+        m2 = buffer.getDouble(secondMomentOffset)
         m2 += delta * (delta - deltaN)
-        buffer.setDouble(mutableAggBufferOffset + 2, m2)
+        buffer.setDouble(secondMomentOffset, m2)
       }
 
       if (momentOrder >= 3) {
         delta2 = delta * delta
         deltaN2 = deltaN * deltaN
-        m3 = buffer.getDouble(mutableAggBufferOffset + 3)
+        m3 = buffer.getDouble(thirdMomentOffset)
         m3 += -3.0 * deltaN * m2 + delta * (delta2 - deltaN2)
-        buffer.setDouble(mutableAggBufferOffset + 3, m3)
+        buffer.setDouble(thirdMomentOffset, m3)
       }
 
       if (momentOrder >= 4) {
-        m4 = buffer.getDouble(mutableAggBufferOffset + 4)
+        m4 = buffer.getDouble(fourthMomentOffset)
         m4 += -4.0 * deltaN * m3 - 6.0 * deltaN2 * m2 +
           delta * (delta * delta2 - deltaN * deltaN2)
-        buffer.setDouble(mutableAggBufferOffset + 4, m4)
+        buffer.setDouble(fourthMomentOffset, m4)
       }
     }
   }
@@ -1055,106 +1061,85 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
    * Merge two central moment buffers.
    */
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val n1 = buffer1.getDouble(mutableAggBufferOffset)
+    val n1 = buffer1.getDouble(nOffset)
     val n2 = buffer2.getDouble(inputAggBufferOffset)
-    val mean1 = buffer1.getDouble(mutableAggBufferOffset + 1)
+    val mean1 = buffer1.getDouble(meanOffset)
     val mean2 = buffer2.getDouble(inputAggBufferOffset + 1)
 
     var secondMoment1 = 0.0
     var secondMoment2 = 0.0
-    var secondMoment = 0.0
 
     var thirdMoment1 = 0.0
     var thirdMoment2 = 0.0
-    var thirdMoment = 0.0
 
     var fourthMoment1 = 0.0
     var fourthMoment2 = 0.0
-    var fourthMoment = 0.0
 
-    val n = n1 + n2
+    n = n1 + n2
+    buffer1.setDouble(nOffset, n)
     delta = mean2 - mean1
     deltaN = delta / n
-    val mean = mean1 + deltaN * n2
-
-    buffer1.setDouble(mutableAggBufferOffset, n)
+    mean = mean1 + deltaN * n
     buffer1.setDouble(mutableAggBufferOffset + 1, mean)
 
     // higher order moments computed according to:
     // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
     if (momentOrder >= 2) {
-      secondMoment1 = buffer1.getDouble(mutableAggBufferOffset + 2)
+      secondMoment1 = buffer1.getDouble(secondMomentOffset)
       secondMoment2 = buffer2.getDouble(inputAggBufferOffset + 2)
-      secondMoment = secondMoment1 + secondMoment2 + delta * deltaN * n1 * n2
-      buffer1.setDouble(mutableAggBufferOffset + 2, secondMoment)
+      m2 = secondMoment1 + secondMoment2 + delta * deltaN * n1 * n2
+      buffer1.setDouble(secondMomentOffset, m2)
     }
 
-
     if (momentOrder >= 3) {
-      thirdMoment1 = buffer1.getDouble(mutableAggBufferOffset + 3)
+      thirdMoment1 = buffer1.getDouble(thirdMomentOffset)
       thirdMoment2 = buffer2.getDouble(inputAggBufferOffset + 3)
-      thirdMoment = thirdMoment1 + thirdMoment2 + deltaN * deltaN * delta * n1 * n2 *
+      m3 = thirdMoment1 + thirdMoment2 + deltaN * deltaN * delta * n1 * n2 *
         (n1 - n2) + 3.0 * deltaN * (n1 * secondMoment2 - n2 * secondMoment1)
-      buffer1.setDouble(mutableAggBufferOffset + 3, thirdMoment)
+      buffer1.setDouble(thirdMomentOffset, m3)
     }
 
     if (momentOrder >= 4) {
-      fourthMoment1 = buffer1.getDouble(mutableAggBufferOffset + 4)
+      fourthMoment1 = buffer1.getDouble(fourthMomentOffset)
       fourthMoment2 = buffer2.getDouble(inputAggBufferOffset + 4)
-      fourthMoment = fourthMoment1 + fourthMoment2 + deltaN * deltaN * deltaN * delta * n1 *
+      m4 = fourthMoment1 + fourthMoment2 + deltaN * deltaN * deltaN * delta * n1 *
         n2 * (n1 * n1 - n1 * n2 + n2 * n2) + deltaN * deltaN * 6.0 *
         (n1 * n1 * secondMoment2 + n2 * n2 * secondMoment1) +
         4.0 * deltaN * (n1 * thirdMoment2 - n2 * thirdMoment1)
-      buffer1.setDouble(mutableAggBufferOffset + 4, fourthMoment)
+      buffer1.setDouble(fourthMomentOffset, m4)
     }
   }
 
   /**
    * Compute aggregate statistic from sufficient moments.
+   * @param centralMoments Length `momentOrder + 1` array of central moments needed to
+   *                       compute the aggregate stat.
    */
-  def getStatistic(n: Double, moments: Array[Double]): Double
+  def getStatistic(n: Double, mean: Double, centralMoments: Array[Double]): Double
 
   override final def eval(buffer: InternalRow): Any = {
-    val n = buffer.getDouble(mutableAggBufferOffset)
-    val moments = sufficientMoments.map { momentIdx =>
-      buffer.getDouble(mutableAggBufferOffset + momentIdx)
+    val n = buffer.getDouble(nOffset)
+    val mean = buffer.getDouble(meanOffset)
+    val moments = Array.ofDim[Double](momentOrder + 1)
+    moments(0) = n
+    moments(1) = mean
+    if (momentOrder >= 2) {
+      moments(2) = buffer.getDouble(secondMomentOffset)
     }
-    getStatistic(n, moments)
+    if (momentOrder >= 3) {
+      moments(3) = buffer.getDouble(thirdMomentOffset)
+    }
+    if (momentOrder >= 4) {
+      moments(4) = buffer.getDouble(fourthMomentOffset)
+    }
+
+    getStatistic(n, mean, moments)
   }
 }
 
-abstract class SecondMoment(child: Expression) extends CentralMomentAgg(child) {
-
-  override protected val momentOrder = 2
-
-  protected def isBiased: Boolean
-
-  protected def isStd: Boolean
-
-  override protected val sufficientMoments = Array(2)
-
-  override def getStatistic(n: Double, moments: Array[Double]): Double = {
-    require(moments.length == sufficientMoments.length,
-      s"$prettyName requires one central moment, received: ${moments.length}")
-
-    val m2 = moments.head
-    val divisor = if (isBiased) n else n - 1
-    val variance = if (n == 0.0) {
-      Double.NaN
-    } else {
-      m2 / divisor
-    }
-
-    if (isStd) {
-      math.sqrt(variance)
-    } else {
-      variance
-    }
-  }
-}
-
-case class Variance(child: Expression, mutableAggBufferOffset: Int = 0,
-                    inputAggBufferOffset: Int = 0) extends SecondMoment(child) {
+case class Variance(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -1164,13 +1149,19 @@ case class Variance(child: Expression, mutableAggBufferOffset: Int = 0,
 
   override def prettyName: String = "variance"
 
-  override protected val isBiased = false
+  override protected val momentOrder = 2
 
-  override protected val isStd = false
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
+
+    if (n == 0.0 || n == 1.0) Double.NaN else moments(2) / (n - 1.0)
+  }
 }
 
-case class VarianceSamp(child: Expression, mutableAggBufferOffset: Int = 0,
-                        inputAggBufferOffset: Int = 0) extends SecondMoment(child) {
+case class VarianceSamp(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -1180,13 +1171,19 @@ case class VarianceSamp(child: Expression, mutableAggBufferOffset: Int = 0,
 
   override def prettyName: String = "variance_samp"
 
-  override protected val isBiased = false
+  override protected val momentOrder = 2
 
-  override protected val isStd = false
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
+
+    if (n == 0.0 || n == 1.0) Double.NaN else moments(2) / (n - 1.0)
+  }
 }
 
-case class VariancePop(child: Expression, mutableAggBufferOffset: Int = 0,
-                       inputAggBufferOffset: Int = 0) extends SecondMoment(child) {
+case class VariancePop(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -1196,13 +1193,19 @@ case class VariancePop(child: Expression, mutableAggBufferOffset: Int = 0,
 
   override def prettyName: String = "variance_pop"
 
-  override protected val isBiased = true
+  override protected val momentOrder = 2
 
-  override protected val isStd = false
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
+
+    if (n == 0.0 || n == 1.0) Double.NaN else moments(2) / n
+  }
 }
 
-case class Skewness(child: Expression, mutableAggBufferOffset: Int = 0,
-                    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+case class Skewness(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -1214,12 +1217,11 @@ case class Skewness(child: Expression, mutableAggBufferOffset: Int = 0,
 
   override protected val momentOrder = 3
 
-  override protected val sufficientMoments = Array(2, 3)
-
-  override def getStatistic(n: Double, moments: Array[Double]): Double = {
-    require(moments.length == sufficientMoments.length,
-      s"$prettyName requires two central moments, received: ${moments.length}")
-    val Array(m2, m3) = moments
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
+    val m2 = moments(2)
+    val m3 = moments(3)
     if (n == 0.0 || m2 == 0.0) {
       Double.NaN
     } else {
@@ -1228,8 +1230,9 @@ case class Skewness(child: Expression, mutableAggBufferOffset: Int = 0,
   }
 }
 
-case class Kurtosis(child: Expression, mutableAggBufferOffset: Int = 0,
-                    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+case class Kurtosis(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -1241,12 +1244,12 @@ case class Kurtosis(child: Expression, mutableAggBufferOffset: Int = 0,
 
   override protected val momentOrder = 4
 
-  override protected val sufficientMoments = Array(2, 4)
-
-  override def getStatistic(n: Double, moments: Array[Double]): Double = {
-    require(moments.length == sufficientMoments.length,
-      s"$prettyName requires two central moments, received: ${moments.length}")
-    val Array(m2, m4) = moments
+  // NOTE: this is the formula for excess kurtosis, which is default for R and SciPy
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
+    val m2 = moments(2)
+    val m4 = moments(4)
     if (n == 0.0 || m2 == 0.0) {
       Double.NaN
     } else {
