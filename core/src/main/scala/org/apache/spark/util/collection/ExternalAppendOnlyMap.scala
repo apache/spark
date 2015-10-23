@@ -73,9 +73,9 @@ class ExternalAppendOnlyMap[K, V, C](
       createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
-      serializer: Serializer = SparkEnv.get.serializer,
-      blockManager: BlockManager = SparkEnv.get.blockManager) {
-    this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager)
+      serializer: Serializer,
+      blockManager: BlockManager) {
+    this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
   }
 
   override protected[this] def taskMemoryManager: TaskMemoryManager = context.taskMemoryManager()
