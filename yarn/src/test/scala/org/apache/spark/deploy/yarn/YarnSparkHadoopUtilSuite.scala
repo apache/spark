@@ -18,10 +18,12 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
+import java.lang.reflect.InvocationTargetException
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -243,6 +245,32 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       assert(SparkHadoopUtil.get.getClass === classOf[SparkHadoopUtil])
     } finally {
       System.clearProperty("SPARK_YARN_MODE")
+    }
+  }
+
+  test("Obtain tokens For HiveMetastore") {
+    val hadoopConf = new Configuration()
+    val sparkConf = new SparkConf()
+    hadoopConf.set("hive.metastore.kerberos.principal", "bob")
+    // thrift picks up on port 0 and bails out, without trying to talk to endpoint
+    hadoopConf.set("hive.metastore.uris", "http://localhost:0")
+    val util = new YarnSparkHadoopUtil
+    val e = intercept[InvocationTargetException] {
+      val token = util.obtainTokenForHiveMetastoreInner(sparkConf, hadoopConf, "alice")
+      fail(s"Expected an exception, got the token $token")
+    }
+    val inner = e.getCause
+    if (inner == null) {
+      fail("No inner cause", e)
+    }
+
+    if (!inner.isInstanceOf[HiveException]) {
+      fail(s"Not a hive exception", inner)
+    }
+    // expect exception trapping code to unwind this hive-side exception
+    intercept[HiveException] {
+      val token = util.obtainTokenForHiveMetastore(sparkConf, hadoopConf)
+      fail(s"Expected an exception, got the token $token")
     }
   }
 }
