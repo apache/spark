@@ -268,10 +268,11 @@ class Analyzer(
                 throw new AnalysisException(
                   s"Pivot does not support non unary aggregate expressions, found $other")
             }
-            if(filteredAggregate.fastEquals(aggregate))
+            if (filteredAggregate.fastEquals(aggregate)) {
               throw new AnalysisException(
                 s"Unary aggregate expression required for pivot, found '$aggregate'")
-            val name = if(singleAgg) value else value + " " + aggregate.prettyString
+            }
+            val name = if (singleAgg) value else value + " " + aggregate.prettyString
             Alias(filteredAggregate, name)()
           }
         }
