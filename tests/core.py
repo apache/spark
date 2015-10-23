@@ -9,7 +9,7 @@ from airflow.configuration import conf
 from airflow.www.app import app
 from airflow.settings import Session
 
-NUM_EXAMPLE_DAGS = 6
+NUM_EXAMPLE_DAGS = 7
 DEV_NULL = '/dev/null'
 DEFAULT_DATE = datetime(2015, 1, 1)
 TEST_DAG_ID = 'unit_tests'
