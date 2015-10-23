@@ -217,8 +217,8 @@ case class TaskCommitDenied(
  * the task crashed the JVM.
  */
 @DeveloperApi
-case class ExecutorLostFailure(execId: String, isNormalExit: Boolean = false, reason: Option[String])
-  extends TaskFailedReason {
+case class ExecutorLostFailure(execId: String, isNormalExit: Boolean = false, reason:
+Option[String]) extends TaskFailedReason {
   override def toErrorString: String = {
     val exitBehavior = if (isNormalExit) "normally" else "abnormally"
     s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})" +
