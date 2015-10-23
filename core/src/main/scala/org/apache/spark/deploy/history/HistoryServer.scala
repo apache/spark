@@ -17,8 +17,10 @@
 
 package org.apache.spark.deploy.history
 
+import java.net.URL
 import java.util.NoSuchElementException
-import java.util.zip.ZipOutputStream
+import java.util.zip.{ZipInputStream, ZipOutputStream}
+import javax.servlet.MultipartConfigElement
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
@@ -112,6 +114,25 @@ class HistoryServer(
     }
   }
 
+  private val uploadServlet = new HttpServlet {
+    protected override def doPost(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+      if (securityManager.checkModifyPermissions(req.getRemoteUser)) {
+        Option(req.getPart("file"))
+          .map { p => new ZipInputStream(p.getInputStream) }
+          .foreach { zin => provider.readEventLogs(zin) }
+      } else {
+        logWarning(s"Current user: ${req.getRemoteUser} has no permission to modify")
+      }
+
+      val newUrl = new URL(new URL(req.getRequestURL.toString), "/").toString
+      res.sendRedirect(newUrl)
+    }
+
+    protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+      res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+    }
+  }
+
   def getSparkUI(appKey: String): Option[SparkUI] = {
     Option(appCache.get(appKey))
   }
@@ -135,6 +156,18 @@ class HistoryServer(
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
+
+    // Attach the upload servlet.
+    // Put the upload files in the tmpdir, don't limit the upload file size and request size,
+    // file will be cached in the memory when less than 1M.
+    val multipartConfig =
+      new MultipartConfigElement(System.getProperty("java.io.tmpdir"), -1, -1, 1024 * 1024)
+    val uploadContextHandler = new ServletContextHandler
+    uploadContextHandler.setContextPath("/upload")
+    val servletHolder = new ServletHolder(uploadServlet)
+    servletHolder.getRegistration.setMultipartConfig(multipartConfig)
+    uploadContextHandler.addServlet(servletHolder, "/")
+    attachHandler(uploadContextHandler)
   }
 
   /** Bind to the HTTP server behind this web interface. */
