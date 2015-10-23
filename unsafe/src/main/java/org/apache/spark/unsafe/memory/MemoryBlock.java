@@ -28,10 +28,10 @@ public class MemoryBlock extends MemoryLocation {
 
   private final long length;
 
-  // TODO(josh)
   /**
    * Optional page number; used when this MemoryBlock represents a page allocated by a
-   * MemoryManager. This is package-private and is modified by MemoryManager.
+   * TaskMemoryManager. This field is public so that it can be modified by the TaskMemoryManager,
+   * which lives in a different package.
    */
   public int pageNumber = -1;
 
