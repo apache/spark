@@ -100,7 +100,7 @@ private[spark] trait Spillable[C] extends Logging {
   /**
    * Release our memory back to the shuffle pool so that other threads can grab it.
    */
-  private def releaseMemoryForThisThread(): Unit = {
+  protected def releaseMemoryForThisThread(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
     shuffleMemoryManager.release(myMemoryThreshold - initialMemoryThreshold)
     myMemoryThreshold = initialMemoryThreshold

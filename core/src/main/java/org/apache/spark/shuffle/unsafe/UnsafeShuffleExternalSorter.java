@@ -272,9 +272,6 @@ final class UnsafeShuffleExternalSorter {
       spills.size() > 1 ? " times" : " time");
 
     writeSortedFile(false);
-    final long inMemSorterMemoryUsage = inMemSorter.getMemoryUsage();
-    inMemSorter = null;
-    shuffleMemoryManager.release(inMemSorterMemoryUsage);
     final long spillSize = freeMemory();
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
 
@@ -316,6 +313,12 @@ final class UnsafeShuffleExternalSorter {
     currentPage = null;
     currentPagePosition = -1;
     freeSpaceInCurrentPage = 0;
+    if (inMemSorter != null) {
+      final long inMemSorterMemoryUsage = inMemSorter.getMemoryUsage();
+      inMemSorter = null;
+      shuffleMemoryManager.release(inMemSorterMemoryUsage);
+      memoryFreed += inMemSorterMemoryUsage;
+    }
     return memoryFreed;
   }
 
@@ -328,10 +331,6 @@ final class UnsafeShuffleExternalSorter {
       if (spill.file.exists() && !spill.file.delete()) {
         logger.error("Unable to delete spill file {}", spill.file.getPath());
       }
-    }
-    if (inMemSorter != null) {
-      shuffleMemoryManager.release(inMemSorter.getMemoryUsage());
-      inMemSorter = null;
     }
   }
 
