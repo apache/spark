@@ -444,14 +444,21 @@ dropTempTable <- function(sqlContext, tableName) {
 #'
 #' @param sqlContext SQLContext to use
 #' @param path The path of files to load
-#' @param source the name of external data source
+#' @param source The name of external data source
+#' @param schema The data schema defined in structType
 #' @return DataFrame
+#' @rdname read.df
+#' @name read.df
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- read.df(sqlContext, "path/to/file.json", source = "json")
+#' df1 <- read.df(sqlContext, "path/to/file.json", source = "json")
+#' schema <- structType(structField("name", "string"),
+#'                      structField("info", "map<string,double>"))
+#' df2 <- read.df(sqlContext, mapTypeJsonPath, "json", schema)
+#' df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema = "true")
 #' }
 
 read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
@@ -474,9 +481,8 @@ read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) 
   dataFrame(sdf)
 }
 
-#' @aliases loadDF
-#' @export
-
+#' @rdname read.df
+#' @name loadDF
 loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
   read.df(sqlContext, path, source, schema, ...)
 }
