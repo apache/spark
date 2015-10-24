@@ -103,25 +103,9 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double): Seq[LabeledPoint] = {
-
-    val rnd = new Random(seed)
-    val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(rnd.nextDouble()))
-
-    x.foreach { v =>
-      var i = 0
-      val len = v.length
-      while (i < len) {
-        v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
-        i += 1
-      }
-    }
-
-    val y = x.map { xi =>
-      blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
-    }
-    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    generateLinearInputInternal(intercept, weights, xMean, xVariance, nPoints, seed, eps, 0.0)
   }
+
 
   /**
    * @param intercept Data intercept
@@ -133,10 +117,12 @@ object LinearDataGenerator {
    * @param nPoints Number of points in sample.
    * @param seed Random seed
    * @param eps Epsilon scaling factor.
-   * @return Seq of LabeledPoint includes sparse vectors..
+   * @param sparcity The ratio of zero elements. If it is 0.0, LabeledPoints with
+   *                 DenseVector is returned.
+   * @return Seq of input.
    */
   @Since("1.6.0")
-  def generateLinearSparseInput(
+  def generateLinearInputInternal(
       intercept: Double,
       weights: Array[Double],
       xMean: Array[Double],
@@ -168,13 +154,19 @@ object LinearDataGenerator {
     }
 
     val sparseX = x.map { (v: Array[Double]) =>
-      v.zipWithIndex.filter{
+      v.zipWithIndex.filter {
         case (d: Double, i: Int) => d != 0.0
       }.map {
         case (d: Double, i: Int) => (i, d)
       }
     }
-    y.zip(sparseX).map(p => LabeledPoint(p._1, Vectors.sparse(weights.length, p._2)))
+    if (sparcity == 0.0) {
+      // Return LabeledPoints with DenseVector
+      y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    } else {
+      // Return LabeledPoints with SparseVector
+      y.zip(sparseX).map(p => LabeledPoint(p._1, Vectors.sparse(weights.length, p._2)))
+    }
   }
 
   /**
