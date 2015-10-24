@@ -37,23 +37,7 @@ In the following code segment, we start with a set of sentences.  We split each 
 Refer to the [HashingTF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.HashingTF) and
 the [IDF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IDF) for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
-
-val sentenceData = sqlContext.createDataFrame(Seq(
-  (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
-)).toDF("label", "sentence")
-val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-val wordsData = tokenizer.transform(sentenceData)
-val hashingTF = new HashingTF().setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(20)
-val featurizedData = hashingTF.transform(wordsData)
-val idf = new IDF().setInputCol("rawFeatures").setOutputCol("features")
-val idfModel = idf.fit(featurizedData)
-val rescaledData = idfModel.transform(featurizedData)
-rescaledData.select("features", "label").take(3).foreach(println)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/TfIdfExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -61,49 +45,7 @@ rescaledData.select("features", "label").take(3).foreach(println)
 Refer to the [HashingTF Java docs](api/java/org/apache/spark/ml/feature/HashingTF.html) and the
 [IDF Java docs](api/java/org/apache/spark/ml/feature/IDF.html) for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.HashingTF;
-import org.apache.spark.ml.feature.IDF;
-import org.apache.spark.ml.feature.Tokenizer;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(0, "Hi I heard about Spark"),
-  RowFactory.create(0, "I wish Java could use case classes"),
-  RowFactory.create(1, "Logistic regression models are neat")
-));
-StructType schema = new StructType(new StructField[]{
-  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-  new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
-});
-DataFrame sentenceData = sqlContext.createDataFrame(jrdd, schema);
-Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
-DataFrame wordsData = tokenizer.transform(sentenceData);
-int numFeatures = 20;
-HashingTF hashingTF = new HashingTF()
-  .setInputCol("words")
-  .setOutputCol("rawFeatures")
-  .setNumFeatures(numFeatures);
-DataFrame featurizedData = hashingTF.transform(wordsData);
-IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
-IDFModel idfModel = idf.fit(featurizedData);
-DataFrame rescaledData = idfModel.transform(featurizedData);
-for (Row r : rescaledData.select("features", "label").take(3)) {
-  Vector features = r.getAs(0);
-  Double label = r.getDouble(1);
-  System.out.println(features);
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaTfIdfExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -111,24 +53,7 @@ for (Row r : rescaledData.select("features", "label").take(3)) {
 Refer to the [HashingTF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.HashingTF) and
 the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for more details on the API.
 
-{% highlight python %}
-from pyspark.ml.feature import HashingTF, IDF, Tokenizer
-
-sentenceData = sqlContext.createDataFrame([
-  (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
-], ["label", "sentence"])
-tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
-wordsData = tokenizer.transform(sentenceData)
-hashingTF = HashingTF(inputCol="words", outputCol="rawFeatures", numFeatures=20)
-featurizedData = hashingTF.transform(wordsData)
-idf = IDF(inputCol="rawFeatures", outputCol="features")
-idfModel = idf.fit(featurizedData)
-rescaledData = idfModel.transform(featurizedData)
-for features_label in rescaledData.select("features", "label").take(3):
-  print(features_label)
-{% endhighlight %}
+{% include_example python/ml/tf_idf_example.py %}
 </div>
 </div>
 
