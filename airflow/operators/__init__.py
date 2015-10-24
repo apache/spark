@@ -13,7 +13,11 @@ _import_module_attrs(globals(), {
 
 _operators = {
     'bash_operator': ['BashOperator'],
-    'python_operator': ['PythonOperator', 'BranchPythonOperator'],
+    'python_operator': [
+        'PythonOperator',
+        'BranchPythonOperator',
+        'ShortCircuitOperator',
+    ],
     'hive_operator': ['HiveOperator'],
     'presto_check_operator': [
         'PrestoCheckOperator',
