@@ -72,8 +72,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble).toArray,
         xMean = Seq.fill(featureSize)(r.nextDouble).toArray,
         xVariance = Seq.fill(featureSize)(r.nextDouble).toArray, nPoints = 200,
-        seed = seed, eps = 0.1
-      ), 2))
+        seed = seed, eps = 0.1, sparcity = 0.7), 2))
   }
 
   test("params") {

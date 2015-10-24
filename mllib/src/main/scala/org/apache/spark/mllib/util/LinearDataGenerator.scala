@@ -143,7 +143,9 @@ object LinearDataGenerator {
       xVariance: Array[Double],
       nPoints: Int,
       seed: Int,
-      eps: Double): Seq[LabeledPoint] = {
+      eps: Double,
+      sparcity: Double): Seq[LabeledPoint] = {
+    require(sparcity <= 1.0)
     val rnd = new Random(seed)
     val x = Array.fill[Array[Double]](nPoints)(
       Array.fill[Double](weights.length)(rnd.nextDouble()))
@@ -152,7 +154,7 @@ object LinearDataGenerator {
       var i = 0
       val len = v.length
       while (i < len) {
-        if (rnd.nextDouble() < 0.7) {
+        if (rnd.nextDouble() <= sparcity) {
           v(i) = 0.0
         } else {
           v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
