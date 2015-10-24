@@ -476,6 +476,8 @@ private[netty] case class RpcFailure(e: Throwable)
 private[netty] class NettyRpcHandler(
     dispatcher: Dispatcher, nettyEnv: NettyRpcEnv) extends RpcHandler with Logging {
 
+  // TODO: Can we add connection callback (channel registered) to the underlying framework?
+  // A variable to track whether we should dispatch the RemoteProcessConnected message.
   private val clients = new ConcurrentHashMap[TransportClient, JBoolean]()
 
   override def receive(
