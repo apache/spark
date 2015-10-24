@@ -1572,18 +1572,17 @@ setMethod("except",
 #' spark.sql.sources.default will be used.
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when
-#' data already exists in the data source. There are four modes:
-#'  append: Contents of this DataFrame are expected to be appended to existing data.
-#'  overwrite: Existing data is expected to be overwritten by the contents of
-#     this DataFrame.
-#'  error: An exception is expected to be thrown.
+#' data already exists in the data source. There are four modes: \cr
+#'  append: Contents of this DataFrame are expected to be appended to existing data. \cr
+#'  overwrite: Existing data is expected to be overwritten by the contents of this DataFrame. \cr
+#'  error: An exception is expected to be thrown. \cr
 #'  ignore: The save operation is expected to not save the contents of the DataFrame
-#     and to not change the existing data.
+#'     and to not change the existing data. \cr
 #'
 #' @param df A SparkSQL DataFrame
 #' @param path A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore'
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
 #'
 #' @rdname write.df
 #' @name write.df
@@ -1596,6 +1595,7 @@ setMethod("except",
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlContext, path)
 #' write.df(df, "myfile", "parquet", "overwrite")
+#' saveDF(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
 #' }
 setMethod("write.df",
           signature(df = "DataFrame", path = "character"),
@@ -1637,18 +1637,17 @@ setMethod("saveDF",
 #' spark.sql.sources.default will be used.
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when
-#' data already exists in the data source. There are four modes:
-#'  append: Contents of this DataFrame are expected to be appended to existing data.
-#'  overwrite: Existing data is expected to be overwritten by the contents of
-#     this DataFrame.
-#'  error: An exception is expected to be thrown.
+#' data already exists in the data source. There are four modes: \cr
+#'  append: Contents of this DataFrame are expected to be appended to existing data. \cr
+#'  overwrite: Existing data is expected to be overwritten by the contents of this DataFrame. \cr
+#'  error: An exception is expected to be thrown. \cr
 #'  ignore: The save operation is expected to not save the contents of the DataFrame
-#     and to not change the existing data.
+#'     and to not change the existing data. \cr
 #'
 #' @param df A SparkSQL DataFrame
 #' @param tableName A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore'
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
 #'
 #' @rdname saveAsTable
 #' @name saveAsTable
