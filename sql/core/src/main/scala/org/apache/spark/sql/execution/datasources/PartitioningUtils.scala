@@ -95,6 +95,12 @@ private[sql] object PartitioningUtils {
     } else {
       // This dataset is partitioned. We need to check whether all partitions have the same
       // partition columns and resolve potential type conflicts.
+
+      assert(
+        basePaths.distinct.size == 1,
+        "Conflicting directory structures detected. Suspicious paths:\b" +
+          basePaths.mkString("\n\t", "\n\t", "\n\n"))
+
       val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues, basePaths)
 
       // Creates the StructType which represents the partition columns.
@@ -204,10 +210,6 @@ private[sql] object PartitioningUtils {
         distinctPartColNames.size == 1,
         listConflictingPartitionColumns(pathsWithPartitionValues))
 
-      assert(
-        basePaths.distinct.size == 1,
-        throwErrorForInvalidPartition(basePaths))
-
       // Resolves possible type conflicts for each column
       val values = pathsWithPartitionValues.map(_._2)
       val columnCount = values.head.columnNames.size
@@ -220,12 +222,6 @@ private[sql] object PartitioningUtils {
         d.copy(literals = resolvedValues.map(_(index)))
       }
     }
-  }
-
-  private[sql] def throwErrorForInvalidPartition(
-      basePaths: Seq[Path]): String = {
-    "Conflicting directory structures detected. Suspicious paths:\b" +
-      basePaths.mkString("\n\t", "\n\t", "\n\n")
   }
 
   private[sql] def listConflictingPartitionColumns(
