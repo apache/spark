@@ -8,7 +8,10 @@ from datetime import datetime, timedelta
 import dateutil.parser
 import copy
 from itertools import chain, product
+
 from past.utils import old_div
+from past.builtins import basestring
+
 import inspect
 import traceback
 
