@@ -5,7 +5,7 @@ from time import sleep
 import unittest
 from airflow import configuration
 configuration.test_mode()
-from airflow import jobs, models, DAG, utils, operators, hooks
+from airflow import jobs, models, DAG, utils, operators, hooks, macros
 from airflow.configuration import conf
 from airflow.www.app import app
 from airflow.settings import Session
@@ -246,7 +246,11 @@ class CoreTest(unittest.TestCase):
         ti.run(force=True)
 
     def test_doctests(self):
-        doctest.testmod(utils)
+        modules = [utils, macros]
+        for mod in modules:
+            failed, tests = doctest.testmod(mod)
+            if failed:
+                raise Exception("Failed a doctest")
 
 
 class WebUiTests(unittest.TestCase):
