@@ -388,13 +388,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
-  test("drop unknown column with same name (no-op) with column reference") {
+  test("drop unknown column with same name with column reference") {
     val col = Column("key")
     val df = testData.drop(col)
     checkAnswer(
       df,
-      testData.collect().toSeq)
-    assert(df.schema.map(_.name) === Seq("key", "value"))
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
   }
 
   test("drop column after join with duplicate columns using column reference") {
