@@ -193,6 +193,7 @@ class DataFrameReader(object):
         """
         return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, paths)))
 
+    @ignore_unicode_prefix
     @since(1.6)
     def text(self, path):
         """Loads a text file and returns a [[DataFrame]] with a single string column named "text".
