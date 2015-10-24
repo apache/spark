@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
+import org.apache.spark.{Accumulator, SparkException, SparkEnv, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.unsafe.memory.TaskMemoryManager
@@ -89,9 +89,15 @@ private[spark] abstract class Task[T](
     } finally {
       context.markTaskCompleted()
       try {
+        val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
+        val shuffleMemoryUsed = shuffleMemoryManager.getMemoryConsumptionForThisTask()
+        if (SparkEnv.get.conf.contains("spark.testing") && shuffleMemoryUsed != 0) {
+          throw new SparkException(
+            s"Shuffle memory leak detected; size = $shuffleMemoryUsed bytes, TID = $taskAttemptId")
+        }
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for shuffles
-          SparkEnv.get.shuffleMemoryManager.releaseMemoryForThisTask()
+          shuffleMemoryManager.releaseMemoryForThisTask()
         }
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
