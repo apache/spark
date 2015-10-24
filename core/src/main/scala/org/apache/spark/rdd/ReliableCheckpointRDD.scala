@@ -21,11 +21,10 @@ import java.io.IOException
 
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
@@ -86,7 +85,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
    */
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val file = new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index))
-    ReliableCheckpointRDD.readCheckpointFile(file, broadcastedConf, context)
+    ReliableCheckpointRDD.readCheckpointFile(file, broadcastedConf.value.value, context)
   }
 
 }
@@ -96,7 +95,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   /**
    * Return the checkpoint file name for the given partition.
    */
-  private def checkpointFileName(partitionIndex: Int): String = {
+  def checkpointFileName(partitionIndex: Int): String = {
     "part-%05d".format(partitionIndex)
   }
 
@@ -104,14 +103,18 @@ private[spark] object ReliableCheckpointRDD extends Logging {
    * Write this partition's values to a checkpoint file.
    */
   def writeCheckpointFile[T: ClassTag](
-      path: String,
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
+      ctx: TaskContext,
+      iterator: Iterator[T],
+      checkpointDir: String,
+      conf: Configuration,
+      partitionIndex: Int = -1,
+      blockSize: Int = -1): Unit = {
     val env = SparkEnv.get
-    val outputDir = new Path(path)
-    val fs = outputDir.getFileSystem(broadcastedConf.value.value)
+    val outputDir = new Path(checkpointDir)
+    val fs = outputDir.getFileSystem(conf)
 
-    val finalOutputName = ReliableCheckpointRDD.checkpointFileName(ctx.partitionId())
+    val index = if (partitionIndex == -1) ctx.partitionId() else partitionIndex
+    val finalOutputName = ReliableCheckpointRDD.checkpointFileName(index)
     val finalOutputPath = new Path(outputDir, finalOutputName)
     val tempOutputPath =
       new Path(outputDir, s".$finalOutputName-attempt-${ctx.attemptNumber()}")
@@ -155,13 +158,13 @@ private[spark] object ReliableCheckpointRDD extends Logging {
    * Read the content of the specified checkpoint file.
    */
   def readCheckpointFile[T](
-      path: Path,
-      broadcastedConf: Broadcast[SerializableConfiguration],
+      checkpointedPartitionPath: Path,
+      conf: Configuration,
       context: TaskContext): Iterator[T] = {
     val env = SparkEnv.get
-    val fs = path.getFileSystem(broadcastedConf.value.value)
+    val fs = checkpointedPartitionPath.getFileSystem(conf)
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
-    val fileInputStream = fs.open(path, bufferSize)
+    val fileInputStream = fs.open(checkpointedPartitionPath, bufferSize)
     val serializer = env.serializer.newInstance()
     val deserializeStream = serializer.deserializeStream(fileInputStream)
 

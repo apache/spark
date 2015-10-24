@@ -31,9 +31,12 @@ import org.apache.spark.util.SerializableConfiguration
 private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private val rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
+  val broadcastedConf = rdd.context.broadcast(
+    new SerializableConfiguration(rdd.context.hadoopConfiguration))
+
   // The directory to which the associated RDD has been checkpointed to
   // This is assumed to be a non-local path that points to some reliable storage
-  private val cpDir: String =
+  val cpDir: String =
     ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.id)
       .map(_.toString)
       .getOrElse { throw new SparkException("Checkpoint dir must be specified.") }
@@ -50,24 +53,39 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
     }
   }
 
-  /**
-   * Materialize this RDD and write its content to a reliable DFS.
-   * This is called immediately after the first action invoked on this RDD has completed.
-   */
-  protected override def doCheckpoint(): CheckpointRDD[T] = {
-
+  protected override def doPrepareCheckpoint(): Unit = {
     // Create the output path for the checkpoint
     val path = new Path(cpDir)
     val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
     if (!fs.mkdirs(path)) {
       throw new SparkException(s"Failed to create checkpoint path $cpDir")
     }
+  }
 
-    // Save to file, and reload it as an RDD
-    val broadcastedConf = rdd.context.broadcast(
-      new SerializableConfiguration(rdd.context.hadoopConfiguration))
-    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
-    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _)
+
+  /**
+   * Materialize this RDD and write its content to a reliable DFS.
+   * This is called immediately after the first action invoked on this RDD has completed.
+   */
+  protected override def doCheckpoint(): CheckpointRDD[T] = {
+    val cpPath = new Path(cpDir)
+    val fs = cpPath.getFileSystem(broadcastedConf.value.value)
+
+    // Not all actions compute all partitions of the RDD (e.g. take). For correctness, we
+    // must checkpoint any missing partitions. TODO: avoid running another job here (SPARK-8582).
+    val missingPartitionIndices = rdd.partitions.map(_.index).filter { i =>
+      !fs.exists(new Path(cpPath, ReliableCheckpointRDD.checkpointFileName(i)))
+    }
+    if (missingPartitionIndices.nonEmpty) {
+      // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
+      rdd.context.runJob(rdd, (ctx: TaskContext, iterator: Iterator[T]) =>
+        ReliableCheckpointRDD.writeCheckpointFile(
+          ctx,
+          iterator,
+          cpDir,
+          broadcastedConf.value.value),
+        missingPartitionIndices)
+    }
     val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir)
     if (newRDD.partitions.length != rdd.partitions.length) {
       throw new SparkException(

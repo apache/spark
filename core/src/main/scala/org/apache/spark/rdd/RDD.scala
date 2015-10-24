@@ -258,6 +258,16 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
+    if (!isCheckpointedAndMaterialized) {
+      if (checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[T]])) {
+        return SparkEnv.get.checkpointMananger.getOrCompute(
+          this, checkpointData.get.asInstanceOf[ReliableRDDCheckpointData[T]], split, context)
+      }
+    }
+    computeOrReadCache(split, context)
+  }
+
+  private[spark] def computeOrReadCache(split: Partition, context: TaskContext): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
     } else {
@@ -1635,6 +1645,19 @@ abstract class RDD[T: ClassTag](
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
   @transient private var doCheckpointCalled = false
+
+  @transient private var doPrepareCheckpointCalled = false
+
+  private[spark] def doPrepareCheckpoint(): Unit = {
+    if (!doPrepareCheckpointCalled) {
+      doPrepareCheckpointCalled = true
+      if (checkpointData.isDefined) {
+        checkpointData.get.prepareCheckpoint()
+      } else {
+        dependencies.foreach(_.rdd.doPrepareCheckpoint())
+      }
+    }
+  }
 
   /**
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
