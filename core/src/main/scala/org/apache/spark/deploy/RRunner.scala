@@ -40,7 +40,16 @@ object RRunner {
 
     // Time to wait for SparkR backend to initialize in seconds
     val backendTimeout = sys.env.getOrElse("SPARKR_BACKEND_TIMEOUT", "120").toInt
-    val rCommand = "Rscript"
+    val rCommand = {
+      // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
+      // but kept here for backward compatibility.
+      var cmd = sys.props.getOrElse("spark.sparkr.r.command", "Rscript")
+      cmd = sys.props.getOrElse("spark.r.command", cmd)
+      if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
+        cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
+      }
+      cmd
+    }
 
     // Check if the file path exists.
     // If not, change directory to current working directory for YARN cluster mode
