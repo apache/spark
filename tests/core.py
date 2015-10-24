@@ -223,10 +223,14 @@ class CoreTest(unittest.TestCase):
         job.run()
 
     def test_local_backfill_job(self):
-        for dag in self.dagbag.dags.values():
+        dags = [
+            dag for dag in self.dagbag.dags.values()
+            if dag.dag_id not in ('example_http_operator',)]
+        for dag in dags:
             dag.clear(
                 start_date=DEFAULT_DATE,
                 end_date=DEFAULT_DATE)
+        for dag in dags:
             job = jobs.BackfillJob(
                 dag=dag,
                 start_date=DEFAULT_DATE,

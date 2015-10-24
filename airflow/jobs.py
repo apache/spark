@@ -654,7 +654,7 @@ class BackfillJob(BaseJob):
                         State.SUCCESS, State.SKIPPED) and key in tasks_to_run:
                     succeeded.append(key)
                     del tasks_to_run[key]
-                elif ti.is_runnable():
+                elif ti.is_runnable(flag_upstream_failed=True):
                     executor.queue_task_instance(
                         ti,
                         mark_success=self.mark_success,

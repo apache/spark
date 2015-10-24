@@ -185,6 +185,16 @@ def initdb():
                 host='localhost'))
         session.commit()
 
+    conn = session.query(C).filter(C.conn_id == 'postgres_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='postgres_default', conn_type='postgres',
+                login='postgres',
+                schema='airflow',
+                host='localhost'))
+        session.commit()
+
     conn = session.query(C).filter(C.conn_id == 'sqlite_default').first()
     if not conn:
         home = conf.get('core', 'AIRFLOW_HOME')
@@ -200,7 +210,7 @@ def initdb():
         session.add(
             models.Connection(
                 conn_id='http_default', conn_type='http',
-                host='https://www.google.com'))
+                host='https://www.google.com/'))
         session.commit()
 
     conn = session.query(C).filter(C.conn_id == 'mssql_default').first()
