@@ -46,23 +46,27 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     conf
   }
 
-  test("simple insert") {
+  test("single insert insert") {
     val conf = createSparkConf(loadDefaults = false)
     sc = new SparkContext("local", "test", conf)
     val map = createExternalMap[Int]
-
-    // Single insert
     map.insert(1, 10)
-    var it = map.iterator
+    val it = map.iterator
     assert(it.hasNext)
     val kv = it.next()
     assert(kv._1 === 1 && kv._2 === ArrayBuffer[Int](10))
     assert(!it.hasNext)
+    sc.stop()
+  }
 
-    // Multiple insert
+  test("multiple insert") {
+    val conf = createSparkConf(loadDefaults = false)
+    sc = new SparkContext("local", "test", conf)
+    val map = createExternalMap[Int]
+    map.insert(1, 10)
     map.insert(2, 20)
     map.insert(3, 30)
-    it = map.iterator
+    val it = map.iterator
     assert(it.hasNext)
     assert(it.toSet === Set[(Int, ArrayBuffer[Int])](
       (1, ArrayBuffer[Int](10)),
@@ -141,39 +145,22 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test", conf)
 
     val map = createExternalMap[Int]
+    val nullInt = null.asInstanceOf[Int]
     map.insert(1, 5)
     map.insert(2, 6)
     map.insert(3, 7)
-    assert(map.size === 3)
-    assert(map.iterator.toSet === Set[(Int, Seq[Int])](
-      (1, Seq[Int](5)),
-      (2, Seq[Int](6)),
-      (3, Seq[Int](7))
-    ))
-
-    // Null keys
-    val nullInt = null.asInstanceOf[Int]
+    map.insert(4, nullInt)
     map.insert(nullInt, 8)
-    assert(map.size === 4)
-    assert(map.iterator.toSet === Set[(Int, Seq[Int])](
+    map.insert(nullInt, nullInt)
+      val result = map.iterator.toSet[(Int, ArrayBuffer[Int])].map(kv => (kv._1, kv._2.sorted))
+    assert(result === Set[(Int, Seq[Int])](
       (1, Seq[Int](5)),
       (2, Seq[Int](6)),
       (3, Seq[Int](7)),
-      (nullInt, Seq[Int](8))
+      (4, Seq[Int](nullInt)),
+      (nullInt, Seq[Int](nullInt, 8))
     ))
 
-    // Null values
-    map.insert(4, nullInt)
-    map.insert(nullInt, nullInt)
-    assert(map.size === 5)
-    val result = map.iterator.toSet[(Int, ArrayBuffer[Int])].map(kv => (kv._1, kv._2.toSet))
-    assert(result === Set[(Int, Set[Int])](
-      (1, Set[Int](5)),
-      (2, Set[Int](6)),
-      (3, Set[Int](7)),
-      (4, Set[Int](nullInt)),
-      (nullInt, Set[Int](nullInt, 8))
-    ))
     sc.stop()
   }
 
