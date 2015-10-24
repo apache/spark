@@ -15,7 +15,7 @@ from airflow.configuration import conf, AirflowConfigException
 from airflow.models import DAG
 from flask.ext.admin import BaseView
 from importlib import import_module
-from utils import AirflowException
+from airflow.utils import AirflowException
 
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 if DAGS_FOLDER not in sys.path:
