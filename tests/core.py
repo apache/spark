@@ -223,14 +223,15 @@ class CoreTest(unittest.TestCase):
         job.run()
 
     def test_local_backfill_job(self):
-        self.dag_bash.clear(
-            start_date=DEFAULT_DATE,
-            end_date=DEFAULT_DATE)
-        job = jobs.BackfillJob(
-            dag=self.dag_bash,
-            start_date=DEFAULT_DATE,
-            end_date=DEFAULT_DATE)
-        job.run()
+        for dag in self.dagbag.dags.values():
+            dag.clear(
+                start_date=DEFAULT_DATE,
+                end_date=DEFAULT_DATE)
+            job = jobs.BackfillJob(
+                dag=dag,
+                start_date=DEFAULT_DATE,
+                end_date=DEFAULT_DATE)
+            job.run()
 
     def test_raw_job(self):
         TI = models.TaskInstance
