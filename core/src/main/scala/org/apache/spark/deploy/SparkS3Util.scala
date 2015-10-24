@@ -278,14 +278,14 @@ object SparkS3Util extends Logging {
   }
 
   /**
-   * Compute input splits for the given files. Burrowed code from `FileInputFormat.getSplits`.
+   * Compute input splits for the given files. Borrowed code from `FileInputFormat.getSplits`.
    */
   @VisibleForTesting
   def computeSplits(
     jobConf: JobConf,
     files: Array[FileStatus],
     minSplits: Int): Array[InputSplit] = {
-    val totalSize: Long = files.map(_.getLen).reduceLeft(_ + _)
+    val totalSize: Long = files.map(_.getLen).foldLeft(0L)((sum, len) => sum + len)
     val goalSize: Long = totalSize / (if (minSplits == 0) 1 else minSplits)
     val minSize: Long = getMinSplitSize()
     val splits: ArrayBuffer[InputSplit] = ArrayBuffer[InputSplit]()

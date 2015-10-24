@@ -41,7 +41,7 @@ import org.apache.hadoop.util.ReflectionUtils
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.{SparkS3Util, SparkHadoopUtil}
+import org.apache.spark.deploy.{SparkHadoopUtil, SparkS3Util}
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, NextIterator, Utils}
