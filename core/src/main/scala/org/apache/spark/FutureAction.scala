@@ -22,11 +22,11 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.api.java.JavaFutureAction
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{JobFailed, JobSucceeded, JobWaiter}
+import org.apache.spark.scheduler.JobWaiter
 
 import scala.concurrent._
 import scala.concurrent.duration.Duration
-import scala.util.{Failure, Try}
+import scala.util.Try
 
 /**
  * A future for the result of an action to support cancellation. This is an extension of the
@@ -148,44 +148,25 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
  */
 class ComplexFutureAction[T] extends FutureAction[T] {
 
-  // Pointer to the thread that is executing the action. It is set when the action is run.
-  @volatile private var thread: Thread = _
+  @volatile private var _cancelled = false
 
-  // A flag indicating whether the future has been cancelled. This is used in case the future
-  // is cancelled before the action was even run (and thus we have no thread to interrupt).
-  @volatile private var _cancelled: Boolean = false
-
-  @volatile private var jobs: Seq[Int] = Nil
+  @volatile private var subActions: List[FutureAction[_]] = Nil
 
   // A promise used to signal the future.
-  private val p = promise[T]()
+  private val p = Promise[T]()
 
-  override def cancel(): Unit = this.synchronized {
+  override def cancel(): Unit = synchronized {
     _cancelled = true
-    if (thread != null) {
-      thread.interrupt()
-    }
+    p.tryFailure(new SparkException("Action has been cancelled"))
+    subActions foreach {_.cancel()}
   }
 
   /**
    * Executes some action enclosed in the closure. To properly enable cancellation, the closure
    * should use runJob implementation in this promise. See takeAsync for example.
    */
-  def run(func: => T)(implicit executor: ExecutionContext): this.type = {
-    scala.concurrent.future {
-      thread = Thread.currentThread
-      try {
-        p.success(func)
-      } catch {
-        case e: Exception => p.failure(e)
-      } finally {
-        // This lock guarantees when calling `thread.interrupt()` in `cancel`,
-        // thread won't be set to null.
-        ComplexFutureAction.this.synchronized {
-          thread = null
-        }
-      }
-    }
+  def run(func: => Future[T])(implicit executor: ExecutionContext): this.type = {
+    p tryCompleteWith func
     this
   }
 
@@ -198,28 +179,15 @@ class ComplexFutureAction[T] extends FutureAction[T] {
       processPartition: Iterator[T] => U,
       partitions: Seq[Int],
       resultHandler: (Int, U) => Unit,
-      resultFunc: => R) {
+      resultFunc: => R)(implicit executor: ExecutionContext) = synchronized {
     // If the action hasn't been cancelled yet, submit the job. The check and the submitJob
     // command need to be in an atomic block.
-    val job = this.synchronized {
-      if (!isCancelled) {
-        rdd.context.submitJob(rdd, processPartition, partitions, resultHandler, resultFunc)
-      } else {
-        throw new SparkException("Action has been cancelled")
-      }
-    }
-
-    this.jobs = jobs ++ job.jobIds
-
-    // Wait for the job to complete. If the action is cancelled (with an interrupt),
-    // cancel the job and stop the execution. This is not in a synchronized block because
-    // Await.ready eventually waits on the monitor in FutureJob.jobWaiter.
-    try {
-      Await.ready(job, Duration.Inf)
-    } catch {
-      case e: InterruptedException =>
-        job.cancel()
-        throw new SparkException("Action has been cancelled")
+    if (!isCancelled) {
+      val job = rdd.context.submitJob(rdd, processPartition, partitions, resultHandler, resultFunc)
+      subActions = job::subActions
+      job
+    } else {
+      throw new SparkException("Action has been cancelled")
     }
   }
 
@@ -245,7 +213,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
 
   override def value: Option[Try[T]] = p.future.value
 
-  def jobIds: Seq[Int] = jobs
+  def jobIds: Seq[Int] = subActions flatMap {_.jobIds}
 
 }
 
@@ -272,7 +240,7 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
     Await.ready(futureAction, timeout)
     futureAction.value.get match {
       case scala.util.Success(value) => converter(value)
-      case Failure(exception) =>
+      case scala.util.Failure(exception) =>
         if (isCancelled) {
           throw new CancellationException("Job cancelled").initCause(exception)
         } else {
