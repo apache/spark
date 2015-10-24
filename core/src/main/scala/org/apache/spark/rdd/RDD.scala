@@ -713,7 +713,7 @@ abstract class RDD[T: ClassTag](
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
-  private[sql] def mapPartitionsInternal[U: ClassTag](
+  private[spark] def mapPartitionsInternal[U: ClassTag](
       f: Iterator[T] => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
