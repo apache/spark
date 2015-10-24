@@ -300,6 +300,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           driver.init()
           val out = sessionState.out
+          val err = sessionState.err
           val start: Long = System.currentTimeMillis()
           if (sessionState.getIsVerbose) {
             out.println(cmd)
@@ -313,8 +314,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             // For analysis exception, only the error is printed out to the console.
             rc.getException() match {
               case e : AnalysisException =>
-                console.printError(s"""Error in query: ${e.getMessage}""")
-              case _ => console.printError(rc.getErrorMessage())
+                err.println(s"""Error in query: ${e.getMessage}""")
+              case _ => err.println(rc.getErrorMessage())
             }
             driver.close()
             return ret

@@ -223,7 +223,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   test("SPARK-11188 Analysis error reporting") {
     runCliWithin(2.minute)(
       "select * from nonexistent_table;"
-        -> "Error in query: Table not Found: nonexistent_table;"
+        -> "Error in query: Table not found: nonexistent_table;"
     )
   }
 }
