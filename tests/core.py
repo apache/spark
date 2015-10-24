@@ -6,7 +6,7 @@ from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, utils, operators, hooks
 from airflow.configuration import conf
-from airflow.www.app import app
+from airflow.www.app import create_app
 from airflow.settings import Session
 
 NUM_EXAMPLE_DAGS = 6
@@ -244,6 +244,7 @@ class WebUiTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
+        app = create_app()
         app.config['TESTING'] = True
         self.app = app.test_client()
 

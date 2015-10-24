@@ -263,7 +263,7 @@ def webserver(args):
             '{args.port}...'.format(**locals()))
         sp = subprocess.Popen([
             'gunicorn', '-w', str(args.threads), '-t', '120', '-b',
-            args.hostname + ':' + str(args.port), 'app'])
+            args.hostname + ':' + str(args.port), 'airflow.www.app:create_app()'])
         sp.wait()
 
 
