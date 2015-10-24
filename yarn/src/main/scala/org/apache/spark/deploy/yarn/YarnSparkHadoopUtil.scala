@@ -438,6 +438,5 @@ object YarnSparkHadoopUtil {
       conf.getInt("spark.executor.instances", targetNumExecutors)
     }
   }
-
 }
 
