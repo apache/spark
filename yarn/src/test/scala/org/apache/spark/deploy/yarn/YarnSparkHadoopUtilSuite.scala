@@ -255,14 +255,17 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       System.setProperty("SPARK_YARN_MODE", "true")
       val initial = SparkHadoopUtil.get
         .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
-      assert(initial === null || initial.length == 0)
+      assert(initial === null || initial.length === 0)
 
-      val conf = new SparkConf().set("spark.authenticate", "true")
+      val conf = new SparkConf()
+        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+        .set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
       val sm = new SecurityManager(conf)
 
       val generated = SparkHadoopUtil.get
         .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
       assert(generated != null)
+      assert(generated != "unused")
       assert(sm.getSecretKey() == new Text(generated).toString())
     } finally {
       // removeSecretKey() was only added in Hadoop 2.6, so instead we just set the secret

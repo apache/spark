@@ -233,14 +233,14 @@ class SecurityManagerSuite extends SparkFunSuite {
   test("secret authentication key") {
     val key = "very secret key"
     val conf = new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", key)
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
     assert(key === new SecurityManager(conf).getSecretKey())
 
     val keyFromEnv = "very secret key from env"
     val conf2 = new SparkConfWithEnv(Map(SecurityManager.ENV_AUTH_SECRET -> keyFromEnv))
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", key)
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
     assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
