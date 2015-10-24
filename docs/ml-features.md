@@ -138,30 +138,7 @@ Refer to the [CountVectorizer Scala docs](api/scala/index.html#org.apache.spark.
 and the [CountVectorizerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel)
 for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.CountVectorizer
-import org.apache.spark.mllib.util.CountVectorizerModel
-
-val df = sqlContext.createDataFrame(Seq(
-  (0, Array("a", "b", "c")),
-  (1, Array("a", "b", "b", "c", "a"))
-)).toDF("id", "words")
-
-// fit a CountVectorizerModel from the corpus
-val cvModel: CountVectorizerModel = new CountVectorizer()
-  .setInputCol("words")
-  .setOutputCol("features")
-  .setVocabSize(3)
-  .setMinDF(2) // a term must appear in more or equal to 2 documents to be included in the vocabulary
-  .fit(df)
-
-// alternatively, define CountVectorizerModel with a-priori vocabulary
-val cvm = new CountVectorizerModel(Array("a", "b", "c"))
-  .setInputCol("words")
-  .setOutputCol("features")
-
-cvModel.transform(df).select("features").show()
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/CountVectorizerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -170,40 +147,7 @@ Refer to the [CountVectorizer Java docs](api/java/org/apache/spark/ml/feature/Co
 and the [CountVectorizerModel Java docs](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html)
 for more details on the API.
 
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.CountVectorizer;
-import org.apache.spark.ml.feature.CountVectorizerModel;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.*;
-
-// Input data: Each row is a bag of words from a sentence or document.
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Arrays.asList("a", "b", "c")),
-  RowFactory.create(Arrays.asList("a", "b", "b", "c", "a"))
-));
-StructType schema = new StructType(new StructField [] {
-  new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
-});
-DataFrame df = sqlContext.createDataFrame(jrdd, schema);
-
-// fit a CountVectorizerModel from the corpus
-CountVectorizerModel cvModel = new CountVectorizer()
-  .setInputCol("text")
-  .setOutputCol("feature")
-  .setVocabSize(3)
-  .setMinDF(2) // a term must appear in more or equal to 2 documents to be included in the vocabulary
-  .fit(df);
-
-// alternatively, define CountVectorizerModel with a-priori vocabulary
-CountVectorizerModel cvm = new CountVectorizerModel(new String[]{"a", "b", "c"})
-  .setInputCol("text")
-  .setOutputCol("feature");
-
-cvModel.transform(df).show();
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaCountVectorizerExample.java %}
 </div>
 </div>
 
