@@ -31,6 +31,10 @@ from numpy import (
 from numpy import sum as array_sum
 
 from py4j.protocol import Py4JJavaError
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version > '3':
     basestring = str
@@ -237,18 +241,30 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(dv.array.dtype == 'float64')
 
     def test_sparse_vector_indexing(self):
-        sv = SparseVector(4, {1: 1, 3: 2})
+        sv = SparseVector(5, {1: 1, 3: 2})
         self.assertEqual(sv[0], 0.)
         self.assertEqual(sv[3], 2.)
         self.assertEqual(sv[1], 1.)
         self.assertEqual(sv[2], 0.)
-        self.assertEqual(sv[-1], 2)
-        self.assertEqual(sv[-2], 0)
-        self.assertEqual(sv[-4], 0)
-        for ind in [4, -5]:
+        self.assertEqual(sv[4], 0.)
+        self.assertEqual(sv[-1], 0.)
+        self.assertEqual(sv[-2], 2.)
+        self.assertEqual(sv[-3], 0.)
+        self.assertEqual(sv[-5], 0.)
+        for ind in [5, -6]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
         for ind in [7.8, '1']:
             self.assertRaises(TypeError, sv.__getitem__, ind)
+
+        zeros = SparseVector(4, {})
+        self.assertEqual(zeros[0], 0.0)
+        self.assertEqual(zeros[3], 0.0)
+        for ind in [4, -5]:
+            self.assertRaises(ValueError, zeros.__getitem__, ind)
+
+        empty = SparseVector(0, {})
+        for ind in [-1, 0, 1]:
+            self.assertRaises(ValueError, empty.__getitem__, ind)
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
@@ -1526,7 +1542,10 @@ class MLUtilsTests(MLlibTestCase):
 if __name__ == "__main__":
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     sc.stop()

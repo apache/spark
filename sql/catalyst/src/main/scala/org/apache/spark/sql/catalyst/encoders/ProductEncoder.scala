@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
-import org.apache.spark.sql.catalyst.{ScalaReflection, InternalRow}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.{ObjectType, StructType}
 
 /**
@@ -31,37 +29,19 @@ import org.apache.spark.sql.types.{ObjectType, StructType}
  * internal binary representation.
  */
 object ProductEncoder {
-  def apply[T <: Product : TypeTag]: Encoder[T] = {
+  def apply[T <: Product : TypeTag]: ClassEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
-    val schema = ScalaReflection.schemaFor[T].dataType.asInstanceOf[StructType]
     val mirror = typeTag[T].mirror
     val cls = mirror.runtimeClass(typeTag[T].tpe)
 
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val extractExpressions = ScalaReflection.extractorsFor[T](inputObject)
-    new ClassEncoder[T](schema, extractExpressions, ClassTag[T](cls))
-  }
-}
+    val extractExpression = ScalaReflection.extractorsFor[T](inputObject)
+    val constructExpression = ScalaReflection.constructorFor[T]
 
-/**
- * A generic encoder for JVM objects.
- *
- * @param schema The schema after converting `T` to a Spark SQL row.
- * @param extractExpressions A set of expressions, one for each top-level field that can be used to
- *                           extract the values from a raw object.
- * @param clsTag A classtag for `T`.
- */
-case class ClassEncoder[T](
-    schema: StructType,
-    extractExpressions: Seq[Expression],
-    clsTag: ClassTag[T])
-  extends Encoder[T] {
-
-  private val extractProjection = GenerateUnsafeProjection.generate(extractExpressions)
-  private val inputRow = new GenericMutableRow(1)
-
-  override def toRow(t: T): InternalRow = {
-    inputRow(0) = t
-    extractProjection(inputRow)
+    new ClassEncoder[T](
+      extractExpression.dataType,
+      extractExpression.flatten,
+      constructExpression,
+      ClassTag[T](cls))
   }
 }

@@ -178,6 +178,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
     .. note:: Experimental
 
     Extracts a vocabulary from document collections and generates a :py:attr:`CountVectorizerModel`.
+
     >>> df = sqlContext.createDataFrame(
     ...    [(0, ["a", "b", "c"]), (1, ["a", "b", "b", "c", "a"])],
     ...    ["label", "raw"])

@@ -235,6 +235,24 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(localC ~== result absTol 1e-8)
   }
 
+  test("simulate multiply") {
+    val blocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 1.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 1.0))))
+    val rdd = sc.parallelize(blocks, 2)
+    val B = new BlockMatrix(rdd, colPerPart, rowPerPart)
+    val resultPartitioner = GridPartitioner(gridBasedMat.numRowBlocks, B.numColBlocks,
+      math.max(numPartitions, 2))
+    val (destinationsA, destinationsB) = gridBasedMat.simulateMultiply(B, resultPartitioner)
+    assert(destinationsA((0, 0)) === Set(0))
+    assert(destinationsA((0, 1)) === Set(2))
+    assert(destinationsA((1, 0)) === Set(0))
+    assert(destinationsA((1, 1)) === Set(2))
+    assert(destinationsA((2, 1)) === Set(3))
+    assert(destinationsB((0, 0)) === Set(0))
+    assert(destinationsB((1, 1)) === Set(2, 3))
+  }
+
   test("validate") {
     // No error
     gridBasedMat.validate()

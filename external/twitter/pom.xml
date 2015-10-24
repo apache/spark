@@ -51,7 +51,7 @@
     <dependency>
       <groupId>org.twitter4j</groupId>
       <artifactId>twitter4j-stream</artifactId>
-      <version>3.0.3</version>
+      <version>4.0.4</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>

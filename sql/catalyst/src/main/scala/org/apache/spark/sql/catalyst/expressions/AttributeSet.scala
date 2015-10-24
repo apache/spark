@@ -31,6 +31,10 @@ protected class AttributeEquals(val a: Attribute) {
 }
 
 object AttributeSet {
+  /** Returns an empty [[AttributeSet]]. */
+  val empty = apply(Iterable.empty)
+
+  /** Constructs a new [[AttributeSet]] that contains a single [[Attribute]]. */
   def apply(a: Attribute): AttributeSet = new AttributeSet(Set(new AttributeEquals(a)))
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
