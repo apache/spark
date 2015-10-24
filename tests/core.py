@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta
+import doctest
 import os
 from time import sleep
 import unittest
@@ -243,6 +244,9 @@ class CoreTest(unittest.TestCase):
             task=self.runme_0, execution_date=DEFAULT_DATE)
         ti.dag = self.dag_bash
         ti.run(force=True)
+
+    def test_doctests(self):
+        doctest.testmod(utils)
 
 
 class WebUiTests(unittest.TestCase):
