@@ -265,8 +265,9 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       val generated = SparkHadoopUtil.get
         .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
       assert(generated != null)
-      assert(generated != "unused")
-      assert(sm.getSecretKey() == new Text(generated).toString())
+      val genString = new Text(generated).toString()
+      assert(genString != "unused")
+      assert(sm.getSecretKey() === genString)
     } finally {
       // removeSecretKey() was only added in Hadoop 2.6, so instead we just set the secret
       // to an empty string.
