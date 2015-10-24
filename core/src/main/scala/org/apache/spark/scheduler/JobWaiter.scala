@@ -53,8 +53,9 @@ private[spark] class JobWaiter[T](
 
   override def taskSucceeded(index: Int, result: Any): Unit = {
     resultHandler(index, result.asInstanceOf[T])
-    if (finishedTasks.incrementAndGet() == totalTasks)
+    if (finishedTasks.incrementAndGet() == totalTasks) {
       jobPromise.success(())
+    }
   }
 
   override def jobFailed(exception: Exception): Unit =

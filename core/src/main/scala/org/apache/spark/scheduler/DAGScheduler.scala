@@ -608,7 +608,7 @@ class DAGScheduler(
       properties: Properties): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
-    Await.ready(waiter.completionFuture, atMost=Duration.Inf)
+    Await.ready(waiter.completionFuture, atMost = Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
         logInfo("Job %d finished: %s, took %f s".format
