@@ -92,7 +92,7 @@ private[spark] trait Spillable[C] extends Logging {
       spill(collection)
       _elementsRead = 0
       _memoryBytesSpilled += currentMemory
-      releaseMemoryForThisTask()
+      releaseMemory()
     }
     shouldSpill
   }
@@ -105,7 +105,7 @@ private[spark] trait Spillable[C] extends Logging {
   /**
    * Release our memory back to the execution pool so that other tasks can grab it.
    */
-  private def releaseMemoryForThisTask(): Unit = {
+  def releaseMemory(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
     taskMemoryManager.releaseExecutionMemory(myMemoryThreshold - initialMemoryThreshold)
     myMemoryThreshold = initialMemoryThreshold

@@ -689,8 +689,11 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   def stop(): Unit = {
+    map = null // So that the memory can be garbage-collected
+    buffer = null // So that the memory can be garbage-collected
     spills.foreach(s => s.file.delete())
     spills.clear()
+    releaseMemory()
   }
 
   /**
