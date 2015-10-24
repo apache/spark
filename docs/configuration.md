@@ -1593,15 +1593,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.sparkr.r.command</code></td>
+  <td><code>spark.r.command</code></td>
   <td>Rscript</td>
   <td>
     Executable for executing R scripts in cluster modes for both driver and workers.
   </td>
 </tr>
 <tr>
-  <td><code>spark.sparkr.r.driver.command</code></td>
-  <td>spark.sparkr.r.command</td>
+  <td><code>spark.r.driver.command</code></td>
+  <td>spark.r.command</td>
   <td>
     Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
   </td>
