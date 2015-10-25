@@ -68,7 +68,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     // as the solver of linear regression in the case of "auto" mode.
     val featureSize = 4100
     datasetWithManyFeature = sqlContext.createDataFrame(
-      sc.parallelize(LinearDataGenerator.generateLinearSparseInput(
+      sc.parallelize(LinearDataGenerator.generateLinearInputInternal(
         intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble).toArray,
         xMean = Seq.fill(featureSize)(r.nextDouble).toArray,
         xVariance = Seq.fill(featureSize)(r.nextDouble).toArray, nPoints = 200,
