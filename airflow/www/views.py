@@ -49,8 +49,6 @@ from airflow.models import State
 
 from airflow.www.forms import DateTimeForm, TreeForm, GraphForm
 
-FILTER_BY_OWNER = False
-AUTHENTICATE = False
 QUERY_LIMIT = 100000
 CHART_LIMIT = 200000
 
@@ -63,6 +61,11 @@ logout_user = login.logout_user
 AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
 if AUTHENTICATE is False:
     login_required = lambda x: x
+
+FILTER_BY_OWNER = False
+if conf.getboolean('webserver', 'FILTER_BY_OWNER'):
+    # filter_by_owner if authentication is enabled and filter_by_owner is true
+    FILTER_BY_OWNER = AUTHENTICATE
 
 
 def dag_link(v, c, m, p):
