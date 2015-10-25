@@ -20,17 +20,28 @@ package org.apache.spark.mllib.fpm
 import java.{util => ju}
 import java.lang.{Iterable => JavaIterable}
 
+import org.apache.spark.mllib.util.Loader._
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.api.java.JavaSparkContext.{fakeClassTag, fakeTypeTag}
 import org.apache.spark.mllib.fpm.FPGrowth._
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.types._
 
 /**
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
@@ -38,8 +49,9 @@ import org.apache.spark.storage.StorageLevel
  * @tparam Item item type
  */
 @Since("1.3.0")
-class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
-    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable {
+class FPGrowthModel[Item: ClassTag: TypeTag] @Since("1.3.0") (
+    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]])
+  extends Saveable with Serializable {
   /**
    * Generates association rules for the [[Item]]s in [[freqItemsets]].
    * @param confidence minimal confidence of the rules produced
@@ -48,6 +60,96 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
   def generateAssociationRules(confidence: Double): RDD[AssociationRules.Rule[Item]] = {
     val associationRules = new AssociationRules(confidence)
     associationRules.run(freqItemsets)
+  }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    FPGrowthModel.SaveLoadV1_0.save(this, path)
+  }
+
+  override protected val formatVersion: String = "1.0"
+}
+
+object FPGrowthModel extends Loader[FPGrowthModel[_]] {
+
+  override def load(sc: SparkContext, path: String): FPGrowthModel[_] = {
+    val inferredItemset = FPGrowthModel.SaveLoadV1_0.inferItemType(sc, path)
+    FPGrowthModel.SaveLoadV1_0.load(sc, path, inferredItemset)
+  }
+
+  private[fpm] object SaveLoadV1_0 {
+
+    private val thisFormatVersion = "1.0"
+
+    private[fpm] val thisClassName = "org.apache.spark.mllib.fpm.FPGrowthModel"
+
+    def save[Item: ClassTag: TypeTag](model: FPGrowthModel[Item], path: String): Unit = {
+      val sc = model.freqItemsets.sparkContext
+      val sqlContext = new SQLContext(sc)
+
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      val itemType = ScalaReflection.schemaFor[Item].dataType
+      val fields = Array(StructField("items", ArrayType(itemType)),
+        StructField("freq", LongType))
+      val schema = StructType(fields)
+      val rowDataRDD = model.freqItemsets.map { x =>
+        Row(x.items, x.freq)
+      }
+      sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
+    }
+
+    def inferItemType(sc: SparkContext, path: String): FreqItemset[_] = {
+      val sqlContext = new SQLContext(sc)
+      val freqItemsets = sqlContext.read.parquet(Loader.dataPath(path))
+      val itemsetType = freqItemsets.schema(0).dataType
+      val freqType = freqItemsets.schema(1).dataType
+      require(itemsetType.isInstanceOf[ArrayType],
+        s"items should be ArrayType, but get $itemsetType")
+      require(freqType.isInstanceOf[LongType], s"freq should be LongType, but get $freqType")
+      val itemType = itemsetType.asInstanceOf[ArrayType].elementType
+      val result = itemType match {
+        case BooleanType => new FreqItemset(Array[Boolean](), 0L)
+        case BinaryType => new FreqItemset(Array(Array[Byte]()), 0L)
+        case StringType => new FreqItemset(Array[String](), 0L)
+        case ByteType => new FreqItemset(Array[Byte](), 0L)
+        case ShortType => new FreqItemset(Array[Short](), 0L)
+        case IntegerType => new FreqItemset(Array[Int](), 0L)
+        case LongType => new FreqItemset(Array[Long](), 0L)
+        case FloatType => new FreqItemset(Array[Float](), 0L)
+        case DoubleType => new FreqItemset(Array[Double](), 0L)
+        case DateType => new FreqItemset(Array[java.sql.Date](), 0L)
+        case DecimalType.SYSTEM_DEFAULT => new FreqItemset(Array[java.math.BigDecimal](), 0L)
+        case TimestampType => new FreqItemset(Array[java.sql.Timestamp](), 0L)
+        case _: ArrayType => new FreqItemset(Array[Seq[_]](), 0L)
+        case _: MapType => new FreqItemset(Array[Map[_, _]](), 0L)
+        case _: StructType => new FreqItemset(Array[Row](), 0L)
+        case other =>
+          throw new UnsupportedOperationException(s"Schema for type $other is not supported")
+      }
+      result
+    }
+
+    def load[Item: ClassTag: TypeTag](
+        sc: SparkContext,
+        path: String,
+        inferredItemset: FreqItemset[Item]): FPGrowthModel[Item] = {
+      implicit val formats = DefaultFormats
+      val sqlContext = new SQLContext(sc)
+
+      val (className, formatVersion, metadata) = loadMetadata(sc, path)
+      assert(className == thisClassName)
+      assert(formatVersion == thisFormatVersion)
+
+      val freqItemsets = sqlContext.read.parquet(Loader.dataPath(path))
+      val freqItemsetsRDD = freqItemsets.map { x =>
+        val items = x.getAs[Seq[Item]](0).toArray
+        val freq = x.getLong(1)
+        new FreqItemset(items, freq)
+      }
+      new FPGrowthModel(freqItemsetsRDD)
+    }
   }
 }
 
@@ -107,7 +209,7 @@ class FPGrowth private (
    *
    */
   @Since("1.3.0")
-  def run[Item: ClassTag](data: RDD[Array[Item]]): FPGrowthModel[Item] = {
+  def run[Item: ClassTag: TypeTag](data: RDD[Array[Item]]): FPGrowthModel[Item] = {
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
@@ -124,6 +226,7 @@ class FPGrowth private (
   @Since("1.3.0")
   def run[Item, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {
     implicit val tag = fakeClassTag[Item]
+    implicit val typeTag = fakeTypeTag[Item]
     run(data.rdd.map(_.asScala.toArray))
   }
 
