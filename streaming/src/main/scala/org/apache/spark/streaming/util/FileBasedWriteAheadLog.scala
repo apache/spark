@@ -80,6 +80,9 @@ private[streaming] class FileBasedWriteAheadLog(
     while (!succeeded && failures < maxFailures) {
       try {
         fileSegment = getLogWriter(time).write(byteBuffer)
+        if (WriteAheadLogUtils.shouldCloseAfterWrite(conf)) {
+          resetWriter()
+        }
         succeeded = true
       } catch {
         case ex: Exception =>

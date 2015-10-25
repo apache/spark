@@ -39,6 +39,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
 
   val DEFAULT_ROLLING_INTERVAL_SECS = 60
   val DEFAULT_MAX_FAILURES = 3
+  val WAL_CLOSE_AFTER_WRITE = "spark.streaming.writeAheadLog.closeAfterWrite"
 
   def enableReceiverLog(conf: SparkConf): Boolean = {
     conf.getBoolean(RECEIVER_WAL_ENABLE_CONF_KEY, false)
@@ -58,6 +59,10 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     } else {
       conf.getInt(RECEIVER_WAL_MAX_FAILURES_CONF_KEY, DEFAULT_MAX_FAILURES)
     }
+  }
+
+  def shouldCloseAfterWrite(conf: SparkConf): Boolean = {
+    conf.getBoolean(WAL_CLOSE_AFTER_WRITE, defaultValue = false)
   }
 
   /**
