@@ -424,6 +424,22 @@ if 'MySqlOperator' in dir(operators):
                 sql=sql, dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+        def test_mysql_to_mysql(self):
+            sql = "SELECT * FROM INFORMATION_SCHEMA.TABLES LIMIT 100;"
+            t = operators.GenericTransfer(
+                task_id='test_m2m',
+                preoperator=[
+                    "DROP TABLE IF EXISTS test_mysql_to_mysql",
+                    "CREATE TABLE IF NOT EXISTS "
+                        "test_mysql_to_mysql LIKE INFORMATION_SCHEMA.TABLES"
+                ],
+                source_conn_id='airflow_db',
+                destination_conn_id='airflow_db',
+                destination_table="test_mysql_to_mysql",
+                sql=sql,
+                dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
 
 if 'PostgresOperator' in dir(operators):
     # Only testing if the operator is installed
@@ -593,22 +609,6 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 sql=sql,
                 hive_table='airflow.test_mysql_to_hive',
                 recreate=True,
-                dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
-
-        def test_mysql_to_mysql(self):
-            sql = "SELECT * FROM task_instance LIMIT 1000;"
-            t = operators.GenericTransfer(
-                task_id='test_m2m',
-                preoperator=[
-                    "DROP TABLE IF EXISTS test_mysql_to_mysql",
-                    "CREATE TABLE IF NOT EXISTS "
-                        "test_mysql_to_mysql LIKE task_instance"
-                ],
-                source_conn_id='airflow_db',
-                destination_conn_id='airflow_db',
-                destination_table="test_mysql_to_mysql",
-                sql=sql,
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
