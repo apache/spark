@@ -1,15 +1,16 @@
 from datetime import datetime, time, timedelta
+import doctest
 import os
 from time import sleep
 import unittest
 from airflow import configuration
 configuration.test_mode()
-from airflow import jobs, models, DAG, utils, operators, hooks
+from airflow import jobs, models, DAG, utils, operators, hooks, macros
 from airflow.configuration import conf
 from airflow.www.app import create_app
 from airflow.settings import Session
 
-NUM_EXAMPLE_DAGS = 6
+NUM_EXAMPLE_DAGS = 7
 DEV_NULL = '/dev/null'
 DEFAULT_DATE = datetime(2015, 1, 1)
 TEST_DAG_ID = 'unit_tests'
@@ -106,6 +107,23 @@ class CoreTest(unittest.TestCase):
         t = operators.TimeSensor(
             task_id='time_sensor_check',
             target_time=time(0),
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_check_operators(self):
+        t = operators.CheckOperator(
+            task_id='check',
+            sql="SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES",
+            conn_id="mysql_default",
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+        t = operators.ValueCheckOperator(
+            task_id='value_check',
+            pass_value=95,
+            tolerance=0.1,
+            conn_id="mysql_default",
+            sql="SELECT 100",
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
@@ -223,14 +241,19 @@ class CoreTest(unittest.TestCase):
         job.run()
 
     def test_local_backfill_job(self):
-        self.dag_bash.clear(
-            start_date=DEFAULT_DATE,
-            end_date=DEFAULT_DATE)
-        job = jobs.BackfillJob(
-            dag=self.dag_bash,
-            start_date=DEFAULT_DATE,
-            end_date=DEFAULT_DATE)
-        job.run()
+        dags = [
+            dag for dag in self.dagbag.dags.values()
+            if dag.dag_id not in ('example_http_operator',)]
+        for dag in dags:
+            dag.clear(
+                start_date=DEFAULT_DATE,
+                end_date=DEFAULT_DATE)
+        for dag in dags:
+            job = jobs.BackfillJob(
+                dag=dag,
+                start_date=DEFAULT_DATE,
+                end_date=DEFAULT_DATE)
+            job.run()
 
     def test_raw_job(self):
         TI = models.TaskInstance
@@ -238,6 +261,13 @@ class CoreTest(unittest.TestCase):
             task=self.runme_0, execution_date=DEFAULT_DATE)
         ti.dag = self.dag_bash
         ti.run(force=True)
+
+    def test_doctests(self):
+        modules = [utils, macros]
+        for mod in modules:
+            failed, tests = doctest.testmod(mod)
+            if failed:
+                raise Exception("Failed a doctest")
 
 
 class WebUiTests(unittest.TestCase):
@@ -393,6 +423,22 @@ if 'MySqlOperator' in dir(operators):
                 task_id='mysql_operator_test_multi',
                 mysql_conn_id='airflow_db',
                 sql=sql, dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+        def test_mysql_to_mysql(self):
+            sql = "SELECT * FROM INFORMATION_SCHEMA.TABLES LIMIT 100;"
+            t = operators.GenericTransfer(
+                task_id='test_m2m',
+                preoperator=[
+                    "DROP TABLE IF EXISTS test_mysql_to_mysql",
+                    "CREATE TABLE IF NOT EXISTS "
+                        "test_mysql_to_mysql LIKE INFORMATION_SCHEMA.TABLES"
+                ],
+                source_conn_id='airflow_db',
+                destination_conn_id='airflow_db',
+                destination_table="test_mysql_to_mysql",
+                sql=sql,
+                dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
 
@@ -564,22 +610,6 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 sql=sql,
                 hive_table='airflow.test_mysql_to_hive',
                 recreate=True,
-                dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
-
-        def test_mysql_to_mysql(self):
-            sql = "SELECT * FROM task_instance LIMIT 1000;"
-            t = operators.GenericTransfer(
-                task_id='test_m2m',
-                preoperator=[
-                    "DROP TABLE IF EXISTS test_mysql_to_mysql",
-                    "CREATE TABLE IF NOT EXISTS "
-                        "test_mysql_to_mysql LIKE task_instance"
-                ],
-                source_conn_id='airflow_db',
-                destination_conn_id='airflow_db',
-                destination_table="test_mysql_to_mysql",
-                sql=sql,
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
