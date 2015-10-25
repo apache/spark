@@ -264,42 +264,57 @@ class CliTests(unittest.TestCase):
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
 
-    def test_list_dags(self):
+    def test_cli_list_dags(self):
         args = self.parser.parse_args(['list_dags'])
         cli.list_dags(args)
 
-    def test_list_tasks(self):
+    def test_cli_list_tasks(self):
         for dag_id in self.dagbag.dags.keys():
             args = self.parser.parse_args(['list_tasks', dag_id])
             cli.list_tasks(args)
 
-    def test_tree_view(self):
         args = self.parser.parse_args([
             'list_tasks', 'example_bash_operator', '--tree'])
         cli.list_tasks(args)
 
-    def test_initdb(self):
+    def test_cli_initdb(self):
         cli.initdb(self.parser.parse_args(['initdb']))
 
-    def test_test(self):
-        cli.initdb(self.parser.parse_args([
+    def test_cli_test(self):
+        cli.test(self.parser.parse_args([
             'test', 'example_bash_operator', 'runme_0',
             DEFAULT_DATE.isoformat()]))
-        cli.initdb(self.parser.parse_args([
+        cli.test(self.parser.parse_args([
             'test', 'example_bash_operator', 'runme_0', '--dry_run',
             DEFAULT_DATE.isoformat()]))
 
+    def test_cli_run(self):
+        cli.run(self.parser.parse_args([
+            'run', 'example_bash_operator', 'runme_0',
+            DEFAULT_DATE.isoformat()]))
+        cli.run(self.parser.parse_args([
+            'run', 'example_bash_operator', 'runme_0', '-l',
+            DEFAULT_DATE.isoformat()]))
+
     def test_task_state(self):
-        cli.initdb(self.parser.parse_args([
+        cli.task_state(self.parser.parse_args([
             'task_state', 'example_bash_operator', 'runme_0',
             DEFAULT_DATE.isoformat()]))
 
     def test_backfill(self):
-        cli.initdb(self.parser.parse_args([
+        cli.backfill(self.parser.parse_args([
             'backfill', 'example_bash_operator',
             '-s', DEFAULT_DATE.isoformat()]))
 
-        cli.initdb(self.parser.parse_args([
+        cli.backfill(self.parser.parse_args([
+            'backfill', 'example_bash_operator', '--dry_run',
+            '-s', DEFAULT_DATE.isoformat()]))
+
+        cli.backfill(self.parser.parse_args([
+            'backfill', 'example_bash_operator', '-l',
+            '-s', DEFAULT_DATE.isoformat()]))
+
+        cli.backfill(self.parser.parse_args([
             'backfill', 'example_bash_operator',
             '-t', '^run.*',
             '-s', DEFAULT_DATE.isoformat()]))
