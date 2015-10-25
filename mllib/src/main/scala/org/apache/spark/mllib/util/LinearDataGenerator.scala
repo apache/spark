@@ -139,8 +139,9 @@ object LinearDataGenerator {
     x.foreach { v =>
       var i = 0
       val len = v.length
+      val sparceRnd = new Random(seed)
       while (i < len) {
-        if (rnd.nextDouble() <= sparcity) {
+        if (sparceRnd.nextDouble() < sparcity) {
           v(i) = 0.0
         } else {
           v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
