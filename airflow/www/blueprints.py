@@ -1,6 +1,6 @@
 from flask import (
-    Flask, url_for, Markup, Blueprint, redirect,
-    flash, Response, render_template)
+    url_for, Markup, Blueprint, redirect,
+)
 import chartkick
 import markdown
 
