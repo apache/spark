@@ -27,6 +27,11 @@ import struct
 import shutil
 from functools import reduce
 
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
+
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -1303,4 +1308,8 @@ if __name__ == "__main__":
     for testcase in testcases:
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
-        unittest.TextTestRunner(verbosity=3).run(tests)
+        if xmlrunner:
+            unittest.main(tests, verbosity=3,
+                          testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        else:
+            unittest.TextTestRunner(verbosity=3).run(tests)

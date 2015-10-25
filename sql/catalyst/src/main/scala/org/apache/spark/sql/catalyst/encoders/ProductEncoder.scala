@@ -31,15 +31,17 @@ import org.apache.spark.sql.types.{ObjectType, StructType}
 object ProductEncoder {
   def apply[T <: Product : TypeTag]: ClassEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
-    val schema = ScalaReflection.schemaFor[T].dataType.asInstanceOf[StructType]
     val mirror = typeTag[T].mirror
     val cls = mirror.runtimeClass(typeTag[T].tpe)
 
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val extractExpressions = ScalaReflection.extractorsFor[T](inputObject)
+    val extractExpression = ScalaReflection.extractorsFor[T](inputObject)
     val constructExpression = ScalaReflection.constructorFor[T]
-    new ClassEncoder[T](schema, extractExpressions, constructExpression, ClassTag[T](cls))
+
+    new ClassEncoder[T](
+      extractExpression.dataType,
+      extractExpression.flatten,
+      constructExpression,
+      ClassTag[T](cls))
   }
-
-
 }
