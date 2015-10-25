@@ -21,6 +21,8 @@ import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
@@ -150,6 +152,13 @@ private[hive] class ClientWrapper(
     val original = Thread.currentThread().getContextClassLoader
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
+
+    val keytab = System.getProperty("spark.yarn.keytab")
+    val principal = System.getProperty("spark.yarn.principal")
+    if (keytab != null && principal != null) {
+      UserGroupInformation.loginUserFromKeytab(principal, keytab)
+    }
+
     val ret = try {
       val initialConf = new HiveConf(classOf[SessionState])
       // HiveConf is a Hadoop Configuration, which has a field of classLoader and
