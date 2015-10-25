@@ -110,6 +110,23 @@ class CoreTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_check_operators(self):
+        t = operators.CheckOperator(
+            task_id='check',
+            sql="SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES",
+            conn_id="mysql_default",
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+        t = operators.ValueCheckOperator(
+            task_id='value_check',
+            pass_value=95,
+            tolerance=0.1,
+            conn_id="mysql_default",
+            sql="SELECT 100",
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
     def test_clear_api(self):
         task = self.dag_bash.tasks[0]
         task.clear(

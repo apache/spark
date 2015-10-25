@@ -1567,8 +1567,9 @@ class QueryView(wwwutils.DataProfilingMixin, BaseView):
             db = [db for db in dbs if db.conn_id == conn_id_str][0]
             hook = db.get_hook()
             try:
-                df = hook.get_pandas_df(wwwutils.limit_sql(sql, QUERY_LIMIT, conn_type=db.conn_type))
-                # df = hook.get_pandas_df(sql)
+                df = hook.get_pandas_df(
+                    wwwutils.limit_sql(
+                        sql, QUERY_LIMIT, conn_type=db.conn_type))
                 has_data = len(df) > 0
                 df = df.fillna('')
                 results = df.to_html(
