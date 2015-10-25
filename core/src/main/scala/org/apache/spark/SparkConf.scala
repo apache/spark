@@ -600,7 +600,7 @@ private[spark] object SparkConf extends Logging {
   /**
    * Return whether the given config should be passed to an executor on start-up.
    *
-   * Certain akka and authentication configs are required of the executor when it connects to
+   * Certain akka and authentication configs are required from the executor when it connects to
    * the scheduler, while the rest of the spark configs can be inherited from the driver later.
    */
   def isExecutorStartupConf(name: String): Boolean = {
