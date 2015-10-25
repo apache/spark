@@ -48,8 +48,9 @@ private[spark] object TestClient {
     val url = args(0)
     val conf = new SparkConf
     val rpcEnv = RpcEnv.create("spark", Utils.localHostName(), 0, conf, new SecurityManager(conf))
+    val executorClassname = TestExecutor.getClass.getCanonicalName.stripSuffix("$")
     val desc = new ApplicationDescription("TestClient", Some(1), 512,
-      Command("spark.deploy.client.TestExecutor", Seq(), Map(), Seq(), Seq(), Seq()), "ignored")
+      Command(executorClassname, Seq(), Map(), Seq(), Seq(), Seq()), "ignored")
     val listener = new TestListener
     val client = new AppClient(rpcEnv, Array(url), desc, listener, new SparkConf)
     client.start()
