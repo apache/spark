@@ -204,10 +204,21 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val tableProperties = new mutable.HashMap[String, String]
     tableProperties.put("spark.sql.sources.provider", provider)
 
+    val normalizedSchema = userSpecifiedSchema.map { schema =>
+      val newFields = schema.map { f =>
+        if (partitionColumns.contains(f.name)) {
+          f.copy(name = f.name.toLowerCase)
+        } else {
+          f
+        }
+      }
+      StructType(newFields)
+    }
+
     // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
     // stored into a single metastore SerDe property.  In this case, we split the JSON string and
     // store each part as a separate SerDe property.
-    userSpecifiedSchema.foreach { schema =>
+    normalizedSchema.foreach { schema =>
       val threshold = conf.schemaStringLengthThreshold
       val schemaJsonString = schema.json
       // Split the JSON string.
@@ -249,7 +260,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
     val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
     val dataSource = ResolvedDataSource(
-      hive, userSpecifiedSchema, partitionColumns, provider, options)
+      hive, normalizedSchema, partitionColumns.map(_.toLowerCase), provider, options)
 
     def newSparkSQLSpecificMetastoreTable(): HiveTable = {
       HiveTable(
