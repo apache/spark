@@ -5,7 +5,7 @@ from time import sleep
 import unittest
 from airflow import configuration
 configuration.test_mode()
-from airflow import jobs, models, DAG, utils, operators, hooks
+from airflow import jobs, models, DAG, utils, operators, hooks, macros
 from airflow.configuration import conf
 from airflow.www.app import app
 from airflow.settings import Session
@@ -107,6 +107,23 @@ class CoreTest(unittest.TestCase):
         t = operators.TimeSensor(
             task_id='time_sensor_check',
             target_time=time(0),
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_check_operators(self):
+        t = operators.CheckOperator(
+            task_id='check',
+            sql="SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES",
+            conn_id="mysql_default",
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+        t = operators.ValueCheckOperator(
+            task_id='value_check',
+            pass_value=95,
+            tolerance=0.1,
+            conn_id="mysql_default",
+            sql="SELECT 100",
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
@@ -246,7 +263,11 @@ class CoreTest(unittest.TestCase):
         ti.run(force=True)
 
     def test_doctests(self):
-        doctest.testmod(utils)
+        modules = [utils, macros]
+        for mod in modules:
+            failed, tests = doctest.testmod(mod)
+            if failed:
+                raise Exception("Failed a doctest")
 
 
 class WebUiTests(unittest.TestCase):

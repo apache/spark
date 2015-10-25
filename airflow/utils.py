@@ -182,6 +182,7 @@ def initdb():
         session.add(
             models.Connection(
                 conn_id='mysql_default', conn_type='mysql',
+                login='root',
                 host='localhost'))
         session.commit()
 
