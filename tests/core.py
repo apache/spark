@@ -6,6 +6,7 @@ import unittest
 from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, utils, operators, hooks, macros
+from airflow.bin import cli
 from airflow.configuration import conf
 from airflow.www.app import app
 from airflow.settings import Session
@@ -86,22 +87,6 @@ class CoreTest(unittest.TestCase):
         assert hash(self.dag) == hash(dag_eq)
         assert hash(self.dag) != hash(dag_diff_name)
         assert hash(self.dag) != hash(dag_subclass)
-
-    def test_cli(self):
-        from airflow.bin import cli
-        parser = cli.get_parser()
-        args = parser.parse_args(['list_dags'])
-        cli.list_dags(args)
-
-        for dag_id in self.dagbag.dags.keys():
-            args = parser.parse_args(['list_tasks', dag_id])
-            cli.list_tasks(args)
-
-        args = parser.parse_args([
-            'list_tasks', 'example_bash_operator', '--tree'])
-        cli.list_tasks(args)
-
-        cli.initdb(parser.parse_args(['initdb']))
 
     def test_time_sensor(self):
         t = operators.TimeSensor(
@@ -268,6 +253,56 @@ class CoreTest(unittest.TestCase):
             failed, tests = doctest.testmod(mod)
             if failed:
                 raise Exception("Failed a doctest")
+
+
+class CliTests(unittest.TestCase):
+
+    def setUp(self):
+        configuration.test_mode()
+        app.config['TESTING'] = True
+        self.parser = cli.get_parser()
+        self.dagbag = models.DagBag(
+            dag_folder=DEV_NULL, include_examples=True)
+
+    def test_list_dags(self):
+        args = self.parser.parse_args(['list_dags'])
+        cli.list_dags(args)
+
+    def test_list_tasks(self):
+        for dag_id in self.dagbag.dags.keys():
+            args = self.parser.parse_args(['list_tasks', dag_id])
+            cli.list_tasks(args)
+
+    def test_tree_view(self):
+        args = self.parser.parse_args([
+            'list_tasks', 'example_bash_operator', '--tree'])
+        cli.list_tasks(args)
+
+    def test_initdb(self):
+        cli.initdb(self.parser.parse_args(['initdb']))
+
+    def test_test(self):
+        cli.initdb(self.parser.parse_args([
+            'test', 'example_bash_operator', 'runme_0',
+            DEFAULT_DATE.isoformat()]))
+        cli.initdb(self.parser.parse_args([
+            'test', 'example_bash_operator', 'runme_0', '--dry_run',
+            DEFAULT_DATE.isoformat()]))
+
+    def test_task_state(self):
+        cli.initdb(self.parser.parse_args([
+            'task_state', 'example_bash_operator', 'runme_0',
+            DEFAULT_DATE.isoformat()]))
+
+    def test_backfill(self):
+        cli.initdb(self.parser.parse_args([
+            'backfill', 'example_bash_operator',
+            '-s', DEFAULT_DATE.isoformat()]))
+
+        cli.initdb(self.parser.parse_args([
+            'backfill', 'example_bash_operator',
+            '-t', '^run.*',
+            '-s', DEFAULT_DATE.isoformat()]))
 
 
 class WebUiTests(unittest.TestCase):
