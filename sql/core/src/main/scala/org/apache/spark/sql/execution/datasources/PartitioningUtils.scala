@@ -124,12 +124,12 @@ private[sql] object PartitioningUtils {
   }
 
   /**
-   * Parses a single partition, returns column names and values of each partition column.  For
-   * example, given:
+   * Parses a single partition, returns column names and values of each partition column, also
+   * the base path.  For example, given:
    * {{{
    *   path = hdfs://<host>:<port>/path/to/partition/a=42/b=hello/c=3.14
    * }}}
-   * it returns:
+   * it returns the partition:
    * {{{
    *   PartitionValues(
    *     Seq("a", "b", "c"),
@@ -137,6 +137,10 @@ private[sql] object PartitioningUtils {
    *       Literal.create(42, IntegerType),
    *       Literal.create("hello", StringType),
    *       Literal.create(3.14, FloatType)))
+   * }}}
+   * and the base path:
+   * {{{
+   *   /path/to/partition
    * }}}
    */
   private[sql] def parsePartition(
