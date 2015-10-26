@@ -1157,7 +1157,7 @@ case class Variance(child: Expression,
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
 
-    if (n == 0.0 || n == 1.0) Double.NaN else moments(2) / (n - 1.0)
+    if (n == 0.0) Double.NaN else moments(2) / n
   }
 }
 

@@ -226,14 +226,14 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val absTol = 1e-8
 
     val sparkVariance = testData2.agg(variance('a))
-    val expectedVariance = Row(4.0 / 5.0)
+    val expectedVariance = Row(4.0 / 6.0)
     checkAggregatesWithTol(sparkVariance, expectedVariance, absTol)
-    val sparkVarianceSamp = testData2.agg(var_samp('a))
-    checkAggregatesWithTol(sparkVarianceSamp, expectedVariance, absTol)
-
     val sparkVariancePop = testData2.agg(var_pop('a))
-    val expectedVariancePop = Row(4.0 / 6.0)
-    checkAggregatesWithTol(sparkVariancePop, expectedVariancePop, absTol)
+    checkAggregatesWithTol(sparkVariancePop, expectedVariance, absTol)
+
+    val sparkVarianceSamp = testData2.agg(var_samp('a))
+    val expectedVarianceSamp = Row(4.0 / 5.0)
+    checkAggregatesWithTol(sparkVarianceSamp, expectedVarianceSamp, absTol)
 
     val sparkSkewness = testData2.agg(skewness('a))
     val expectedSkewness = Row(0.0)
@@ -251,7 +251,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(variance('a)),
-      Row(Double.NaN))
+      Row(0.0))
 
     checkAnswer(
       emptyTableData.agg(var_samp('a)),

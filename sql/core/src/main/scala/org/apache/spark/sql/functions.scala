@@ -413,7 +413,7 @@ object functions {
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
   /**
-   * Aggregate function: returns the unbiased variance of the values in a group.
+   * Aggregate function: returns the population variance of the values in a group.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -421,7 +421,7 @@ object functions {
   def variance(e: Column): Column = Variance(e.expr)
 
   /**
-   * Aggregate function: returns the unbiased variance of the values in a group.
+   * Aggregate function: returns the population variance of the values in a group.
    *
    * @group agg_funcs
    * @since 1.6.0
