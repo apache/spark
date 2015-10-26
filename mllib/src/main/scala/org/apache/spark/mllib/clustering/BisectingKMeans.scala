@@ -253,7 +253,7 @@ private[clustering] object BisectingKMeans {
   }
 
   /**
-   * Gets the initial centers for bisect k-means
+   * Gets the initial centers for bisecting k-means
    *
    * @param data pairs of point and its cluster index
    * @param stats pairs of cluster index and cluster statistics
