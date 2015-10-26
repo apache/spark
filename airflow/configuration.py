@@ -340,6 +340,9 @@ class ConfigParserWithDefaults(ConfigParser):
     def getint(self, section, key):
         return int(self.get(section, key))
 
+    def getfloat(self, section, key):
+        return float(self.get(section, key))
+
 
 def mkdir_p(path):
     try:

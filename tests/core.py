@@ -24,6 +24,16 @@ except ImportError:
     import pickle
 
 
+def reset():
+    session = Session()
+    tis = session.query(models.TaskInstance).filter_by(dag_id=TEST_DAG_ID)
+    tis.delete()
+    session.commit()
+    session.close()
+
+reset()
+
+
 class CoreTest(unittest.TestCase):
 
     def setUp(self):
@@ -38,6 +48,25 @@ class CoreTest(unittest.TestCase):
 
     def test_confirm_unittest_mod(self):
         assert configuration.conf.get('core', 'unit_test_mode')
+
+    def test_backfill_examples(self):
+        self.dagbag = models.DagBag(
+            dag_folder=DEV_NULL, include_examples=True)
+        dags = [
+            dag for dag in self.dagbag.dags.values()
+            #if dag.dag_id not in ('example_http_operator',)]
+            if dag.dag_id in ('example_bash_operator',)]
+        for dag in dags:
+            dag.clear(
+                start_date=DEFAULT_DATE,
+                end_date=DEFAULT_DATE)
+        for dag in dags:
+            print(dag.tasks)
+            job = jobs.BackfillJob(
+                dag=dag,
+                start_date=DEFAULT_DATE,
+                end_date=DEFAULT_DATE)
+            job.run()
 
     def test_pickling(self):
         dp = self.dag.pickle()
@@ -169,8 +198,8 @@ class CoreTest(unittest.TestCase):
     def test_timeout(self):
         t = operators.PythonOperator(
             task_id='test_timeout',
-            execution_timeout=timedelta(seconds=2),
-            python_callable=lambda: sleep(10),
+            execution_timeout=timedelta(seconds=1),
+            python_callable=lambda: sleep(5),
             dag=self.dag)
         self.assertRaises(
             utils.AirflowTaskTimeout,
@@ -225,21 +254,6 @@ class CoreTest(unittest.TestCase):
         job = jobs.SchedulerJob(dag_id='example_bash_operator', test_mode=True)
         job.run()
 
-    def test_local_backfill_job(self):
-        dags = [
-            dag for dag in self.dagbag.dags.values()
-            if dag.dag_id not in ('example_http_operator',)]
-        for dag in dags:
-            dag.clear(
-                start_date=DEFAULT_DATE,
-                end_date=DEFAULT_DATE)
-        for dag in dags:
-            job = jobs.BackfillJob(
-                dag=dag,
-                start_date=DEFAULT_DATE,
-                end_date=DEFAULT_DATE)
-            job.run()
-
     def test_raw_job(self):
         TI = models.TaskInstance
         ti = TI(
@@ -290,9 +304,6 @@ class CliTests(unittest.TestCase):
 
     def test_cli_run(self):
         cli.run(self.parser.parse_args([
-            'run', 'example_bash_operator', 'runme_0',
-            DEFAULT_DATE.isoformat()]))
-        cli.run(self.parser.parse_args([
             'run', 'example_bash_operator', 'runme_0', '-l',
             DEFAULT_DATE.isoformat()]))
 
@@ -312,11 +323,6 @@ class CliTests(unittest.TestCase):
 
         cli.backfill(self.parser.parse_args([
             'backfill', 'example_bash_operator', '-l',
-            '-s', DEFAULT_DATE.isoformat()]))
-
-        cli.backfill(self.parser.parse_args([
-            'backfill', 'example_bash_operator',
-            '-t', '^run.*',
             '-s', DEFAULT_DATE.isoformat()]))
 
 
@@ -392,16 +398,20 @@ class WebUiTests(unittest.TestCase):
             'execution_date=2015-01-01T00:00:00&'
             'origin=/admin')
         assert "Wait a minute" in response.data.decode('utf-8')
-        response = self.app.get(
-            '/admin/airflow/action?action=clear&task_id=run_after_loop&'
-            'dag_id=example_bash_operator&future=false&past=false&'
-            'upstream=false&downstream=true&'
-            'execution_date=2015-01-01T00:00:00&')
         url = (
-            '/admin/airflow/action?action=success&task_id=runme_0&'
-            'dag_id=example_bash_operator&upstream=false&'
-            'downstream=false&execution_date=2017-01-12&'
-            'origin=/admin')
+            "/admin/airflow/action?action=success&task_id=run_this_last&"
+            "dag_id=example_bash_operator&upstream=false&downstream=false&"
+            "future=false&past=false&execution_date=2017-01-12T00:00:00&"
+            "origin=/admin")
+        response = self.app.get(url)
+        assert "Wait a minute" in response.data.decode('utf-8')
+        response = self.app.get(url + "&confirmed=true")
+        url = (
+            "/admin/airflow/action?action=clear&task_id=runme_1&"
+            "dag_id=example_bash_operator&future=false&past=false&"
+            "upstream=false&downstream=true&"
+            "execution_date=2017-01-12T00:00:00&"
+            "origin=/admin")
         response = self.app.get(url)
         assert "Wait a minute" in response.data.decode('utf-8')
         response = self.app.get(url + "&confirmed=true")
@@ -563,21 +573,6 @@ class HttpOpSensorTest(unittest.TestCase):
             timeout=15,
             dag=self.dag)
         sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
-
-    def test_sensor_timeout(self):
-        sensor = operators.HttpSensor(
-            task_id='http_sensor_check',
-            conn_id='http_default',
-            endpoint='/search',
-            params={"client": "ubuntu", "q": "airflow"},
-            headers={},
-            response_check=lambda response: ("dingdong" in response.text),
-            poke_interval=2,
-            timeout=5,
-            dag=self.dag)
-        with self.assertRaises(utils.AirflowSensorTimeout):
-            sensor.run(
-                start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
 
 class ConnectionTest(unittest.TestCase):
