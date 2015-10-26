@@ -319,7 +319,7 @@ private[clustering] object BisectingKMeans {
 
     // extract the centers of the clusters
     val sc = data.sparkContext
-    var centers = dividedClusters.map { case (idx, cluster) => (idx, cluster.mean)}
+    val centers = dividedClusters.map { case (idx, cluster) => (idx, cluster.mean)}
     val bcCenters = sc.broadcast(centers)
 
     // TODO Supports distance metrics other Euclidean distance metric
@@ -328,17 +328,19 @@ private[clustering] object BisectingKMeans {
 
     // update the indexes to their children indexes
     data.map { case (idx, point) =>
-      val childrenIndexes = Array(2 * idx, 2 * idx + 1).filter(c => bcCenters.value.contains(c))
-      childrenIndexes.length match {
+      // TODO improve how to extract child indexes
+      val childIndexes = Array(2 * idx, 2 * idx + 1)
+      val extractedChildIndexes = childIndexes.filter(c => bcCenters.value.contains(c))
+      extractedChildIndexes.length match {
         // update the indexes
         case s if s == 2 => {
-          val nextCenters = childrenIndexes.map(bcCenters.value(_))
+          val nextCenters = extractedChildIndexes.map(bcCenters.value(_))
           val closestIndex = BisectingKMeans
             .findClosestCenter(bcMetric.value)(nextCenters)(point)
           val nextIndex = 2 * idx + closestIndex
           (nextIndex, point)
         }
-        // stay the index if the number of children is not enough
+        // stay the index if a cluster which a point belongs wasn't divided
         case _ => (idx, point)
       }
     }
