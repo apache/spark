@@ -23,8 +23,6 @@ import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
-import org.apache.spark.ui.sql.SQLListener
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
@@ -91,15 +89,14 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
 class HiveContext private[hive](
     sc: SparkContext,
     cacheManager: CacheManager,
-    listener: SQLListener,
     @transient private val execHive: ClientWrapper,
     @transient private val metaHive: ClientInterface,
     isRootContext: Boolean)
-  extends SQLContext(sc, cacheManager, listener, isRootContext) with Logging {
+  extends SQLContext(sc, cacheManager, isRootContext) with Logging {
   self =>
 
   def this(sc: SparkContext) = {
-    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), null, null, true)
+    this(sc, new CacheManager, null, null, true)
   }
   def this(sc: JavaSparkContext) = this(sc.sc)
 
@@ -116,7 +113,6 @@ class HiveContext private[hive](
     new HiveContext(
       sc = sc,
       cacheManager = cacheManager,
-      listener = listener,
       execHive = executionHive.newSession(),
       metaHive = metadataHive.newSession(),
       isRootContext = false)

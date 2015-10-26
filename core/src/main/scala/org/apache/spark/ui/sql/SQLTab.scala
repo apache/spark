@@ -25,7 +25,7 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 import scala.collection.mutable
 
 private[spark] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, SQLTab.nextTabName(sparkUI)) with Logging {
+  extends SparkUITab(sparkUI, "SQL") with Logging {
 
   val parent = sparkUI
 
@@ -37,14 +37,5 @@ private[spark] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
 }
 
 private[sql] object SQLTab {
-
   private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
-
-  private val nextTabIds = new mutable.HashMap[SparkUI, AtomicInteger]
-
-  private def nextTabName(sparkUI: SparkUI): String = {
-    val nextTabId = nextTabIds.getOrElseUpdate(sparkUI, new AtomicInteger(0))
-    val nextId = nextTabId.getAndIncrement()
-    if (nextId == 0) "SQL" else s"SQL$nextId"
-  }
 }

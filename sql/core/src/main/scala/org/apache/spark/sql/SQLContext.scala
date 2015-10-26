@@ -68,15 +68,13 @@ import org.apache.spark.util.Utils
 class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
     @transient protected[sql] val cacheManager: CacheManager,
-    @transient private[sql] val listener: SQLListener,
     val isRootContext: Boolean)
   extends org.apache.spark.Logging with Serializable {
 
   self =>
 
-  def this(sparkContext: SparkContext) = {
-    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
-  }
+  def this(sparkContext: SparkContext) = this(sparkContext, new CacheManager, true)
+
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
@@ -101,6 +99,15 @@ class SQLContext private[sql](
     }
   }
 
+  @transient private[sql] val listener: SQLListener = if (sparkContext.sqlListener != null) {
+      sparkContext.sqlListener
+    } else {
+      val listener = new SQLListener(sparkContext.conf)
+      sparkContext.addSparkListener(listener)
+      sparkContext.ui.foreach(new SQLTab(listener, _))
+      listener
+    }
+
   /**
    * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
    * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
@@ -111,7 +118,6 @@ class SQLContext private[sql](
     new SQLContext(
       sparkContext = sparkContext,
       cacheManager = cacheManager,
-      listener = listener,
       isRootContext = false)
   }
 
@@ -1328,13 +1334,4 @@ object SQLContext {
     }
   }
 
-  /**
-   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
-   */
-  private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
-    val listener = new SQLListener(sc.conf)
-    sc.addSparkListener(listener)
-    sc.ui.foreach(new SQLTab(listener, _))
-    listener
-  }
 }
