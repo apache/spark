@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui.sql
 
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 
@@ -118,7 +117,8 @@ private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Log
   override def onExecutorMetricsUpdate(
       executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = synchronized {
     for ((taskId, stageId, stageAttemptID, metrics) <- executorMetricsUpdate.taskMetrics) {
-      updateTaskAccumulatorValues(taskId, stageId, stageAttemptID, metrics, finishTask = false)
+      updateTaskAccumulatorValues(taskId, stageId, stageAttemptID, metrics.accumulatorUpdates(),
+        finishTask = false)
     }
   }
 
@@ -140,7 +140,7 @@ private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Log
       taskEnd.taskInfo.taskId,
       taskEnd.stageId,
       taskEnd.stageAttemptId,
-      taskEnd.taskMetrics,
+      taskEnd.taskMetrics.accumulatorUpdates(),
       finishTask = true)
   }
 
@@ -148,15 +148,12 @@ private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Log
    * Update the accumulator values of a task with the latest metrics for this task. This is called
    * every time we receive an executor heartbeat or when a task finishes.
    */
-  private def updateTaskAccumulatorValues(
+  protected def updateTaskAccumulatorValues(
       taskId: Long,
       stageId: Int,
       stageAttemptID: Int,
-      metrics: TaskMetrics,
+      accumulatorUpdates: Map[Long, Any],
       finishTask: Boolean): Unit = {
-    if (metrics == null) {
-      return
-    }
 
     _stageIdToStageMetrics.get(stageId) match {
       case Some(stageMetrics) =>
@@ -174,9 +171,9 @@ private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Log
             case Some(taskMetrics) =>
               if (finishTask) {
                 taskMetrics.finished = true
-                taskMetrics.accumulatorUpdates = metrics.accumulatorUpdates()
+                taskMetrics.accumulatorUpdates = accumulatorUpdates
               } else if (!taskMetrics.finished) {
-                taskMetrics.accumulatorUpdates = metrics.accumulatorUpdates()
+                taskMetrics.accumulatorUpdates = accumulatorUpdates
               } else {
                 // If a task is finished, we should not override with accumulator updates from
                 // heartbeat reports
@@ -185,7 +182,7 @@ private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Log
               // TODO Now just set attemptId to 0. Should fix here when we can get the attempt
               // id from SparkListenerExecutorMetricsUpdate
               stageMetrics.taskIdToMetricUpdates(taskId) = new SQLTaskMetrics(
-                  attemptId = 0, finished = finishTask, metrics.accumulatorUpdates())
+                  attemptId = 0, finished = finishTask, accumulatorUpdates)
           }
         }
       case None =>
@@ -290,6 +287,23 @@ private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Log
     }
   }
 
+}
+
+private[spark] class SQLHistoryListener(conf: SparkConf) extends SQLListener(conf) {
+  override def onExecutorMetricsUpdate(
+      executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = synchronized {
+    // Do nothing
+  }
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
+    updateTaskAccumulatorValues(
+      taskEnd.taskInfo.taskId,
+      taskEnd.stageId,
+      taskEnd.stageAttemptId,
+      taskEnd.taskInfo.accumulables.map { acc =>
+        (acc.id, new LongSQLMetricValue(acc.update.getOrElse("0").toLong))
+      }.toMap,
+      finishTask = true)
+  }
 }
 
 /**
