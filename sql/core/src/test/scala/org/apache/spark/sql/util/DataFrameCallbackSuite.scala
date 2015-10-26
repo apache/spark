@@ -54,6 +54,8 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(1)._1 == "count")
     assert(metrics(1)._2.analyzed.isInstanceOf[Aggregate])
     assert(metrics(1)._3 > 0)
+
+    sqlContext.listenerManager.unregister(listener)
   }
 
   test("execute callback functions when a DataFrame action failed") {
@@ -79,6 +81,8 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0)._1 == "collect")
     assert(metrics(0)._2.analyzed.isInstanceOf[Project])
     assert(metrics(0)._3.getMessage == e.getMessage)
+
+    sqlContext.listenerManager.unregister(listener)
   }
 
   test("get numRows metrics by callback") {
@@ -102,6 +106,8 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0) == 1)
     assert(metrics(1) == 1)
     assert(metrics(2) == 2)
+
+    sqlContext.listenerManager.unregister(listener)
   }
 
   // TODO: Currently some LongSQLMetric use -1 as initial value, so if the accumulator is never
@@ -146,5 +152,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics.length == 2)
     assert(metrics(0) == topAggDataSize)
     assert(metrics(1) == bottomAggDataSize)
+
+    sqlContext.listenerManager.unregister(listener)
   }
 }
