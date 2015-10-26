@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -160,6 +160,9 @@ object PartialAggregation {
 
 /**
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
+ *
+ * Null-safe equality will be transformed into equality as joining key (replace null with default
+ * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
@@ -171,17 +174,25 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
-      val (joinPredicates, otherPredicates) =
-        condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
-          case EqualTo(l, r) =>
-            (canEvaluate(l, left) && canEvaluate(r, right)) ||
-            (canEvaluate(l, right) && canEvaluate(r, left))
-          case _ => false
-        }
-
-      val joinKeys = joinPredicates.map {
-        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
-        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
+      val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
+      val joinKeys = predicates.flatMap {
+        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
+        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
+        // Replace null with default value for joining key, then those rows with null in it could
+        // be joined together
+        case EqualNullSafe(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
+          Some((Coalesce(Seq(l, Literal.default(l.dataType))),
+            Coalesce(Seq(r, Literal.default(r.dataType)))))
+        case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
+          Some((Coalesce(Seq(r, Literal.default(r.dataType))),
+            Coalesce(Seq(l, Literal.default(l.dataType)))))
+        case other => None
+      }
+      val otherPredicates = predicates.filterNot {
+        case EqualTo(l, r) =>
+          canEvaluate(l, left) && canEvaluate(r, right) ||
+            canEvaluate(l, right) && canEvaluate(r, left)
+        case other => false
       }
 
       if (joinKeys.nonEmpty) {

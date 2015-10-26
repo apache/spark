@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -218,7 +219,10 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     andExpression * (OR ^^^ { (e1: Expression, e2: Expression) => Or(e1, e2) })
 
   protected lazy val andExpression: Parser[Expression] =
-    comparisonExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
+    notExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
+
+  protected lazy val notExpression: Parser[Expression] =
+    NOT.? ~ comparisonExpression ^^ { case maybeNot ~ e => maybeNot.map(_ => Not(e)).getOrElse(e) }
 
   protected lazy val comparisonExpression: Parser[Expression] =
     ( termExpression ~ ("="  ~> termExpression) ^^ { case e1 ~ e2 => EqualTo(e1, e2) }
@@ -246,7 +250,6 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       }
     | termExpression <~ IS ~ NULL ^^ { case e => IsNull(e) }
     | termExpression <~ IS ~ NOT ~ NULL ^^ { case e => IsNotNull(e) }
-    | NOT ~> termExpression ^^ {e => Not(e)}
     | termExpression
     )
 
