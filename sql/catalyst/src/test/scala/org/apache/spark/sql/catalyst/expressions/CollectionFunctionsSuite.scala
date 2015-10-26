@@ -69,17 +69,8 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
     val arrayStruct = Literal.create(Seq(create_row(2), create_row(1)), typeAS)
-    val sorted = new SortArray(arrayStruct)
 
-    def getArrayStructFields(expr: Expression, fieldName: String): GetArrayStructFields = {
-      expr.dataType match {
-        case ArrayType(StructType(fields), containsNull) =>
-          val field = fields.find(_.name == fieldName).get
-          GetArrayStructFields(expr, field, fields.indexOf(field), fields.length, containsNull)
-      }
-    }
-
-    checkEvaluation(getArrayStructFields(sorted, "a"), Seq(1, 2))
+    checkEvaluation(new SortArray(arrayStruct), Seq(create_row(1), create_row(2)))
   }
 
   test("Array contains") {
