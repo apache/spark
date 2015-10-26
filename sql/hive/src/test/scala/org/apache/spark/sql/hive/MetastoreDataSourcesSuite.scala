@@ -744,32 +744,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  test("Saving partition columns information") {
-    val df = (1 to 10).map(i => (i, i + 1, s"str$i", s"str${i + 1}")).toDF("a", "b", "c", "d")
-    val tableName = s"partitionInfo_${System.currentTimeMillis()}"
-
-    withTable(tableName) {
-      df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
-      invalidateTable(tableName)
-      val metastoreTable = catalog.client.getTable("default", tableName)
-      val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
-      val actualPartitionColumns =
-        StructType(
-          metastoreTable.partitionColumns.map(c =>
-            StructField(c.name, HiveMetastoreTypes.toDataType(c.hiveType))))
-      // Make sure partition columns are correctly stored in metastore.
-      assert(
-        expectedPartitionColumns.sameType(actualPartitionColumns),
-        s"Partitions columns stored in metastore $actualPartitionColumns is not the " +
-          s"partition columns defined by the saveAsTable operation $expectedPartitionColumns.")
-
-      // Check the content of the saved table.
-      checkAnswer(
-        table(tableName).select("c", "b", "d", "a"),
-        df.select("c", "b", "d", "a"))
-    }
-  }
-
   test("insert into a table") {
     def createDF(from: Int, to: Int): DataFrame = {
       (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
