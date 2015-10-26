@@ -59,14 +59,12 @@ import org.apache.spark.rdd.RDD
  * candidates and merge it to the cluster tree until the desired number of clusters is reached.
  *
  * @param k tne desired number of clusters
- * @param clusterMap the pairs of cluster and its index as Map
  * @param maxIterations the number of maximal iterations to split clusters
  * @param seed a random seed
  */
 @Since("1.6.0")
 class BisectingKMeans private (
     private var k: Int,
-    private var clusterMap: Map[BigInt, BisectingClusterNode],
     private var maxIterations: Int,
     private var seed: Long) extends Logging {
 
@@ -74,7 +72,7 @@ class BisectingKMeans private (
    * Constructs with the default configuration
    */
   @Since("1.6.0")
-  def this() = this(20, mutable.ListMap.empty[BigInt, BisectingClusterNode], 20, 1)
+  def this() = this(20, 20, 1)
 
   /**
    * Sets the number of clusters you want
