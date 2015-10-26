@@ -238,6 +238,13 @@ private[spark] object SQLConf {
     doc = "When true, use the optimized Tungsten physical execution backend which explicitly " +
           "manages memory and dynamically generates bytecode for expression evaluation.")
 
+  val PRE_AGGREGATION_ENABLED = booleanConf("spark.sql.preAggregation.enabled",
+    defaultValue = Some(true),
+    doc = "When true, use pre-aggregation in TungstenAggregationIterator to continue to " +
+          "perform hash-based pre-aggregation after we've decided to spill and switch to " +
+          "sort-based aggregation. If a very low reduction factor is expected for the data " +
+          "this feature shoule be disabled to obtain better performance.")
+
   val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
     defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
     doc = "When true, code will be dynamically generated at runtime for expression evaluation in" +

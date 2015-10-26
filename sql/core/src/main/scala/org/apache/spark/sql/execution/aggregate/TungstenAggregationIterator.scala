@@ -86,6 +86,7 @@ class TungstenAggregationIterator(
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     originalInputAttributes: Seq[Attribute],
     testFallbackStartsAt: Option[Int],
+    preAggregation: Boolean,
     numInputRows: LongSQLMetric,
     numOutputRows: LongSQLMetric,
     dataSize: LongSQLMetric,
@@ -488,7 +489,7 @@ class TungstenAggregationIterator(
   // This is the hash map used for hash-based aggregation. It is backed by an
   // UnsafeFixedWidthAggregationMap and it is used to store
   // all groups and their corresponding aggregation buffers for hash-based aggregation.
-  private[this] val hashMap = initHashMap()
+  private[this] var hashMap = initHashMap()
 
   // Exposed for testing
   private[aggregate] def getHashMap: UnsafeFixedWidthAggregationMap = hashMap
@@ -618,26 +619,35 @@ class TungstenAggregationIterator(
 
       // Process the rest of input rows.
       while (inputIter.hasNext) {
-        var newHashMap = initHashMap()
-        val ret = internalProcessInputs(newHashMap)
-        if (ret.isDefined) {
-          // If we can't allocate more memory, we insert all records from the hashmap
-          // into externalSorter.
-          val iter = newHashMap.iterator()
-          while(iter.next()) {
-            externalSorter.insertKV(iter.getKey(), iter.getValue())
-          }
-          newHashMap.free()
+        if (preAggregation) {
+          hashMap = initHashMap()
+          val ret = internalProcessInputs(hashMap)
+          if (ret.isDefined) {
+            // If we can't allocate more memory, we insert all records from the hashmap
+            // into externalSorter.
+            val iter = hashMap.iterator()
+            while(iter.next()) {
+              externalSorter.insertKV(iter.getKey(), iter.getValue())
+            }
+            hashMap.free()
 
-          buffer.copyFrom(initialAggregationBuffer)
-          processRow(buffer, ret.get._2)
-          externalSorter.insertKV(ret.get._1, buffer)
-        } else {
-          val iter = newHashMap.iterator()
-          while(iter.next()) {
-            externalSorter.insertKV(iter.getKey(), iter.getValue())
+            buffer.copyFrom(initialAggregationBuffer)
+            processRow(buffer, ret.get._2)
+            externalSorter.insertKV(ret.get._1, buffer)
+          } else {
+            val iter = hashMap.iterator()
+            while(iter.next()) {
+              externalSorter.insertKV(iter.getKey(), iter.getValue())
+            }
+            hashMap.free()
           }
-          newHashMap.free()
+        } else {
+          val newInput = inputIter.next()
+          numInputRows += 1
+          val groupingKey = groupProjection.apply(newInput)
+          buffer.copyFrom(initialAggregationBuffer)
+          processRow(buffer, newInput)
+          externalSorter.insertKV(groupingKey, buffer)
         }
       }
     } else {

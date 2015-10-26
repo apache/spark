@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.types.StructType
 
 case class TungstenAggregate(
@@ -78,6 +79,8 @@ case class TungstenAggregate(
     }
   }
 
+  private val preAggregation: Boolean = sqlContext.getConf(SQLConf.PRE_AGGREGATION_ENABLED)
+
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
@@ -100,6 +103,7 @@ case class TungstenAggregate(
         newMutableProjection,
         child.output,
         testFallbackStartsAt,
+        preAggregation,
         numInputRows,
         numOutputRows,
         dataSize,
