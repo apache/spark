@@ -127,8 +127,8 @@ class BisectingKMeans private (
     var step = 1
     var noMoreDividable = false
     var updatedDataHistory = Array.empty[RDD[(BigInt, BV[Double])]]
-    // the number of maximum nodes of a binary tree by given parameter
-    val multiplier = math.ceil(math.log10(this.k) / math.log10(2.0)) + 1
+    // the minimum number of nodes of a binary tree by given parameter
+    val multiplier = math.ceil(math.log(this.k) / math.log(2.0)) + 1
     val maxAllNodesInTree = math.pow(2, multiplier).toInt
 
     // divide clusters until the number of clusters reachs the condition
