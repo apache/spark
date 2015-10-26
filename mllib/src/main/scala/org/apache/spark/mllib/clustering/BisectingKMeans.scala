@@ -310,6 +310,11 @@ private[clustering] object BisectingKMeans {
       data: RDD[(BigInt, BV[Double])],
       dividedClusters: Map[BigInt, BisectingClusterStat]): RDD[(BigInt, BV[Double])] = {
 
+    // If there is no divided clusters, return the original
+    if (dividedClusters.size == 0) {
+      return data
+    }
+
     // extract the centers of the clusters
     val sc = data.sparkContext
     var centers = dividedClusters.map { case (idx, cluster) => (idx, cluster.center)}
@@ -323,16 +328,16 @@ private[clustering] object BisectingKMeans {
     data.map { case (idx, point) =>
       val childrenIndexes = Array(2 * idx, 2 * idx + 1).filter(c => bcCenters.value.contains(c))
       childrenIndexes.length match {
-        // stay the index if the number of children is not enough
-        case s if s < 2 => (idx, point)
         // update the indexes
-        case _ => {
+        case s if s == 2 => {
           val nextCenters = childrenIndexes.map(bcCenters.value(_))
           val closestIndex = BisectingKMeans
             .findClosestCenter(bcMetric.value)(nextCenters)(point)
           val nextIndex = 2 * idx + closestIndex
           (nextIndex, point)
         }
+        // stay the index if the number of children is not enough
+        case _ => (idx, point)
       }
     }
   }
