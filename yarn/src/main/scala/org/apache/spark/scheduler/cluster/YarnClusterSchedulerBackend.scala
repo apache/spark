@@ -30,20 +30,12 @@ private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
   extends YarnSchedulerBackend(scheduler, sc) {
-  private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
 
   override def start() {
+    val attemptId = ApplicationMaster.getAttemptId
+    bindToYARN(attemptId.getApplicationId(), Some(attemptId))
     super.start()
     totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sc.conf)
-    val attemptId = ApplicationMaster.getAttemptId
-    val binding = SchedulerExtensionServiceBinding(sc, attemptId.getApplicationId(),
-      Some(attemptId))
-    services.start(binding)
-  }
-
-  override def stop(): Unit = {
-    super.stop()
-    services.stop()
   }
 
   override def applicationId(): String =

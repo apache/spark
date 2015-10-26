@@ -17,17 +17,17 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Future, ExecutionContext}
-
-import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.rpc._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.scheduler._
-import org.apache.spark.ui.JettyUtils
-import org.apache.spark.util.{ThreadUtils, RpcUtils}
-
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
+
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
+
+import org.apache.spark.rpc._
+import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.ui.JettyUtils
+import org.apache.spark.util.{RpcUtils, ThreadUtils}
+import org.apache.spark.{Logging, SparkContext}
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -50,6 +50,38 @@ private[spark] abstract class YarnSchedulerBackend(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
+
+  /** Application ID. Must be set by a subclass before starting the service */
+  private var appId: ApplicationId = null
+
+  /** Attempt ID. This is unset for client-side schedulers */
+  private var attemptId: Option[ApplicationAttemptId] = None
+
+  /** Scheduler extension services */
+  private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
+
+  /**
+    * Bind to YARN. This *must* be done before calling [[start()]].
+    *
+    * @param appId YARN application ID
+    * @param attemptId Optional YARN attempt ID
+    */
+  protected def bindToYARN(appId: ApplicationId, attemptId: Option[ApplicationAttemptId]): Unit = {
+    this.appId = appId
+    this.attemptId = attemptId
+  }
+
+  override def start() {
+    require(appId != null, "application ID unset")
+    val binding = SchedulerExtensionServiceBinding(sc, appId, attemptId)
+    services.start(binding)
+    super.start()
+  }
+
+  override def stop(): Unit = {
+    super.stop()
+    services.stop()
+  }
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
