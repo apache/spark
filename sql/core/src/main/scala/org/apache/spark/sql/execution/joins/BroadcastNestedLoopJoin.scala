@@ -68,7 +68,7 @@ case class BroadcastNestedLoopJoin(
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case Inner => left.output ++ right.output
-      case x =>
+      case x => // TODO support the Left Semi Join
         throw new IllegalArgumentException(
           s"BroadcastNestedLoopJoin should not take $x as the JoinType")
     }
