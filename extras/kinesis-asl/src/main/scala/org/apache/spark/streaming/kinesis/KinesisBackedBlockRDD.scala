@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kinesis
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
@@ -67,7 +68,7 @@ class KinesisBackedBlockRDDPartition(
  * sequence numbers of the corresponding blocks.
  */
 private[kinesis]
-class KinesisBackedBlockRDD(
+class KinesisBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
     val regionName: String,
     val endpointUrl: String,
@@ -75,8 +76,9 @@ class KinesisBackedBlockRDD(
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
+    val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
     val awsCredentialsOption: Option[SerializableAWSCredentials] = None
-  ) extends BlockRDD[Array[Byte]](sc, blockIds) {
+  ) extends BlockRDD[T](sc, blockIds) {
 
   require(blockIds.length == arrayOfseqNumberRanges.length,
     "Number of blockIds is not equal to the number of sequence number ranges")
@@ -90,23 +92,23 @@ class KinesisBackedBlockRDD(
     }
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val blockManager = SparkEnv.get.blockManager
     val partition = split.asInstanceOf[KinesisBackedBlockRDDPartition]
     val blockId = partition.blockId
 
-    def getBlockFromBlockManager(): Option[Iterator[Array[Byte]]] = {
+    def getBlockFromBlockManager(): Option[Iterator[T]] = {
       logDebug(s"Read partition data of $this from block manager, block $blockId")
-      blockManager.get(blockId).map(_.data.asInstanceOf[Iterator[Array[Byte]]])
+      blockManager.get(blockId).map(_.data.asInstanceOf[Iterator[T]])
     }
 
-    def getBlockFromKinesis(): Iterator[Array[Byte]] = {
-      val credenentials = awsCredentialsOption.getOrElse {
+    def getBlockFromKinesis(): Iterator[T] = {
+      val credentials = awsCredentialsOption.getOrElse {
         new DefaultAWSCredentialsProviderChain().getCredentials()
       }
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
-        new KinesisSequenceRangeIterator(
-          credenentials, endpointUrl, regionName, range, retryTimeoutMs)
+        new KinesisSequenceRangeIterator(credentials, endpointUrl, regionName,
+          range, retryTimeoutMs).map(messageHandler)
       }
     }
     if (partition.isBlockIdValid) {
@@ -129,8 +131,7 @@ class KinesisSequenceRangeIterator(
     endpointUrl: String,
     regionId: String,
     range: SequenceNumberRange,
-    retryTimeoutMs: Int
-  ) extends NextIterator[Array[Byte]] with Logging {
+    retryTimeoutMs: Int) extends NextIterator[Record] with Logging {
 
   private val client = new AmazonKinesisClient(credentials)
   private val streamName = range.streamName
@@ -142,8 +143,8 @@ class KinesisSequenceRangeIterator(
 
   client.setEndpoint(endpointUrl, "kinesis", regionId)
 
-  override protected def getNext(): Array[Byte] = {
-    var nextBytes: Array[Byte] = null
+  override protected def getNext(): Record = {
+    var nextRecord: Record = null
     if (toSeqNumberReceived) {
       finished = true
     } else {
@@ -170,10 +171,7 @@ class KinesisSequenceRangeIterator(
       } else {
 
         // Get the record, copy the data into a byte array and remember its sequence number
-        val nextRecord: Record = internalIterator.next()
-        val byteBuffer = nextRecord.getData()
-        nextBytes = new Array[Byte](byteBuffer.remaining())
-        byteBuffer.get(nextBytes)
+        nextRecord = internalIterator.next()
         lastSeqNumber = nextRecord.getSequenceNumber()
 
         // If the this record's sequence number matches the stopping sequence number, then make sure
@@ -182,9 +180,8 @@ class KinesisSequenceRangeIterator(
           toSeqNumberReceived = true
         }
       }
-
     }
-    nextBytes
+    nextRecord
   }
 
   override protected def close(): Unit = {
