@@ -24,6 +24,7 @@ import scala.util.Random
 
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import com.amazonaws.services.kinesis.model.Record
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
@@ -31,6 +32,7 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
@@ -113,9 +115,9 @@ class KinesisStreamSuite extends KinesisFunSuite
     val inputStream = KinesisUtils.createStream(ssc, appName, "dummyStream",
       dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, Seconds(2),
       StorageLevel.MEMORY_AND_DISK_2, dummyAWSAccessKey, dummyAWSSecretKey)
-    assert(inputStream.isInstanceOf[KinesisInputDStream])
+    assert(inputStream.isInstanceOf[KinesisInputDStream[Array[Byte]]])
 
-    val kinesisStream = inputStream.asInstanceOf[KinesisInputDStream]
+    val kinesisStream = inputStream.asInstanceOf[KinesisInputDStream[Array[Byte]]]
     val time = Time(1000)
 
     // Generate block info data for testing
@@ -134,8 +136,8 @@ class KinesisStreamSuite extends KinesisFunSuite
     // Verify that the generated KinesisBackedBlockRDD has the all the right information
     val blockInfos = Seq(blockInfo1, blockInfo2)
     val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
-    nonEmptyRDD shouldBe a [KinesisBackedBlockRDD]
-    val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD]
+    nonEmptyRDD shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
+    val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
     assert(kinesisRDD.regionName === dummyRegionName)
     assert(kinesisRDD.endpointUrl === dummyEndpointUrl)
     assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
@@ -151,7 +153,7 @@ class KinesisStreamSuite extends KinesisFunSuite
 
     // Verify that KinesisBackedBlockRDD is generated even when there are no blocks
     val emptyRDD = kinesisStream.createBlockRDD(time, Seq.empty)
-    emptyRDD shouldBe a [KinesisBackedBlockRDD]
+    emptyRDD shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
     emptyRDD.partitions shouldBe empty
 
     // Verify that the KinesisBackedBlockRDD has isBlockValid = false when blocks are invalid
@@ -192,6 +194,32 @@ class KinesisStreamSuite extends KinesisFunSuite
     ssc.stop(stopSparkContext = false)
   }
 
+  testIfEnabled("custom message handling") {
+    val awsCredentials = KinesisTestUtils.getAWSCredentials()
+    def addFive(r: Record): Int = new String(r.getData.array()).toInt + 5
+    val stream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
+      testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
+      Seconds(10), StorageLevel.MEMORY_ONLY, addFive,
+      awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
+
+    stream shouldBe a [ReceiverInputDStream[Int]]
+
+    val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
+    stream.foreachRDD { rdd =>
+      collected ++= rdd.collect()
+      logInfo("Collected = " + rdd.collect().toSeq.mkString(", "))
+    }
+    ssc.start()
+
+    val testData = 1 to 10
+    eventually(timeout(120 seconds), interval(10 second)) {
+      testUtils.pushData(testData)
+      val modData = testData.map(_ + 5)
+      assert(collected === modData.toSet, "\nData received does not match data sent")
+    }
+    ssc.stop(stopSparkContext = false)
+  }
+
   testIfEnabled("failure recovery") {
     val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
     val checkpointDir = Utils.createTempDir().getAbsolutePath
@@ -210,7 +238,7 @@ class KinesisStreamSuite extends KinesisFunSuite
 
     // Verify that the generated RDDs are KinesisBackedBlockRDDs, and collect the data in each batch
     kinesisStream.foreachRDD((rdd: RDD[Array[Byte]], time: Time) => {
-      val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD]
+      val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
       val data = rdd.map { bytes => new String(bytes).toInt }.collect().toSeq
       collectedData(time) = (kRdd.arrayOfseqNumberRanges, data)
     })
@@ -243,10 +271,10 @@ class KinesisStreamSuite extends KinesisFunSuite
     times.foreach { time =>
       val (arrayOfSeqNumRanges, data) = collectedData(time)
       val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
-      rdd shouldBe a [KinesisBackedBlockRDD]
+      rdd shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
 
       // Verify the recovered sequence ranges
-      val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD]
+      val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
       assert(kRdd.arrayOfseqNumberRanges.size === arrayOfSeqNumRanges.size)
       arrayOfSeqNumRanges.zip(kRdd.arrayOfseqNumberRanges).foreach { case (expected, found) =>
         assert(expected.ranges.toSeq === found.ranges.toSeq)

@@ -759,9 +759,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val sched = new FakeTaskScheduler(sc,
         ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
     val taskSet = FakeTask.createTaskSet(3,
-      Seq(HostTaskLocation("host1")),
-      Seq(HostTaskLocation("host2")),
-      Seq(HDFSCacheTaskLocation("host3")))
+      Seq(TaskLocation("host1")),
+      Seq(TaskLocation("host2")),
+      Seq(TaskLocation("hdfs_cache_host3")))
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
@@ -774,6 +774,11 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched.removeExecutor("execC")
     manager.executorAdded()
     assert(manager.myLocalityLevels.sameElements(Array(ANY)))
+  }
+
+  test("Test TaskLocation for different host type.") {
+    assert(TaskLocation("host1") === HostTaskLocation("host1"))
+    assert(TaskLocation("hdfs_cache_host1") === HDFSCacheTaskLocation("host1"))
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {

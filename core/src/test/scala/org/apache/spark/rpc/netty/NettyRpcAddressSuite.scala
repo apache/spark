@@ -22,7 +22,7 @@ import org.apache.spark.SparkFunSuite
 class NettyRpcAddressSuite extends SparkFunSuite {
 
   test("toString") {
-    val addr = NettyRpcAddress("localhost", 12345, "test")
+    val addr = RpcEndpointAddress("localhost", 12345, "test")
     assert(addr.toString === "spark://test@localhost:12345")
   }
 

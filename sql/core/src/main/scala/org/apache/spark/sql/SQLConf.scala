@@ -186,6 +186,16 @@ private[spark] object SQLConf {
 
   import SQLConfEntry._
 
+  val ALLOW_MULTIPLE_CONTEXTS = booleanConf("spark.sql.allowMultipleContexts",
+    defaultValue = Some(true),
+    doc = "When set to true, creating multiple SQLContexts/HiveContexts is allowed." +
+      "When set to false, only one SQLContext/HiveContext is allowed to be created " +
+      "through the constructor (new SQLContexts/HiveContexts created through newSession " +
+      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once" +
+      "a SQLContext/HiveContext has been created, changing the value of this conf will not" +
+      "have effect.",
+    isPublic = true)
+
   val COMPRESS_CACHED = booleanConf("spark.sql.inMemoryColumnarStorage.compressed",
     defaultValue = Some(true),
     doc = "When set to true Spark SQL will automatically select a compression codec for each " +
@@ -318,7 +328,7 @@ private[spark] object SQLConf {
     doc = "When true, some predicates will be pushed down into the Hive metastore so that " +
           "unmatching partitions can be eliminated earlier.")
 
-  val CANONICALIZE_VIEW = booleanConf("spark.sql.canonicalizeView",
+  val NATIVE_VIEW = booleanConf("spark.sql.nativeView",
     defaultValue = Some(false),
     doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
           "Note that this function is experimental and should ony be used when you are using " +
@@ -422,6 +432,12 @@ private[spark] object SQLConf {
   val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
     defaultValue = Some(true), doc = "<TODO>")
 
+  val RUN_SQL_ON_FILES = booleanConf("spark.sql.runSQLOnFiles",
+    defaultValue = Some(true),
+    isPublic = false,
+    doc = "When true, we could use `datasource`.`path` as table in SQL query"
+  )
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -479,7 +495,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  private[spark] def canonicalizeView: Boolean = getConf(CANONICALIZE_VIEW)
+  private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 
@@ -529,6 +545,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+
+  private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   /** ********************** SQLConf functionality methods ************ */
 

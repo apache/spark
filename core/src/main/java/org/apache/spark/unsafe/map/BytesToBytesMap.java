@@ -26,7 +26,6 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
@@ -34,7 +33,7 @@ import org.apache.spark.unsafe.bitset.BitSet;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryLocation;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 
 /**
  * An append-only hash map where keys and values are contiguous regions of bytes.
@@ -69,8 +68,6 @@ public final class BytesToBytesMap {
   private static final int END_OF_PAGE_MARKER = -1;
 
   private final TaskMemoryManager taskMemoryManager;
-
-  private final ShuffleMemoryManager shuffleMemoryManager;
 
   /**
    * A linked list for tracking all allocated data pages so that we can free all of our memory.
@@ -169,13 +166,11 @@ public final class BytesToBytesMap {
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     this.taskMemoryManager = taskMemoryManager;
-    this.shuffleMemoryManager = shuffleMemoryManager;
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
@@ -201,21 +196,18 @@ public final class BytesToBytesMap {
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes) {
-    this(taskMemoryManager, shuffleMemoryManager, initialCapacity, 0.70, pageSizeBytes, false);
+    this(taskMemoryManager, initialCapacity, 0.70, pageSizeBytes, false);
   }
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     this(
       taskMemoryManager,
-      shuffleMemoryManager,
       initialCapacity,
       0.70,
       pageSizeBytes,
@@ -260,7 +252,6 @@ public final class BytesToBytesMap {
       if (destructive && currentPage != null) {
         dataPagesIterator.remove();
         this.bmap.taskMemoryManager.freePage(currentPage);
-        this.bmap.shuffleMemoryManager.release(currentPage.size());
       }
       currentPage = dataPagesIterator.next();
       pageBaseObject = currentPage.getBaseObject();
@@ -572,14 +563,12 @@ public final class BytesToBytesMap {
       if (useOverflowPage) {
         // The record is larger than the page size, so allocate a special overflow page just to hold
         // that record.
-        final long memoryRequested = requiredSize + 8;
-        final long memoryGranted = shuffleMemoryManager.tryToAcquire(memoryRequested);
-        if (memoryGranted != memoryRequested) {
-          shuffleMemoryManager.release(memoryGranted);
-          logger.debug("Failed to acquire {} bytes of memory", memoryRequested);
+        final long overflowPageSize = requiredSize + 8;
+        MemoryBlock overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
+        if (overflowPage == null) {
+          logger.debug("Failed to acquire {} bytes of memory", overflowPageSize);
           return false;
         }
-        MemoryBlock overflowPage = taskMemoryManager.allocatePage(memoryRequested);
         dataPages.add(overflowPage);
         dataPage = overflowPage;
         dataPageBaseObject = overflowPage.getBaseObject();
@@ -655,17 +644,15 @@ public final class BytesToBytesMap {
   }
 
   /**
-   * Acquire a new page from the {@link ShuffleMemoryManager}.
+   * Acquire a new page from the memory manager.
    * @return whether there is enough space to allocate the new page.
    */
   private boolean acquireNewPage() {
-    final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-    if (memoryGranted != pageSizeBytes) {
-      shuffleMemoryManager.release(memoryGranted);
+    MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
+    if (newPage == null) {
       logger.debug("Failed to acquire {} bytes of memory", pageSizeBytes);
       return false;
     }
-    MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
     dataPages.add(newPage);
     pageCursor = 0;
     currentDataPage = newPage;
@@ -705,17 +692,12 @@ public final class BytesToBytesMap {
       MemoryBlock dataPage = dataPagesIterator.next();
       dataPagesIterator.remove();
       taskMemoryManager.freePage(dataPage);
-      shuffleMemoryManager.release(dataPage.size());
     }
     assert(dataPages.isEmpty());
   }
 
   public TaskMemoryManager getTaskMemoryManager() {
     return taskMemoryManager;
-  }
-
-  public ShuffleMemoryManager getShuffleMemoryManager() {
-    return shuffleMemoryManager;
   }
 
   public long getPageSizeBytes() {
