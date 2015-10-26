@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
@@ -207,7 +207,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       localityMatchedPendingAllocations: Seq[ContainerRequest]): Map[String, Double] = {
     val pendingHostToContainerCount = new HashMap[String, Int]()
     localityMatchedPendingAllocations.foreach { cr =>
-      cr.getNodes.foreach { n =>
+      cr.getNodes.asScala.foreach { n =>
         val count = pendingHostToContainerCount.getOrElse(n, 0) + 1
         pendingHostToContainerCount(n) = count
       }
