@@ -128,14 +128,13 @@ class BisectingKMeans private (
     var noMoreDividable = false
     var updatedDataHistory = Array.empty[RDD[(BigInt, BV[Double])]]
     // the minimum number of nodes of a binary tree by given parameter
-    val multiplier = math.ceil(math.log(this.k) / math.log(2.0)) + 1
-    val maxAllNodesInTree = math.pow(2, multiplier).toInt
+    val numNodeLimit = getMinimumNumNodesInTree(this.k)
 
     // divide clusters until the number of clusters reachs the condition
     // or there is no dividable cluster
     val startTime = System.currentTimeMillis()
     var data = initData(input).cache()
-    while (clusterStats.size < maxAllNodesInTree && noMoreDividable == false) {
+    while (clusterStats.size < numNodeLimit && noMoreDividable == false) {
       logInfo(s"${sc.appName} starts step ${step}")
       val leafClusters = summarizeClusters(data)
       val dividableLeafClusters = leafClusters.filter(_._2.isDividable)
@@ -206,6 +205,19 @@ private[clustering] object BisectingKMeans {
     val (closestCenter, closestIndex) =
       centers.zipWithIndex.map { case (center, idx) => (metric(center, point), idx)}.minBy(_._1)
     closestIndex
+  }
+
+  /**
+   * Gets the minimum number of nodes in a tree by the number of leaves
+   *
+   * @param k: the number of leaf nodes
+   */
+  def getMinimumNumNodesInTree(k: Int): Int = {
+    val multiplier = math.ceil(math.log(k) / math.log(2.0))
+    // the calculation is same as `math.pow(2, multiplier)`
+    var numNodes = 2
+    (1 to multiplier.toInt).foreach (i => numNodes = numNodes << 1)
+    numNodes
   }
 
   /**

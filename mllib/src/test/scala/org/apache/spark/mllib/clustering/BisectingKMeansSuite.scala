@@ -159,6 +159,16 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("should be equal to math.pow") {
+    (1 to 1000).foreach { k =>
+      // the minimum number of nodes of a binary tree by given parameter
+      val multiplier = math.ceil(math.log(k) / math.log(2.0)) + 1
+      val expected = math.pow(2, multiplier).toInt
+      val result = BisectingKMeans.getMinimumNumNodesInTree(k)
+      assert(result === expected)
+    }
+  }
+
   test("should divide clusters correctly") {
     val local = Seq(
       (BigInt(2), BV[Double](0.9, 0.9)), (BigInt(2), BV[Double](1.1, 1.1)),
