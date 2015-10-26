@@ -29,6 +29,8 @@ import scala.Option;
 import scala.Product2;
 import scala.Tuple2;
 import scala.collection.Iterator;
+import scala.collection.JavaConverters;
+import scala.collection.Seq;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
@@ -49,8 +51,6 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
-import scala.collection.JavaConverters;
-import scala.collection.Seq;
 
 /**
  * This class implements sort-based shuffle's hash-style shuffle fallback path. This write path

@@ -20,7 +20,7 @@ import java.io.{FileOutputStream, FileInputStream, File}
 
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.serializer.{SerializerInstance, Serializer}
+import org.apache.spark.serializer.SerializerInstance
 
 /**
  * Ensures that on each executor, there are no conflicting writes to the same shuffle files.  It

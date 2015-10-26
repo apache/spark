@@ -17,17 +17,17 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{Executors, ExecutorService, Callable, CyclicBarrier}
+import java.util.concurrent.{Callable, CyclicBarrier, ExecutorService, Executors}
 
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.shuffle.{ShuffleWriter, ShuffleOutputCoordinator}
-import org.apache.spark.storage.{ShuffleMapStatusBlockId, ShuffleDataBlockId, ShuffleBlockId}
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.shuffle.{ShuffleOutputCoordinator, ShuffleWriter}
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleMapStatusBlockId}
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {

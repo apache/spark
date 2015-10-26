@@ -48,16 +48,16 @@ import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZ4CompressionCodec;
 import org.apache.spark.io.LZFCompressionCodec;
 import org.apache.spark.io.SnappyCompressionCodec;
-import org.apache.spark.shuffle.ShuffleOutputCoordinator;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
+import org.apache.spark.memory.GrantEverythingMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.serializer.*;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.shuffle.ShuffleOutputCoordinator;
 import org.apache.spark.storage.*;
-import org.apache.spark.memory.GrantEverythingMemoryManager;
-import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
 
 public class UnsafeShuffleWriterSuite {
