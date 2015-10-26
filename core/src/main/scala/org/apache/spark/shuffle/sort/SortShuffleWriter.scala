@@ -54,13 +54,13 @@ private[spark] class SortShuffleWriter[K, V, C](
     sorter = if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
-        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+        context, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
       new ExternalSorter[K, V, V](
-        aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
+        context, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
     }
     sorter.insertAll(records)
 
@@ -69,7 +69,7 @@ private[spark] class SortShuffleWriter[K, V, C](
     // (see SPARK-3570).
     val (_, tmpDataFile) = blockManager.diskBlockManager.createTempShuffleBlock()
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
-    val partitionLengths = sorter.writePartitionedFile(blockId, context, tmpDataFile)
+    val partitionLengths = sorter.writePartitionedFile(blockId, tmpDataFile)
     val tmpIndexFile = shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
     val dataFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
     val indexFile = blockManager.diskBlockManager.getFile(

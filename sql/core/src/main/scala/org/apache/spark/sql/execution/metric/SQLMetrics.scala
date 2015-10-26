@@ -28,7 +28,12 @@ import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String, val param: SQLMetricParam[R, T])
-  extends Accumulable[R, T](param.zero, param, Some(name), true)
+  extends Accumulable[R, T](param.zero, param, Some(name), true) {
+
+  def reset(): Unit = {
+    this.value = param.zero
+  }
+}
 
 /**
  * Create a layer for specialized metric. We cannot add `@specialized` to

@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListene
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.{ShuffleWriter, ShuffleOutputCoordinator}
 import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
-import org.apache.spark.unsafe.memory.TaskMemoryManager
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -326,7 +326,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     sc = new SparkContext("local", "test", conf)
     val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     val manager = sc.env.shuffleManager
-    val taskMemoryManager = new TaskMemoryManager(sc.env.executorMemoryManager)
+    val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0L)
     val metricsSystem = sc.env.metricsSystem
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))

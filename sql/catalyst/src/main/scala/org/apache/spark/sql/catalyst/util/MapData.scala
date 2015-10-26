@@ -15,16 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst.util
 
-/**
- * Shim to allow us to implement [[scala.Iterator]] in Java. Scala 2.11+ has an AbstractIterator
- * class for this, but that class is `private[scala]` in 2.10. We need to explicitly fix this to
- * `Row` in order to work around a spurious IntelliJ compiler error. This cannot be an abstract
- * class because that leads to compilation errors under Scala 2.11.
- */
-private[spark] class AbstractScalaRowIterator[T] extends Iterator[T] {
-  override def hasNext: Boolean = throw new NotImplementedError
+import org.apache.spark.sql.types.DataType
 
-  override def next(): T = throw new NotImplementedError
+abstract class MapData extends Serializable {
+
+  def numElements(): Int
+
+  def keyArray(): ArrayData
+
+  def valueArray(): ArrayData
+
+  def copy(): MapData
+
+  def foreach(keyType: DataType, valueType: DataType, f: (Any, Any) => Unit): Unit = {
+    val length = numElements()
+    val keys = keyArray()
+    val values = valueArray()
+    var i = 0
+    while (i < length) {
+      f(keys.get(i, keyType), values.get(i, valueType))
+      i += 1
+    }
+  }
 }

@@ -21,18 +21,19 @@ import org.apache.spark.shuffle.sort.PackedRecordPointer;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
+import org.apache.spark.SparkConf;
+import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 import static org.apache.spark.shuffle.sort.PackedRecordPointer.*;
 
 public class PackedRecordPointerSuite {
 
   @Test
   public void heap() {
+    final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
+      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
     final MemoryBlock page0 = memoryManager.allocatePage(128);
     final MemoryBlock page1 = memoryManager.allocatePage(128);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
@@ -49,8 +50,9 @@ public class PackedRecordPointerSuite {
 
   @Test
   public void offHeap() {
+    final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "true");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.UNSAFE));
+      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
     final MemoryBlock page0 = memoryManager.allocatePage(128);
     final MemoryBlock page1 = memoryManager.allocatePage(128);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,

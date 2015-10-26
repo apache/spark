@@ -15,26 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.memory
 
-abstract class MapData extends Serializable {
+import org.apache.spark.{SparkEnv, TaskContextImpl, TaskContext}
 
-  def numElements(): Int
-
-  def keyArray(): ArrayData
-
-  def valueArray(): ArrayData
-
-  def copy(): MapData
-
-  def foreach(keyType: DataType, valueType: DataType, f: (Any, Any) => Unit): Unit = {
-    val length = numElements()
-    val keys = keyArray()
-    val values = valueArray()
-    var i = 0
-    while (i < length) {
-      f(keys.get(i, keyType), values.get(i, valueType))
-      i += 1
-    }
+/**
+ * Helper methods for mocking out memory-management-related classes in tests.
+ */
+object MemoryTestingUtils {
+  def fakeTaskContext(env: SparkEnv): TaskContext = {
+    val taskMemoryManager = new TaskMemoryManager(env.memoryManager, 0)
+    new TaskContextImpl(
+      stageId = 0,
+      partitionId = 0,
+      taskAttemptId = 0,
+      attemptNumber = 0,
+      taskMemoryManager = taskMemoryManager,
+      metricsSystem = env.metricsSystem,
+      internalAccumulators = Seq.empty)
   }
 }
