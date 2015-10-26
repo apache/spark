@@ -109,7 +109,6 @@ private[sql] class JSONRelation(
         inputRDD.getOrElse(createBaseRdd(files)),
         samplingRatio,
         sqlContext.conf.columnNameOfCorruptRecord)
-      }
     }
     checkConstraints(jsonSchema)
 
