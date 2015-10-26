@@ -141,25 +141,24 @@ class BisectingKMeans private (
       val dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
       clusterStats = clusterStats ++ leafClusterStats
 
+      // can be clustered if the number of divided clusterStats is equal to 0
+      val divided = divideClusters(data, dividableLeafClusters, maxIterations)
+      // update each index
+      val newData = updateClusterIndex(data, divided).cache()
+      updatedDataHistory = updatedDataHistory ++ Array(data)
+      data = newData
+      // keep recent 2 cached RDDs in order to run more quickly
+      if (updatedDataHistory.length > 1) {
+        val head = updatedDataHistory.head
+        updatedDataHistory = updatedDataHistory.tail
+        head.unpersist()
+      }
+      clusterStats = clusterStats ++ divided
+      step += 1
+      logInfo(s"${sc.appName} adding ${divided.size} new clusterStats at step:${step}")
+
       if (dividableLeafClusters.isEmpty) {
         noMoreDividable = true
-      }
-      else {
-        // can be clustered if the number of divided clusterStats is equal to 0
-        val divided = divideClusters(data, dividableLeafClusters, maxIterations)
-        // update each index
-        val newData = updateClusterIndex(data, divided).cache()
-        updatedDataHistory = updatedDataHistory ++ Array(data)
-        data = newData
-        // keep recent 2 cached RDDs in order to run more quickly
-        if (updatedDataHistory.length > 1) {
-          val head = updatedDataHistory.head
-          head.unpersist()
-          updatedDataHistory = updatedDataHistory.filterNot(_.hashCode() == head.hashCode())
-        }
-        clusterStats = clusterStats ++ divided
-        step += 1
-        logInfo(s"${sc.appName} adding ${divided.size} new clusterStats at step:${step}")
       }
     }
     // unpersist kept RDDs
