@@ -86,20 +86,20 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val data = sc.parallelize(local)
 
-    val clusters = BisectingKMeans.summarizeClusters(data)
-    assert(clusters.size === 4)
-    assert(clusters(4).center === Vectors.dense(2.0, 2.0).toBreeze)
-    assert(clusters(4).variances === Vectors.dense(0.25, 0.25).toBreeze)
-    assert(clusters(4).rows === 2)
-    assert(clusters(5).center === Vectors.dense(12.0, 12.0).toBreeze)
-    assert(clusters(5).variances === Vectors.dense(0.25, 0.25).toBreeze)
-    assert(clusters(5).rows === 2)
-    assert(clusters(6).center === Vectors.dense(22.0, 22.0).toBreeze)
-    assert(clusters(6).variances === Vectors.dense(0.25, 0.25).toBreeze)
-    assert(clusters(6).rows === 2)
-    assert(clusters(7).center === Vectors.dense(32.0, 32.0).toBreeze)
-    assert(clusters(7).variances === Vectors.dense(0.25, 0.25).toBreeze)
-    assert(clusters(7).rows === 2)
+    val clusterStats = BisectingKMeans.summarizeClusters(data)
+    assert(clusterStats.size === 4)
+    assert(clusterStats(4).mean === Vectors.dense(2.0, 2.0).toBreeze)
+    assert(clusterStats(4).variance ~== 0.3535 absTol 10e-4)
+    assert(clusterStats(4).rows === 2)
+    assert(clusterStats(5).mean === Vectors.dense(12.0, 12.0).toBreeze)
+    assert(clusterStats(5).variance ~== 0.3535 absTol 10e-4)
+    assert(clusterStats(5).rows === 2)
+    assert(clusterStats(6).mean === Vectors.dense(22.0, 22.0).toBreeze)
+    assert(clusterStats(6).variance ~== 0.3535 absTol 10e-4)
+    assert(clusterStats(6).rows === 2)
+    assert(clusterStats(7).mean === Vectors.dense(32.0, 32.0).toBreeze)
+    assert(clusterStats(7).variance ~== 0.3535 absTol 10e-4)
+    assert(clusterStats(7).rows === 2)
   }
 
   test("initialize centers at next step") {
@@ -109,8 +109,8 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val data = sc.parallelize(local)
     val stats = Map[BigInt, BisectingClusterStat](
-      BigInt(2) -> new BisectingClusterStat(2, BV[Double](1.0, 1.0) * 2.0, BV.zeros[Double](2)),
-      BigInt(3) -> new BisectingClusterStat(2, BV[Double](2.0, 2.0) * 2.0, BV.zeros[Double](2))
+      BigInt(2) -> new BisectingClusterStat(2, BV[Double](1.0, 1.0) * 2.0, 0.0),
+      BigInt(3) -> new BisectingClusterStat(2, BV[Double](2.0, 2.0) * 2.0, 0.0)
     )
     val initNextCenters = BisectingKMeans.initNextCenters(data, stats)
     assert(initNextCenters.size === 4)
@@ -126,14 +126,18 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       (BigInt(3), Vectors.dense(8.0, 8.0)), (BigInt(3), Vectors.dense(9.0, 9.0)),
       (BigInt(3), Vectors.dense(10.0, 10.0)), (BigInt(3), Vectors.dense(11.0, 11.0))
     ).map { case (idx, vector) => (idx, vector.toBreeze) }
-    val newClusters = Map(
-      BigInt(4) -> new BisectingClusterStat(3L, BV[Double](1.0, 1.0) :* 3.0, BV[Double](1.0, 1.0)),
-      BigInt(5) -> new BisectingClusterStat(3L, BV[Double](4.0, 4.0) :* 3.0, BV[Double](1.0, 1.0)),
-      BigInt(6) -> new BisectingClusterStat(3L, BV[Double](7.0, 7.0) :* 3.0, BV[Double](1.0, 1.0)),
-      BigInt(7) -> new BisectingClusterStat(3L, BV[Double](10.0, 10.0) :* 3.0, BV[Double](1.0, 1.0))
+    val variance = breezeNorm(Vectors.dense(1.0, 1.0).toBreeze, 2.0)
+    val newClusterStats = Map(
+      BigInt(4) -> new BisectingClusterStat(3L, BV[Double](1.0, 1.0) :* 3.0, variance),
+      BigInt(5) -> new BisectingClusterStat(3L, BV[Double](4.0, 4.0) :* 3.0, variance),
+      BigInt(6) -> new BisectingClusterStat(3L, BV[Double](7.0, 7.0) :* 3.0, variance),
+      BigInt(7) -> new BisectingClusterStat(3L, BV[Double](10.0, 10.0) :* 3.0, variance)
     )
     val data = sc.parallelize(seed)
-    val result = BisectingKMeans.updateClusterIndex(data, newClusters).collect().toSeq
+    val leafClusterStats = BisectingKMeans.summarizeClusters(data)
+    val dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
+    val divided = BisectingKMeans.divideClusters(data, dividableLeafClusters, 20)
+    val result = BisectingKMeans.updateClusterIndex(data, divided).collect().toSeq
 
     val expected = Seq(
       (4, Vectors.dense(0.0, 0.0)), (4, Vectors.dense(1.0, 1.0)), (4, Vectors.dense(2.0, 2.0)),
@@ -178,17 +182,17 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val data = sc.parallelize(local)
     val stats = BisectingKMeans.summarizeClusters(data)
-    val newClusters = BisectingKMeans.divideClusters(data, stats, 20)
+    val newClusterStats = BisectingKMeans.divideClusters(data, stats, 20)
 
-    assert(newClusters.size === 4)
-    assert(newClusters(4).center === BV[Double](1.0, 1.0))
-    assert(newClusters(4).rows === 2)
-    assert(newClusters(5).center === BV[Double](10.0, 10.0))
-    assert(newClusters(5).rows === 2)
-    assert(newClusters(6).center === BV[Double](100.0, 100.0))
-    assert(newClusters(6).rows === 2)
-    assert(newClusters(7).center === BV[Double](110.0, 110.0))
-    assert(newClusters(7).rows === 2)
+    assert(newClusterStats.size === 4)
+    assert(newClusterStats(4).mean === BV[Double](1.0, 1.0))
+    assert(newClusterStats(4).rows === 2)
+    assert(newClusterStats(5).mean === BV[Double](10.0, 10.0))
+    assert(newClusterStats(5).rows === 2)
+    assert(newClusterStats(6).mean === BV[Double](100.0, 100.0))
+    assert(newClusterStats(6).rows === 2)
+    assert(newClusterStats(7).mean === BV[Double](110.0, 110.0))
+    assert(newClusterStats(7).rows === 2)
   }
 
 }

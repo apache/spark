@@ -191,6 +191,8 @@ class BisectingKMeans private (
 
 private[clustering] object BisectingKMeans {
 
+  import BisectingClusterStat._
+
   val ROOT_INDEX_KEY: BigInt = 1
 
   /**
@@ -241,7 +243,9 @@ private[clustering] object BisectingKMeans {
       // sum the accumulation and the count in the all partition
       (sum1 + sum2, n1 + n2, sumOfSquares1 + sumOfSquares2)
     }.map { case (i, (sum, n, sumOfSquares)) =>
-      (i, new BisectingClusterStat(n.toLong, sum, sumOfSquares))
+      val mean = calcMean(n.toLong, sum)
+      val variance = getVariance(n.toLong, sum, sumOfSquares)
+      (i, new BisectingClusterStat(n.toLong, mean, variance))
     }.collectAsMap()
   }
 
@@ -316,7 +320,7 @@ private[clustering] object BisectingKMeans {
 
     // extract the centers of the clusters
     val sc = data.sparkContext
-    var centers = dividedClusters.map { case (idx, cluster) => (idx, cluster.center)}
+    var centers = dividedClusters.map { case (idx, cluster) => (idx, cluster.mean)}
     val bcCenters = sc.broadcast(centers)
 
     // TODO Supports distance metrics other Euclidean distance metric
@@ -345,29 +349,30 @@ private[clustering] object BisectingKMeans {
    * Divides clusters according to their statistics
    *
    * @param data pairs of point and its cluster index
-   * @param targetClusters target clusters to divide
+   * @param clusterStats target clusters to divide
    * @param maxIterations the maximum iterations to calculate clusters statistics
    */
   def divideClusters(
       data: RDD[(BigInt, BV[Double])],
-      targetClusters: Map[BigInt, BisectingClusterStat],
+      clusterStats: Map[BigInt, BisectingClusterStat],
       maxIterations: Int): Map[BigInt, BisectingClusterStat] = {
     val sc = data.sparkContext
     val appName = sc.appName
 
     // get keys of dividable clusters
-    val dividableClusters = targetClusters.filter { case (idx, cluster) => cluster.isDividable }
-    if (dividableClusters.isEmpty) {
+    val dividableClusterStats = clusterStats.filter { case (idx, cluster) => cluster.isDividable }
+    if (dividableClusterStats.isEmpty) {
       return Map.empty[BigInt, BisectingClusterStat]
     }
     // extract dividable input data
-    val dividableData = data.filter { case (idx, point) => dividableClusters.contains(idx)}
+    val dividableData = data.filter { case (idx, point) => dividableClusterStats.contains(idx)}
 
-    var newCenters = initNextCenters(dividableData, dividableClusters)
+    var newCenters = initNextCenters(dividableData, dividableClusterStats)
     var bcNewCenters = sc.broadcast(newCenters)
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
     val bcMetric = sc.broadcast(metric)
+    // pairs of cluster index and (sums, #points, sumOfSquares)
     var stats = Map.empty[BigInt, (BV[Double], Double, BV[Double])]
 
     var subIter = 0
@@ -415,7 +420,11 @@ private[clustering] object BisectingKMeans {
       oldTotalStd = totalStd
       subIter += 1
     }
-    stats.map { case (i, stat) => i -> new BisectingClusterStat(stat._2.toLong, stat._1, stat._3) }
+    stats.map { case (i, (sums, rows, sumOfSquares)) =>
+      val mean = calcMean(rows.toLong, sums)
+      val variance = getVariance(rows.toLong, sums, sumOfSquares)
+      i -> new BisectingClusterStat(rows.toLong, mean, variance)
+    }
   }
 
   /**
@@ -440,7 +449,7 @@ private[clustering] object BisectingKMeans {
       stats: Map[BigInt, BisectingClusterStat]): Map[BigInt, BisectingClusterNode] = {
 
     // calculate average costs of all clusters
-    val bcCenters = data.sparkContext.broadcast(stats.map { case (i, stat) => i -> stat.center })
+    val bcCenters = data.sparkContext.broadcast(stats.map { case (i, stat) => i -> stat.mean })
     val costs = data.mapPartitions { iter =>
       val counters = mutable.Map.empty[BigInt, (Long, Double)]
       bcCenters.value.foreach {case (i, center) => counters(i) = (0L, 0.0)}
@@ -458,7 +467,7 @@ private[clustering] object BisectingKMeans {
         case x if x == 0.0 => 0.0
         case _ => costs(i)._2 / costs(i)._1
       }
-      i -> new BisectingClusterNode(Vectors.fromBreeze(stat.center), stat.rows, avgCost)
+      i -> new BisectingClusterNode(Vectors.fromBreeze(stat.mean), stat.rows, avgCost)
     }
   }
 
@@ -685,21 +694,29 @@ class BisectingClusterNode private (
  *  This class is used for maneging a cluster statistics
  *
  * @param rows the number of points
- * @param sums the sum of points
- * @param sumOfSquares the sum of squares of points
+ * @param mean the sum of points
+ * @param variance the sum of squares of points
  */
 private[clustering] case class BisectingClusterStat (
     rows: Long,
-    sums: BV[Double],
-    sumOfSquares: BV[Double]) extends Serializable {
+    mean: BV[Double],
+    variance: Double) extends Serializable {
 
-  // initialization
-  val center: BV[Double] = sums :/ rows.toDouble
-  val variances: BV[Double] = rows match {
-    case n if n > 1 => sumOfSquares.:/(n.toDouble) - (sums :* sums).:/(n.toDouble * n.toDouble)
-    case _ => BV.zeros[Double](sums.size)
-  }
-
-  def isDividable: Boolean = breezeAny(variances) && rows >= 2
+  def isDividable: Boolean = variance > 0 && rows >= 2
 }
+
+private[clustering] object BisectingClusterStat {
+  // calculate a mean vector
+  def calcMean(rows: Long, sums: BV[Double]): BV[Double] = sums :/ rows.toDouble
+
+  // calculate a variance
+  def getVariance(rows: Long, sums: BV[Double], sumOfSquares: BV[Double]): Double = {
+    val variances: BV[Double] = rows match {
+      case n if n > 1 => sumOfSquares.:/(n.toDouble) - (sums :* sums).:/(n.toDouble * n.toDouble)
+      case _ => BV.zeros[Double](sums.size)
+    }
+    breezeNorm(variances, 2.0)
+  }
+}
+
 
