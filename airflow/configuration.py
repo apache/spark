@@ -48,6 +48,7 @@ defaults = {
         'plugins_folder': None,
         'security': None,
         'donot_pickle': False,
+        's3_log_folder': ''
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -94,9 +95,11 @@ airflow_home = {AIRFLOW_HOME}
 # subfolder in a code repository
 dags_folder = {AIRFLOW_HOME}/dags
 
-# The folder where airflow should store its log files
-# For S3, use the full URL to the base folder (starting with "s3://...")
+# The folder where airflow should store its log files. This location
 base_log_folder = {AIRFLOW_HOME}/logs
+# An S3 location can be provided for log backups
+# For S3, use the full URL to the base folder (starting with "s3://...")
+s3_log_folder = None
 
 # The executor class that airflow should use. Choices include
 # SequentialExecutor, LocalExecutor, CeleryExecutor
