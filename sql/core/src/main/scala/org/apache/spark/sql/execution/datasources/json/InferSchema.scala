@@ -113,6 +113,7 @@ private[sql] object InferSchema {
         ArrayType(elementType)
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) if primitivesAsString => StringType
+      
       case (VALUE_TRUE | VALUE_FALSE) if primitivesAsString => StringType
 
       case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
