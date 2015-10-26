@@ -24,7 +24,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle._
-import org.apache.spark.storage.DiskBlockObjectWriter
+import org.apache.spark.storage.{DiskBlockObjectWriter, ShuffleMapStatusBlockId}
 
 private[spark] class HashShuffleWriter[K, V](
     shuffleBlockResolver: FileShuffleBlockResolver,
@@ -101,6 +101,10 @@ private[spark] class HashShuffleWriter[K, V](
         }
       }
     }
+  }
+
+  override def mapStatusFile: File = {
+    blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(handle.shuffleId, mapId))
   }
 
   private def commitWritesAndBuildStatus(): MapStatus = {

@@ -50,6 +50,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   private var tempDir: File = _
   private var outputFile: File = _
   private var indexFile: File = _
+  private var mapStatusFile: File = _
   private val conf: SparkConf = new SparkConf(loadDefaults = false)
   private val temporaryFilesCreated: mutable.Buffer[File] = new ArrayBuffer[File]()
   private val blockIdToFileMap: mutable.Map[BlockId, File] = new mutable.HashMap[BlockId, File]
@@ -59,9 +60,11 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     tempDir = Utils.createTempDir()
     outputFile = File.createTempFile("shuffle", null, tempDir)
     indexFile = File.createTempFile("shuffle", ".index", tempDir)
+    mapStatusFile = File.createTempFile("shuffle", ".mapstatus", tempDir)
     // ShuffleOutputCoordinator requires these files to not exist yet
     outputFile.delete()
     indexFile.delete()
+    mapStatusFile.delete()
     taskMetrics = new TaskMetrics
     MockitoAnnotations.initMocks(this)
     shuffleHandle = new BypassMergeSortShuffleHandle[Int, Int](
@@ -101,6 +104,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
         )
       }
     })
+    when(blockManager.shuffleServerId).thenReturn(BlockManagerId.apply("1", "a.b.c", 1))
+
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer[(TempShuffleBlockId, File)] {
         override def answer(invocation: InvocationOnMock): (TempShuffleBlockId, File) = {
@@ -141,8 +146,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       conf
     )
     val files = writer.write(Iterator.empty)
-    writer.stop( /* success = */ true)
-    assert(ShuffleOutputCoordinator.commitOutputs(0, 0, files))
+    val mapStatus = writer.stop( /* success = */ true).get
+    val ser = new JavaSerializer(conf).newInstance()
+    assert(ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile, ser)._1)
     assert(writer.getPartitionLengths.sum === 0)
     if (outputFile.exists()) {
       assert(outputFile.length() === 0)
@@ -169,8 +175,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       conf
     )
     val files = writer.write(records)
-    writer.stop( /* success = */ true)
-    ShuffleOutputCoordinator.commitOutputs(0, 0, files)
+    val mapStatus = writer.stop( /* success = */ true).get
+    val ser = new JavaSerializer(conf).newInstance()
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile, ser)
     assert(temporaryFilesCreated.nonEmpty)
     assert(writer.getPartitionLengths.sum === outputFile.length())
     assert(temporaryFilesCreated.count(_.exists()) === 0) // check that temporary files were deleted

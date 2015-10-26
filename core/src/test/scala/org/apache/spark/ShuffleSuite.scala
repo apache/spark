@@ -26,7 +26,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.{ShuffleWriter, ShuffleOutputCoordinator}
-import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
+import org.apache.spark.storage.{ShuffleMapStatusBlockId, ShuffleDataBlockId, ShuffleBlockId}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.util.MutablePair
 
@@ -324,8 +324,10 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
   test("multiple simultaneous attempts for one task (SPARK-8029)") {
     sc = new SparkContext("local", "test", conf)
+    val mapStatusFile = sc.env.blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(0, 0))
     val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     val manager = sc.env.shuffleManager
+
     val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0L)
     val metricsSystem = sc.env.metricsSystem
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
@@ -351,11 +353,12 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     def writeAndClose(
       writer: ShuffleWriter[Int, Int])(
-      iter: Iterator[(Int, Int)]): Option[MapStatus] = {
+      iter: Iterator[(Int, Int)]): Option[(Boolean, MapStatus)] = {
       val files = writer.write(iter)
       val output = writer.stop(true)
-      ShuffleOutputCoordinator.commitOutputs(0, 0, files)
-      output
+      output.map(ShuffleOutputCoordinator.commitOutputs(0, 0, files, _, mapStatusFile,
+          serializer = SparkEnv.get.serializer.newInstance())
+      )
     }
     val interleaver = new InterleaveIterators(
       data1, writeAndClose(writer1), data2, writeAndClose(writer2))
@@ -367,15 +370,26 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // either task, but must be consistent)
     assert(mapOutput1.isDefined)
     assert(mapOutput2.isDefined)
-    assert(mapOutput1.get.location === mapOutput2.get.location)
+    // exactly one succeeded
+    assert(mapOutput1.get._1 ^ mapOutput2.get._1)
+    // The mapstatuses should be equivalent, but not the same object, since they will be
+    // deserialized independently.  Unfortunately we can't check that they are the same since
+    // MapStatus doesn't override equals()
+
     // register one of the map outputs -- doesn't matter which one
-    mapOutput1.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
+    mapOutput1.foreach { case (_, mapStatus) =>
+      mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))
+    }
 
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,
       new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem,
         InternalAccumulator.create(sc)))
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
+
+    assert(mapStatusFile.exists())
+    manager.unregisterShuffle(0)
+    assert(!mapStatusFile.exists(), s"$mapStatusFile did not get deleted")
   }
 
 }

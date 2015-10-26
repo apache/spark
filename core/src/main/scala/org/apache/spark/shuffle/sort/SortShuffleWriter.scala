@@ -23,7 +23,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
-import org.apache.spark.storage.{ShuffleBlockId, ShuffleIndexBlockId}
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleIndexBlockId, ShuffleMapStatusBlockId}
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
@@ -107,6 +107,11 @@ private[spark] class SortShuffleWriter[K, V, C](
       }
     }
   }
+
+  override def mapStatusFile: File = {
+    blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(handle.shuffleId, mapId))
+  }
+
 }
 
 private[spark] object SortShuffleWriter {

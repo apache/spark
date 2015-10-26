@@ -60,6 +60,16 @@ case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends Blo
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
+/**
+ * Used to get the canonical filename for the [[org.apache.spark.shuffle.ShuffleOutputCoordinator]]
+ * to store the MapStatus between attempts.  See ShuffleOutputCoordinator for more details.  Note
+ * that this "block" is never shared between executors, its just used between tasks on one executor.
+ * Its just a convenient way to get a canonical file to store this data.
+ */
+case class ShuffleMapStatusBlockId(shuffleId: Int, mapId: Int) extends BlockId {
+  override def name: String = "shuffle_" + shuffleId + "_" + mapId + ".mapstatus"
+}
+
 @DeveloperApi
 case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"

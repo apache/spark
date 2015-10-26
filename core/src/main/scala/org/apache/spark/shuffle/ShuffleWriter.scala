@@ -34,6 +34,13 @@ private[spark] abstract class ShuffleWriter[K, V] {
   @throws[IOException]
   def write(records: Iterator[Product2[K, V]]): Seq[(File, File)]
 
+  /**
+   * The canonical location of a file for storing the serialized output, to coordinate between
+   * multiple tasks that may write the same shuffle data
+   * @return
+   */
+  def mapStatusFile: File
+
   /** Close this writer, passing along whether the map completed */
   def stop(success: Boolean): Option[MapStatus]
 }

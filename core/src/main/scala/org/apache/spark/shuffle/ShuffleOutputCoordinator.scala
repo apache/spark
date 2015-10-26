@@ -16,9 +16,11 @@
  */
 package org.apache.spark.shuffle
 
-import java.io.File
+import java.io.{FileOutputStream, FileInputStream, File}
 
 import org.apache.spark.Logging
+import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.serializer.{SerializerInstance, Serializer}
 
 /**
  * Ensures that on each executor, there are no conflicting writes to the same shuffle files.  It
@@ -37,14 +39,12 @@ object ShuffleOutputCoordinator extends Logging {
   def commitOutputs(
       shuffleId: Int,
       partitionId: Int,
-      tmpToDest: Seq[(File, File)]): Boolean = synchronized {
-
-    // There might not even be zero-length files for some of the temp files -- that's OK,
-    // we just ignore those
-    val toMove = tmpToDest.filter{_._1.exists()}
-
-    val destAlreadyExists = toMove.forall(_._2.exists)
-    if (!destAlreadyExists) {
+      tmpToDest: Seq[(File, File)],
+      mapStatus: MapStatus,
+      mapStatusFile: File,
+      serializer: SerializerInstance): (Boolean, MapStatus) = synchronized {
+    val toMove = tmpToDest.filter { _._1.exists()}
+    if (!mapStatusFile.exists()) {
       toMove.foreach { case (tmp, dest) =>
         // If *some* of the destination files exist, but not all of them, then its not clear
         // what to do.  There could be a task already reading from this dest file when we delete
@@ -55,12 +55,18 @@ object ShuffleOutputCoordinator extends Logging {
         }
         tmp.renameTo(dest)
       }
-      true
+      val out = serializer.serializeStream(new FileOutputStream(mapStatusFile))
+      out.writeObject(mapStatus)
+      out.close()
+      (true, mapStatus)
     } else {
       logInfo(s"shuffle output for shuffle $shuffleId, partition $partitionId already exists, " +
         s"not overwriting.  Another task must have created this shuffle output.")
       toMove.foreach{ case (tmp, _) => tmp.delete()}
-      false
+      val in = serializer.deserializeStream(new FileInputStream(mapStatusFile))
+      val readStatus = in.readObject[MapStatus]
+      in.close()
+      (false, readStatus)
     }
   }
 }
