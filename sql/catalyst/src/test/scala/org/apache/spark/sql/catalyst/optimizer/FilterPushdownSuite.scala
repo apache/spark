@@ -40,6 +40,7 @@ class FilterPushdownSuite extends PlanTest {
         BooleanSimplification,
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
+        PushPredicateThroughAggregate,
         ColumnPruning,
         ProjectCollapsing) :: Nil
   }
@@ -651,5 +652,49 @@ class FilterPushdownSuite extends PlanTest {
       Sample(0.0, 0.6, false, 11L, x.select('a))
 
     comparePlans(optimized, correctAnswer.analyze)
+  }
+
+  test("aggregate: push down filter when filter on group by expression") {
+    val originalQuery = testRelation
+                        .groupBy('a)('a, Count('b) as 'c)
+                        .select('a, 'c)
+                        .where('a === 2)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+                        .where('a === 2)
+                        .groupBy('a)('a, Count('b) as 'c)
+                        .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("aggregate: don't push down filter when filter not on group by expression") {
+    val originalQuery = testRelation
+                        .select('a, 'b)
+                        .groupBy('a)('a, Count('b) as 'c)
+                        .where('c === 2L)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    comparePlans(optimized, originalQuery.analyze)
+  }
+
+  test("aggregate: push down filters partially which are subset of group by expressions") {
+    val originalQuery = testRelation
+                        .select('a, 'b)
+                        .groupBy('a)('a, Count('b) as 'c)
+                        .where('c === 2L && 'a === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+                        .select('a, 'b)
+                        .where('a === 3)
+                        .groupBy('a)('a, Count('b) as 'c)
+                        .where('c === 2L)
+                        .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }
