@@ -203,6 +203,23 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
     assert(writtenData === dataToWrite)
   }
 
+  test("FileBasedWriteAheadLog - close after write flag") {
+    // Write data with rotation using WriteAheadLog class
+    val numFiles = 3
+    val dataToWrite = Seq.tabulate(numFiles)(_.toString)
+    val conf = new SparkConf()
+    conf.set(WriteAheadLogUtils.WAL_CLOSE_AFTER_WRITE, "true")
+    // total advance time is less than 1000, therefore log shouldn't be rolled, but manually closed
+    writeDataUsingWriteAheadLog(testDir, dataToWrite, closeLog = false, clockAdvanceTime = 100,
+      sparkConf = conf)
+
+    // Read data manually to verify the written data
+    val logFiles = getLogFilesInDirectory(testDir)
+    assert(logFiles.size === numFiles)
+    val writtenData = logFiles.flatMap { file => readDataManually(file)}
+    assert(writtenData === dataToWrite)
+  }
+
   test("FileBasedWriteAheadLog - read rotating logs") {
     // Write data manually for testing reading through WriteAheadLog
     val writtenData = (1 to 10).map { i =>
@@ -356,14 +373,16 @@ object WriteAheadLogSuite {
       logDirectory: String,
       data: Seq[String],
       manualClock: ManualClock = new ManualClock,
-      closeLog: Boolean = true
+      closeLog: Boolean = true,
+      clockAdvanceTime: Int = 500,
+      sparkConf: SparkConf = new SparkConf()
     ): FileBasedWriteAheadLog = {
     if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
-    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
+    val wal = new FileBasedWriteAheadLog(sparkConf, logDirectory, hadoopConf, 1, 1)
 
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
-      manualClock.advance(500)
+      manualClock.advance(clockAdvanceTime)
       wal.write(item, manualClock.getTimeMillis())
     }
     if (closeLog) wal.close()
