@@ -32,10 +32,10 @@ case class ExecutorExited(exitCode: Int, exitCausedByApp: Boolean, reason: Strin
   extends ExecutorLossReason(reason)
 
 private[spark] object ExecutorExited {
-  def apply(exitCode: Int, exitUnrelatedToRunningTasks: Boolean): ExecutorExited = {
+  def apply(exitCode: Int, exitCausedByApp: Boolean): ExecutorExited = {
     ExecutorExited(
       exitCode,
-      exitUnrelatedToRunningTasks,
+      exitCausedByApp,
       ExecutorExitCode.explainExitCode(exitCode))
   }
 }

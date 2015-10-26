@@ -529,12 +529,12 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.executorLost(
       "execA",
       "host1",
-      ExecutorExited(143, true, "Terminated for reason unrelated to running tasks"))
+      ExecutorExited(143, false, "Terminated for reason unrelated to running tasks"))
     assert(!sched.taskSetsFailed.contains(taskSet.id))
     assert(manager.resourceOffer("execC", "host2", ANY).isDefined)
     sched.removeExecutor("execC")
     manager.executorLost(
-      "execC", "host2", ExecutorExited(1, false, "Terminated due to issue with running tasks"))
+      "execC", "host2", ExecutorExited(1, true, "Terminated due to issue with running tasks"))
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
