@@ -136,9 +136,10 @@ class BisectingKMeans private (
     var data = initData(input).cache()
     while (clusterStats.size < numNodeLimit && noMoreDividable == false) {
       logInfo(s"${sc.appName} starts step ${step}")
-      val leafClusters = summarizeClusters(data)
-      val dividableLeafClusters = leafClusters.filter(_._2.isDividable)
-      clusterStats = clusterStats ++ leafClusters
+      // TODO Remove non-leaf cluster stats from `leafClusterStats`
+      val leafClusterStats = summarizeClusters(data)
+      val dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
+      clusterStats = clusterStats ++ leafClusterStats
 
       if (dividableLeafClusters.isEmpty) {
         noMoreDividable = true
