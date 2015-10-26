@@ -115,7 +115,11 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
           annotation.value(),
           annotation.extended()))
       } else {
-        None
+        Some(new ExpressionInfo(
+          info.getFunctionClass.getCanonicalName,
+          name,
+          null,
+          null))
       }
     }.getOrElse(None))
   }
