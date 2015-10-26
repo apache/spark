@@ -105,14 +105,10 @@ private[sql] class JSONRelation(
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
       }.toArray
-      if (files.isEmpty) {
-        throw new IOException("Input paths do not exist or are empty directories, "
-            + "Input Paths=" + paths.mkString(","))
-      } else {
-        InferSchema(
-          inputRDD.getOrElse(createBaseRdd(files)),
-          samplingRatio,
-          sqlContext.conf.columnNameOfCorruptRecord)
+      InferSchema(
+        inputRDD.getOrElse(createBaseRdd(files)),
+        samplingRatio,
+        sqlContext.conf.columnNameOfCorruptRecord)
       }
     }
     checkConstraints(jsonSchema)
