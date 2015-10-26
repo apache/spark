@@ -31,7 +31,8 @@ class CheckpointManager extends Logging {
   /** Keys of RDD partitions that are being checkpointed. */
   private val checkpointingRDDPartitions = new mutable.HashSet[RDDBlockId]
 
-  /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached. */
+  /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is about to be
+    * checkpointed. */
   def getOrCompute[T: ClassTag](
       rdd: RDD[T],
       checkpointData: ReliableRDDCheckpointData[T],
@@ -49,7 +50,7 @@ class CheckpointManager extends Logging {
     } else {
       // Acquire a lock for loading this partition
       // If another thread already holds the lock, wait for it to finish return its results
-      val checkpoint = acquireLockForPartition[T](key, path, conf, context)
+      val checkpoint = acquireLockForPartition[T](rdd, partition, key, context)
       if (checkpoint.isDefined) {
         return new InterruptibleIterator[T](context, checkpoint.get)
       }
@@ -61,7 +62,7 @@ class CheckpointManager extends Logging {
       val computedValues = rdd.computeOrReadCache(partition, context)
       ReliableCheckpointRDD.writeCheckpointFile(
         context, computedValues, checkpointData.cpDir, conf, partition.index)
-      ReliableCheckpointRDD.readCheckpointFile(path, conf, context)
+      rdd.computeOrReadCache(partition, context)
     } finally {
       checkpointingRDDPartitions.synchronized {
         checkpointingRDDPartitions.remove(key)
@@ -78,8 +79,10 @@ class CheckpointManager extends Logging {
    * thread.
    */
   private def acquireLockForPartition[T](
-      id: RDDBlockId, path: Path, conf: Configuration, context: TaskContext): Option[Iterator[T]] =
-  {
+      rdd: RDD[T],
+      partition: Partition,
+      id: RDDBlockId,
+      context: TaskContext): Option[Iterator[T]] = {
     checkpointingRDDPartitions.synchronized {
       if (!checkpointingRDDPartitions.contains(id)) {
         // If the partition is free, acquire its lock to compute its value
@@ -94,7 +97,7 @@ class CheckpointManager extends Logging {
         logInfo(s"Finished waiting for $id")
       }
     }
-    Some(ReliableCheckpointRDD.readCheckpointFile(path, conf, context))
+    Some(rdd.computeOrReadCache(partition, context))
   }
 
 }

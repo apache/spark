@@ -260,7 +260,7 @@ abstract class RDD[T: ClassTag](
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
     if (!isCheckpointedAndMaterialized) {
       if (checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[T]])) {
-        return SparkEnv.get.checkpointMananger.getOrCompute(
+        return SparkEnv.get.checkpointManager.getOrCompute(
           this, checkpointData.get.asInstanceOf[ReliableRDDCheckpointData[T]], split, context)
       }
     }

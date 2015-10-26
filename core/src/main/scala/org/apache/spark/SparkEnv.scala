@@ -81,7 +81,7 @@ class SparkEnv (
   @deprecated("Actor system is no longer supported as of 1.4.0", "1.4.0")
   val actorSystem: ActorSystem = _actorSystem
 
-  private[spark] val checkpointMananger = new CheckpointManager
+  private[spark] val checkpointManager = new CheckpointManager
 
   private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
