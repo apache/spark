@@ -340,7 +340,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
       // Calling checkForLogs to load newly import logs.
-      // TODO. this is not thread-safe
       checkForLogs()
     } catch {
       case e: Exception => throw new SparkException(s"Exception while unzipping imported file", e)
