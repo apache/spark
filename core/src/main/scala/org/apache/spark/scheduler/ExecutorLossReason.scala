@@ -28,7 +28,7 @@ class ExecutorLossReason(val message: String) extends Serializable {
 }
 
 private[spark]
-case class ExecutorExited(exitCode: Int, exitUnrelatedToRunningTasks: Boolean, reason: String)
+case class ExecutorExited(exitCode: Int, exitCausedByApp: Boolean, reason: String)
   extends ExecutorLossReason(reason)
 
 private[spark] object ExecutorExited {

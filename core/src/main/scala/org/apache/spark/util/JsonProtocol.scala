@@ -367,9 +367,9 @@ private[spark] object JsonProtocol {
         ("Job ID" -> taskCommitDenied.jobID) ~
         ("Partition ID" -> taskCommitDenied.partitionID) ~
         ("Attempt Number" -> taskCommitDenied.attemptNumber)
-      case ExecutorLostFailure(executorId, exitUnrelatedToRunningTasks) =>
+      case ExecutorLostFailure(executorId, exitCausedByApp) =>
         ("Executor ID" -> executorId) ~
-        ("Exit Unrelated to Running Tasks" -> exitUnrelatedToRunningTasks)
+        ("Exit Caused By App" -> exitCausedByApp)
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -810,11 +810,9 @@ private[spark] object JsonProtocol {
         val attemptNo = Utils.jsonOption(json \ "Attempt Number").map(_.extract[Int]).getOrElse(-1)
         TaskCommitDenied(jobId, partitionId, attemptNo)
       case `executorLostFailure` =>
-        val exitUnrelatedToRunningTasks =
-          Utils.jsonOption(json \ "Exit Unrelated to Running Tasks").map(_.extract[Boolean])
+        val exitCausedByApp = Utils.jsonOption(json \ "Exit Caused By App").map(_.extract[Boolean])
         val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
-        ExecutorLostFailure(
-          executorId.getOrElse("Unknown"), exitUnrelatedToRunningTasks.getOrElse(false))
+        ExecutorLostFailure(executorId.getOrElse("Unknown"), exitCausedByApp.getOrElse(true))
       case `unknownReason` => UnknownReason
     }
   }

@@ -709,7 +709,7 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
-      case e: ExecutorLostFailure if e.exitUnrelatedToRunningTasks =>
+      case e: ExecutorLostFailure if !e.exitCausedByApp =>
         logInfo(s"Task $tid failed because while it was being computed, its executor" +
           "exited for a reason unrelated to the task. Not counting this failure towards the " +
           "maximum number of failures for the task.")
@@ -815,12 +815,12 @@ private[spark] class TaskSetManager(
       }
     }
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      val exitUnrelatedToRunningTasks: Boolean = reason match {
-        case exited: ExecutorExited => exited.exitUnrelatedToRunningTasks
-        case _ => false
+      val exitCausedByApp: Boolean = reason match {
+        case exited: ExecutorExited => exited.exitCausedByApp
+        case _ => true
       }
       handleFailedTask(
-        tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitUnrelatedToRunningTasks))
+        tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()

@@ -223,18 +223,18 @@ case class TaskCommitDenied(
  * the task crashed the JVM.
  */
 @DeveloperApi
-case class ExecutorLostFailure(execId: String, exitUnrelatedToRunningTasks: Boolean = false)
+case class ExecutorLostFailure(execId: String, exitCausedByApp: Boolean = true)
   extends TaskFailedReason {
   override def toErrorString: String = {
-    val exitBehavior = if (exitUnrelatedToRunningTasks) {
-      "unrelated to the running tasks"
-    } else {
+    val exitBehavior = if (exitCausedByApp) {
       "caused by one of the running tasks"
+    } else {
+      "unrelated to the running tasks"
     }
     s"ExecutorLostFailure (executor ${execId} exited due to an issue ${exitBehavior})"
   }
 
-  override def countTowardsTaskFailures: Boolean = !exitUnrelatedToRunningTasks
+  override def countTowardsTaskFailures: Boolean = exitCausedByApp
 }
 
 /**
