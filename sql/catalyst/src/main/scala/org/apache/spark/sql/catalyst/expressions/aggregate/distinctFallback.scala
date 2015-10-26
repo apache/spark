@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext, CodegenFallback}
 import org.apache.spark.sql.types.{AbstractDataType, DataType}
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -143,5 +143,31 @@ case class ReduceSetUsingDeclarativeAggregate(left: Expression, right: Declarati
       }
       evaluate.eval(buffer)
     } else null
+  }
+}
+
+case class DropAnyNull(child: Expression) extends UnaryExpression {
+  override def nullable: Boolean = false
+  override def dataType: DataType = child.dataType
+
+  protected override def nullSafeEval(input: Any): InternalRow = {
+    val row = input.asInstanceOf[InternalRow]
+    if (row.anyNull) {
+      null
+    } else {
+      row
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"""
+        if ($eval.anyNull) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = $eval
+        }
+      """
+    })
   }
 }
