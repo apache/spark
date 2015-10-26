@@ -161,10 +161,11 @@ class BisectingKMeans private (
         noMoreDividable = true
       }
     }
-    // unpersist kept RDDs
-    updatedDataHistory.foreach(_.unpersist())
     // create a map of cluster node with their criterions
     val nodes = createClusterNodes(data, clusterStats)
+    // unpersist RDDs
+    data.unpersist()
+    updatedDataHistory.foreach(_.unpersist())
 
     // build a cluster tree by Map class which is expressed
     logInfo(s"Building the cluster tree is started in ${sc.appName}")
