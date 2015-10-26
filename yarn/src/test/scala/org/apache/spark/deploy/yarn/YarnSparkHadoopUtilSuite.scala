@@ -255,8 +255,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     hadoopConf.set("hive.metastore.uris", "http://localhost:0")
     val util = new YarnSparkHadoopUtil
     val e = intercept[InvocationTargetException] {
-      val token = util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
-      fail(s"Expected an exception, got the token $token")
+      util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
     }
     val inner = e.getCause
     if (inner == null) {
@@ -267,8 +266,38 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     }
     // expect exception trapping code to unwind this hive-side exception
     intercept[HiveException] {
-      val token = util.obtainTokenForHiveMetastore(hadoopConf)
-      fail(s"Expected an exception, got the token $token")
+      util.obtainTokenForHiveMetastore(hadoopConf)
     }
   }
+
+  test("handleTokenIntrospectionFailure") {
+    val util = new YarnSparkHadoopUtil
+    // downgraded exceptions
+    util.handleTokenIntrospectionFailure("hive", new ClassNotFoundException("cnfe"))
+    util.handleTokenIntrospectionFailure("hive", new NoClassDefFoundError("ncdef"))
+
+    // directly relayed
+    intercept[NoSuchMethodException] {
+      util.handleTokenIntrospectionFailure("hive", new NoSuchMethodException("no such method"))
+    }
+    intercept[IllegalArgumentException] {
+      util.handleTokenIntrospectionFailure("hive", new IllegalArgumentException("oops"))
+    }
+
+    // unwound
+    intercept[IllegalArgumentException] {
+      util.handleTokenIntrospectionFailure("hive",
+        new InvocationTargetException(new IllegalArgumentException("oops")))
+    }
+    // no unwinding if there's no inner exception
+    intercept[InvocationTargetException] {
+      util.handleTokenIntrospectionFailure("hive", new InvocationTargetException(null))
+    }
+
+    // wrapped
+    intercept[RuntimeException] {
+      util.handleTokenIntrospectionFailure("hive", new Throwable("t"))
+    }
+  }
+
 }

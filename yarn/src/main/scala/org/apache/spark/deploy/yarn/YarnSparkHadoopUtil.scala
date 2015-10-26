@@ -157,29 +157,42 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     try {
       obtainTokenForHiveMetastoreInner(conf, UserGroupInformation.getCurrentUser().getUserName)
     } catch {
-      case e: NoSuchMethodException =>
-        logInfo("Hive Method not found", e)
+      case e: Exception => {
+        handleTokenIntrospectionFailure("Hive", e)
         None
+      }
+    }
+  }
+
+  /**
+   * Handle failures to obtain a token through introspection. Failures to load the class are
+   * not treated as errors: anything else is.
+   * @param service service name for error messages
+   * @param thrown exception caught
+   * @throws Exception if the `thrown` exception isn't one that is to be ignored
+   */
+  private[yarn] def handleTokenIntrospectionFailure(service: String, thrown: Throwable): Unit = {
+    thrown match {
       case e: ClassNotFoundException =>
-        logInfo("Hive Class not found", e)
-        None
-      case e: NoClassDefFoundError =>
+        logInfo(s"$service class not found $e")
         logDebug("Hive Class not found", e)
-        None
+      case e: NoClassDefFoundError =>
+        logDebug(s"$service class not found", e)
       case e: InvocationTargetException =>
         // problem talking to the metastore or other hive-side exception
-        logInfo("Hive method invocation failed", e)
+        logInfo(s"$service method invocation failed", e)
         throw if (e.getCause != null) e.getCause else e
       case e: ReflectiveOperationException =>
-        // any other reflection failure log at error and continue
-        logError("Hive Class operation failed", e)
-        None
+        // any other reflection failure log at error and rethrow
+        logError(s"$service Class operation failed", e)
+        throw e;
       case e: RuntimeException =>
         // any runtime exception, including Illegal Argument Exception
         throw e
-      case e: Exception => {
-        logError("Unexpected Exception " + e, e)
-        throw new RuntimeException("Unexpected exception", e)
+      case t: Throwable => {
+        val msg = s"$service: Unexpected Exception " + t
+        logError(msg, t)
+        throw new RuntimeException(msg, t)
       }
     }
   }
