@@ -292,6 +292,9 @@ class S3Hook(BaseHook):
         if not self.check_for_key(key, bucket_name):
             key_obj = bucket.new_key(key_name=key)
         else:
+            if not replace:
+                logging.info("The key {key} already exists.".format(**locals()))
+                return
             key_obj = bucket.get_key(key)
         key_size = key_obj.set_contents_from_filename(filename,
                                                       replace=replace)
