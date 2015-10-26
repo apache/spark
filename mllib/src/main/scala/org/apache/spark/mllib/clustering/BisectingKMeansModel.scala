@@ -99,39 +99,5 @@ class BisectingKMeansModel @Since("1.6.0") (
   @Since("1.6.0")
   def WSSSE(data: JavaRDD[Vector]): Double = this.WSSSE(data.rdd)
 
-  @Since("1.6.0")
-  def toAdjacencyList: Array[(Int, Int, Double)] = this.node.toAdjacencyList
-
-  /** Since Java doesn't support tuple, we must support the data structure for java and py4j. */
-  @Since("1.6.0")
-  def toJavaAdjacencyList: java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
-    val javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]()
-    this.node.toAdjacencyList.foreach { x =>
-      val edge = new java.util.ArrayList[java.lang.Double]()
-      edge.add(x._1.toDouble)
-      edge.add(x._2.toDouble)
-      edge.add(x._3.toDouble)
-      javaList.add(edge)
-    }
-    javaList
-  }
-
-  @Since("1.6.0")
-  def toLinkageMatrix: Array[(Int, Int, Double, Int)] = this.node.toLinkageMatrix
-
-  /** Since Java doesn't support tuple, we must support the data structure for java and py4j. */
-  @Since("1.6.0")
-  def toJavaLinkageMatrix: java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
-    val javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]()
-    this.node.toLinkageMatrix.foreach {x =>
-      val row = new java.util.ArrayList[java.lang.Double]()
-      row.add(x._1.toDouble)
-      row.add(x._2.toDouble)
-      row.add(x._3.toDouble)
-      row.add(x._4.toDouble)
-      javaList.add(row)
-    }
-    javaList
-  }
 }
 

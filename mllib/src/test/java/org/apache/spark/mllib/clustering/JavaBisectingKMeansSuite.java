@@ -27,7 +27,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -82,13 +81,6 @@ public class JavaBisectingKMeansSuite implements Serializable {
     assertEquals(Vectors.dense(2.0, 2.0), centers[2]);
     assertEquals(Vectors.dense(3.0, 3.0), centers[3]);
     assertEquals(Vectors.dense(4.0, 4.0), centers[4]);
-
-    // adjacency list
-    ArrayList<ArrayList<Double>> edges = model.toJavaAdjacencyList();
-    assertEquals(8, edges.size());
-    // linkage matrix
-    ArrayList<ArrayList<Double>> matrix = model.toJavaLinkageMatrix();
-    assertEquals(4, matrix.size());
   }
 
   @Test
@@ -112,12 +104,5 @@ public class JavaBisectingKMeansSuite implements Serializable {
     assertEquals(points.get(2), centers[2]);
     assertEquals(points.get(3), centers[3]);
     assertEquals(points.get(4), centers[4]);
-
-    // adjacency list
-    ArrayList<ArrayList<Double>> edges = model.toJavaAdjacencyList();
-    assertEquals(8, edges.size());
-    // linkage matrix
-    ArrayList<ArrayList<Double>> matrix = model.toJavaLinkageMatrix();
-    assertEquals(4, matrix.size());
   }
 }
