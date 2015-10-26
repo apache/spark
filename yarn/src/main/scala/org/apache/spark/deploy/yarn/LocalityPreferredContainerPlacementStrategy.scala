@@ -181,8 +181,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       localityMatchedPendingAllocations: Seq[ContainerRequest]
     ): Map[String, Int] = {
     val totalLocalTaskNum = hostToLocalTaskCount.values.sum
-    val pendingHostToContainersMap = pendingAllocationHostToContainerCount(
-      hostToLocalTaskCount, localityMatchedPendingAllocations)
+    val pendingHostToContainersMap = pendingHostToContainerCount(localityMatchedPendingAllocations)
 
     hostToLocalTaskCount.map { case (host, count) =>
       val expectedCount =
@@ -199,17 +198,13 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
   }
 
   /**
-   * Calculate the host to possible number of containers for pending allocation containers.
-   * @param hostToLocalTaskCount a map to store the preferred hostname and possible task
-   *                             numbers running on it, used as hints for container allocation
+   * Calculate the host to possible number of containers for pending allocated containers.
    * @param localityMatchedPendingAllocations A sequence of pending container request which
    *                                          matches the localities of current required tasks.
    * @return a Map with hostname as key and possible number of containers on this host as value
    */
-  private def pendingAllocationHostToContainerCount(
-      hostToLocalTaskCount: Map[String, Int],
-      localityMatchedPendingAllocations: Seq[ContainerRequest]
-    ): Map[String, Double] = {
+  private def pendingHostToContainerCount(
+      localityMatchedPendingAllocations: Seq[ContainerRequest]): Map[String, Double] = {
     val pendingHostToContainerCount = new HashMap[String, Int]()
     localityMatchedPendingAllocations.foreach { cr =>
       cr.getNodes.foreach { n =>

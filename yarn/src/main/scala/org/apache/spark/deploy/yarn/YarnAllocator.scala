@@ -166,7 +166,9 @@ private[yarn] class YarnAllocator(
    * fulfilled.
    */
   private def getPendingAtLocation(location: String): Seq[ContainerRequest] = {
-    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala.flatten.toSeq
+    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala
+      .flatMap(_.asScala)
+      .toSeq
   }
 
   /**
@@ -571,7 +573,7 @@ private[yarn] class YarnAllocator(
       if (nodes == null) {
         localityFree += cr
       } else {
-        if (nodes.toSet.intersect(preferredHosts).nonEmpty) {
+        if (nodes.asScala.toSet.intersect(preferredHosts).nonEmpty) {
           localityMatched += cr
         } else {
           localityUnMatched += cr
