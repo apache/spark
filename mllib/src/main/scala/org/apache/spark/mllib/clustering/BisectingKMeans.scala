@@ -227,7 +227,7 @@ private[clustering] object BisectingKMeans {
    */
   def summarizeClusters(data: RDD[(BigInt, BV[Double])]): Map[BigInt, BisectingClusterStat] = {
 
-    val stats = data.mapPartitions { iter =>
+    data.mapPartitions { iter =>
       // calculate the accumulation of the all point in a partition and count the rows
       val map = mutable.Map.empty[BigInt, (BV[Double], Double, BV[Double])]
       iter.foreach { case (idx: BigInt, point: BV[Double]) =>
@@ -240,9 +240,9 @@ private[clustering] object BisectingKMeans {
     }.reduceByKey { case ((sum1, n1, sumOfSquares1), (sum2, n2, sumOfSquares2)) =>
       // sum the accumulation and the count in the all partition
       (sum1 + sum2, n1 + n2, sumOfSquares1 + sumOfSquares2)
-    }.collect().toMap
-
-    stats.map {case (i, stat) => i -> new BisectingClusterStat(stat._2.toLong, stat._1, stat._3)}
+    }.map { case (i, (sum, n, sumOfSquares)) =>
+      (i, new BisectingClusterStat(n.toLong, sum, sumOfSquares))
+    }.collectAsMap()
   }
 
   /**
