@@ -21,6 +21,8 @@ import java.lang.{Long => JLong}
 import java.util
 
 import com.clearspring.analytics.hash.MurmurHash
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -118,7 +120,23 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   override val evaluateExpression = Cast(currentCount, LongType)
 }
 
-case class First(child: Expression) extends DeclarativeAggregate {
+/**
+ * Returns the first value of `child` for a group of rows. If the first value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on a already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
+ * @param child
+ */
+case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -135,24 +153,61 @@ case class First(child: Expression) extends DeclarativeAggregate {
 
   private val first = AttributeReference("first", child.dataType)()
 
-  override val aggBufferAttributes = first :: Nil
+  private val valueSet = AttributeReference("valueSet", BooleanType)()
+
+  override val aggBufferAttributes = first :: valueSet :: Nil
 
   override val initialValues = Seq(
-    /* first = */ Literal.create(null, child.dataType)
+    /* first = */ Literal.create(null, child.dataType),
+    /* valueSet = */ Literal.create(false, BooleanType)
   )
 
-  override val updateExpressions = Seq(
-    /* first = */ If(IsNull(first), child, first)
-  )
+  override val updateExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* first = */ If(Or(valueSet, IsNull(child)), first, child),
+        /* valueSet = */ Or(valueSet, IsNotNull(child))
+      )
+    } else {
+      Seq(
+        /* first = */ If(valueSet, first, child),
+        /* valueSet = */ Literal.create(true, BooleanType)
+      )
+    }
+  }
 
-  override val mergeExpressions = Seq(
-    /* first = */ If(IsNull(first.left), first.right, first.left)
-  )
+  override val mergeExpressions = {
+    // For first, we can just check if valueSet.left is set to true. If it is set
+    // to true, we use first.right. If not, we use first.right (even if valueSet.right is
+    // false, we are safe to do so because first.right will be null in this case).
+    Seq(
+      /* first = */ If(valueSet.left, first.left, first.right),
+      /* valueSet = */ Or(valueSet.left, valueSet.right)
+    )
+  }
 
   override val evaluateExpression = first
+
+  override def toString: String = s"FIRST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 }
 
-case class Last(child: Expression) extends DeclarativeAggregate {
+/**
+ * Returns the last value of `child` for a group of rows. If the last value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[Last]] is used on a already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
+ * @param child
+ */
+case class Last(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -175,15 +230,33 @@ case class Last(child: Expression) extends DeclarativeAggregate {
     /* last = */ Literal.create(null, child.dataType)
   )
 
-  override val updateExpressions = Seq(
-    /* last = */ If(IsNull(child), last, child)
-  )
+  override val updateExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* last = */ If(IsNull(child), last, child)
+      )
+    } else {
+      Seq(
+        /* last = */ child
+      )
+    }
+  }
 
-  override val mergeExpressions = Seq(
-    /* last = */ If(IsNull(last.right), last.left, last.right)
-  )
+  override val mergeExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* last = */ If(IsNull(last.right), last.left, last.right)
+      )
+    } else {
+      Seq(
+        /* last = */ last.right
+      )
+    }
+  }
 
   override val evaluateExpression = last
+
+  override def toString: String = s"LAST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 }
 
 case class Max(child: Expression) extends DeclarativeAggregate {

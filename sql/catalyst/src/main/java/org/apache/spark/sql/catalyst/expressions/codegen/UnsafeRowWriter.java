@@ -58,6 +58,10 @@ public class UnsafeRowWriter {
     }
   }
 
+  public boolean isNullAt(int ordinal) {
+    return BitSetMethods.isSet(holder.buffer, startingOffset, ordinal);
+  }
+
   public void setNullAt(int ordinal) {
     BitSetMethods.set(holder.buffer, startingOffset, ordinal);
     Platform.putLong(holder.buffer, getFieldOffset(ordinal), 0L);
@@ -95,41 +99,85 @@ public class UnsafeRowWriter {
     }
   }
 
-  public void writeCompactDecimal(int ordinal, Decimal input, int precision, int scale) {
-    // make sure Decimal object has the same scale as DecimalType
-    if (input.changePrecision(precision, scale)) {
-      Platform.putLong(holder.buffer, getFieldOffset(ordinal), input.toUnscaledLong());
-    } else {
-      setNullAt(ordinal);
+  public void write(int ordinal, boolean value) {
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putBoolean(holder.buffer, offset, value);
+  }
+
+  public void write(int ordinal, byte value) {
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putByte(holder.buffer, offset, value);
+  }
+
+  public void write(int ordinal, short value) {
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putShort(holder.buffer, offset, value);
+  }
+
+  public void write(int ordinal, int value) {
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putInt(holder.buffer, offset, value);
+  }
+
+  public void write(int ordinal, long value) {
+    Platform.putLong(holder.buffer, getFieldOffset(ordinal), value);
+  }
+
+  public void write(int ordinal, float value) {
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
     }
+    final long offset = getFieldOffset(ordinal);
+    Platform.putLong(holder.buffer, offset, 0L);
+    Platform.putFloat(holder.buffer, offset, value);
+  }
+
+  public void write(int ordinal, double value) {
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
+    Platform.putDouble(holder.buffer, getFieldOffset(ordinal), value);
   }
 
   public void write(int ordinal, Decimal input, int precision, int scale) {
-    // grow the global buffer before writing data.
-    holder.grow(16);
-
-    // zero-out the bytes
-    Platform.putLong(holder.buffer, holder.cursor, 0L);
-    Platform.putLong(holder.buffer, holder.cursor + 8, 0L);
-
-    // Make sure Decimal object has the same scale as DecimalType.
-    // Note that we may pass in null Decimal object to set null for it.
-    if (input == null || !input.changePrecision(precision, scale)) {
-      BitSetMethods.set(holder.buffer, startingOffset, ordinal);
-      // keep the offset for future update
-      setOffsetAndSize(ordinal, 0L);
+    if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      // make sure Decimal object has the same scale as DecimalType
+      if (input.changePrecision(precision, scale)) {
+        Platform.putLong(holder.buffer, getFieldOffset(ordinal), input.toUnscaledLong());
+      } else {
+        setNullAt(ordinal);
+      }
     } else {
-      final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
-      assert bytes.length <= 16;
+      // grow the global buffer before writing data.
+      holder.grow(16);
 
-      // Write the bytes to the variable length portion.
-      Platform.copyMemory(
-        bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
-      setOffsetAndSize(ordinal, bytes.length);
+      // zero-out the bytes
+      Platform.putLong(holder.buffer, holder.cursor, 0L);
+      Platform.putLong(holder.buffer, holder.cursor + 8, 0L);
+
+      // Make sure Decimal object has the same scale as DecimalType.
+      // Note that we may pass in null Decimal object to set null for it.
+      if (input == null || !input.changePrecision(precision, scale)) {
+        BitSetMethods.set(holder.buffer, startingOffset, ordinal);
+        // keep the offset for future update
+        setOffsetAndSize(ordinal, 0L);
+      } else {
+        final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
+        assert bytes.length <= 16;
+
+        // Write the bytes to the variable length portion.
+        Platform.copyMemory(
+          bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
+        setOffsetAndSize(ordinal, bytes.length);
+      }
+
+      // move the cursor forward.
+      holder.cursor += 16;
     }
-
-    // move the cursor forward.
-    holder.cursor += 16;
   }
 
   public void write(int ordinal, UTF8String input) {
@@ -151,7 +199,10 @@ public class UnsafeRowWriter {
   }
 
   public void write(int ordinal, byte[] input) {
-    final int numBytes = input.length;
+    write(ordinal, input, 0, input.length);
+  }
+
+  public void write(int ordinal, byte[] input, int offset, int numBytes) {
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
 
     // grow the global buffer before writing data.
@@ -160,7 +211,8 @@ public class UnsafeRowWriter {
     zeroOutPaddingBytes(numBytes);
 
     // Write the bytes to the variable length portion.
-    Platform.copyMemory(input, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
+    Platform.copyMemory(input, Platform.BYTE_ARRAY_OFFSET + offset,
+      holder.buffer, holder.cursor, numBytes);
 
     setOffsetAndSize(ordinal, numBytes);
 
@@ -180,20 +232,5 @@ public class UnsafeRowWriter {
 
     // move the cursor forward.
     holder.cursor += 16;
-  }
-
-
-
-  // If this struct is already an UnsafeRow, we don't need to go through all fields, we can
-  // directly write it.
-  public static void directWrite(BufferHolder holder, UnsafeRow input) {
-    // No need to zero-out the bytes as UnsafeRow is word aligned for sure.
-    final int numBytes = input.getSizeInBytes();
-    // grow the global buffer before writing data.
-    holder.grow(numBytes);
-    // Write the bytes to the variable length portion.
-    input.writeToMemory(holder.buffer, holder.cursor);
-    // move the cursor forward.
-    holder.cursor += numBytes;
   }
 }

@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, ArrayData, DateTimeUtils}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * A default version of ScalaReflection that uses the runtime universe.
@@ -142,7 +142,7 @@ trait ScalaReflection {
   }
 
   /**
-   * Returns an expression that can be used to construct an object of type `T` given a an input
+   * Returns an expression that can be used to construct an object of type `T` given an input
    * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
    * of the same name as the constructor arguments.  Nested classes will have their fields accessed
    * using UnresolvedExtractValue.
@@ -411,9 +411,9 @@ trait ScalaReflection {
   }
 
   /** Returns expressions for extracting all the fields from the given type. */
-  def extractorsFor[T : TypeTag](inputObject: Expression): Seq[Expression] = {
+  def extractorsFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
     ScalaReflectionLock.synchronized {
-      extractorFor(inputObject, typeTag[T].tpe).asInstanceOf[CreateStruct].children
+      extractorFor(inputObject, typeTag[T].tpe).asInstanceOf[CreateNamedStruct]
     }
   }
 
@@ -497,11 +497,11 @@ trait ScalaReflection {
             }
           }
 
-          CreateStruct(params.head.map { p =>
+          CreateNamedStruct(params.head.flatMap { p =>
             val fieldName = p.name.toString
             val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
-            extractorFor(fieldValue, fieldType)
+            expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType) :: Nil
           })
 
         case t if t <:< localTypeOf[Array[_]] =>

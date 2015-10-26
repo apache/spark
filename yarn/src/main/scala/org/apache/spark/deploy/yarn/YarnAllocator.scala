@@ -430,17 +430,20 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val alreadyReleased = releasedContainers.remove(containerId)
+      val hostOpt = allocatedContainerToHostMap.get(containerId)
+      val onHostStr = hostOpt.map(host => s" on host: $host").getOrElse("")
       val exitReason = if (!alreadyReleased) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
         numExecutorsRunning -= 1
-        logInfo("Completed container %s (state: %s, exit status: %s)".format(
+        logInfo("Completed container %s%s (state: %s, exit status: %s)".format(
           containerId,
+          onHostStr,
           completedContainer.getState,
           completedContainer.getExitStatus))
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
         // there are some exit status' we shouldn't necessarily count against us, but for
-        // now I think its ok as none of the containers are expected to exit
+        // now I think its ok as none of the containers are expected to exit.
         val exitStatus = completedContainer.getExitStatus
         val (exitCausedByApp, containerExitReason) = exitStatus match {
           case ContainerExitStatus.SUCCESS =>
@@ -450,7 +453,7 @@ private[yarn] class YarnAllocator(
             // Preemption is not the fault of the running tasks, since YARN preempts containers
             // merely to do resource sharing, and tasks that fail due to preempted executors could
             // just as easily finish on any other executor. See SPARK-8167.
-            (false, s"Container $containerId was preempted.")
+            (false, s"Container ${containerId}${onHostStr} was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
           case VMEM_EXCEEDED_EXIT_CODE =>
             (true, memLimitExceededLogMessage(
@@ -462,7 +465,7 @@ private[yarn] class YarnAllocator(
               PMEM_EXCEEDED_PATTERN))
           case unknown =>
             numExecutorsFailed += 1
-            (true, "Container marked as failed: " + containerId +
+            (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
               ". Diagnostics: " + completedContainer.getDiagnostics)
 
@@ -480,10 +483,10 @@ private[yarn] class YarnAllocator(
           s"Container $containerId exited from explicit termination request.")
       }
 
-      if (allocatedContainerToHostMap.contains(containerId)) {
-        val host = allocatedContainerToHostMap.get(containerId).get
-        val containerSet = allocatedHostToContainersMap.get(host).get
-
+      for {
+        host <- hostOpt
+        containerSet <- allocatedHostToContainersMap.get(host)
+      } {
         containerSet.remove(containerId)
         if (containerSet.isEmpty) {
           allocatedHostToContainersMap.remove(host)

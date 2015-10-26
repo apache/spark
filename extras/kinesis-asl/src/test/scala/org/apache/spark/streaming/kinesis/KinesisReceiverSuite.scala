@@ -52,14 +52,14 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   record2.setData(ByteBuffer.wrap("Learning Spark".getBytes(StandardCharsets.UTF_8)))
   val batch = Arrays.asList(record1, record2)
 
-  var receiverMock: KinesisReceiver = _
+  var receiverMock: KinesisReceiver[Array[Byte]] = _
   var checkpointerMock: IRecordProcessorCheckpointer = _
   var checkpointClockMock: ManualClock = _
   var checkpointStateMock: KinesisCheckpointState = _
   var currentClockMock: Clock = _
 
   override def beforeFunction(): Unit = {
-    receiverMock = mock[KinesisReceiver]
+    receiverMock = mock[KinesisReceiver[Array[Byte]]]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
     checkpointClockMock = mock[ManualClock]
     checkpointStateMock = mock[KinesisCheckpointState]
