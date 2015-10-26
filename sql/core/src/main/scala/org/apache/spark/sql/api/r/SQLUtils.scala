@@ -130,16 +130,18 @@ private[r] object SQLUtils {
   }
 
   def dfToCols(df: DataFrame): Array[Array[Any]] = {
-    // localDF is Array[Row]
-    val localDF = df.collect()
+    val localDF: Array[Row] = df.collect()
     val numCols = df.columns.length
+    val numRows = localDF.length
 
-    // result is Array[Array[Any]]
-    (0 until numCols).map { colIdx =>
-      localDF.map { row =>
-        row(colIdx)
+    val colArray = new Array[Array[Any]](numCols)
+    for (colNo <- 0 until numCols) {
+      colArray(colNo) = new Array[Any](numRows)
+      for (rowNo <- 0 until numRows) {
+        colArray(colNo)(rowNo) = localDF(rowNo)(colNo)
       }
-    }.toArray
+    }
+    colArray
   }
 
   def saveMode(mode: String): SaveMode = {
