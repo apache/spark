@@ -79,14 +79,18 @@ def run(args):
     utils.pessimistic_connection_handling()
     # Setting up logging
     log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
-    if log.startswith('s3:'):
-        log = os.path.join(settings.AIRFLOW_HOME, '_tmp_s3_logs')
     directory = log + "/{args.dag_id}/{args.task_id}".format(args=args)
     if not os.path.exists(directory):
         os.makedirs(directory)
     args.execution_date = dateutil.parser.parse(args.execution_date)
     iso = args.execution_date.isoformat()
     filename = "{directory}/{iso}".format(**locals())
+
+    # store old log (to help with S3 appends)
+    if os.path.exists(filename):
+        with open(filename, 'r') as logfile:
+            old_log = logfile.read()
+
     subdir = None
     if args.subdir:
         subdir = args.subdir.replace(
@@ -167,21 +171,28 @@ def run(args):
         executor.heartbeat()
         executor.end()
 
-    if conf.get('core', 'BASE_LOG_FOLDER').startswith('s3:'):
+    if conf.get('core', 'S3_LOG_FOLDER').startswith('s3:'):
         import boto
         s3 = boto.connect_s3()
-        s3_log = filename.replace(log, conf.get('core', 'BASE_LOG_FOLDER'))
+        s3_log = filename.replace(log, conf.get('core', 'S3_LOG_FOLDER'))
         bucket, key = s3_log.lstrip('s3:/').split('/', 1)
         s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
         if os.path.exists(filename):
-            s3_key.set_contents_from_filename(filename)
-            try:
-                # load log file to s3, if it exists
-                # try to clean up tmp files
-                os.remove(filename)
-                os.removedirs(os.path.dirname(filename))
-            except:
-                pass
+
+            # get logs
+            with open(filename, 'r') as logfile:
+                new_log = logfile.read()
+
+            # remove old logs (since they are already in S3)
+            new_log.replace(old_log, '')
+
+            # append new logs to old S3 logs, if available
+            if s3_key.exists():
+                old_s3_log = s3_key.get_contents_as_string().decode()
+                new_log = old_s3_log + '\n' + new_log
+
+            # send log to S3
+            s3_key.set_contents_from_string(new_log)
 
 
 def task_state(args):
@@ -318,11 +329,7 @@ def worker(args):
     # Worker to serve static log files through this simple flask app
     env = os.environ.copy()
     env['AIRFLOW_HOME'] = settings.AIRFLOW_HOME
-    if not conf.get('core', 'BASE_LOG_FOLDER').startswith('s3:'):
-        sp = subprocess.Popen(
-            ['airflow', 'serve_logs'],
-            env=env,
-        )
+    sp = subprocess.Popen(['airflow', 'serve_logs'], env=env)
 
     # Celery worker
     from airflow.executors.celery_executor import app as celery_app

@@ -824,39 +824,52 @@ class Airflow(BaseView):
             TI.execution_date == dttm).first()
         dttm = dateutil.parser.parse(execution_date)
         form = DateTimeForm(data={'execution_date': dttm})
+
         if ti:
             host = ti.hostname
+            log_loaded = False
 
-            if loc.startswith('s3:'):
-                import boto
-                s3 = boto.connect_s3()
-                bucket, key = loc.lstrip('s3:/').split('/', 1)
-                s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
-                if not s3_key.exists():
-                    log = 'No log available on S3.'
-                else:
-                    log = s3_key.get_contents_as_string().decode()
-
-            elif socket.gethostname() == host:
+            if socket.gethostname() == host:
                 try:
                     f = open(loc)
                     log += "".join(f.readlines())
                     f.close()
+                    log_loaded = True
                 except:
-                    log = "Log file isn't where expected.\n".format(loc)
+                    log = "*** Log file isn't where expected.\n".format(loc)
             else:
                 WORKER_LOG_SERVER_PORT = \
                     conf.get('celery', 'WORKER_LOG_SERVER_PORT')
                 url = os.path.join(
                     "http://{host}:{WORKER_LOG_SERVER_PORT}/log", log_relative
                     ).format(**locals())
-                log += "Log file isn't local.\n"
-                log += "Fetching here: {url}\n".format(**locals())
+                log += "*** Log file isn't local.\n"
+                log += "*** Fetching here: {url}\n".format(**locals())
                 try:
                     import requests
                     log += requests.get(url).text
+                    log_loaded = True
                 except:
-                    log += "Failed to fetch log file.".format(**locals())
+                    log += "*** Failed to fetch log file from worker.\n".format(
+                        **locals())
+
+            # try to load log backup from S3
+            s3_log_folder = conf.get('core', 'S3_LOG_FOLDER')
+            if not log_loaded and s3_log_folder.startswith('s3:'):
+                log += '*** Fetching log from S3.\n'
+                log += ('*** Note: S3 logs are only available once '
+                        'tasks have completed.\n')
+                import boto
+                s3 = boto.connect_s3()
+                s3_log_loc = os.path.join(
+                    conf.get('core', 'S3_LOG_FOLDER'), log_relative)
+                bucket, key = s3_log_loc.lstrip('s3:/').split('/', 1)
+                s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
+                if s3_key.exists():
+                    log += '\n' + s3_key.get_contents_as_string().decode()
+                else:
+                    log += '*** No log found on S3.\n'
+
             session.commit()
             session.close()
         log = log.decode('utf-8') if PY2 else log
