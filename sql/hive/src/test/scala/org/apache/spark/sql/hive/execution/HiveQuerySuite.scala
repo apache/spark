@@ -874,6 +874,17 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  test("DROP TEMPORARY FUNCTION") {
+    val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+    sql(s"ADD JAR $funcJar")
+    sql(
+      """CREATE TEMPORARY FUNCTION udtf_count2 AS
+        | 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'""".stripMargin)
+    assert(sql("show functions udtf_count2").count == 1)
+    sql("DROP TEMPORARY FUNCTION udtf_count2")
+    assert(sql("show functions udtf_count2").count == 0)
+  }
+
   test("ADD JAR command") {
     val testJar = TestHive.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
     sql("CREATE TABLE alter1(a INT, b INT)")
