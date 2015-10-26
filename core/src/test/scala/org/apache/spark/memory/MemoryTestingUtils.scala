@@ -15,12 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.map;
+package org.apache.spark.memory
 
-public class BytesToBytesMapOnHeapSuite extends AbstractBytesToBytesMapSuite {
+import org.apache.spark.{SparkEnv, TaskContextImpl, TaskContext}
 
-  @Override
-  protected boolean useOffHeapMemoryAllocator() {
-    return false;
+/**
+ * Helper methods for mocking out memory-management-related classes in tests.
+ */
+object MemoryTestingUtils {
+  def fakeTaskContext(env: SparkEnv): TaskContext = {
+    val taskMemoryManager = new TaskMemoryManager(env.memoryManager, 0)
+    new TaskContextImpl(
+      stageId = 0,
+      partitionId = 0,
+      taskAttemptId = 0,
+      attemptNumber = 0,
+      taskMemoryManager = taskMemoryManager,
+      metricsSystem = env.metricsSystem,
+      internalAccumulators = Seq.empty)
   }
 }
