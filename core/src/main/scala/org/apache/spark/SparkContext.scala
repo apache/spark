@@ -1234,6 +1234,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     union(Seq(first) ++ rest)
   }
 
+  private[spark] def zipPartitions[T : ClassTag, V : ClassTag](
+      rdds: Seq[RDD[T]],
+      preservesPartitioning: Boolean = false)(
+      func: Seq[Iterator[T]] => Iterator[V]): RDD[V] = withScope {
+    new ZippedPartitionsRDD(this, func, rdds, preservesPartitioning)
+  }
+
   /** Get an RDD that has no partitions or elements. */
   def emptyRDD[T: ClassTag]: EmptyRDD[T] = new EmptyRDD[T](this)
 

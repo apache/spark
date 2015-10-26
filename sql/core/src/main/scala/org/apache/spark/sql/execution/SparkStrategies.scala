@@ -379,6 +379,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.AppendColumns(f, tEnc, uEnc, newCol, planLater(child)) :: Nil
       case logical.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, child) =>
         execution.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, planLater(child)) :: Nil
+      case logical.CoGroup(f, kEnc, eEnc, output, encoders, groupings, children) =>
+        execution.CoGroup(f, kEnc, eEnc, output, encoders, groupings, children.map(planLater)) ::
+          Nil
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
