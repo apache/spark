@@ -39,14 +39,14 @@ public class CombineSplitInputFormat<K, V> implements InputFormat<K, V> {
    * Create a combine split from the list of splits
    * Add this new combine split into splitList.
    */
-  private void addCreatedSplit(List<CombineSplit> splitList,
+  private void addCreatedSplit(List<CombineSplit> combineSplits,
                                long totalLen,
                                Collection<String> locations,
-                               List<InputSplit> validSplits) {
+                               List<InputSplit> combineSplitBuffer) {
     CombineSplit combineSparkSplit =
-      new CombineSplit(validSplits.toArray(new InputSplit[0]),
+      new CombineSplit(combineSplitBuffer.toArray(new InputSplit[0]),
         totalLen, locations.toArray(new String[0]));
-    splitList.add(combineSparkSplit);
+    combineSplits.add(combineSparkSplit);
   }
 
   @Override
@@ -66,7 +66,7 @@ public class CombineSplitInputFormat<K, V> implements InputFormat<K, V> {
     }
     // Iterate the nodes to combine in order to evenly distributing the splits
     List<CombineSplit> combineSparkSplits = Lists.newArrayList();
-    List<InputSplit> oneCombinedSplits = Lists.newArrayList();
+    List<InputSplit> combinedSplitBuffer = Lists.newArrayList();
     long currentSplitSize = 0L;
     for (Map.Entry<String, List<InputSplit>> entry: nodeToSplits.entrySet()) {
       String node = entry.getKey();
@@ -77,27 +77,27 @@ public class CombineSplitInputFormat<K, V> implements InputFormat<K, V> {
           continue;
         } else {
           currentSplitSize += split.getLength();
-          oneCombinedSplits.add(split);
+          combinedSplitBuffer.add(split);
           splitsSet.remove(split);
         }
         if (splitSize != 0 && currentSplitSize > splitSize) {
           // TODO: optimize this by providing the second/third preference locations
           addCreatedSplit(combineSparkSplits,
-            currentSplitSize, Collections.singleton(node), oneCombinedSplits);
+            currentSplitSize, Collections.singleton(node), combinedSplitBuffer);
           currentSplitSize = 0;
-          oneCombinedSplits.clear();
+          combinedSplitBuffer.clear();
         }
       }
       // populate the remaining splits into one combined split
-      if (!oneCombinedSplits.isEmpty()) {
+      if (!combinedSplitBuffer.isEmpty()) {
         long remainLen = 0;
-        for (InputSplit s: oneCombinedSplits) {
+        for (InputSplit s: combinedSplitBuffer) {
           remainLen += s.getLength();
         }
         addCreatedSplit(combineSparkSplits,
-          remainLen, Collections.singleton(node), oneCombinedSplits);
+          remainLen, Collections.singleton(node), combinedSplitBuffer);
         currentSplitSize = 0;
-        oneCombinedSplits.clear();
+        combinedSplitBuffer.clear();
       }
     }
     return combineSparkSplits.toArray(new InputSplit[0]);
