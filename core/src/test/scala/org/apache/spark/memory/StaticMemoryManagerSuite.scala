@@ -36,27 +36,35 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
       maxExecutionMem: Long,
       maxStorageMem: Long): (StaticMemoryManager, MemoryStore) = {
     val mm = new StaticMemoryManager(
-      conf, maxExecutionMemory = maxExecutionMem, maxStorageMemory = maxStorageMem)
+      conf, maxExecutionMemory = maxExecutionMem, maxStorageMemory = maxStorageMem, numCores = 1)
     val ms = makeMemoryStore(mm)
     (mm, ms)
+  }
+
+  override protected def createMemoryManager(maxMemory: Long): MemoryManager = {
+    new StaticMemoryManager(
+      conf,
+      maxExecutionMemory = maxMemory,
+      maxStorageMemory = 0,
+      numCores = 1)
   }
 
   test("basic execution memory") {
     val maxExecutionMem = 1000L
     val (mm, _) = makeThings(maxExecutionMem, Long.MaxValue)
     assert(mm.executionMemoryUsed === 0L)
-    assert(mm.acquireExecutionMemory(10L, evictedBlocks) === 10L)
+    assert(mm.doAcquireExecutionMemory(10L, evictedBlocks) === 10L)
     assert(mm.executionMemoryUsed === 10L)
-    assert(mm.acquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
     // Acquire up to the max
-    assert(mm.acquireExecutionMemory(1000L, evictedBlocks) === 890L)
+    assert(mm.doAcquireExecutionMemory(1000L, evictedBlocks) === 890L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    assert(mm.acquireExecutionMemory(1L, evictedBlocks) === 0L)
+    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 0L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
     mm.releaseExecutionMemory(800L)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
-    assert(mm.acquireExecutionMemory(1L, evictedBlocks) === 1L)
+    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
     mm.releaseExecutionMemory(maxExecutionMem)
@@ -108,10 +116,10 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     val dummyBlock = TestBlockId("ain't nobody love like you do")
     val (mm, ms) = makeThings(maxExecutionMem, maxStorageMem)
     // Only execution memory should increase
-    assert(mm.acquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 100L)
-    assert(mm.acquireExecutionMemory(1000L, evictedBlocks) === 100L)
+    assert(mm.doAcquireExecutionMemory(1000L, evictedBlocks) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 200L)
     // Only storage memory should increase

@@ -34,9 +34,13 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
    * Make a [[UnifiedMemoryManager]] and a [[MemoryStore]] with limited class dependencies.
    */
   private def makeThings(maxMemory: Long): (UnifiedMemoryManager, MemoryStore) = {
-    val mm = new UnifiedMemoryManager(conf, maxMemory)
+    val mm = new UnifiedMemoryManager(conf, maxMemory, numCores = 1)
     val ms = makeMemoryStore(mm)
     (mm, ms)
+  }
+
+  override protected def createMemoryManager(maxMemory: Long): MemoryManager = {
+    new UnifiedMemoryManager(conf, maxMemory, numCores = 1)
   }
 
   private def getStorageRegionSize(mm: UnifiedMemoryManager): Long = {
@@ -56,18 +60,18 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val maxMemory = 1000L
     val (mm, _) = makeThings(maxMemory)
     assert(mm.executionMemoryUsed === 0L)
-    assert(mm.acquireExecutionMemory(10L, evictedBlocks) === 10L)
+    assert(mm.doAcquireExecutionMemory(10L, evictedBlocks) === 10L)
     assert(mm.executionMemoryUsed === 10L)
-    assert(mm.acquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
     // Acquire up to the max
-    assert(mm.acquireExecutionMemory(1000L, evictedBlocks) === 890L)
+    assert(mm.doAcquireExecutionMemory(1000L, evictedBlocks) === 890L)
     assert(mm.executionMemoryUsed === maxMemory)
-    assert(mm.acquireExecutionMemory(1L, evictedBlocks) === 0L)
+    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 0L)
     assert(mm.executionMemoryUsed === maxMemory)
     mm.releaseExecutionMemory(800L)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
-    assert(mm.acquireExecutionMemory(1L, evictedBlocks) === 1L)
+    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
     mm.releaseExecutionMemory(maxMemory)
@@ -132,12 +136,12 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     require(mm.storageMemoryUsed > storageRegionSize,
       s"bad test: storage memory used should exceed the storage region")
     // Execution needs to request 250 bytes to evict storage memory
-    assert(mm.acquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
     assert(mm.executionMemoryUsed === 100L)
     assert(mm.storageMemoryUsed === 750L)
     assertEnsureFreeSpaceNotCalled(ms)
     // Execution wants 200 bytes but only 150 are free, so storage is evicted
-    assert(mm.acquireExecutionMemory(200L, evictedBlocks) === 200L)
+    assert(mm.doAcquireExecutionMemory(200L, evictedBlocks) === 200L)
     assertEnsureFreeSpaceCalled(ms, 200L)
     assert(mm.executionMemoryUsed === 300L)
     mm.releaseAllStorageMemory()
@@ -151,7 +155,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       s"bad test: storage memory used should be within the storage region")
     // Execution cannot evict storage because the latter is within the storage fraction,
     // so grant only what's remaining without evicting anything, i.e. 1000 - 300 - 400 = 300
-    assert(mm.acquireExecutionMemory(400L, evictedBlocks) === 300L)
+    assert(mm.doAcquireExecutionMemory(400L, evictedBlocks) === 300L)
     assert(mm.executionMemoryUsed === 600L)
     assert(mm.storageMemoryUsed === 400L)
     assertEnsureFreeSpaceNotCalled(ms)
@@ -170,7 +174,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     require(executionRegionSize === expectedExecutionRegionSize,
       "bad test: storage region size is unexpected")
     // Acquire enough execution memory to exceed the execution region
-    assert(mm.acquireExecutionMemory(800L, evictedBlocks) === 800L)
+    assert(mm.doAcquireExecutionMemory(800L, evictedBlocks) === 800L)
     assert(mm.executionMemoryUsed === 800L)
     assert(mm.storageMemoryUsed === 0L)
     assertEnsureFreeSpaceNotCalled(ms)
@@ -188,7 +192,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     mm.releaseExecutionMemory(maxMemory)
     mm.releaseStorageMemory(maxMemory)
     // Acquire some execution memory again, but this time keep it within the execution region
-    assert(mm.acquireExecutionMemory(200L, evictedBlocks) === 200L)
+    assert(mm.doAcquireExecutionMemory(200L, evictedBlocks) === 200L)
     assert(mm.executionMemoryUsed === 200L)
     assert(mm.storageMemoryUsed === 0L)
     assertEnsureFreeSpaceNotCalled(ms)

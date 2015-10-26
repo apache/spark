@@ -42,10 +42,14 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * up most of the storage space, in which case the new blocks will be evicted immediately
  * according to their respective storage levels.
  */
-private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) extends MemoryManager {
+private[spark] class UnifiedMemoryManager(
+    conf: SparkConf,
+    maxMemory: Long,
+    numCores: Int)
+  extends MemoryManager(conf, numCores) {
 
-  def this(conf: SparkConf) {
-    this(conf, UnifiedMemoryManager.getMaxMemory(conf))
+  def this(conf: SparkConf, numCores: Int) {
+    this(conf, UnifiedMemoryManager.getMaxMemory(conf), numCores)
   }
 
   /**
@@ -91,7 +95,7 @@ private[spark] class UnifiedMemoryManager(conf: SparkConf, maxMemory: Long) exte
    * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return number of bytes successfully granted (<= N).
    */
-  override def acquireExecutionMemory(
+  private[memory] override def doAcquireExecutionMemory(
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
     assert(numBytes >= 0)

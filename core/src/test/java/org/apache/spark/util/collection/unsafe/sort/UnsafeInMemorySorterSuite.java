@@ -26,11 +26,11 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 
 import org.apache.spark.HashPartitioner;
+import org.apache.spark.SparkConf;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
+import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 
 public class UnsafeInMemorySorterSuite {
 
@@ -43,7 +43,8 @@ public class UnsafeInMemorySorterSuite {
   @Test
   public void testSortingEmptyInput() {
     final UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(
-      new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP)),
+      new TaskMemoryManager(
+        new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0),
       mock(RecordComparator.class),
       mock(PrefixComparator.class),
       100);
@@ -64,8 +65,8 @@ public class UnsafeInMemorySorterSuite {
       "Lychee",
       "Mango"
     };
-    final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
+    final TaskMemoryManager memoryManager = new TaskMemoryManager(
+      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048);
     final Object baseObject = dataPage.getBaseObject();
     // Write the records into the data page:

@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.memory;
+package org.apache.spark.memory;
 
 import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * Manages the memory allocated by an individual task.
@@ -87,13 +89,9 @@ public class TaskMemoryManager {
    */
   private final BitSet allocatedPages = new BitSet(PAGE_TABLE_SIZE);
 
-  /**
-   * Tracks memory allocated with {@link TaskMemoryManager#allocate(long)}, used to detect / clean
-   * up leaked memory.
-   */
-  private final HashSet<MemoryBlock> allocatedNonPageMemory = new HashSet<MemoryBlock>();
+  private final MemoryManager memoryManager;
 
-  private final ExecutorMemoryManager executorMemoryManager;
+  private final long taskAttemptId;
 
   /**
    * Tracks whether we're in-heap or off-heap. For off-heap, we short-circuit most of these methods
@@ -103,16 +101,38 @@ public class TaskMemoryManager {
   private final boolean inHeap;
 
   /**
-   * Construct a new MemoryManager.
+   * Construct a new TaskMemoryManager.
    */
-  public TaskMemoryManager(ExecutorMemoryManager executorMemoryManager) {
-    this.inHeap = executorMemoryManager.inHeap;
-    this.executorMemoryManager = executorMemoryManager;
+  public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
+    this.inHeap = memoryManager.tungstenMemoryIsAllocatedInHeap();
+    this.memoryManager = memoryManager;
+    this.taskAttemptId = taskAttemptId;
+  }
+
+  /**
+   * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
+   * @return number of bytes successfully granted (<= N).
+   */
+  public long acquireExecutionMemory(long size) {
+    return memoryManager.acquireExecutionMemory(size, taskAttemptId);
+  }
+
+  /**
+   * Release N bytes of execution memory.
+   */
+  public void releaseExecutionMemory(long size) {
+    memoryManager.releaseExecutionMemory(size, taskAttemptId);
+  }
+
+  public long pageSizeBytes() {
+    return memoryManager.pageSizeBytes();
   }
 
   /**
    * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
-   * intended for allocating large blocks of memory that will be shared between operators.
+   * intended for allocating large blocks of Tungsten memory that will be shared between operators.
+   *
+   * Returns `null` if there was not enough memory to allocate the page.
    */
   public MemoryBlock allocatePage(long size) {
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
@@ -129,7 +149,15 @@ public class TaskMemoryManager {
       }
       allocatedPages.set(pageNumber);
     }
-    final MemoryBlock page = executorMemoryManager.allocate(size);
+    final long acquiredExecutionMemory = acquireExecutionMemory(size);
+    if (acquiredExecutionMemory != size) {
+      releaseExecutionMemory(acquiredExecutionMemory);
+      synchronized (this) {
+        allocatedPages.clear(pageNumber);
+      }
+      return null;
+    }
+    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(size);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
@@ -152,45 +180,16 @@ public class TaskMemoryManager {
     if (logger.isTraceEnabled()) {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
-    // Cannot access a page once it's freed.
-    executorMemoryManager.free(page);
-  }
-
-  /**
-   * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed
-   * to be zeroed out (call `zero()` on the result if this is necessary). This method is intended
-   * to be used for allocating operators' internal data structures. For data pages that you want to
-   * exchange between operators, consider using {@link TaskMemoryManager#allocatePage(long)}, since
-   * that will enable intra-memory pointers (see
-   * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)} and this class's
-   * top-level Javadoc for more details).
-   */
-  public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    assert(size > 0) : "Size must be positive, but got " + size;
-    final MemoryBlock memory = executorMemoryManager.allocate(size);
-    synchronized(allocatedNonPageMemory) {
-      allocatedNonPageMemory.add(memory);
-    }
-    return memory;
-  }
-
-  /**
-   * Free memory allocated by {@link TaskMemoryManager#allocate(long)}.
-   */
-  public void free(MemoryBlock memory) {
-    assert (memory.pageNumber == -1) : "Should call freePage() for pages, not free()";
-    executorMemoryManager.free(memory);
-    synchronized(allocatedNonPageMemory) {
-      final boolean wasAlreadyRemoved = !allocatedNonPageMemory.remove(memory);
-      assert (!wasAlreadyRemoved) : "Called free() on memory that was already freed!";
-    }
+    long pageSize = page.size();
+    memoryManager.tungstenMemoryAllocator().free(page);
+    releaseExecutionMemory(pageSize);
   }
 
   /**
    * Given a memory page and offset within that page, encode this address into a 64-bit long.
    * This address will remain valid as long as the corresponding page has not been freed.
    *
-   * @param page a data page allocated by {@link TaskMemoryManager#allocate(long)}.
+   * @param page a data page allocated by {@link TaskMemoryManager#allocatePage(long)}/
    * @param offsetInPage an offset in this page which incorporates the base offset. In other words,
    *                     this should be the value that you would pass as the base offset into an
    *                     UNSAFE call (e.g. page.baseOffset() + something).
@@ -270,17 +269,15 @@ public class TaskMemoryManager {
       }
     }
 
-    synchronized (allocatedNonPageMemory) {
-      final Iterator<MemoryBlock> iter = allocatedNonPageMemory.iterator();
-      while (iter.hasNext()) {
-        final MemoryBlock memory = iter.next();
-        freedBytes += memory.size();
-        // We don't call free() here because that calls Set.remove, which would lead to a
-        // ConcurrentModificationException here.
-        executorMemoryManager.free(memory);
-        iter.remove();
-      }
-    }
+    freedBytes += memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
+
     return freedBytes;
+  }
+
+  /**
+   * Returns the memory consumption, in bytes, for the current task
+   */
+  public long getMemoryConsumptionForThisTask() {
+    return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
   }
 }

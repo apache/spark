@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.sort;
 
+import org.apache.spark.memory.TaskMemoryManager;
+
 /**
  * Wrapper around an 8-byte word that holds a 24-bit partition number and 40-bit record pointer.
  * <p>
@@ -26,7 +28,7 @@ package org.apache.spark.shuffle.sort;
  * </pre>
  * This implies that the maximum addressable page size is 2^27 bits = 128 megabytes, assuming that
  * our offsets in pages are not 8-byte-word-aligned. Since we have 2^13 pages (based off the
- * 13-bit page numbers assigned by {@link org.apache.spark.unsafe.memory.TaskMemoryManager}), this
+ * 13-bit page numbers assigned by {@link TaskMemoryManager}), this
  * implies that we can address 2^13 * 128 megabytes = 1 terabyte of RAM per task.
  * <p>
  * Assuming word-alignment would allow for a 1 gigabyte maximum page size, but we leave this

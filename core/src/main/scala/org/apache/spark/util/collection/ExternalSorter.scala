@@ -27,6 +27,7 @@ import com.google.common.annotations.VisibleForTesting
 import com.google.common.io.ByteStreams
 
 import org.apache.spark._
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
@@ -87,12 +88,15 @@ import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
  * - Users are expected to call stop() at the end to delete all the intermediate files.
  */
 private[spark] class ExternalSorter[K, V, C](
+    context: TaskContext,
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
     serializer: Option[Serializer] = None)
   extends Logging
   with Spillable[WritablePartitionedPairCollection[K, C]] {
+
+  override protected[this] def taskMemoryManager: TaskMemoryManager = context.taskMemoryManager()
 
   private val conf = SparkEnv.get.conf
 
@@ -640,7 +644,6 @@ private[spark] class ExternalSorter[K, V, C](
    */
   def writePartitionedFile(
       blockId: BlockId,
-      context: TaskContext,
       outputFile: File): Array[Long] = {
 
     // Track location of each range in the output file
@@ -686,8 +689,11 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   def stop(): Unit = {
+    map = null // So that the memory can be garbage-collected
+    buffer = null // So that the memory can be garbage-collected
     spills.foreach(s => s.file.delete())
     spills.clear()
+    releaseMemory()
   }
 
   /**

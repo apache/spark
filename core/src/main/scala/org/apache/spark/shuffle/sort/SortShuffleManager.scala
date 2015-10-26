@@ -133,7 +133,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           env.blockManager,
           shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           context.taskMemoryManager(),
-          env.shuffleMemoryManager,
           unsafeShuffleHandle,
           mapId,
           context,

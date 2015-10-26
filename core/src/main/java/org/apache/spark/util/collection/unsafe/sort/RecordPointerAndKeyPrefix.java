@@ -17,9 +17,11 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import org.apache.spark.memory.TaskMemoryManager;
+
 final class RecordPointerAndKeyPrefix {
   /**
-   * A pointer to a record; see {@link org.apache.spark.unsafe.memory.TaskMemoryManager} for a
+   * A pointer to a record; see {@link TaskMemoryManager} for a
    * description of how these addresses are encoded.
    */
   public long recordPointer;
