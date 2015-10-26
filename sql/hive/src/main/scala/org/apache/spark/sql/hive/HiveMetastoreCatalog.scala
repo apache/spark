@@ -281,14 +281,14 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         }
       }
 
-      val partitionColumns = schemaToHiveColumn(relation.partitionColumns)
-      val dataColumns = schemaToHiveColumn(relation.schema).filterNot(partitionColumns.contains)
+      assert(partitionColumns.isEmpty)
+      assert(relation.partitionColumns.isEmpty)
 
       HiveTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
-        schema = dataColumns,
-        partitionColumns = partitionColumns,
+        schema = schemaToHiveColumn(relation.schema),
+        partitionColumns = Nil,
         tableType = tableType,
         properties = tableProperties.toMap,
         serdeProperties = options,
