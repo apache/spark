@@ -368,14 +368,9 @@ private[spark] object JsonProtocol {
         ("Partition ID" -> taskCommitDenied.partitionID) ~
         ("Attempt Number" -> taskCommitDenied.attemptNumber)
       case ExecutorLostFailure(executorId, isNormalExit, reason) =>
-        if (reason.isDefined) {
-          ("Executor ID" -> executorId) ~
-          ("Normal Exit" -> isNormalExit) ~
-          ("Loss Reason" -> reason.get.toString)
-        } else {
-          ("Executor ID" -> executorId) ~
-          ("Normal Exit" -> isNormalExit)
-        }
+        ("Executor ID" -> executorId) ~
+        ("Normal Exit" -> isNormalExit) ~
+        ("Loss Reason" -> reason.map(_.toString))
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
