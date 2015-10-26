@@ -1521,7 +1521,8 @@ setMethod("merge",
               joinX <- by.x
               joinY <- by.y
             } else if (length(by) > 0) {
-              # if join columns have the same name for both dataframes, they are used in join expression
+              # if join columns have the same name for both dataframes,
+              # they are used in join expression
               joinX <- by
               joinY <- by
             } else {
