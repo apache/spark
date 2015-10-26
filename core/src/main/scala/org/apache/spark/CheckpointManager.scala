@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.rdd.{ReliableRDDCheckpointData, ReliableCheckpointRDD, RDD}
 import org.apache.spark.storage._
 
-class CheckpointManager extends Logging {
+private[spark] class CheckpointManager extends Logging {
 
   /** Keys of RDD partitions that are being checkpointed. */
   private val checkpointingRDDPartitions = new mutable.HashSet[RDDBlockId]
