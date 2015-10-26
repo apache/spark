@@ -314,6 +314,7 @@ def worker(args):
         'optimization': 'fair',
         'O': 'fair',
         'queues': args.queues,
+        'concurrency': args.concurrency,
     }
     worker.run(**options)
     sp.kill()
@@ -583,6 +584,11 @@ def get_parser():
         "-q", "--queues",
         help="Comma delimited list of queues to serve",
         default=conf.get('celery', 'DEFAULT_QUEUE'))
+    parser_worker.add_argument(
+        "-c", "--concurrency",
+        type=int,
+        help="The number of worker processes",
+        default=conf.get('celery', 'celeryd_concurrency'))
     parser_worker.set_defaults(func=worker)
 
     ht = "Serve logs generate by worker"
