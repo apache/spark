@@ -37,6 +37,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
   override def beforeEach(): Unit = {
     tempDir = Utils.createTempDir()
     mapStatusFile = File.createTempFile("shuffle", ".mapstatus", tempDir)
+    mapStatusFile.delete()
   }
 
   override def afterEach(): Unit = {
@@ -104,7 +105,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     firstAttempt.foreach{ case (t, d) => assert(!t.exists())}
 
     val secondAttempt = generateAttempt(1)
-    firstAttempt(0)._2.delete() // TODO should be mapStatusFile.delete()
+    mapStatusFile.delete()
     // second commit now succeeds since one destination file is missing
     val secondCommit = commit(secondAttempt, 2)
     assert(secondCommit._1)
