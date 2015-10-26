@@ -17,7 +17,9 @@
 
 package org.apache.spark.memory;
 
-import java.util.*;
+import java.io.IOException;
+import java.util.BitSet;
+import java.util.HashMap;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
@@ -101,12 +103,18 @@ public class TaskMemoryManager {
   private final boolean inHeap;
 
   /**
+   * The size of memory granted to each consumer.
+   */
+  private HashMap<MemoryConsumer, Long> consumers;
+
+  /**
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
     this.inHeap = memoryManager.tungstenMemoryIsAllocatedInHeap();
     this.memoryManager = memoryManager;
     this.taskAttemptId = taskAttemptId;
+    this.consumers = new HashMap<>();
   }
 
   /**
@@ -118,10 +126,72 @@ public class TaskMemoryManager {
   }
 
   /**
+   * Acquire N bytes of memory for a consumer. If there is no enough memory, it will call
+   * spill() of consumers to release more memory.
+   *
+   * @return number of bytes successfully granted (<= N).
+   */
+  public long acquireExecutionMemory(long size, MemoryConsumer consumer) throws IOException {
+    synchronized (this) {
+      long got = acquireExecutionMemory(size);
+
+      if (got < size && consumer != null) {
+        // call spill() on itself to release some memory
+        consumer.spill(size - got);
+        got += acquireExecutionMemory(size - got);
+
+        if (got < size) {
+          long needed = size - got;
+          // call spill() on other consumers to release memory
+          for (MemoryConsumer c: consumers.keySet()) {
+            if (c != consumer) {
+              needed -= c.spill(size - got);
+              if (needed < 0) {
+                break;
+              }
+            }
+          }
+          got += acquireExecutionMemory(size - got);
+        }
+      }
+
+      long old = 0L;
+      if (consumers.containsKey(consumer)) {
+        old = consumers.get(consumer);
+      }
+      consumers.put(consumer, got + old);
+
+      return got;
+    }
+  }
+
+  /**
    * Release N bytes of execution memory.
    */
   public void releaseExecutionMemory(long size) {
     memoryManager.releaseExecutionMemory(size, taskAttemptId);
+  }
+
+  /**
+   * Release N bytes of execution memory for a MemoryConsumer.
+   */
+  public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
+    synchronized (this) {
+      if (consumer != null && consumers.containsKey(consumer)) {
+        long old = consumers.get(consumer);
+        if (old > size) {
+          consumers.put(consumer, old - size);
+        } else {
+          if (old < size) {
+            // TODO
+          }
+          consumers.remove(consumer);
+        }
+      } else {
+        // TODO
+      }
+      memoryManager.releaseExecutionMemory(size, taskAttemptId);
+    }
   }
 
   public long pageSizeBytes() {
@@ -134,10 +204,25 @@ public class TaskMemoryManager {
    *
    * Returns `null` if there was not enough memory to allocate the page.
    */
-  public MemoryBlock allocatePage(long size) {
+  public MemoryBlock allocatePage(long size) throws IOException {
+    return allocatePage(size, null);
+  }
+
+  /**
+   * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
+   * intended for allocating large blocks of Tungsten memory that will be shared between operators.
+   *
+   * Returns `null` if there was not enough memory to allocate the page.
+   */
+  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) throws IOException {
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
       throw new IllegalArgumentException(
         "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
+    }
+
+    long acquired = acquireExecutionMemory(size, consumer);
+    if (acquired <= 0) {
+      return null;
     }
 
     final int pageNumber;
@@ -148,14 +233,6 @@ public class TaskMemoryManager {
           "Have already allocated a maximum of " + PAGE_TABLE_SIZE + " pages");
       }
       allocatedPages.set(pageNumber);
-    }
-    final long acquiredExecutionMemory = acquireExecutionMemory(size);
-    if (acquiredExecutionMemory != size) {
-      releaseExecutionMemory(acquiredExecutionMemory);
-      synchronized (this) {
-        allocatedPages.clear(pageNumber);
-      }
-      return null;
     }
     final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(size);
     page.pageNumber = pageNumber;
@@ -170,6 +247,13 @@ public class TaskMemoryManager {
    * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage(long)}.
    */
   public void freePage(MemoryBlock page) {
+    freePage(page, null);
+  }
+
+  /**
+   * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage(long)}.
+   */
+  public void freePage(MemoryBlock page, MemoryConsumer consumer) {
     assert (page.pageNumber != -1) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
     assert(allocatedPages.get(page.pageNumber));
@@ -182,7 +266,7 @@ public class TaskMemoryManager {
     }
     long pageSize = page.size();
     memoryManager.tungstenMemoryAllocator().free(page);
-    releaseExecutionMemory(pageSize);
+    releaseExecutionMemory(pageSize, consumer);
   }
 
   /**

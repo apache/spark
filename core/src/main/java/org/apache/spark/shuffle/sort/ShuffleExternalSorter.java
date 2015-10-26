@@ -31,15 +31,15 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
 
 /**
@@ -58,14 +58,13 @@ import org.apache.spark.util.Utils;
  * spill files. Instead, this merging is performed in {@link UnsafeShuffleWriter}, which uses a
  * specialized merge procedure that avoids extra serialization/deserialization.
  */
-final class ShuffleExternalSorter {
+final class ShuffleExternalSorter extends MemoryConsumer {
 
   private final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
 
-  private final int initialSize;
   private final int numPartitions;
   private final int pageSizeBytes;
   @VisibleForTesting
@@ -98,8 +97,7 @@ final class ShuffleExternalSorter {
   // These variables are reset after spilling:
   @Nullable private ShuffleInMemorySorter inMemSorter;
   @Nullable private MemoryBlock currentPage = null;
-  private long currentPagePosition = -1;
-  private long freeSpaceInCurrentPage = 0;
+  private long pageCursor = -1;
 
   public ShuffleExternalSorter(
       TaskMemoryManager memoryManager,
@@ -109,10 +107,10 @@ final class ShuffleExternalSorter {
       int numPartitions,
       SparkConf conf,
       ShuffleWriteMetrics writeMetrics) throws IOException {
+    super(memoryManager);
     this.taskMemoryManager = memoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;
-    this.initialSize = initialSize;
     this.peakMemoryUsedBytes = initialSize;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
@@ -123,25 +121,7 @@ final class ShuffleExternalSorter {
       PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, taskMemoryManager.pageSizeBytes());
     this.maxRecordSizeBytes = pageSizeBytes - 4;
     this.writeMetrics = writeMetrics;
-    initializeForWriting();
-
-    // preserve first page to ensure that we have at least one page to work with. Otherwise,
-    // other operators in the same task may starve this sorter (SPARK-9709).
-    acquireNewPageIfNecessary(pageSizeBytes);
-  }
-
-  /**
-   * Allocates new sort data structures. Called when creating the sorter and after each spill.
-   */
-  private void initializeForWriting() throws IOException {
-    // TODO: move this sizing calculation logic into a static method of sorter:
-    final long memoryRequested = initialSize * 8L;
-    final long memoryAcquired = taskMemoryManager.acquireExecutionMemory(memoryRequested);
-    if (memoryAcquired != memoryRequested) {
-      taskMemoryManager.releaseExecutionMemory(memoryAcquired);
-      throw new IOException("Could not acquire " + memoryRequested + " bytes of memory");
-    }
-
+    acquireMemory(initialSize * 8L);
     this.inMemSorter = new ShuffleInMemorySorter(initialSize);
     numRecordsInsertedSinceLastSpill = 0;
   }
@@ -242,6 +222,8 @@ final class ShuffleExternalSorter {
       }
     }
 
+    inMemSorter.reset();
+
     if (!isLastFile) {  // i.e. this is a spill file
       // The current semantics of `shuffleRecordsWritten` seem to be that it's updated when records
       // are written to disk, not when they enter the shuffle sorting code. DiskBlockObjectWriter
@@ -267,8 +249,8 @@ final class ShuffleExternalSorter {
    * Sort and spill the current records in response to memory pressure.
    */
   @VisibleForTesting
-  void spill() throws IOException {
-    assert(inMemSorter != null);
+  @Override
+  public long spill(long size) throws IOException {
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
       Utils.bytesToString(getMemoryUsage()),
@@ -276,13 +258,9 @@ final class ShuffleExternalSorter {
       spills.size() > 1 ? " times" : " time");
 
     writeSortedFile(false);
-    final long inMemSorterMemoryUsage = inMemSorter.getMemoryUsage();
-    inMemSorter = null;
-    taskMemoryManager.releaseExecutionMemory(inMemSorterMemoryUsage);
     final long spillSize = freeMemory();
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
-
-    initializeForWriting();
+    return spillSize;
   }
 
   private long getMemoryUsage() {
@@ -312,18 +290,12 @@ final class ShuffleExternalSorter {
     updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
-      taskMemoryManager.freePage(block);
+      freePage(block);
       memoryFreed += block.size();
-    }
-    if (inMemSorter != null) {
-      long sorterMemoryUsage = inMemSorter.getMemoryUsage();
-      inMemSorter = null;
-      taskMemoryManager.releaseExecutionMemory(sorterMemoryUsage);
     }
     allocatedPages.clear();
     currentPage = null;
-    currentPagePosition = -1;
-    freeSpaceInCurrentPage = 0;
+    pageCursor = 0;
     return memoryFreed;
   }
 
@@ -332,15 +304,15 @@ final class ShuffleExternalSorter {
    */
   public void cleanupResources() {
     freeMemory();
+    if (inMemSorter != null) {
+      long sorterMemoryUsage = inMemSorter.getMemoryUsage();
+      inMemSorter = null;
+      releaseMemory(sorterMemoryUsage);
+    }
     for (SpillInfo spill : spills) {
       if (spill.file.exists() && !spill.file.delete()) {
         logger.error("Unable to delete spill file {}", spill.file.getPath());
       }
-    }
-    if (inMemSorter != null) {
-      long sorterMemoryUsage = inMemSorter.getMemoryUsage();
-      inMemSorter = null;
-      taskMemoryManager.releaseExecutionMemory(sorterMemoryUsage);
     }
   }
 
@@ -354,15 +326,8 @@ final class ShuffleExternalSorter {
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       logger.debug("Attempting to expand sort pointer array");
       final long oldPointerArrayMemoryUsage = inMemSorter.getMemoryUsage();
-      final long memoryToGrowPointerArray = oldPointerArrayMemoryUsage * 2;
-      final long memoryAcquired = taskMemoryManager.acquireExecutionMemory(memoryToGrowPointerArray);
-      if (memoryAcquired < memoryToGrowPointerArray) {
-        taskMemoryManager.releaseExecutionMemory(memoryAcquired);
-        spill();
-      } else {
-        inMemSorter.expandPointerArray();
-        taskMemoryManager.releaseExecutionMemory(oldPointerArrayMemoryUsage);
-      }
+      acquireMemory(oldPointerArrayMemoryUsage);  //TODO actual memory may be less
+      inMemSorter.expandPointerArray();
     }
   }
 
@@ -370,93 +335,42 @@ final class ShuffleExternalSorter {
    * Allocates more memory in order to insert an additional record. This will request additional
    * memory from the memory manager and spill if the requested memory can not be obtained.
    *
-   * @param requiredSpace the required space in the data page, in bytes, including space for storing
+   * @param required the required space in the data page, in bytes, including space for storing
    *                      the record size. This must be less than or equal to the page size (records
    *                      that exceed the page size are handled via a different code path which uses
    *                      special overflow pages).
    */
-  private void acquireNewPageIfNecessary(int requiredSpace) throws IOException {
+  private void acquireNewPageIfNecessary(int required) throws IOException {
     growPointerArrayIfNecessary();
-    if (requiredSpace > freeSpaceInCurrentPage) {
-      logger.trace("Required space {} is less than free space in current page ({})", requiredSpace,
-        freeSpaceInCurrentPage);
-      // TODO: we should track metrics on the amount of space wasted when we roll over to a new page
-      // without using the free space at the end of the current page. We should also do this for
-      // BytesToBytesMap.
-      if (requiredSpace > pageSizeBytes) {
-        throw new IOException("Required space " + requiredSpace + " is greater than page size (" +
-          pageSizeBytes + ")");
-      } else {
-        currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
-        if (currentPage == null) {
-          spill();
-          currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
-          if (currentPage == null) {
-            throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
-          }
-        }
-        currentPagePosition = currentPage.getBaseOffset();
-        freeSpaceInCurrentPage = pageSizeBytes;
-        allocatedPages.add(currentPage);
-      }
+    if (currentPage == null ||
+      pageCursor + required > currentPage.getBaseOffset() + currentPage.size() ) {
+      // TODO: try to find space in previous pages
+      currentPage = allocatePage(pageSizeBytes);
+      pageCursor = currentPage.getBaseOffset();
+      allocatedPages.add(currentPage);
     }
   }
 
   /**
    * Write a record to the shuffle sorter.
    */
-  public void insertRecord(
-      Object recordBaseObject,
-      long recordBaseOffset,
-      int lengthInBytes,
-      int partitionId) throws IOException {
+  public void insertRecord(Object recordBase, long recordOffset, int length, int partitionId)
+    throws IOException {
 
+    // for tests
     if (numRecordsInsertedSinceLastSpill > numElementsForSpillThreshold) {
-      spill();
+      spill(0);
     }
 
-    growPointerArrayIfNecessary();
-    // Need 4 bytes to store the record length.
-    final int totalSpaceRequired = lengthInBytes + 4;
+    final int required = length + 4;
+    acquireNewPageIfNecessary(required);
 
-    // --- Figure out where to insert the new record ----------------------------------------------
-
-    final MemoryBlock dataPage;
-    long dataPagePosition;
-    boolean useOverflowPage = totalSpaceRequired > pageSizeBytes;
-    if (useOverflowPage) {
-      long overflowPageSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSpaceRequired);
-      // The record is larger than the page size, so allocate a special overflow page just to hold
-      // that record.
-      MemoryBlock overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
-      if (overflowPage == null) {
-        spill();
-        overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
-        if (overflowPage == null) {
-          throw new IOException("Unable to acquire " + overflowPageSize + " bytes of memory");
-        }
-      }
-      allocatedPages.add(overflowPage);
-      dataPage = overflowPage;
-      dataPagePosition = overflowPage.getBaseOffset();
-    } else {
-      // The record is small enough to fit in a regular data page, but the current page might not
-      // have enough space to hold it (or no pages have been allocated yet).
-      acquireNewPageIfNecessary(totalSpaceRequired);
-      dataPage = currentPage;
-      dataPagePosition = currentPagePosition;
-      // Update bookkeeping information
-      freeSpaceInCurrentPage -= totalSpaceRequired;
-      currentPagePosition += totalSpaceRequired;
-    }
-    final Object dataPageBaseObject = dataPage.getBaseObject();
-
-    final long recordAddress =
-      taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    Platform.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
-    dataPagePosition += 4;
-    Platform.copyMemory(
-      recordBaseObject, recordBaseOffset, dataPageBaseObject, dataPagePosition, lengthInBytes);
+    final Object base = currentPage.getBaseObject();
+    final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
+    Platform.putInt(base, pageCursor, length);
+    pageCursor += 4;
+    Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
+    pageCursor += length;
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, partitionId);
     numRecordsInsertedSinceLastSpill += 1;
@@ -475,6 +389,9 @@ final class ShuffleExternalSorter {
         // Do not count the final file towards the spill count.
         writeSortedFile(true);
         freeMemory();
+        long sorterMemoryUsage = inMemSorter.getMemoryUsage();
+        inMemSorter = null;
+        releaseMemory(sorterMemoryUsage);
       }
       return spills.toArray(new SpillInfo[spills.size()]);
     } catch (IOException e) {

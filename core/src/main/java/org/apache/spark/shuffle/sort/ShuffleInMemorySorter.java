@@ -50,6 +50,10 @@ final class ShuffleInMemorySorter {
     this.sorter = new Sorter<PackedRecordPointer, long[]>(ShuffleSortDataFormat.INSTANCE);
   }
 
+  public void reset() {
+    pointerArrayInsertPosition = 0;
+  }
+
   public void expandPointerArray() {
     final long[] oldArray = pointerArray;
     // Guard against overflow:
@@ -59,7 +63,7 @@ final class ShuffleInMemorySorter {
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pointerArrayInsertPosition + 1 < pointerArray.length;
+    return pointerArrayInsertPosition < pointerArray.length;
   }
 
   public long getMemoryUsage() {

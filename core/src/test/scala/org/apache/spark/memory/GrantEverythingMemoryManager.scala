@@ -26,8 +26,10 @@ class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, 
   private[memory] override def doAcquireExecutionMemory(
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
-    if (oom) {
-      oom = false
+    if (oomAlways) {
+      0
+    } else if (oomOnce) {
+      oomOnce = false
       0
     } else {
       _executionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
@@ -46,9 +48,18 @@ class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, 
   override def maxExecutionMemory: Long = Long.MaxValue
   override def maxStorageMemory: Long = Long.MaxValue
 
-  private var oom = false
+  private var oomOnce = false
+  private var oomAlways = false
 
-  def markExecutionAsOutOfMemory(): Unit = {
-    oom = true
+  def markExecutionAsOutOfMemoryOnce(): Unit = {
+    oomOnce = true
+  }
+
+  def markExecutionAsOutOfMemoryAlways(): Unit = {
+    oomAlways = true
+  }
+
+  def resetOutOfMemory(): Unit = {
+    oomAlways = false
   }
 }

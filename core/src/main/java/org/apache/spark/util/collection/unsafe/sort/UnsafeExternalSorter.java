@@ -17,11 +17,10 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
-
-import javax.annotation.Nullable;
 
 import scala.runtime.AbstractFunction0;
 import scala.runtime.BoxedUnit;
@@ -32,24 +31,22 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
 
 /**
  * External sorter based on {@link UnsafeInMemorySorter}.
  */
-public final class UnsafeExternalSorter {
+public final class UnsafeExternalSorter extends MemoryConsumer {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
 
-  private final long pageSizeBytes;
   private final PrefixComparator prefixComparator;
   private final RecordComparator recordComparator;
-  private final int initialSize;
   private final TaskMemoryManager taskMemoryManager;
   private final BlockManager blockManager;
   private final TaskContext taskContext;
@@ -70,13 +67,13 @@ public final class UnsafeExternalSorter {
 
   // These variables are reset after spilling:
   @Nullable private UnsafeInMemorySorter inMemSorter;
-  // Whether the in-mem sorter is created internally, or passed in from outside.
-  // If it is passed in from outside, we shouldn't release the in-mem sorter's memory.
-  private boolean isInMemSorterExternal = false;
+  // The acquired memory for in-memory sorter
+  private long acquiredMem = 0L;
+
   private MemoryBlock currentPage = null;
-  private long currentPagePosition = -1;
-  private long freeSpaceInCurrentPage = 0;
+  private long pageCursor = -1;
   private long peakMemoryUsedBytes = 0;
+  private SpillableIterator readingIterator = null;
 
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
       TaskMemoryManager taskMemoryManager,
@@ -112,26 +109,26 @@ public final class UnsafeExternalSorter {
       int initialSize,
       long pageSizeBytes,
       @Nullable UnsafeInMemorySorter existingInMemorySorter) throws IOException {
+    super(taskMemoryManager, pageSizeBytes);
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;
     this.recordComparator = recordComparator;
     this.prefixComparator = prefixComparator;
-    this.initialSize = initialSize;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.fileBufferSizeBytes = 32 * 1024;
-    this.pageSizeBytes = pageSizeBytes;
+    // TODO: metrics tracking + integration with shuffle write metrics
+    // need to connect the write metrics to task metrics so we count the spill IO somewhere.
     this.writeMetrics = new ShuffleWriteMetrics();
 
     if (existingInMemorySorter == null) {
-      initializeForWriting();
-      // Acquire a new page as soon as we construct the sorter to ensure that we have at
-      // least one page to work with. Otherwise, other operators in the same task may starve
-      // this sorter (SPARK-9709). We don't need to do this if we already have an existing sorter.
-      acquireNewPage();
+      this.inMemSorter =
+        new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
+      acquireMemory(inMemSorter.getMemoryUsage());
+      acquiredMem = inMemSorter.getMemoryUsage();
     } else {
-      this.isInMemSorterExternal = true;
+      acquiredMem = 0;
       this.inMemSorter = existingInMemorySorter;
     }
 
@@ -147,25 +144,7 @@ public final class UnsafeExternalSorter {
     });
   }
 
-  // TODO: metrics tracking + integration with shuffle write metrics
-  // need to connect the write metrics to task metrics so we count the spill IO somewhere.
 
-  /**
-   * Allocates new sort data structures. Called when creating the sorter and after each spill.
-   */
-  private void initializeForWriting() throws IOException {
-    // Note: Do not track memory for the pointer array for now because of SPARK-10474.
-    // In more detail, in TungstenAggregate we only reserve a page, but when we fall back to
-    // sort-based aggregation we try to acquire a page AND a pointer array, which inevitably
-    // fails if all other memory is already occupied. It should be safe to not track the array
-    // because its memory footprint is frequently much smaller than that of a page. This is a
-    // temporary hack that we should address in 1.6.0.
-    // TODO: track the pointer array memory!
-    this.writeMetrics = new ShuffleWriteMetrics();
-    this.inMemSorter =
-      new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
-    this.isInMemSorterExternal = false;
-  }
 
   /**
    * Marks the current page as no-more-space-available, and as a result, either allocate a
@@ -173,19 +152,26 @@ public final class UnsafeExternalSorter {
    */
   @VisibleForTesting
   public void closeCurrentPage() {
-    freeSpaceInCurrentPage = 0;
+    if (currentPage != null) {
+      pageCursor = currentPage.getBaseOffset() + currentPage.size();
+    }
   }
 
   /**
    * Sort and spill the current records in response to memory pressure.
    */
-  public void spill() throws IOException {
+  @Override
+  public long spill(long size) throws IOException {
     assert(inMemSorter != null);
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
       Utils.bytesToString(getMemoryUsage()),
       spillWriters.size(),
       spillWriters.size() > 1 ? " times" : " time");
+
+    if (readingIterator != null) {
+      return readingIterator.spill();
+    }
 
     // We only write out contents of the inMemSorter if it is not empty.
     if (inMemSorter.numRecords() > 0) {
@@ -202,6 +188,8 @@ public final class UnsafeExternalSorter {
         spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
       }
       spillWriter.close();
+
+      inMemSorter.reset();
     }
 
     final long spillSize = freeMemory();
@@ -210,7 +198,7 @@ public final class UnsafeExternalSorter {
     // written to disk. This also counts the space needed to store the sorter's pointer array.
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
 
-    initializeForWriting();
+    return spillSize;
   }
 
   /**
@@ -246,7 +234,7 @@ public final class UnsafeExternalSorter {
   }
 
   /**
-   * Free this sorter's in-memory data structures, including its data pages and pointer array.
+   * Free this sorter's data pages.
    *
    * @return the number of bytes freed.
    */
@@ -254,14 +242,12 @@ public final class UnsafeExternalSorter {
     updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
-      taskMemoryManager.freePage(block);
+      freePage(block);
       memoryFreed += block.size();
     }
-    // TODO: track in-memory sorter memory usage (SPARK-10474)
     allocatedPages.clear();
     currentPage = null;
-    currentPagePosition = -1;
-    freeSpaceInCurrentPage = 0;
+    pageCursor = 0;
     return memoryFreed;
   }
 
@@ -285,6 +271,11 @@ public final class UnsafeExternalSorter {
   public void cleanupResources() {
     deleteSpillFiles();
     freeMemory();
+    if (inMemSorter != null) {
+      inMemSorter = null;
+      releaseMemory(acquiredMem);
+      acquiredMem = 0;
+    }
   }
 
   /**
@@ -295,8 +286,15 @@ public final class UnsafeExternalSorter {
   private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
-      // TODO: track the pointer array memory! (SPARK-10474)
-      inMemSorter.expandPointerArray();
+      // assume that the memory of array will be doubled
+      long needed = inMemSorter.getMemoryUsage();
+      acquireMemory(needed);  // could trigger spilling
+      if (inMemSorter.hasSpaceForAnotherRecord()) {
+        releaseMemory(needed);
+      } else {
+        acquiredMem += needed;
+        inMemSorter.expandPointerArray();
+      }
     }
   }
 
@@ -304,101 +302,38 @@ public final class UnsafeExternalSorter {
    * Allocates more memory in order to insert an additional record. This will request additional
    * memory from the memory manager and spill if the requested memory can not be obtained.
    *
-   * @param requiredSpace the required space in the data page, in bytes, including space for storing
+   * @param required the required space in the data page, in bytes, including space for storing
    *                      the record size. This must be less than or equal to the page size (records
    *                      that exceed the page size are handled via a different code path which uses
    *                      special overflow pages).
    */
-  private void acquireNewPageIfNecessary(int requiredSpace) throws IOException {
-    assert (requiredSpace <= pageSizeBytes);
-    if (requiredSpace > freeSpaceInCurrentPage) {
-      logger.trace("Required space {} is less than free space in current page ({})", requiredSpace,
-        freeSpaceInCurrentPage);
-      // TODO: we should track metrics on the amount of space wasted when we roll over to a new page
-      // without using the free space at the end of the current page. We should also do this for
-      // BytesToBytesMap.
-      if (requiredSpace > pageSizeBytes) {
-        throw new IOException("Required space " + requiredSpace + " is greater than page size (" +
-          pageSizeBytes + ")");
-      } else {
-        acquireNewPage();
-      }
+  private void acquireNewPageIfNecessary(int required) throws IOException {
+    if (currentPage == null ||
+      pageCursor + required > currentPage.getBaseOffset() + currentPage.size()) {
+      // TODO: try to find space on previous pages
+      currentPage = allocatePage(required);
+      pageCursor = currentPage.getBaseOffset();
+      allocatedPages.add(currentPage);
     }
-  }
-
-  /**
-   * Acquire a new page from the memory manager.
-   *
-   * If there is not enough space to allocate the new page, spill all existing ones
-   * and try again. If there is still not enough space, report error to the caller.
-   */
-  private void acquireNewPage() throws IOException {
-    currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
-    if (currentPage == null) {
-      spill();
-      currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
-      if (currentPage == null) {
-        throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
-      }
-    }
-    currentPagePosition = currentPage.getBaseOffset();
-    freeSpaceInCurrentPage = pageSizeBytes;
-    allocatedPages.add(currentPage);
   }
 
   /**
    * Write a record to the sorter.
    */
-  public void insertRecord(
-      Object recordBaseObject,
-      long recordBaseOffset,
-      int lengthInBytes,
-      long prefix) throws IOException {
+  public void insertRecord(Object recordBase, long recordOffset, int length, long prefix)
+    throws IOException {
 
     growPointerArrayIfNecessary();
     // Need 4 bytes to store the record length.
-    final int totalSpaceRequired = lengthInBytes + 4;
+    final int required = length + 4;
+    acquireNewPageIfNecessary(required);
 
-    // --- Figure out where to insert the new record ----------------------------------------------
-
-    final MemoryBlock dataPage;
-    long dataPagePosition;
-    boolean useOverflowPage = totalSpaceRequired > pageSizeBytes;
-    if (useOverflowPage) {
-      long overflowPageSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSpaceRequired);
-      // The record is larger than the page size, so allocate a special overflow page just to hold
-      // that record.
-      MemoryBlock overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
-      if (overflowPage == null) {
-        spill();
-        overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
-        if (overflowPage == null) {
-          throw new IOException("Unable to acquire " + overflowPageSize + " bytes of memory");
-        }
-      }
-      allocatedPages.add(overflowPage);
-      dataPage = overflowPage;
-      dataPagePosition = overflowPage.getBaseOffset();
-    } else {
-      // The record is small enough to fit in a regular data page, but the current page might not
-      // have enough space to hold it (or no pages have been allocated yet).
-      acquireNewPageIfNecessary(totalSpaceRequired);
-      dataPage = currentPage;
-      dataPagePosition = currentPagePosition;
-      // Update bookkeeping information
-      freeSpaceInCurrentPage -= totalSpaceRequired;
-      currentPagePosition += totalSpaceRequired;
-    }
-    final Object dataPageBaseObject = dataPage.getBaseObject();
-
-    // --- Insert the record ----------------------------------------------------------------------
-
-    final long recordAddress =
-      taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    Platform.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
-    dataPagePosition += 4;
-    Platform.copyMemory(
-      recordBaseObject, recordBaseOffset, dataPageBaseObject, dataPagePosition, lengthInBytes);
+    final Object base = currentPage.getBaseObject();
+    final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
+    Platform.putInt(base, pageCursor, length);
+    pageCursor += 4;
+    Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
+    pageCursor += length;
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
   }
@@ -411,59 +346,23 @@ public final class UnsafeExternalSorter {
    *
    * record length = key length + value length + 4
    */
-  public void insertKVRecord(
-      Object keyBaseObj, long keyOffset, int keyLen,
-      Object valueBaseObj, long valueOffset, int valueLen, long prefix) throws IOException {
+  public void insertKVRecord(Object keyBase, long keyOffset, int keyLen,
+      Object valueBase, long valueOffset, int valueLen, long prefix) throws IOException {
 
     growPointerArrayIfNecessary();
-    final int totalSpaceRequired = keyLen + valueLen + 4 + 4;
+    final int required = keyLen + valueLen + 4 + 4;
+    acquireNewPageIfNecessary(required);
 
-    // --- Figure out where to insert the new record ----------------------------------------------
-
-    final MemoryBlock dataPage;
-    long dataPagePosition;
-    boolean useOverflowPage = totalSpaceRequired > pageSizeBytes;
-    if (useOverflowPage) {
-      long overflowPageSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSpaceRequired);
-      // The record is larger than the page size, so allocate a special overflow page just to hold
-      // that record.
-      MemoryBlock overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
-      if (overflowPage == null) {
-        spill();
-        overflowPage = taskMemoryManager.allocatePage(overflowPageSize);
-        if (overflowPage == null) {
-          throw new IOException("Unable to acquire " + overflowPageSize + " bytes of memory");
-        }
-      }
-      allocatedPages.add(overflowPage);
-      dataPage = overflowPage;
-      dataPagePosition = overflowPage.getBaseOffset();
-    } else {
-      // The record is small enough to fit in a regular data page, but the current page might not
-      // have enough space to hold it (or no pages have been allocated yet).
-      acquireNewPageIfNecessary(totalSpaceRequired);
-      dataPage = currentPage;
-      dataPagePosition = currentPagePosition;
-      // Update bookkeeping information
-      freeSpaceInCurrentPage -= totalSpaceRequired;
-      currentPagePosition += totalSpaceRequired;
-    }
-    final Object dataPageBaseObject = dataPage.getBaseObject();
-
-    // --- Insert the record ----------------------------------------------------------------------
-
-    final long recordAddress =
-      taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    Platform.putInt(dataPageBaseObject, dataPagePosition, keyLen + valueLen + 4);
-    dataPagePosition += 4;
-
-    Platform.putInt(dataPageBaseObject, dataPagePosition, keyLen);
-    dataPagePosition += 4;
-
-    Platform.copyMemory(keyBaseObj, keyOffset, dataPageBaseObject, dataPagePosition, keyLen);
-    dataPagePosition += keyLen;
-
-    Platform.copyMemory(valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
+    final Object base = currentPage.getBaseObject();
+    final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
+    Platform.putInt(base, pageCursor, keyLen + valueLen + 4);
+    pageCursor += 4;
+    Platform.putInt(base, pageCursor, keyLen);
+    pageCursor += 4;
+    Platform.copyMemory(keyBase, keyOffset, base, pageCursor, keyLen);
+    pageCursor += keyLen;
+    Platform.copyMemory(valueBase, valueOffset, base, pageCursor, valueLen);
+    pageCursor += valueLen;
 
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
@@ -475,10 +374,10 @@ public final class UnsafeExternalSorter {
    */
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     assert(inMemSorter != null);
-    final UnsafeInMemorySorter.SortedIterator inMemoryIterator = inMemSorter.getSortedIterator();
-    int numIteratorsToMerge = spillWriters.size() + (inMemoryIterator.hasNext() ? 1 : 0);
+    readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+    int numIteratorsToMerge = spillWriters.size() + (readingIterator.hasNext() ? 1 : 0);
     if (spillWriters.isEmpty()) {
-      return inMemoryIterator;
+      return readingIterator;
     } else {
       final UnsafeSorterSpillMerger spillMerger =
         new UnsafeSorterSpillMerger(recordComparator, prefixComparator, numIteratorsToMerge);
@@ -486,9 +385,131 @@ public final class UnsafeExternalSorter {
         spillMerger.addSpillIfNotEmpty(spillWriter.getReader(blockManager));
       }
       spillWriters.clear();
-      spillMerger.addSpillIfNotEmpty(inMemoryIterator);
+      spillMerger.addSpillIfNotEmpty(readingIterator);
 
       return spillMerger.getSortedIterator();
+    }
+  }
+
+  class SpillableIterator extends UnsafeSorterIterator {
+    private Object baseObject = null;
+    private long baseOffset = 0;
+    private long keyPrefix = 0;
+    private int recordLength = 0;
+
+    private boolean cached = false;
+    private MemoryBlock lastPage = null;
+
+    private UnsafeSorterIterator upstream;
+
+    public SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
+      this.upstream = inMemIterator;
+    }
+
+    public long spill() throws IOException {
+      synchronized (this) {
+        if (!(upstream instanceof UnsafeInMemorySorter.SortedIterator && upstream.hasNext())) {
+          return 0L;
+        }
+
+        UnsafeInMemorySorter.SortedIterator inMemIterator =
+          (UnsafeInMemorySorter.SortedIterator) upstream;
+
+        // backup the current record
+        baseObject = inMemIterator.getBaseObject();
+        baseOffset = inMemIterator.getBaseOffset();
+        keyPrefix = inMemIterator.getKeyPrefix();
+        recordLength = inMemIterator.getRecordLength();
+
+        final UnsafeSorterSpillWriter spillWriter =
+          new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
+            inMemIterator.numRecordsLeft());
+        while (inMemIterator.hasNext()) {
+          inMemIterator.loadNext();
+          final Object baseObject = inMemIterator.getBaseObject();
+          final long baseOffset = inMemIterator.getBaseOffset();
+          final int recordLength = inMemIterator.getRecordLength();
+          spillWriter.write(baseObject, baseOffset, recordLength, inMemIterator.getKeyPrefix());
+        }
+        spillWriter.close();
+        upstream = spillWriter.getReader(blockManager);
+
+        cached = true;
+        // release the pages except the one that is used
+        long released = 0L;
+        for (MemoryBlock block : allocatedPages) {
+          if (block.getBaseObject() != baseObject) {
+            freePage(block);
+            released += block.size();
+          } else {
+            lastPage = block;
+          }
+        }
+        allocatedPages.clear();
+        return released;
+      }
+    }
+
+    @Override
+    public boolean hasNext() {
+      synchronized (this) {
+        return upstream.hasNext();
+      }
+    }
+
+    @Override
+    public void loadNext() throws IOException {
+      synchronized (this) {
+        if (cached) {
+          // Just consumed the last record from in memory iterator
+          if (lastPage != null) {
+            freePage(lastPage);
+            lastPage = null;
+          }
+          cached = false;
+        }
+        upstream.loadNext();
+      }
+    }
+
+    @Override
+    public Object getBaseObject() {
+      synchronized (this) {
+        if (cached) {
+          return baseObject;
+        }
+        return upstream.getBaseObject();
+      }
+    }
+
+    @Override
+    public long getBaseOffset() {
+      synchronized (this) {
+        if (cached) {
+          return baseOffset;
+        }
+        return upstream.getBaseOffset();
+      }
+    }
+
+    @Override
+    public int getRecordLength() {
+      synchronized (this) {
+        if (cached) {
+          return recordLength;
+        }
+        return upstream.getRecordLength();
+      }
+    }
+
+    @Override
+    public long getKeyPrefix() {
+      synchronized (this) {
+        if (cached) {
+          return keyPrefix;
+        }
+        return upstream.getKeyPrefix();
+      }
     }
   }
 }

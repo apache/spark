@@ -102,7 +102,7 @@ final class UnsafeExternalRowSorter {
 
   @VisibleForTesting
   void spill() throws IOException {
-    sorter.spill();
+    sorter.spill(Long.MAX_VALUE);
   }
 
   /**

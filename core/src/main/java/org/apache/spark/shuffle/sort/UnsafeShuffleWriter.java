@@ -245,7 +245,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @VisibleForTesting
   void forceSorterToSpill() throws IOException {
     assert (sorter != null);
-    sorter.spill();
+    sorter.spill(Long.MAX_VALUE);
   }
 
   /**

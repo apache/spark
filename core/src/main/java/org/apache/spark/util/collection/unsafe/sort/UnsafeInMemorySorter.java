@@ -89,6 +89,10 @@ public final class UnsafeInMemorySorter {
     this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
   }
 
+  public void reset() {
+    pointerArrayInsertPosition = 0;
+  }
+
   /**
    * @return the number of records that have been inserted into this sorter.
    */
@@ -100,12 +104,8 @@ public final class UnsafeInMemorySorter {
     return pointerArray.length * 8L;
   }
 
-  static long getMemoryRequirementsForPointerArray(long numEntries) {
-    return numEntries * 2L * 8L;
-  }
-
   public boolean hasSpaceForAnotherRecord() {
-    return pointerArrayInsertPosition + 2 < pointerArray.length;
+    return pointerArrayInsertPosition + 2 <= pointerArray.length;
   }
 
   public void expandPointerArray() {
@@ -156,6 +156,10 @@ public final class UnsafeInMemorySorter {
     @Override
     public boolean hasNext() {
       return position < sortBufferInsertPosition;
+    }
+
+    public int numRecordsLeft() {
+      return sortBufferInsertPosition - position;
     }
 
     @Override

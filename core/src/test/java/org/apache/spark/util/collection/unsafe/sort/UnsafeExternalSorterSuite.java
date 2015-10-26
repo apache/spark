@@ -36,22 +36,23 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.junit.Assert.*;
-import static org.mockito.AdditionalAnswers.returnsSecondArg;
-import static org.mockito.Answers.RETURNS_SMART_NULLS;
-import static org.mockito.Mockito.*;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.memory.GrantEverythingMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
+
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.junit.Assert.*;
+import static org.mockito.AdditionalAnswers.returnsSecondArg;
+import static org.mockito.Answers.RETURNS_SMART_NULLS;
+import static org.mockito.Mockito.*;
 
 public class UnsafeExternalSorterSuite {
 
@@ -86,7 +87,7 @@ public class UnsafeExternalSorterSuite {
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
 
 
-  private final long pageSizeBytes = new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "64m");
+  private final long pageSizeBytes = new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "4m");
 
   private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
     @Override
@@ -183,9 +184,9 @@ public class UnsafeExternalSorterSuite {
     insertNumber(sorter, 5);
     insertNumber(sorter, 1);
     insertNumber(sorter, 3);
-    sorter.spill();
+    sorter.spill(0);
     insertNumber(sorter, 4);
-    sorter.spill();
+    sorter.spill(0);
     insertNumber(sorter, 2);
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
@@ -206,9 +207,9 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = newSorter();
     sorter.insertRecord(null, 0, 0, 0);
     sorter.insertRecord(null, 0, 0, 0);
-    sorter.spill();
+    sorter.spill(0L);
     sorter.insertRecord(null, 0, 0, 0);
-    sorter.spill();
+    sorter.spill(0L);
     sorter.insertRecord(null, 0, 0, 0);
     sorter.insertRecord(null, 0, 0, 0);
 
@@ -233,7 +234,7 @@ public class UnsafeExternalSorterSuite {
       insertNumber(sorter, numRecords - i);
     }
     assertEquals(1, sorter.getNumberOfAllocatedPages());
-    memoryManager.markExecutionAsOutOfMemory();
+    memoryManager.markExecutionAsOutOfMemoryOnce();
     // The insertion of this record should trigger a spill:
     insertNumber(sorter, 0);
     // Ensure that spill files were created
@@ -274,9 +275,9 @@ public class UnsafeExternalSorterSuite {
     Arrays.fill(smallRecord, 123);
 
     insertRecord(sorter, largeRecord, 456);
-    sorter.spill();
+    sorter.spill(0L);
     insertRecord(sorter, smallRecord, 123);
-    sorter.spill();
+    sorter.spill(0L);
     insertRecord(sorter, smallRecord, 123);
     insertRecord(sorter, largeRecord, 456);
 
@@ -334,7 +335,7 @@ public class UnsafeExternalSorterSuite {
         insertNumber(sorter, i);
         newPeakMemory = sorter.getPeakMemoryUsedBytes();
         // The first page is pre-allocated on instantiation
-        if (i % numRecordsPerPage == 0 && i > 0) {
+        if (i % numRecordsPerPage == 0) {
           // We allocated a new page for this record, so peak memory should change
           assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
@@ -344,7 +345,7 @@ public class UnsafeExternalSorterSuite {
       }
 
       // Spilling should not change peak memory
-      sorter.spill();
+      sorter.spill(0L);
       newPeakMemory = sorter.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
       for (int i = 0; i < numRecordsPerPage; i++) {
@@ -352,22 +353,6 @@ public class UnsafeExternalSorterSuite {
       }
       newPeakMemory = sorter.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
-    } finally {
-      sorter.cleanupResources();
-      assertSpillFilesWereCleanedUp();
-    }
-  }
-
-  @Test
-  public void testReservePageOnInstantiation() throws Exception {
-    final UnsafeExternalSorter sorter = newSorter();
-    try {
-      assertEquals(1, sorter.getNumberOfAllocatedPages());
-      // Inserting a new record doesn't allocate more memory since we already have a page
-      long peakMemory = sorter.getPeakMemoryUsedBytes();
-      insertNumber(sorter, 100);
-      assertEquals(peakMemory, sorter.getPeakMemoryUsedBytes());
-      assertEquals(1, sorter.getNumberOfAllocatedPages());
     } finally {
       sorter.cleanupResources();
       assertSpillFilesWereCleanedUp();
