@@ -18,6 +18,68 @@
 __all__ = ["StreamingListener"]
 
 
+class StreamingListenerEvent(object):
+
+    def __init__(self):
+        pass
+
+
+class StreamingListenerBatchSubmitted(StreamingListenerEvent):
+
+    def __init__(self, batchInfo):
+        super(StreamingListenerEvent, self).__init__()
+        self.batchInfo = batchInfo
+
+
+class StreamingListenerBatchCompleted(StreamingListenerEvent):
+
+    def __init__(self, batchInfo):
+        super(StreamingListenerEvent, self).__init__()
+        self.batchInfo = batchInfo
+
+
+class StreamingListenerBatchStarted(StreamingListenerEvent):
+
+    def __init__(self, batchInfo):
+        super(StreamingListenerEvent, self).__init__()
+        self.batchInfo = batchInfo
+
+
+class StreamingListenerOutputOperationStarted(StreamingListenerEvent):
+
+    def __init__(self, outputOperationInfo):
+        super(StreamingListenerEvent, self).__init__()
+        self.outputOperationInfo = outputOperationInfo
+
+
+class StreamingListenerOutputOperationCompleted(StreamingListenerEvent):
+
+    def __init__(self, outputOperationInfo):
+        super(StreamingListenerEvent, self).__init__()
+        self.outputOperationInfo = outputOperationInfo
+
+
+class StreamingListenerReceieverStarted(StreamingListenerEvent):
+
+    def __init__(self, receiverInfo):
+        super(StreamingListenerEvent, self).__init__()
+        self.receiverInfo = receiverInfo
+
+
+class StreamingListenerReceiverError(StreamingListenerEvent):
+
+    def __init__(self, receiverInfo):
+        super(StreamingListenerEvent, self).__init__()
+        self.receiverInfo = receiverInfo
+
+
+class StreamingListenerReceiverStopped(StreamingListenerEvent):
+
+    def __init__(self, receiverInfo):
+        super(StreamingListenerEvent, self).__init__()
+        self.receiverInfo = receiverInfo
+
+
 class StreamingListener(object):
 
     def __init__(self):
@@ -71,24 +133,55 @@ class StreamingListener(object):
         """
         pass
 
-    def getEventInfo(self, event):
-        """
-        :param event: StreamingListenerEvent
-        :return Returns a BatchInfo, OutputOperationInfo, or ReceiverInfo based on
-                event passed.
-        """
-        event_name = event.getClass().getSimpleName()
-        if 'Batch' in event_name:
-            return BatchInfo(event.batchInfo())
-
-        elif 'Output' in event_name:
-            return OutputOperationInfo(event.outputOperationInfo())
-
-        elif 'Receiver' in event_name:
-            return ReceiverInfo(event.receiverInfo())
-
     class Java:
         implements = ["org.apache.spark.streaming.scheduler.StreamingListener"]
+
+
+class StreamingListenerAdapter(StreamingListener):
+
+    def __init__(self, streamingListener):
+        super(StreamingListener, self).__init__()
+        self.userStreamingListener = streamingListener
+
+    def onReceiverStarted(self, receiverStarted):
+        receiver_info = ReceiverInfo(receiverStarted.receiverInfo())
+        receiver_started = StreamingListenerReceieverStarted(receiver_info)
+        self.userStreamingListener.onReceiverStarted(receiver_started)
+
+    def onReceiverError(self, receiverError):
+        receiver_info = ReceiverInfo(receiverError.receiverInfo())
+        receiver_error = StreamingListenerReceiverError(receiver_info)
+        self.userStreamingListener.onReceiverError(receiver_error)
+
+    def onReceiverStopped(self, receiverStopped):
+        receiver_info = ReceiverInfo(receiverStopped.receiverInfo())
+        receiver_stopped = StreamingListenerReceiverStopped(receiver_info)
+        self.userStreamingListener.onReceiverStopped(receiver_stopped)
+
+    def onBatchSubmitted(self, batchSubmitted):
+        batch_info = BatchInfo(batchSubmitted.batchInfo())
+        batch_submitted = StreamingListenerBatchSubmitted(batch_info)
+        self.userStreamingListener.onBatchSubmitted(batch_submitted)
+
+    def onBatchStarted(self, batchStarted):
+        batch_info = BatchInfo(batchStarted.batchInfo())
+        batch_started = StreamingListenerBatchStarted(batch_info)
+        self.userStreamingListener .onBatchStarted(batch_started)
+
+    def onBatchCompleted(self, batchCompleted):
+        batch_info = BatchInfo(batchCompleted.batchInfo())
+        batch_completed = StreamingListenerBatchCompleted(batch_info)
+        self.userStreamingListener.onBatchCompleted(batch_completed)
+
+    def onOutputOperationStarted(self, outputOperationStarted):
+        output_op_info = OutputOperationInfo(outputOperationStarted.outputOperationInfo())
+        output_operation_started = StreamingListenerOutputOperationStarted(output_op_info)
+        self.userStreamingListener.onOutputOperationStarted(output_operation_started)
+
+    def onOutputOperationCompleted(self, outputOperationCompleted):
+        output_op_info = OutputOperationInfo(outputOperationCompleted.outputOperationInfo())
+        output_operation_completed = StreamingListenerOutputOperationCompleted(output_op_info)
+        self.userStreamingListener.onOutputOperationCompleted(output_operation_completed)
 
 
 class BatchInfo(object):

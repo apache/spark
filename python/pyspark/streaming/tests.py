@@ -412,13 +412,13 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.batchInfosSubmitted = []
 
         def onBatchSubmitted(self, batchSubmitted):
-            self.batchInfosSubmitted.append(self.getEventInfo(batchSubmitted))
+            self.batchInfosSubmitted.append(batchSubmitted.batchInfo)
 
         def onBatchStarted(self, batchStarted):
-            self.batchInfosStarted.append(self.getEventInfo(batchStarted))
+            self.batchInfosStarted.append(batchStarted.batchInfo)
 
         def onBatchCompleted(self, batchCompleted):
-            self.batchInfosCompleted.append(self.getEventInfo(batchCompleted))
+            self.batchInfosCompleted.append(batchCompleted.batchInfo)
 
     def test_batch_info_reports(self):
         batch_collector = self.BatchInfoCollector()
