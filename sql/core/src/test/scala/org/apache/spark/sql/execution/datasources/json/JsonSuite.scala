@@ -664,7 +664,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Loading a JSON dataset primitivesAsString returns schema with complex field and type inferring as strings") {
+  test("Loading a JSON dataset primitivesAsString returns complex fields as strings") {
     val jsonDF = sqlContext.read.option("primitivesAsString", "true").json(complexFieldAndType1)
 
     val expectedSchema = StructType(
