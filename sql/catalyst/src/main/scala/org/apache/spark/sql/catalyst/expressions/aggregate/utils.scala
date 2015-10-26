@@ -41,6 +41,16 @@ object Utils {
 
   private def doConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
     case p: Aggregate if supportsGroupingKeySchema(p) =>
+
+      var distinctExpressionSet: Seq[Expression] = null
+      def addDistinct(children: Seq[Expression], function: AggregateFunction2) = {
+        if (distinctExpressionSet == null || distinctExpressionSet == children) {
+          distinctExpressionSet = children
+          (true, function)
+        } else {
+          (false, DistinctAggregateFallback(function))
+        }
+      }
       val converted = p.transformExpressionsDown {
         case expressions.Average(child) =>
           aggregate.AggregateExpression2(
@@ -56,10 +66,18 @@ object Utils {
 
         // We do not support multiple COUNT DISTINCT columns for now.
         case expressions.CountDistinct(children) if children.length == 1 =>
+          val (isDistinct, function) = addDistinct(children, aggregate.Count(children.head))
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(children.head),
+            aggregateFunction = function,
             mode = aggregate.Complete,
-            isDistinct = true)
+            isDistinct = isDistinct)
+
+        // Always use the fallback distinct operator when we have to deal with multiple children.
+        case expressions.CountDistinct(children) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = DistinctAggregateFallback(aggregate.Count(children.head)),
+            mode = aggregate.Complete,
+            isDistinct = false)
 
         case expressions.First(child, ignoreNulls) =>
           aggregate.AggregateExpression2(
@@ -110,10 +128,11 @@ object Utils {
             isDistinct = false)
 
         case expressions.SumDistinct(child) =>
+          val (isDistinct, function) = addDistinct(Seq(child), aggregate.Sum(child))
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Sum(child),
+            aggregateFunction = function,
             mode = aggregate.Complete,
-            isDistinct = true)
+            isDistinct = isDistinct)
 
         case expressions.ApproxCountDistinct(child, rsd) =>
           aggregate.AggregateExpression2(
@@ -121,6 +140,7 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
       }
+
       // Check if there is any expressions.AggregateExpression1 left.
       // If so, we cannot convert this plan.
       val hasAggregateExpression1 = converted.aggregateExpressions.exists { expr =>
@@ -131,21 +151,7 @@ object Utils {
         }.isDefined
       }
 
-      // Check if there are multiple distinct columns.
-      val aggregateExpressions = converted.aggregateExpressions.flatMap { expr =>
-        expr.collect {
-          case agg: AggregateExpression2 => agg
-        }
-      }.toSet.toSeq
-      val functionsWithDistinct = aggregateExpressions.filter(_.isDistinct)
-      val hasMultipleDistinctColumnSets =
-        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
-          true
-        } else {
-          false
-        }
-
-      if (!hasAggregateExpression1 && !hasMultipleDistinctColumnSets) Some(converted) else None
+      if (!hasAggregateExpression1) Some(converted) else None
 
     case other => None
   }
@@ -170,7 +176,7 @@ object Utils {
         }
       }
       val errorMessage =
-        s"${invalidFunctions} implemented based on the new Aggregate Function " +
+        s"$invalidFunctions implemented based on the new Aggregate Function " +
           s"interface and it cannot be used with functions implemented based on " +
           s"the old Aggregate Function interface."
       throw new AnalysisException(errorMessage)
