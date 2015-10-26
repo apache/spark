@@ -90,6 +90,8 @@ def run(args):
     if os.path.exists(filename):
         with open(filename, 'r') as logfile:
             old_log = logfile.read()
+    else:
+        old_log = None
 
     subdir = None
     if args.subdir:
@@ -182,7 +184,8 @@ def run(args):
                 new_log = logfile.read()
 
             # remove old logs (since they are already in S3)
-            new_log.replace(old_log, '')
+            if old_log:
+                new_log.replace(old_log, '')
 
             try:
                 s3 = boto.connect_s3()
