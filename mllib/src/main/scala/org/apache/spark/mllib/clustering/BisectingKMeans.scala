@@ -126,7 +126,7 @@ class BisectingKMeans private (
     var clusterStats = mutable.Map.empty[BigInt, BisectingClusterStat]
     var step = 1
     var noMoreDividable = false
-    var rddArray = Array.empty[RDD[(BigInt, BV[Double])]]
+    var updatedDataHistory = Array.empty[RDD[(BigInt, BV[Double])]]
     // the number of maximum nodes of a binary tree by given parameter
     val multiplier = math.ceil(math.log10(this.k) / math.log10(2.0)) + 1
     val maxAllNodesInTree = math.pow(2, multiplier).toInt
@@ -149,13 +149,13 @@ class BisectingKMeans private (
         val divided = divideClusters(data, dividableLeafClusters, maxIterations)
         // update each index
         val newData = updateClusterIndex(data, divided).cache()
-        rddArray = rddArray ++ Array(data)
+        updatedDataHistory = updatedDataHistory ++ Array(data)
         data = newData
         // keep recent 2 cached RDDs in order to run more quickly
-        if (rddArray.length > 1) {
-          val head = rddArray.head
+        if (updatedDataHistory.length > 1) {
+          val head = updatedDataHistory.head
           head.unpersist()
-          rddArray = rddArray.filterNot(_.hashCode() == head.hashCode())
+          updatedDataHistory = updatedDataHistory.filterNot(_.hashCode() == head.hashCode())
         }
         clusterStats = clusterStats ++ divided
         step += 1
@@ -163,7 +163,7 @@ class BisectingKMeans private (
       }
     }
     // unpersist kept RDDs
-    rddArray.foreach(_.unpersist())
+    updatedDataHistory.foreach(_.unpersist())
     // create a map of cluster node with their criterions
     val nodes = createClusterNodes(data, clusterStats)
 
