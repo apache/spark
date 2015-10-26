@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.CharArrayWriter
+import java.io.{IOException, CharArrayWriter}
 
 import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
@@ -102,10 +102,15 @@ private[sql] class JSONRelation(
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
       }.toArray
-      InferSchema(
-        inputRDD.getOrElse(createBaseRdd(files)),
-        samplingRatio,
-        sqlContext.conf.columnNameOfCorruptRecord)
+      if (files.isEmpty) {
+        throw new IOException("Input paths do not exist or are empty directories, "
+            + "Input Paths=" + paths.mkString(","))
+      } else {
+        InferSchema(
+          inputRDD.getOrElse(createBaseRdd(files)),
+          samplingRatio,
+          sqlContext.conf.columnNameOfCorruptRecord)
+      }
     }
     checkConstraints(jsonSchema)
 

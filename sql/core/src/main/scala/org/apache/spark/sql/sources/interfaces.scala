@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.IOException
-
 import scala.collection.mutable
 import scala.util.Try
 
@@ -453,10 +451,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     def refresh(): Unit = {
       val files = listLeafFiles(paths)
-      if (!paths.isEmpty && files.isEmpty) {
-        throw new IOException("Input paths do not exist or are empty directories, "
-            + "Input Paths=" + paths.mkString(","))
-      }
+
       leafFiles.clear()
       leafDirToChildrenFiles.clear()
 
