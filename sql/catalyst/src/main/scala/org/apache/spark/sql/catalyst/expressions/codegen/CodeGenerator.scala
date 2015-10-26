@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.util.collection.OpenHashSet
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -127,6 +129,7 @@ class CodeGenContext {
       case BinaryType => s"$input.getBinary($ordinal)"
       case CalendarIntervalType => s"$input.getInterval($ordinal)"
       case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
+      case _: OpenHashSetUDT => s"($jt)$input.get($ordinal, null)"
       case _: ArrayType => s"$input.getArray($ordinal)"
       case _: MapType => s"$input.getMap($ordinal)"
       case NullType => "null"
@@ -175,11 +178,12 @@ class CodeGenContext {
     case BinaryType => "byte[]"
     case StringType => "UTF8String"
     case CalendarIntervalType => "CalendarInterval"
+    case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
+    case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
+    case dt: OpenHashSetUDT => s"${classOf[OpenHashSet[_]].getName}<${boxedType(dt.elementType)}>"
     case _: StructType => "InternalRow"
     case _: ArrayType => "ArrayData"
     case _: MapType => "MapData"
-    case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
-    case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName

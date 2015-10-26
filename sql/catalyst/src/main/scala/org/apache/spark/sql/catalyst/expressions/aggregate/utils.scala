@@ -74,8 +74,9 @@ object Utils {
 
         // Always use the fallback distinct operator when we have to deal with multiple children.
         case expressions.CountDistinct(children) =>
+          val function = DistinctAggregateFallback(aggregate.Count(CreateStruct(children)))
           aggregate.AggregateExpression2(
-            aggregateFunction = DistinctAggregateFallback(aggregate.Count(children.head)),
+            aggregateFunction = function,
             mode = aggregate.Complete,
             isDistinct = false)
 
