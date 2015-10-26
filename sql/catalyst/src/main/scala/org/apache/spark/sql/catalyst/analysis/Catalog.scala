@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{TableIdentifier, CatalystConf, EmptyConf}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
+import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Subquery}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.types.{StructType, BooleanType, StringType}
 
 /**
  * Thrown by a catalog when a table cannot be found.  The analyzer will rethrow the exception
@@ -34,6 +34,48 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 class NoSuchTableException extends Exception
 
 class NoSuchDatabaseException extends Exception
+
+object CatalystMetaData {
+
+  final val TABLES_META_NAME = "catalog_tables"
+
+  final val COLUMNS_META_NAME = "catalog_columns"
+
+  val tablesMetaOutput: Seq[Attribute] = Seq(
+    AttributeReference("name", StringType, nullable = false)(),
+    AttributeReference("database", StringType, nullable = true)(),
+    AttributeReference("is_temporary", BooleanType, nullable = false)()
+  )
+
+  val columnsMetaOutput: Seq[Attribute] = Seq(
+    AttributeReference("name", StringType, nullable = false)(),
+    AttributeReference("table", StringType, nullable = false)(),
+    AttributeReference("database", StringType, nullable = true)(),
+    AttributeReference("data_type", StringType, nullable = false)(),
+    AttributeReference("nullable", BooleanType, nullable = false)()
+  )
+
+  val tablesMetaConverter: TableInfo => InternalRow = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(
+      StructType.fromAttributes(tablesMetaOutput))
+    tableInfo => converter(tableInfo).asInstanceOf[InternalRow]
+  }
+
+  val columnsMetaConverter: ColumnInfo => InternalRow = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(
+      StructType.fromAttributes(columnsMetaOutput))
+    columnInfo => converter(columnInfo).asInstanceOf[InternalRow]
+  }
+
+  case class TableInfo(name: String, database: Option[String], isTemporary: Boolean)
+
+  case class ColumnInfo(
+      name: String,
+      table: String,
+      database: Option[String],
+      dataType: String,
+      nullable: Boolean)
+}
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
@@ -51,6 +93,8 @@ trait Catalog {
    * isTemporary is a Boolean value indicates if a table is a temporary or not.
    */
   def getTables(databaseName: Option[String]): Seq[(String, Boolean)]
+
+  def getDatabases(): Seq[String]
 
   def refreshTable(tableIdent: TableIdentifier): Unit
 
@@ -117,6 +161,8 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     tables.keySet().asScala.map(_ -> true).toSeq
   }
 
+  override def getDatabases(): Seq[String] = Nil
+
   override def refreshTable(tableIdent: TableIdentifier): Unit = {
     throw new UnsupportedOperationException
   }
@@ -163,7 +209,11 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    overrides.keySet().asScala.map(_ -> true).toSeq ++ super.getTables(databaseName)
+    if (databaseName.isEmpty) {
+      overrides.keySet().asScala.map(_ -> true).toSeq
+    } else {
+      Nil
+    } ++ super.getTables(databaseName)
   }
 
   override def registerTable(tableIdent: TableIdentifier, plan: LogicalPlan): Unit = {
@@ -178,6 +228,45 @@ trait OverrideCatalog extends Catalog {
 
   override def unregisterAllTables(): Unit = {
     overrides.clear()
+  }
+}
+
+trait MetaDataCatalog extends Catalog {
+  import CatalystMetaData._
+
+  abstract override def lookupRelation(
+      tableIdent: TableIdentifier,
+      alias: Option[String] = None): LogicalPlan = {
+    if (tableIdent.database.isEmpty && alias.isEmpty) {
+      val tableName = getTableName(tableIdent)
+
+      if (tableName == TABLES_META_NAME) {
+        return LocalRelation(tablesMetaOutput, tablesMeta().map(tablesMetaConverter))
+      }
+
+      if (tableName == COLUMNS_META_NAME) {
+        return LocalRelation(columnsMetaOutput, columnsMeta().map(columnsMetaConverter))
+      }
+    }
+
+    super.lookupRelation(tableIdent, alias)
+  }
+
+  private def tablesMeta() = {
+    val databases = None +: getDatabases().map(Option(_))
+    for {
+      db <- databases
+      (name, isTemporary) <- getTables(db)
+    } yield TableInfo(name, if (isTemporary) None else db, isTemporary)
+  }
+
+  private def columnsMeta() = {
+    for {
+      table <- tablesMeta()
+      column <- super.lookupRelation(TableIdentifier(table.name, table.database)).output
+    } yield
+    ColumnInfo(column.name, table.name, table.database,
+      column.dataType.simpleString, column.nullable)
   }
 }
 
@@ -200,6 +289,10 @@ object EmptyCatalog extends Catalog {
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getDatabases(): Seq[String] = {
     throw new UnsupportedOperationException
   }
 

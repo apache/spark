@@ -450,7 +450,7 @@ class HiveContext private[hive](
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
   override protected[sql] lazy val catalog =
-    new HiveMetastoreCatalog(metadataHive, this) with OverrideCatalog
+    new HiveMetastoreCatalog(metadataHive, this) with OverrideCatalog with MetaDataCatalog
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient

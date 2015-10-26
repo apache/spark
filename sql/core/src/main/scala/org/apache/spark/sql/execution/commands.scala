@@ -282,7 +282,13 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
   override def run(sqlContext: SQLContext): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sqlContext.
-    val rows = sqlContext.catalog.getTables(databaseName).map {
+    val tables = if (databaseName.isDefined) {
+      sqlContext.catalog.getTables(databaseName)
+    } else {
+      Nil
+    } ++ sqlContext.catalog.getTables(None)
+
+    val rows = tables.map {
       case (tableName, isTemporary) => Row(tableName, isTemporary)
     }
 

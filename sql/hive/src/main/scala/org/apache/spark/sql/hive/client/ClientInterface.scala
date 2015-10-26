@@ -106,6 +106,9 @@ private[hive] trait ClientInterface {
   /** Returns the names of all tables in the given database. */
   def listTables(dbName: String): Seq[String]
 
+  /** Returns the names of all databases. */
+  def listDatabases(): Seq[String]
+
   /** Returns the name of the active database. */
   def currentDatabase: String
 

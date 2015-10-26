@@ -1860,4 +1860,34 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(1))
     }
   }
+
+  test("query meta table") {
+    withTempTable("t1", "t2", "t3") {
+      Seq(1 -> "a").toDF("key", "value").registerTempTable("t1")
+      Seq(1 -> Array("a")).toDF("int", "array").registerTempTable("t2")
+      Seq((1, 2, 3)).toDF("i", "j", "k").registerTempTable("t3")
+
+      val allTables = sql("select * from catalog_tables")
+        .filter('name.startsWith("t") && length('name) === 2)
+        .sort('name)
+      checkAnswer(allTables, Seq(
+        Row("t1", null, true),
+        Row("t2", null, true),
+        Row("t3", null, true)
+      ))
+
+      val allColumns = sql("select * from catalog_columns")
+        .filter('table.startsWith("t") && length('table) === 2)
+        .sort('name)
+      checkAnswer(allColumns, Seq(
+        Row("array", "t2", null, "array<string>", true),
+        Row("i", "t3", null, "int", false),
+        Row("int", "t2", null, "int", false),
+        Row("j", "t3", null, "int", false),
+        Row("k", "t3", null, "int", false),
+        Row("key", "t1", null, "int", false),
+        Row("value", "t1", null, "string", true)
+      ))
+    }
+  }
 }
