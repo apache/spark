@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{IOException, CharArrayWriter}
+import java.io.CharArrayWriter
 
 import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
@@ -83,13 +83,10 @@ private[sql] class JSONRelation(
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
     val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
-    val rddInputPaths = inputPaths.map(_.getPath)
+    val paths = inputPaths.map(_.getPath)
 
-    if (rddInputPaths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, rddInputPaths: _*)
-    } else {
-      throw new IOException("Input paths do not exist or are empty directories, "
-            + "Input Paths=" + paths.mkString(","))
+    if (paths.nonEmpty) {
+      FileInputFormat.setInputPaths(job, paths: _*)
     }
 
     sqlContext.sparkContext.hadoopRDD(
