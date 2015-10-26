@@ -263,10 +263,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     val taskDescriptions2 = taskScheduler.resourceOffers(e1Offers).flatten
     assert(0 === taskDescriptions2.length)
 
-    // now really kill the executor
+    // provide the actual loss reason for executor0
     taskScheduler.executorLost("executor0", SlaveLost("oops"))
 
-    // try again, now task should be on executor1.
+    // executor0's tasks should have failed now that the loss reason is known, so offering more
+    // resources should make them be scheduled on the new executor.
     val taskDescriptions3 = taskScheduler.resourceOffers(e1Offers).flatten
     assert(1 === taskDescriptions3.length)
     assert("executor1" === taskDescriptions3(0).executorId)
