@@ -117,13 +117,13 @@ class BisectingKMeansModelSuite
       val denseData = sc.parallelize(localData.map(_._2), 2)
       val denseModel = app.run(denseData)
       assert(denseModel.getCenters.length === numClusters)
-      assert(denseModel.getClusters.forall(_.criterion == 0.0))
+      assert(denseModel.getClusters.forall(_.cost == 0.0))
 
       // sparse version
       val sparseData = sc.parallelize(localData.map(_._3), 2)
       val sparseModel = app.run(sparseData)
       assert(sparseModel.getCenters.length === numClusters)
-      assert(sparseModel.getClusters.forall(_.criterion == 0.0))
+      assert(sparseModel.getClusters.forall(_.cost == 0.0))
     }
   }
 }

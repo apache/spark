@@ -45,9 +45,9 @@ import org.apache.spark.rdd.RDD
  * efficient on Spark and splitting a cluster one by one is very slow. It will keep splitting until
  * the number of clusters will be enough to build a cluster tree. Otherwise, it will stop splitting
  * when there are no dividable clusters before the number of clusters will be sufficient. And
- * it calculates the criterions, such as average cost, entropy and so on, for building a cluster
- * tree in the first part. The criterion means how large the cluster is. That is, the cluster
- * whose criterion is maximum of all the clusters is the largest cluster.
+ * it calculates the costs, such as average cost, entropy and so on, for building a cluster
+ * tree in the first part. The costs means how large the cluster is. That is, the cluster
+ * whose cost is maximum of all the clusters is the largest cluster.
  *
  * Second, it builds a cluster tree as a binary tree by the result of the first part.
  * First of all, the cluster tree starts with only the root cluster which includes all points.
@@ -161,7 +161,7 @@ class BisectingKMeans private (
         noMoreDividable = true
       }
     }
-    // create a map of cluster node with their criterions
+    // create a map of cluster node with their costs
     val nodes = createClusterNodes(data, clusterStats)
     // unpersist RDDs
     data.unpersist()
@@ -419,7 +419,7 @@ private[clustering] object BisectingKMeans {
   }
 
   /**
-   * Creates the map of cluster stats to the map of cluster nodes with their criterions
+   * Creates the map of cluster stats to the map of cluster nodes with their costs
    *
    * @param data input data
    * @param stats map of cluster stats which is described as a binary tree
@@ -428,7 +428,7 @@ private[clustering] object BisectingKMeans {
       data: RDD[(BigInt, BV[Double])],
       stats: Map[BigInt, BisectingClusterStat]): Map[BigInt, BisectingClusterNode] = {
 
-    // TODO: support other criterion, such as entropy
+    // TODO: support other cost, such as entropy
     createClusterNodesWithAverageCost(data, stats)
   }
 
@@ -483,8 +483,8 @@ private[clustering] object BisectingKMeans {
     val root = treeMap(rootIndex)
     var leavesQueue = Map(rootIndex -> root)
     while (leavesQueue.nonEmpty && numLeavesClusters < numClusters) {
-      // pick up the largest cluster by the maximum criterion of all the clusters
-      val mostScattered = leavesQueue.maxBy(_._2.criterion)
+      // pick up the largest cluster by the maximum cost of all the clusters
+      val mostScattered = leavesQueue.maxBy(_._2.cost)
       val mostScatteredKey = mostScattered._1
       val mostScatteredCluster = mostScattered._2
 
@@ -519,7 +519,7 @@ private[clustering] object BisectingKMeans {
  *
  * @param center the center of the cluster
  * @param rows the number of rows in the cluster
- * @param criterion how large a cluster is
+ * @param cost how large a cluster is
  * @param localHeight the maximal distance between this node and its children
  * @param parent the parent cluster of the cluster
  * @param children the children nodes of the cluster
@@ -528,16 +528,16 @@ private[clustering] object BisectingKMeans {
 class BisectingClusterNode private (
     @Since("1.6.0") val center: Vector,
     @Since("1.6.0") val rows: Long,
-    @Since("1.6.0") val criterion: Double,
+    @Since("1.6.0") val cost: Double,
     private var localHeight: Double,
     private var parent: Option[BisectingClusterNode],
     private var children: Seq[BisectingClusterNode]) extends Serializable {
 
-  require(!criterion.isNaN)
+  require(!cost.isNaN)
 
   @Since("1.6.0")
-  def this(center: Vector, rows: Long, criterion: Double) =
-    this(center, rows, criterion, 0.0, None, Array.empty[BisectingClusterNode])
+  def this(center: Vector, rows: Long, cost: Double) =
+    this(center, rows, cost, 0.0, None, Array.empty[BisectingClusterNode])
 
   /**
    * Inserts a sub node as its child
@@ -573,7 +573,7 @@ class BisectingClusterNode private (
       case _ => Array(this) ++ this.children.flatMap(child => child.toArray.toIterator)
     }
     array.sortWith { case (a, b) =>
-      a.getDepth < b.getDepth && a.criterion < b.criterion && a.rows < b.rows
+      a.getDepth < b.getDepth && a.cost < b.cost && a.rows < b.rows
     }
   }
 
