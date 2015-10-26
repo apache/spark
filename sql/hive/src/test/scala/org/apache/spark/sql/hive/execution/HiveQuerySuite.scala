@@ -905,7 +905,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql(
       """CREATE TEMPORARY FUNCTION udtf_count2 AS
         | 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'""".stripMargin)
-    sql("DESCRIBE FUNCTION udtf_count2")
+    assert(sql("DESCRIBE FUNCTION udtf_count2").count > 1)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 
