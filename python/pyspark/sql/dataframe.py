@@ -1266,6 +1266,7 @@ class DataFrame(object):
             raise TypeError("col should be a string or a Column")
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def toDF(self, *cols):
         """Returns a new class:`DataFrame` that with new specified column names
 
