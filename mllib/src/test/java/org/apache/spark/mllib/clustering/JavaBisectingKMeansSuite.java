@@ -17,19 +17,19 @@
 
 package org.apache.spark.mllib.clustering;
 
+import java.io.Serializable;
+import java.util.List;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 import com.google.common.collect.Lists;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.io.Serializable;
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
 
 public class JavaBisectingKMeansSuite implements Serializable {
   private transient JavaSparkContext sc;

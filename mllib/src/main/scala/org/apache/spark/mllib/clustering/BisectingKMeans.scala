@@ -19,8 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.{Map, mutable}
 
-import breeze.linalg
-  .{SparseVector => BSV, Vector => BV, any => breezeAny, norm => breezeNorm, sum => breezeSum}
+import breeze.linalg.{SparseVector => BSV, Vector => BV, norm => breezeNorm, sum => breezeSum}
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Since
