@@ -1521,6 +1521,7 @@ setMethod("merge",
               joinX <- by.x
               joinY <- by.y
             } else if (length(by) > 0) {
+              # if join columns have the same name for both dataframes, they are used in join expression
               joinX <- by
               joinY <- by
             } else {
@@ -1538,6 +1539,8 @@ setMethod("merge",
             xsel <- select(x, colsX)
             ysel <- select(y, colsY)
 
+            # generates join conditions and adds them into a list
+            # it also considers alias names of the columns while generating join conditions
             joinColumns <- lapply(seq_len(length(joinX)), function(i) {
               colX <- joinX[[i]]
               colY <- joinY[[i]]
@@ -1555,6 +1558,7 @@ setMethod("merge",
               colX == colY
             })
 
+            # concatenates join columns with '&' and executes join
             joinExpr <- Reduce("&", joinColumns)
             joinRes <- join(xsel, ysel, joinExpr, joinType)
 
