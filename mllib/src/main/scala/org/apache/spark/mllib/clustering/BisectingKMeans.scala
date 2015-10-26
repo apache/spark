@@ -203,9 +203,8 @@ private[clustering] object BisectingKMeans {
    */
   def findClosestCenter(metric: (BV[Double], BV[Double]) => Double)
       (centers: Seq[BV[Double]])(point: BV[Double]): Int = {
-    val (closestCenter, closestIndex) =
-      centers.zipWithIndex.map { case (center, idx) => (metric(center, point), idx)}.minBy(_._1)
-    closestIndex
+    // get the closest index
+    centers.zipWithIndex.map { case (center, idx) => (metric(center, point), idx)}.minBy(_._1)._2
   }
 
   /**
