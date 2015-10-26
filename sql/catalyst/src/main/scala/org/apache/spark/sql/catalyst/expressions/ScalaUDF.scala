@@ -999,10 +999,56 @@ case class ScalaUDF(
     val converterTerms = (0 until children.size).map(genCodeForConverter(ctx, _))
 
     // Initialize user-defined function
-    val funcClassName = if (children.size == 0) {
-      classOf[() => Any].getName
-    } else {
-      function.getClass.getName
+    val funcClassName = children.size match {
+      case 0 =>
+        classOf[() => Any].getName
+      case 1 =>
+        classOf[(Any) => Any].getName
+      case 2 =>
+        classOf[(Any, Any) => Any].getName
+      case 3 =>
+        classOf[(Any, Any, Any) => Any].getName
+      case 4 =>
+        classOf[(Any, Any, Any, Any) => Any].getName
+      case 5 =>
+        classOf[(Any, Any, Any, Any, Any) => Any].getName
+      case 6 =>
+        classOf[(Any, Any, Any, Any, Any, Any) => Any].getName
+      case 7 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 8 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 9 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 10 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 11 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 12 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 13 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 14 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 15 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 16 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 17 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 18 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 19 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 20 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 21 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case 22 =>
+        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
+      case _ =>
+        throw new UnsupportedOperationException(
+          "ScalaUDF doesn't support user-defined functions with more than 22 arguments")
     }
 
     val funcTerm = ctx.freshName("udf")
