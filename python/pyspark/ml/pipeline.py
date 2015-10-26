@@ -17,6 +17,7 @@
 
 from abc import ABCMeta, abstractmethod
 
+from pyspark import since
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
@@ -42,6 +43,7 @@ class Estimator(Params):
         """
         raise NotImplementedError()
 
+    @since("1.3.0")
     def fit(self, dataset, params=None):
         """
         Fits a model to the input dataset with optional parameters.
@@ -88,6 +90,7 @@ class Transformer(Params):
         """
         raise NotImplementedError()
 
+    @since("1.3.0")
     def transform(self, dataset, params=None):
         """
         Transforms the input dataset with optional parameters.
@@ -151,6 +154,7 @@ class Pipeline(Estimator):
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
+    @since("1.3.0")
     def setStages(self, value):
         """
         Set pipeline stages.
@@ -161,6 +165,7 @@ class Pipeline(Estimator):
         self._paramMap[self.stages] = value
         return self
 
+    @since("1.3.0")
     def getStages(self):
         """
         Get pipeline stages.
@@ -169,6 +174,7 @@ class Pipeline(Estimator):
             return self._paramMap[self.stages]
 
     @keyword_only
+    @since("1.3.0")
     def setParams(self, stages=None):
         """
         setParams(self, stages=None)
@@ -204,6 +210,7 @@ class Pipeline(Estimator):
                 transformers.append(stage)
         return PipelineModel(transformers)
 
+    @since("1.4.0")
     def copy(self, extra=None):
         if extra is None:
             extra = dict()
@@ -227,6 +234,7 @@ class PipelineModel(Model):
             dataset = t.transform(dataset)
         return dataset
 
+    @since("1.4.0")
     def copy(self, extra=None):
         if extra is None:
             extra = dict()

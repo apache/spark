@@ -19,6 +19,7 @@ import sys
 if sys.version > '3':
     basestring = str
 
+from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import keyword_only
@@ -71,6 +72,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, threshold=0.0, inputCol=None, outputCol=None):
         """
         setParams(self, threshold=0.0, inputCol=None, outputCol=None)
@@ -79,6 +81,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setThreshold(self, value):
         """
         Sets the value of :py:attr:`threshold`.
@@ -86,6 +89,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.threshold] = value
         return self
 
+    @since("1.4.0")
     def getThreshold(self):
         """
         Gets the value of threshold or its default value.
@@ -150,6 +154,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, splits=None, inputCol=None, outputCol=None):
         """
         setParams(self, splits=None, inputCol=None, outputCol=None)
@@ -158,6 +163,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setSplits(self, value):
         """
         Sets the value of :py:attr:`splits`.
@@ -165,6 +171,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.splits] = value
         return self
 
+    @since("1.4.0")
     def getSplits(self):
         """
         Gets the value of threshold or its default value.
@@ -242,6 +249,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.6.0")
     def setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None):
         """
         setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None)
@@ -250,6 +258,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.6.0")
     def setMinTF(self, value):
         """
         Sets the value of :py:attr:`minTF`.
@@ -257,12 +266,14 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.minTF] = value
         return self
 
+    @since("1.6.0")
     def getMinTF(self):
         """
         Gets the value of minTF or its default value.
         """
         return self.getOrDefault(self.minTF)
 
+    @since("1.6.0")
     def setMinDF(self, value):
         """
         Sets the value of :py:attr:`minDF`.
@@ -270,12 +281,14 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.minDF] = value
         return self
 
+    @since("1.6.0")
     def getMinDF(self):
         """
         Gets the value of minDF or its default value.
         """
         return self.getOrDefault(self.minDF)
 
+    @since("1.6.0")
     def setVocabSize(self, value):
         """
         Sets the value of :py:attr:`vocabSize`.
@@ -283,6 +296,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.vocabSize] = value
         return self
 
+    @since("1.6.0")
     def getVocabSize(self):
         """
         Gets the value of vocabSize or its default value.
@@ -301,6 +315,7 @@ class CountVectorizerModel(JavaModel):
     """
 
     @property
+    @since("1.6.0")
     def vocabulary(self):
         """
         An array of terms in the vocabulary.
@@ -351,6 +366,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.6.0")
     def setParams(self, inverse=False, inputCol=None, outputCol=None):
         """
         setParams(self, inverse=False, inputCol=None, outputCol=None)
@@ -359,6 +375,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.6.0")
     def setInverse(self, value):
         """
         Sets the value of :py:attr:`inverse`.
@@ -366,6 +383,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.inverse] = value
         return self
 
+    @since("1.6.0")
     def getInverse(self):
         """
         Gets the value of inverse or its default value.
@@ -410,6 +428,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.5.0")
     def setParams(self, scalingVec=None, inputCol=None, outputCol=None):
         """
         setParams(self, scalingVec=None, inputCol=None, outputCol=None)
@@ -418,6 +437,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.5.0")
     def setScalingVec(self, value):
         """
         Sets the value of :py:attr:`scalingVec`.
@@ -425,6 +445,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.scalingVec] = value
         return self
 
+    @since("1.5.0")
     def getScalingVec(self):
         """
         Gets the value of scalingVec or its default value.
@@ -463,6 +484,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.3.0")
     def setParams(self, numFeatures=1 << 18, inputCol=None, outputCol=None):
         """
         setParams(self, numFeatures=1 << 18, inputCol=None, outputCol=None)
@@ -510,6 +532,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, minDocFreq=0, inputCol=None, outputCol=None):
         """
         setParams(self, minDocFreq=0, inputCol=None, outputCol=None)
@@ -518,6 +541,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setMinDocFreq(self, value):
         """
         Sets the value of :py:attr:`minDocFreq`.
@@ -525,6 +549,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.minDocFreq] = value
         return self
 
+    @since("1.4.0")
     def getMinDocFreq(self):
         """
         Gets the value of minDocFreq or its default value.
@@ -591,6 +616,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.6.0")
     def setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
         """
         setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
@@ -599,6 +625,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.6.0")
     def setMin(self, value):
         """
         Sets the value of :py:attr:`min`.
@@ -606,12 +633,14 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.min] = value
         return self
 
+    @since("1.6.0")
     def getMin(self):
         """
         Gets the value of min or its default value.
         """
         return self.getOrDefault(self.min)
 
+    @since("1.6.0")
     def setMax(self, value):
         """
         Sets the value of :py:attr:`max`.
@@ -619,6 +648,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.max] = value
         return self
 
+    @since("1.6.0")
     def getMax(self):
         """
         Gets the value of max or its default value.
@@ -686,6 +716,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.5.0")
     def setParams(self, n=2, inputCol=None, outputCol=None):
         """
         setParams(self, n=2, inputCol=None, outputCol=None)
@@ -694,6 +725,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.5.0")
     def setN(self, value):
         """
         Sets the value of :py:attr:`n`.
@@ -701,6 +733,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.n] = value
         return self
 
+    @since("1.5.0")
     def getN(self):
         """
         Gets the value of n or its default value.
@@ -744,6 +777,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, p=2.0, inputCol=None, outputCol=None):
         """
         setParams(self, p=2.0, inputCol=None, outputCol=None)
@@ -752,6 +786,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setP(self, value):
         """
         Sets the value of :py:attr:`p`.
@@ -759,6 +794,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.p] = value
         return self
 
+    @since("1.4.0")
     def getP(self):
         """
         Gets the value of p or its default value.
@@ -818,6 +854,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, dropLast=True, inputCol=None, outputCol=None):
         """
         setParams(self, dropLast=True, inputCol=None, outputCol=None)
@@ -826,6 +863,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setDropLast(self, value):
         """
         Sets the value of :py:attr:`dropLast`.
@@ -833,6 +871,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.dropLast] = value
         return self
 
+    @since("1.4.0")
     def getDropLast(self):
         """
         Gets the value of dropLast or its default value.
@@ -877,6 +916,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, degree=2, inputCol=None, outputCol=None):
         """
         setParams(self, degree=2, inputCol=None, outputCol=None)
@@ -885,6 +925,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setDegree(self, value):
         """
         Sets the value of :py:attr:`degree`.
@@ -892,6 +933,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.degree] = value
         return self
 
+    @since("1.4.0")
     def getDegree(self):
         """
         Gets the value of degree or its default value.
@@ -951,6 +993,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None):
         """
         setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None)
@@ -959,6 +1002,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setMinTokenLength(self, value):
         """
         Sets the value of :py:attr:`minTokenLength`.
@@ -966,12 +1010,14 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.minTokenLength] = value
         return self
 
+    @since("1.4.0")
     def getMinTokenLength(self):
         """
         Gets the value of minTokenLength or its default value.
         """
         return self.getOrDefault(self.minTokenLength)
 
+    @since("1.4.0")
     def setGaps(self, value):
         """
         Sets the value of :py:attr:`gaps`.
@@ -979,12 +1025,14 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.gaps] = value
         return self
 
+    @since("1.4.0")
     def getGaps(self):
         """
         Gets the value of gaps or its default value.
         """
         return self.getOrDefault(self.gaps)
 
+    @since("1.4.0")
     def setPattern(self, value):
         """
         Sets the value of :py:attr:`pattern`.
@@ -992,6 +1040,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.pattern] = value
         return self
 
+    @since("1.4.0")
     def getPattern(self):
         """
         Gets the value of pattern or its default value.
@@ -1030,6 +1079,7 @@ class SQLTransformer(JavaTransformer):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.6.0")
     def setParams(self, statement=None):
         """
         setParams(self, statement=None)
@@ -1038,6 +1088,7 @@ class SQLTransformer(JavaTransformer):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.6.0")
     def setStatement(self, value):
         """
         Sets the value of :py:attr:`statement`.
@@ -1045,6 +1096,7 @@ class SQLTransformer(JavaTransformer):
         self._paramMap[self.statement] = value
         return self
 
+    @since("1.6.0")
     def getStatement(self):
         """
         Gets the value of statement or its default value.
@@ -1090,6 +1142,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, withMean=False, withStd=True, inputCol=None, outputCol=None):
         """
         setParams(self, withMean=False, withStd=True, inputCol=None, outputCol=None)
@@ -1098,6 +1151,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setWithMean(self, value):
         """
         Sets the value of :py:attr:`withMean`.
@@ -1105,12 +1159,14 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.withMean] = value
         return self
 
+    @since("1.4.0")
     def getWithMean(self):
         """
         Gets the value of withMean or its default value.
         """
         return self.getOrDefault(self.withMean)
 
+    @since("1.4.0")
     def setWithStd(self, value):
         """
         Sets the value of :py:attr:`withStd`.
@@ -1118,6 +1174,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.withStd] = value
         return self
 
+    @since("1.4.0")
     def getWithStd(self):
         """
         Gets the value of withStd or its default value.
@@ -1136,6 +1193,7 @@ class StandardScalerModel(JavaModel):
     """
 
     @property
+    @since("1.5.0")
     def std(self):
         """
         Standard deviation of the StandardScalerModel.
@@ -1143,6 +1201,7 @@ class StandardScalerModel(JavaModel):
         return self._call_java("std")
 
     @property
+    @since("1.5.0")
     def mean(self):
         """
         Mean of the StandardScalerModel.
@@ -1185,6 +1244,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, inputCol=None, outputCol=None, handleInvalid="error"):
         """
         setParams(self, inputCol=None, outputCol=None, handleInvalid="error")
@@ -1204,6 +1264,7 @@ class StringIndexerModel(JavaModel):
     Model fitted by StringIndexer.
     """
     @property
+    @since("1.5.0")
     def labels(self):
         """
         Ordered list of labels, corresponding to indices to be assigned.
@@ -1243,6 +1304,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.6.0")
     def setParams(self, inputCol=None, outputCol=None, labels=None):
         """
         setParams(self, inputCol=None, outputCol=None, labels=None)
@@ -1251,6 +1313,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.6.0")
     def setLabels(self, value):
         """
         Sets the value of :py:attr:`labels`.
@@ -1258,6 +1321,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.labels] = value
         return self
 
+    @since("1.6.0")
     def getLabels(self):
         """
         Gets the value of :py:attr:`labels` or its default value.
@@ -1297,6 +1361,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.6.0")
     def setParams(self, inputCol=None, outputCol=None, stopWords=None,
                   caseSensitive=False):
         """
@@ -1307,6 +1372,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.6.0")
     def setStopWords(self, value):
         """
         Specify the stopwords to be filtered.
@@ -1314,12 +1380,14 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.stopWords] = value
         return self
 
+    @since("1.6.0")
     def getStopWords(self):
         """
         Get the stopwords.
         """
         return self.getOrDefault(self.stopWords)
 
+    @since("1.6.0")
     def setCaseSensitive(self, value):
         """
         Set whether to do a case sensitive comparison over the stop words
@@ -1327,6 +1395,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.caseSensitive] = value
         return self
 
+    @since("1.6.0")
     def getCaseSensitive(self):
         """
         Get whether to do a case sensitive comparison over the stop words.
@@ -1373,6 +1442,7 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.3.0")
     def setParams(self, inputCol=None, outputCol=None):
         """
         setParams(self, inputCol="input", outputCol="output")
@@ -1411,6 +1481,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, inputCols=None, outputCol=None):
         """
         setParams(self, inputCols=None, outputCol=None)
@@ -1501,6 +1572,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, maxCategories=20, inputCol=None, outputCol=None):
         """
         setParams(self, maxCategories=20, inputCol=None, outputCol=None)
@@ -1509,6 +1581,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setMaxCategories(self, value):
         """
         Sets the value of :py:attr:`maxCategories`.
@@ -1516,6 +1589,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.maxCategories] = value
         return self
 
+    @since("1.4.0")
     def getMaxCategories(self):
         """
         Gets the value of maxCategories or its default value.
@@ -1534,6 +1608,7 @@ class VectorIndexerModel(JavaModel):
     """
 
     @property
+    @since("1.4.0")
     def numFeatures(self):
         """
         Number of features, i.e., length of Vectors which this transforms.
@@ -1541,6 +1616,7 @@ class VectorIndexerModel(JavaModel):
         return self._call_java("numFeatures")
 
     @property
+    @since("1.4.0")
     def categoryMaps(self):
         """
         Feature value index.  Keys are categorical feature indices (column indices).
@@ -1600,6 +1676,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.6.0")
     def setParams(self, inputCol=None, outputCol=None, indices=None, names=None):
         """
         setParams(self, inputCol=None, outputCol=None, indices=None, names=None):
@@ -1608,6 +1685,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.6.0")
     def setIndices(self, value):
         """
         Sets the value of :py:attr:`indices`.
@@ -1615,12 +1693,14 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.indices] = value
         return self
 
+    @since("1.6.0")
     def getIndices(self):
         """
         Gets the value of indices or its default value.
         """
         return self.getOrDefault(self.indices)
 
+    @since("1.6.0")
     def setNames(self, value):
         """
         Sets the value of :py:attr:`names`.
@@ -1628,6 +1708,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.names] = value
         return self
 
+    @since("1.6.0")
     def getNames(self):
         """
         Gets the value of names or its default value.
@@ -1699,6 +1780,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                   seed=None, inputCol=None, outputCol=None):
         """
@@ -1709,6 +1791,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setVectorSize(self, value):
         """
         Sets the value of :py:attr:`vectorSize`.
@@ -1716,12 +1799,14 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         self._paramMap[self.vectorSize] = value
         return self
 
+    @since("1.4.0")
     def getVectorSize(self):
         """
         Gets the value of vectorSize or its default value.
         """
         return self.getOrDefault(self.vectorSize)
 
+    @since("1.4.0")
     def setNumPartitions(self, value):
         """
         Sets the value of :py:attr:`numPartitions`.
@@ -1729,12 +1814,14 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         self._paramMap[self.numPartitions] = value
         return self
 
+    @since("1.4.0")
     def getNumPartitions(self):
         """
         Gets the value of numPartitions or its default value.
         """
         return self.getOrDefault(self.numPartitions)
 
+    @since("1.4.0")
     def setMinCount(self, value):
         """
         Sets the value of :py:attr:`minCount`.
@@ -1742,6 +1829,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         self._paramMap[self.minCount] = value
         return self
 
+    @since("1.4.0")
     def getMinCount(self):
         """
         Gets the value of minCount or its default value.
@@ -1759,6 +1847,7 @@ class Word2VecModel(JavaModel):
     Model fitted by Word2Vec.
     """
 
+    @since("1.5.0")
     def getVectors(self):
         """
         Returns the vector representation of the words as a dataframe
@@ -1766,6 +1855,7 @@ class Word2VecModel(JavaModel):
         """
         return self._call_java("getVectors")
 
+    @since("1.5.0")
     def findSynonyms(self, word, num):
         """
         Find "num" number of words closest in similarity to "word".
@@ -1811,6 +1901,7 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.5.0")
     def setParams(self, k=None, inputCol=None, outputCol=None):
         """
         setParams(self, k=None, inputCol=None, outputCol=None)
@@ -1819,6 +1910,7 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.5.0")
     def setK(self, value):
         """
         Sets the value of :py:attr:`k`.
@@ -1826,6 +1918,7 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.k] = value
         return self
 
+    @since("1.5.0")
     def getK(self):
         """
         Gets the value of k or its default value.
@@ -1896,6 +1989,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.5.0")
     def setParams(self, formula=None, featuresCol="features", labelCol="label"):
         """
         setParams(self, formula=None, featuresCol="features", labelCol="label")
@@ -1904,6 +1998,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.5.0")
     def setFormula(self, value):
         """
         Sets the value of :py:attr:`formula`.
@@ -1911,6 +2006,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
         self._paramMap[self.formula] = value
         return self
 
+    @since("1.5.0")
     def getFormula(self):
         """
         Gets the value of :py:attr:`formula`.

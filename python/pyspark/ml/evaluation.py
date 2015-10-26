@@ -17,6 +17,7 @@
 
 from abc import abstractmethod, ABCMeta
 
+from pyspark import since
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
@@ -46,6 +47,7 @@ class Evaluator(Params):
         """
         raise NotImplementedError()
 
+    @since("1.4.0")
     def evaluate(self, dataset, params=None):
         """
         Evaluates the output with optional parameters.
@@ -66,6 +68,7 @@ class Evaluator(Params):
         else:
             raise ValueError("Params must be a param map but got %s." % type(params))
 
+    @since("1.5.0")
     def isLargerBetter(self):
         """
         Indicates whether the metric returned by :py:meth:`evaluate` should be maximized
@@ -138,6 +141,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
 
+    @since("1.4.0")
     def setMetricName(self, value):
         """
         Sets the value of :py:attr:`metricName`.
@@ -145,6 +149,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         self._paramMap[self.metricName] = value
         return self
 
+    @since("1.4.0")
     def getMetricName(self):
         """
         Gets the value of metricName or its default value.
@@ -152,6 +157,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         return self.getOrDefault(self.metricName)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
                   metricName="areaUnderROC"):
         """
@@ -205,6 +211,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
 
+    @since("1.4.0")
     def setMetricName(self, value):
         """
         Sets the value of :py:attr:`metricName`.
@@ -212,6 +219,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         self._paramMap[self.metricName] = value
         return self
 
+    @since("1.4.0")
     def getMetricName(self):
         """
         Gets the value of metricName or its default value.
@@ -219,6 +227,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         return self.getOrDefault(self.metricName)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
                   metricName="rmse"):
         """
@@ -271,6 +280,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
 
+    @since("1.5.0")
     def setMetricName(self, value):
         """
         Sets the value of :py:attr:`metricName`.
@@ -278,6 +288,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         self._paramMap[self.metricName] = value
         return self
 
+    @since("1.5.0")
     def getMetricName(self):
         """
         Gets the value of metricName or its default value.
@@ -285,6 +296,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         return self.getOrDefault(self.metricName)
 
     @keyword_only
+    @since("1.5.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
                   metricName="f1"):
         """
