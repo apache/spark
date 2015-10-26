@@ -173,10 +173,8 @@ def run(args):
 
     if conf.get('core', 'S3_LOG_FOLDER').startswith('s3:'):
         import boto
-        s3 = boto.connect_s3()
         s3_log = filename.replace(log, conf.get('core', 'S3_LOG_FOLDER'))
         bucket, key = s3_log.lstrip('s3:/').split('/', 1)
-        s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
         if os.path.exists(filename):
 
             # get logs
@@ -186,13 +184,19 @@ def run(args):
             # remove old logs (since they are already in S3)
             new_log.replace(old_log, '')
 
-            # append new logs to old S3 logs, if available
-            if s3_key.exists():
-                old_s3_log = s3_key.get_contents_as_string().decode()
-                new_log = old_s3_log + '\n' + new_log
+            try:
+                s3 = boto.connect_s3()
+                s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
 
-            # send log to S3
-            s3_key.set_contents_from_string(new_log)
+                # append new logs to old S3 logs, if available
+                if s3_key.exists():
+                    old_s3_log = s3_key.get_contents_as_string().decode()
+                    new_log = old_s3_log + '\n' + new_log
+
+                # send log to S3
+                s3_key.set_contents_from_string(new_log)
+            except:
+                print('Could not send logs to S3.')
 
 
 def task_state(args):
