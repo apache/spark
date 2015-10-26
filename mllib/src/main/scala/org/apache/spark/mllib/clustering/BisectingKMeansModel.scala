@@ -48,9 +48,11 @@ class BisectingKMeansModel @Since("1.6.0") (
   def predict(vector: Vector): Int = {
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
+    val closestLeafNode = this.node.findClosestLeaf(vector, metric)
 
+    val closestCenter = closestLeafNode.center
     val centers = this.getCenters.map(_.toBreeze)
-    BisectingKMeans.findClosestCenter(metric)(centers)(vector.toBreeze)
+    BisectingKMeans.findClosestCenter(metric)(centers)(closestCenter.toBreeze)
   }
 
   /**
@@ -59,16 +61,7 @@ class BisectingKMeansModel @Since("1.6.0") (
   @Since("1.6.0")
   def predict(data: RDD[Vector]): RDD[Int] = {
     val sc = data.sparkContext
-
-    // TODO Supports distance metrics other Euclidean distance metric
-    val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
-    sc.broadcast(metric)
-    val centers = this.getCenters.map(_.toBreeze)
-    sc.broadcast(centers)
-
-    data.map{point =>
-      BisectingKMeans.findClosestCenter(metric)(centers)(point.toBreeze)
-    }
+    data.map { p => predict(p) }
   }
 
   /**

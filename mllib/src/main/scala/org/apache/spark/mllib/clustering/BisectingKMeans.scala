@@ -600,6 +600,27 @@ class BisectingClusterNode private (
   }
 
   /**
+   * Finds a leaf which is the closest under the node
+   *
+   * @param point target point
+   */
+  @Since("1.6.0")
+  def findClosestLeaf(
+      point: Vector,
+      metric: (BV[Double], BV[Double]) => Double
+    ): BisectingClusterNode = {
+    this.children.size match {
+      case 0 => this
+      case _ => {
+        val bv = point.toBreeze
+        val centers = this.children.map(_.center).map(_.toBreeze)
+        val closestIndex = BisectingKMeans.findClosestCenter(metric)(centers)(bv)
+        this.children(closestIndex).findClosestLeaf(point, metric)
+      }
+    }
+  }
+
+  /**
    * Gets the leaves nodes in the cluster tree
    */
   @Since("1.6.0")
