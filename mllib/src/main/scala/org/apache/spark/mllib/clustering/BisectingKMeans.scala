@@ -68,6 +68,8 @@ class BisectingKMeans private (
     private var maxIterations: Int,
     private var seed: Long) extends Logging {
 
+  import BisectingKMeans._
+
   /**
    * Constructs with the default configuration
    */
@@ -132,10 +134,10 @@ class BisectingKMeans private (
     // divide clusters until the number of clusters reachs the condition
     // or there is no dividable cluster
     val startTime = System.currentTimeMillis()
-    var data = BisectingKMeans.initData(input).cache()
+    var data = initData(input).cache()
     while (clusterStats.size < maxAllNodesInTree && noMoreDividable == false) {
       logInfo(s"${sc.appName} starts step ${step}")
-      val leafClusters = BisectingKMeans.summarizeClusters(data)
+      val leafClusters = summarizeClusters(data)
       val dividableLeafClusters = leafClusters.filter(_._2.isDividable)
       clusterStats = clusterStats ++ leafClusters
 
@@ -144,10 +146,9 @@ class BisectingKMeans private (
       }
       else {
         // can be clustered if the number of divided clusterStats is equal to 0
-        val divided =
-          BisectingKMeans.divideClusters(data, dividableLeafClusters, maxIterations)
+        val divided = divideClusters(data, dividableLeafClusters, maxIterations)
         // update each index
-        val newData = BisectingKMeans.updateClusterIndex(data, divided).cache()
+        val newData = updateClusterIndex(data, divided).cache()
         rddArray = rddArray ++ Array(data)
         data = newData
         // keep recent 2 cached RDDs in order to run more quickly
@@ -164,11 +165,11 @@ class BisectingKMeans private (
     // unpersist kept RDDs
     rddArray.foreach(_.unpersist())
     // create a map of cluster node with their criterions
-    val nodes = BisectingKMeans.createClusterNodes(data, clusterStats)
+    val nodes = createClusterNodes(data, clusterStats)
 
     // build a cluster tree by Map class which is expressed
     logInfo(s"Building the cluster tree is started in ${sc.appName}")
-    val root = BisectingKMeans.buildTree(nodes, BisectingKMeans.ROOT_INDEX_KEY, this.k)
+    val root = buildTree(nodes, ROOT_INDEX_KEY, this.k)
     if (root.isEmpty) {
       new SparkException("Failed to build a cluster tree from a Map type of clusterStats")
     }
@@ -236,7 +237,7 @@ private[clustering] object BisectingKMeans {
    * Assigns the initial cluster index id to all data
    */
   def initData(data: RDD[Vector]): RDD[(BigInt, BV[Double])] = {
-    data.map { v: Vector => (BisectingKMeans.ROOT_INDEX_KEY, v.toBreeze)}
+    data.map { v: Vector => (ROOT_INDEX_KEY, v.toBreeze)}
   }
 
   /**
@@ -345,7 +346,7 @@ private[clustering] object BisectingKMeans {
     // extract dividable input data
     val dividableData = data.filter { case (idx, point) => dividableClusters.contains(idx)}
 
-    var newCenters = BisectingKMeans.initNextCenters(dividableData, dividableClusters)
+    var newCenters = initNextCenters(dividableData, dividableClusters)
     var bcNewCenters = sc.broadcast(newCenters)
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
@@ -365,8 +366,7 @@ private[clustering] object BisectingKMeans {
           val childrenCenters = Array(2 * idx, 2 * idx + 1)
             .filter(x => bcNewCenters.value.contains(x)).map(bcNewCenters.value(_))
           if (childrenCenters.length == 2) {
-            val closestIndex =
-              BisectingKMeans.findClosestCenter(bcMetric.value)(childrenCenters)(point)
+            val closestIndex = findClosestCenter(bcMetric.value)(childrenCenters)(point)
             val nextIndex = 2 * idx + closestIndex
 
             // get a map value or else get a sparse vector
