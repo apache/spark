@@ -430,19 +430,19 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         expected = [[1], [2], [3], [4]]
         self._test_func(input, func, expected)
 
-        # Test occasionally fails without a delay
-        time.sleep(.1)
-
         batchInfosSubmitted = batch_collector.batchInfosSubmitted
-        self.assertEqual(len(batchInfosSubmitted), 4)
+        batchInfosStarted = batch_collector.batchInfosStarted
+        batchInfosCompleted = batch_collector.batchInfosCompleted
 
+        self.wait_for(batchInfosCompleted, 4)
+
+        self.assertEqual(len(batchInfosSubmitted), 4)
         for info in batchInfosSubmitted:
 
             self.assertIsNone(info.schedulingDelay())
             self.assertIsNone(info.processingDelay())
             self.assertIsNone(info.totalDelay())
 
-        batchInfosStarted = batch_collector.batchInfosStarted
         self.assertEqual(len(batchInfosStarted), 4)
         for info in batchInfosStarted:
             self.assertIsNotNone(info.schedulingDelay())
@@ -450,7 +450,6 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.assertIsNone(info.processingDelay())
             self.assertIsNone(info.totalDelay())
 
-        batchInfosCompleted = batch_collector.batchInfosCompleted
         self.assertEqual(len(batchInfosCompleted), 4)
 
         for info in batchInfosCompleted:

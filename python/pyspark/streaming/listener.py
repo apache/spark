@@ -166,7 +166,7 @@ class StreamingListenerAdapter(StreamingListener):
     def onBatchStarted(self, batchStarted):
         batch_info = BatchInfo(batchStarted.batchInfo())
         batch_started = StreamingListenerBatchStarted(batch_info)
-        self.userStreamingListener .onBatchStarted(batch_started)
+        self.userStreamingListener.onBatchStarted(batch_started)
 
     def onBatchCompleted(self, batchCompleted):
         batch_info = BatchInfo(batchCompleted.batchInfo())
@@ -192,15 +192,16 @@ class BatchInfo(object):
         self.processingEndTime = None
 
         self.batchTime = javaBatchInfo.batchTime()
-        self.streamIdToInputInfo = self._map2dict(javaBatchInfo.streamIdToInputInfo())
-
+        self.streamIdToInputInfo = _map2dict(javaBatchInfo.streamIdToInputInfo(),
+                                             StreamInputInfo)
         self.submissionTime = javaBatchInfo.submissionTime()
         if javaBatchInfo.processingStartTime().isEmpty() is False:
             self.processingStartTime = javaBatchInfo.processingStartTime().get()
         if javaBatchInfo.processingEndTime().isEmpty() is False:
             self.processingEndTime = javaBatchInfo.processingEndTime().get()
 
-        self.outputOperationInfos = self._map2dict(javaBatchInfo.outputOperationInfos())
+        self.outputOperationInfos = _map2dict(javaBatchInfo.outputOperationInfos(),
+                                              OutputOperationInfo)
 
     def schedulingDelay(self):
         """
@@ -238,17 +239,6 @@ class BatchInfo(object):
         """
         return len(self.streamIdToInputInfo)
 
-    def _map2dict(self, javaMap):
-        """
-        Converts a scala.collection.immutable.Map to a Python dict
-        """
-        mapping = dict()
-        map_iterator = javaMap.iterator()
-        while map_iterator.hasNext():
-            entry = map_iterator.next()
-            mapping[entry._1()] = entry._2()
-        return mapping
-
 
 class OutputOperationInfo(object):
 
@@ -283,3 +273,32 @@ class ReceiverInfo(object):
         self.lastErrorMessage = receiverInfo.lastErrorMessage()
         self.lastError = receiverInfo.lastError()
         self.lastErrorTime = receiverInfo.lastErrorTime()
+
+
+class StreamInputInfo(object):
+
+    def __init__(self, streamInputInfo):
+        self.inputStreamId = streamInputInfo.inputStreamId()
+        self.numRecords = streamInputInfo.numRecords()
+        self.metadata = _map2dict(streamInputInfo.metadata())
+        self.metadataDescription = None
+        if streamInputInfo.metadataDescription().isEmpty() is False:
+            self.metadataDescription = streamInputInfo.metadataDescription().get()
+
+
+def _map2dict(scalaMap, constructor=None):
+    """
+    Converts a scala.collection.immutable.Map to a Python dict.
+    Creates an instance of an object as the value if a constructor
+    is passed.
+    """
+    mapping = dict()
+    map_iterator = scalaMap.iterator()
+    while map_iterator.hasNext():
+        entry = map_iterator.next()
+        if constructor is not None:
+            info = constructor(entry._2())
+            mapping[entry._1()] = info
+        else:
+            mapping[entry._1()] = entry._2()
+    return mapping
