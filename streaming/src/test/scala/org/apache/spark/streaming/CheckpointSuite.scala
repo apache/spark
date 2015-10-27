@@ -17,7 +17,8 @@
 
 package org.apache.spark.streaming
 
-import java.io.File
+import java.io.{ObjectOutputStream, ByteArrayOutputStream, ByteArrayInputStream, File}
+import org.apache.spark.TestUtils
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
@@ -34,7 +35,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
 import org.apache.spark.streaming.scheduler.{ConstantEstimator, RateTestInputDStream, RateTestReceiver}
-import org.apache.spark.util.{Clock, ManualClock, Utils}
+import org.apache.spark.util.{MutableURLClassLoader, Clock, ManualClock, Utils}
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -579,6 +580,36 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
+  // This tests whether spark can deserialize array object
+  // refer to SPARK-5569
+  test("recovery from checkpoint contains array object") {
+    // create a class which is invisible to app class loader
+    val jar = TestUtils.createJarWithClasses(
+      classNames = Seq("testClz"),
+      toStringValue = "testStringValue"
+      )
+
+    // invisible to current class loader
+    val appClassLoader = getClass.getClassLoader
+    intercept[ClassNotFoundException](appClassLoader.loadClass("testClz"))
+
+    // visible to mutableURLClassLoader
+    val loader = new MutableURLClassLoader(
+      Array(jar), appClassLoader)
+    assert(loader.loadClass("testClz").newInstance().toString == "testStringValue")
+
+    // create and serialize Array[testClz]
+    // scalastyle:off classforname
+    val arrayObj = Class.forName("[LtestClz;", false, loader)
+    // scalastyle:on classforname
+    val bos = new ByteArrayOutputStream()
+    new ObjectOutputStream(bos).writeObject(arrayObj)
+
+    // deserialize the Array[testClz]
+    val ois = new ObjectInputStreamWithLoader(
+      new ByteArrayInputStream(bos.toByteArray), loader)
+    assert(ois.readObject().asInstanceOf[Class[_]].getName == "[LtestClz;")
+  }
 
   /**
    * Tests a streaming operation under checkpointing, by restarting the operation
