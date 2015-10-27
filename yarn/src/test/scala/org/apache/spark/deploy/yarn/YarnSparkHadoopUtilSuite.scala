@@ -257,6 +257,14 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     val e = intercept[InvocationTargetException] {
       util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
     }
+    assertNestedHiveException(e)
+    // expect exception trapping code to unwind this hive-side exception
+    assertNestedHiveException(intercept[InvocationTargetException] {
+      util.obtainTokenForHiveMetastore(hadoopConf)
+    })
+  }
+
+  def assertNestedHiveException(e: InvocationTargetException): Throwable = {
     val inner = e.getCause
     if (inner == null) {
       fail("No inner cause", e)
@@ -264,17 +272,13 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     if (!inner.isInstanceOf[HiveException]) {
       fail(s"Not a hive exception", inner)
     }
-    // expect exception trapping code to unwind this hive-side exception
-    intercept[HiveException] {
-      util.obtainTokenForHiveMetastore(hadoopConf)
-    }
+    inner
   }
 
   test("handleTokenIntrospectionFailure") {
     val util = new YarnSparkHadoopUtil
     // downgraded exceptions
     util.handleTokenIntrospectionFailure("hive", new ClassNotFoundException("cnfe"))
-    util.handleTokenIntrospectionFailure("hive", new NoClassDefFoundError("ncdef"))
 
     // directly relayed
     intercept[NoSuchMethodException] {
@@ -283,19 +287,13 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     intercept[IllegalArgumentException] {
       util.handleTokenIntrospectionFailure("hive", new IllegalArgumentException("oops"))
     }
-
-    // unwound
-    intercept[IllegalArgumentException] {
-      util.handleTokenIntrospectionFailure("hive",
-        new InvocationTargetException(new IllegalArgumentException("oops")))
-    }
     // no unwinding if there's no inner exception
     intercept[InvocationTargetException] {
       util.handleTokenIntrospectionFailure("hive", new InvocationTargetException(null))
     }
 
     // wrapped
-    intercept[RuntimeException] {
+    intercept[Throwable] {
       util.handleTokenIntrospectionFailure("hive", new Throwable("t"))
     }
   }

@@ -176,23 +176,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       case e: ClassNotFoundException =>
         logInfo(s"$service class not found $e")
         logDebug("Hive Class not found", e)
-      case e: NoClassDefFoundError =>
-        logDebug(s"$service class not found", e)
-      case e: InvocationTargetException =>
-        // problem talking to the metastore or other hive-side exception
-        logInfo(s"$service method invocation failed", e)
-        throw if (e.getCause != null) e.getCause else e
-      case e: ReflectiveOperationException =>
-        // any other reflection failure log at error and rethrow
-        logError(s"$service Class operation failed", e)
-        throw e;
-      case e: RuntimeException =>
-        // any runtime exception, including Illegal Argument Exception
-        throw e
       case t: Throwable => {
         val msg = s"$service: Unexpected Exception " + t
         logError(msg, t)
-        throw new RuntimeException(msg, t)
+        throw t
       }
     }
   }
@@ -215,20 +202,15 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     val ctor = hiveConfClass.getDeclaredConstructor(classOf[Configuration],
       classOf[Object].getClass)
     val hiveConf = ctor.newInstance(conf, hiveConfClass).asInstanceOf[Configuration]
-    val metastore_uri = hiveConf.getTrimmed("hive.metastore.uris", "")
+    val metastoreUri = hiveConf.getTrimmed("hive.metastore.uris", "")
 
     // Check for local metastore
-    if (metastore_uri.nonEmpty) {
-      if (username.isEmpty) {
-        throw new IllegalArgumentException(s"Username undefined")
-      }
-      val metastore_kerberos_principal_key = "hive.metastore.kerberos.principal"
-      val principal = hiveConf.getTrimmed(metastore_kerberos_principal_key, "")
-      if (principal.isEmpty) {
-        throw new IllegalArgumentException(s"Hive principal" +
-            s" $metastore_kerberos_principal_key undefined")
-      }
-      logDebug(s"Getting Hive delegation token for user $username against $metastore_uri")
+    if (metastoreUri.nonEmpty) {
+      require(username.nonEmpty, "Username undefined")
+      val principalKey = "hive.metastore.kerberos.principal"
+      val principal = hiveConf.getTrimmed(principalKey, "")
+      require(principal.nonEmpty, "Hive principal $principalKey undefined")
+      logDebug(s"Getting Hive delegation token for $username against $principal at $metastoreUri")
       val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
       val closeCurrent = hiveClass.getMethod("closeCurrent")
       try {
