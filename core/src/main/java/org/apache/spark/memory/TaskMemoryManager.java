@@ -164,6 +164,9 @@ public class TaskMemoryManager {
    * Release N bytes of execution memory for a MemoryConsumer.
    */
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
+    if (size == 0) {
+      return;
+    }
     synchronized (this) {
       if (consumers.containsKey(consumer)) {
         long old = consumers.get(consumer);
