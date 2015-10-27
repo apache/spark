@@ -311,7 +311,7 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!nonexistentTempPath.exists())
 
     val writtenSegment = writeDataManually(generateRandomData(), testFile)
-    val wal = new FileBasedWriteAheadLog(new SparkConf(), tempDir.getAbsolutePath, 
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), tempDir.getAbsolutePath,
       new Configuration(), 1, 1, closeFileAfterWrite = false)
     assert(!nonexistentTempPath.exists(), "Directory created just by creating log object")
     wal.read(writtenSegment.head)
