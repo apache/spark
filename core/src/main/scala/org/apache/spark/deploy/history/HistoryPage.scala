@@ -85,8 +85,9 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
                 <span style="float: right">
                   {
                     if (actualPage > 1) {
-                      <a href={makePageLink(actualPage - 1, requestedIncomplete)}>&lt; </a>
-                      <a href={makePageLink(1, requestedIncomplete)}>1</a>
+                      <a href={UIUtils.prependBaseUri(
+                        makePageLink(actualPage - 1, requestedIncomplete))}>&lt; </a>
+                      <a href={UIUtils.prependBaseUri(makePageLink(1, requestedIncomplete))}>1</a>
                     }
                   }
                   {if (actualPage - plusOrMinus > secondPageFromLeft) " ... "}
@@ -96,8 +97,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
                   {if (actualPage + plusOrMinus < secondPageFromRight) " ... "}
                   {
                     if (actualPage < pageCount) {
-                      <a href={makePageLink(pageCount, requestedIncomplete)}>{pageCount}</a>
-                      <a href={makePageLink(actualPage + 1, requestedIncomplete)}> &gt;</a>
+                      <a href={UIUtils.prependBaseUri(
+                        makePageLink(pageCount, requestedIncomplete))}>{pageCount}</a>
+                      <a href={UIUtils.prependBaseUri(
+                        makePageLink(actualPage + 1, requestedIncomplete))}> &gt;</a>
                     }
                   }
                 </span>
@@ -115,7 +118,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               </p>
             }
           }
-          <a href={makePageLink(actualPage, !requestedIncomplete)}>
+          <a href={UIUtils.prependBaseUri(makePageLink(actualPage, !requestedIncomplete))}>
             {
               if (requestedIncomplete) {
                 "Back to completed applications"
@@ -153,7 +156,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       condition: Int => Boolean,
       showIncomplete: Boolean): Seq[Node] = {
     range.filter(condition).map(nextPage =>
-      <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
+      <a href={UIUtils.prependBaseUri(makePageLink(nextPage, showIncomplete))}> {nextPage} </a>)
   }
 
   private def attemptRow(
@@ -176,11 +179,11 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
         if (isFirst) {
           if (info.attempts.size > 1 || renderAttemptIdColumn) {
             <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
-              <a href={uiAddress}>{info.id}</a></td>
+              <a href={UIUtils.prependBaseUri(uiAddress)}>{info.id}</a></td>
             <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
               {info.name}</td>
           } else {
-            <td><a href={uiAddress}>{info.id}</a></td>
+            <td><a href={UIUtils.prependBaseUri(uiAddress)}>{info.id}</a></td>
             <td>{info.name}</td>
           }
         } else {
@@ -190,7 +193,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       {
         if (renderAttemptIdColumn) {
           if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
-            <td><a href={HistoryServer.getAttemptURI(info.id, attempt.attemptId)}>
+            <td><a href={UIUtils.prependBaseUri(
+              HistoryServer.getAttemptURI(info.id, attempt.attemptId))}>
               {attempt.attemptId.get}</a></td>
           } else {
             <td>&nbsp;</td>
