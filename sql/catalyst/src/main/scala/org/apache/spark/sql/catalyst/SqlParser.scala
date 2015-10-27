@@ -69,6 +69,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val BY = Keyword("BY")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
+  protected val DAY = Keyword("DAY")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
@@ -79,6 +80,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
   protected val HAVING = Keyword("HAVING")
+  protected val HOUR = Keyword("HOUR")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
   protected val INSERT = Keyword("INSERT")
@@ -90,11 +92,14 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val LEFT = Keyword("LEFT")
   protected val LIKE = Keyword("LIKE")
   protected val LIMIT = Keyword("LIMIT")
+  protected val MINUTE = Keyword("MINUTE")
+  protected val MONTH = Keyword("MONTH")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
   protected val ORDER = Keyword("ORDER")
+  protected val SECOND = Keyword("SECOND")
   protected val SORT = Keyword("SORT")
   protected val OUTER = Keyword("OUTER")
   protected val OVERWRITE = Keyword("OVERWRITE")
@@ -105,11 +110,13 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val SEMI = Keyword("SEMI")
   protected val TABLE = Keyword("TABLE")
   protected val THEN = Keyword("THEN")
+  protected val TO = Keyword("TO")
   protected val TRUE = Keyword("TRUE")
   protected val UNION = Keyword("UNION")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
   protected val WITH = Keyword("WITH")
+  protected val YEAR = Keyword("YEAR")
 
   protected lazy val start: Parser[LogicalPlan] =
     start1 | insert | cte
@@ -322,7 +329,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val literal: Parser[Literal] =
     ( numericLiteral
     | booleanLiteral
-    | stringLit ^^ {case s => Literal.create(s, StringType) }
+    | stringLit ^^ { case s => Literal.create(s, StringType) }
     | intervalLiteral
     | NULL ^^^ Literal.create(null, NullType)
     )
@@ -397,20 +404,44 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     }
 
   protected lazy val intervalLiteral: Parser[Literal] =
-    INTERVAL ~> year.? ~ month.? ~ week.? ~ day.? ~ hour.? ~ minute.? ~ second.? ~
-      millisecond.? ~ microsecond.? ^^ {
-        case year ~ month ~ week ~ day ~ hour ~ minute ~ second ~
+    ( INTERVAL ~> stringLit <~ YEAR ~ TO ~ MONTH ^^ { case s =>
+      Literal(CalendarInterval.fromYearMonthString(s))
+    }
+    | INTERVAL ~> stringLit <~ DAY ~ TO ~ SECOND ^^ { case s =>
+      Literal(CalendarInterval.fromDayTimeString(s))
+    }
+    | INTERVAL ~> stringLit <~ YEAR ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("year", s))
+    }
+    | INTERVAL ~> stringLit <~ MONTH ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("month", s))
+    }
+    | INTERVAL ~> stringLit <~ DAY ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("day", s))
+    }
+    | INTERVAL ~> stringLit <~ HOUR ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("hour", s))
+    }
+    | INTERVAL ~> stringLit <~ MINUTE ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("minute", s))
+    }
+    | INTERVAL ~> stringLit <~ SECOND ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("second", s))
+    }
+    | INTERVAL ~> year.? ~ month.? ~ week.? ~ day.? ~ hour.? ~ minute.? ~ second.? ~
+        millisecond.? ~ microsecond.? ^^ { case year ~ month ~ week ~ day ~ hour ~ minute ~ second ~
           millisecond ~ microsecond =>
-          if (!Seq(year, month, week, day, hour, minute, second,
-            millisecond, microsecond).exists(_.isDefined)) {
-            throw new AnalysisException(
-              "at least one time unit should be given for interval literal")
-          }
-          val months = Seq(year, month).map(_.getOrElse(0)).sum
-          val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
-            .map(_.getOrElse(0L)).sum
-          Literal.create(new CalendarInterval(months, microseconds), CalendarIntervalType)
+      if (!Seq(year, month, week, day, hour, minute, second,
+        millisecond, microsecond).exists(_.isDefined)) {
+        throw new AnalysisException(
+          "at least one time unit should be given for interval literal")
       }
+      val months = Seq(year, month).map(_.getOrElse(0)).sum
+      val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
+        .map(_.getOrElse(0L)).sum
+      Literal(new CalendarInterval(months, microseconds))
+    }
+    )
 
   private def toNarrowestIntegerType(value: String): Any = {
     val bigIntValue = BigDecimal(value)
