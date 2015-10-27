@@ -25,7 +25,7 @@ import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.serializer.{KryoSerializer, Serializer}
 import org.apache.spark.shuffle.{ShuffleOutputCoordinator, ShuffleWriter}
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleMapStatusBlockId}
 import org.apache.spark.util.MutablePair
@@ -92,33 +92,16 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
   }
 
   test("zero sized blocks") {
-    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
-
-    // 201 partitions (greater than "spark.shuffle.sort.bypassMergeThreshold") from 4 keys
-    val NUM_BLOCKS = 201
-    val a = sc.parallelize(1 to 4, NUM_BLOCKS)
-    val b = a.map(x => (x, x*2))
-
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
-    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
-      .setSerializer(new KryoSerializer(conf))
-
-    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-    assert(c.count === 4)
-
-    val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
-      val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
-      statuses.flatMap(_._2.map(_._2))
-    }
-    val nonEmptyBlocks = blockSizes.filter(x => x > 0)
-
-    // We should have at most 4 non-zero sized partitions
-    assert(nonEmptyBlocks.size <= 4)
+    testZeroSizedBlocks(Some(new KryoSerializer(conf)))
   }
 
   test("zero sized blocks without kryo") {
+    testZeroSizedBlocks(None)
+  }
+
+  def testZeroSizedBlocks(serOpt: Option[Serializer]): Unit = {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
@@ -127,8 +110,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val a = sc.parallelize(1 to 4, NUM_BLOCKS)
     val b = a.map(x => (x, x*2))
 
-    // NOTE: The default Java serializer should create zero-sized blocks
     val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
+    serOpt.foreach(c.setSerializer(_))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
     assert(c.count === 4)

@@ -639,7 +639,6 @@ private[spark] class ExternalSorter[K, V, C](
    * called by the SortShuffleWriter.
    *
    * @param blockId block ID to write to. The index file will be blockId.name + ".index".
-   * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
   def writePartitionedFile(
@@ -678,6 +677,12 @@ private[spark] class ExternalSorter[K, V, C](
           lengths(id) = segment.length
         }
       }
+    }
+
+    // SPARK-8029 the ShuffleOutputCoordinator requires all shuffle output files to always exist,
+    // even if they are zero-length
+    if (!outputFile.exists()) {
+      outputFile.createNewFile()
     }
 
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
