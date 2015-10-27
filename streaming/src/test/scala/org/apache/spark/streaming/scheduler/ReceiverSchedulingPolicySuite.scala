@@ -42,13 +42,7 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
   }
 
   test("rescheduleReceiver: return all idle executors if there are any idle executors") {
-    val executors = Seq(
-      ExecutorCacheTaskLocation("host1", "1"),
-      ExecutorCacheTaskLocation("host2", "2"),
-      ExecutorCacheTaskLocation("host3", "3"),
-      ExecutorCacheTaskLocation("host4", "4"),
-      ExecutorCacheTaskLocation("host5", "5")
-    )
+    val executors = (1 to 5).map(i => ExecutorCacheTaskLocation(s"host$i", s"$i"))
     // executor 1 is busy, others are idle.
     val receiverTrackingInfoMap = Map(
       0 -> ReceiverTrackingInfo(0, ReceiverState.ACTIVE, None, Some(executors(0))))

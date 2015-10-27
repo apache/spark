@@ -29,11 +29,11 @@ import org.apache.spark.streaming.receiver.Receiver
  *
  * - The first phase is global scheduling when ReceiverTracker is starting and we need to schedule
  *   all receivers at the same time. ReceiverTracker will call `scheduleReceivers` at this phase.
- *   It will try to schedule receivers with evenly distributed. ReceiverTracker should update its
- *   `receiverTrackingInfoMap` according to the results of `scheduleReceivers`.
- *   `ReceiverTrackingInfo.scheduledLocations` for each receiver will set to an location list that
- *   contains the scheduled locations. Then when a receiver is starting, it will send a register
- *   request and `ReceiverTracker.registerReceiver` will be called. In
+ *   It will try to schedule receivers such that they are evenly distributed. ReceiverTracker should
+ *   update its `receiverTrackingInfoMap` according to the results of `scheduleReceivers`.
+ *   `ReceiverTrackingInfo.scheduledLocations` for each receiver should be set to an location list
+ *   that contains the scheduled locations. Then when a receiver is starting, it will send a
+ *   register request and `ReceiverTracker.registerReceiver` will be called. In
  *   `ReceiverTracker.registerReceiver`, if a receiver's scheduled locations is set, it should check
  *   if the location of this receiver is one of the scheduled locations, if not, the register will
  *   be rejected.
@@ -180,21 +180,10 @@ private[streaming] class ReceiverSchedulingPolicy {
     // handle this case
     scheduledLocations ++= preferredLocation.map(TaskLocation(_))
 
-    val executorWeights: Map[ExecutorCacheTaskLocation, Double] =
-      receiverTrackingInfoMap.values.flatMap { receiverTrackingInfo =>
-        receiverTrackingInfo.state match {
-          case ReceiverState.INACTIVE => Nil
-          case ReceiverState.SCHEDULED =>
-            val scheduledLocations = receiverTrackingInfo.scheduledLocations.get
-            // The probability that a scheduled receiver will run in an executor is
-            // 1.0 / scheduledLocations.size
-            scheduledLocations.filter(_.isInstanceOf[ExecutorCacheTaskLocation]).
-              map { location =>
-                location.asInstanceOf[ExecutorCacheTaskLocation] -> (1.0 / scheduledLocations.size)
-              }
-          case ReceiverState.ACTIVE => Seq(receiverTrackingInfo.runningExecutor.get -> 1.0)
-        }
-      }.groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor
+    val executorWeights: Map[ExecutorCacheTaskLocation, Double] = {
+      receiverTrackingInfoMap.values.flatMap(convertReceiverTrackingInfoToExecutorWeights)
+        .groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor
+    }
 
     val idleExecutors = executors.toSet -- executorWeights.keys
     if (idleExecutors.nonEmpty) {
@@ -210,5 +199,29 @@ private[streaming] class ReceiverSchedulingPolicy {
       }
     }
     scheduledLocations.toSeq
+  }
+
+  /**
+   * This method tries to convert a receiver tracking info to executor weights. Every executor will
+   * be assigned to a weight according to the receivers running or scheduling on it:
+   *
+   * - If a receiver is running on an executor, it contributes 1.0 to the executor's weight.
+   * - If a receiver is scheduled to an executor but has not yet run, it contributes
+   * `1.0 / #candidate_executors_of_this_receiver` to the executor's weight.
+   */
+  private def convertReceiverTrackingInfoToExecutorWeights(
+      receiverTrackingInfo: ReceiverTrackingInfo): Seq[(ExecutorCacheTaskLocation, Double)] = {
+    receiverTrackingInfo.state match {
+      case ReceiverState.INACTIVE => Nil
+      case ReceiverState.SCHEDULED =>
+        val scheduledLocations = receiverTrackingInfo.scheduledLocations.get
+        // The probability that a scheduled receiver will run in an executor is
+        // 1.0 / scheduledLocations.size
+        scheduledLocations.filter(_.isInstanceOf[ExecutorCacheTaskLocation]).
+          map { location =>
+          location.asInstanceOf[ExecutorCacheTaskLocation] -> (1.0 / scheduledLocations.size)
+        }
+      case ReceiverState.ACTIVE => Seq(receiverTrackingInfo.runningExecutor.get -> 1.0)
+    }
   }
 }
