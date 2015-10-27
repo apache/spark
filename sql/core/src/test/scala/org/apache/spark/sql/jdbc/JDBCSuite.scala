@@ -514,6 +514,10 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     val badNames =
       """bad"name""" ::
       """foo; drop database finance;""" ::
+      """foo.""" ::
+      """.foo""" ::
+      """foo bar""" ::
+      """fo"o""" ::
       Nil
     val allDialects = JdbcDialects.getAllDialects()
     for ( d <- allDialects; b <- badNames ) badNameVetter(d, b)
@@ -524,6 +528,14 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
       """"foo"."bar"""" ::
       """foo."bar"""" ::
       """"foo.bar"""" ::
+      """ foo""" ::
+      """"foo"""" ::
+      """"foo bar"""" ::
+      """"foo."""" ::
+      """foo.bar""" ::
+      """foo .bar""" ::
+      """foo.bar.wibble""" ::
+      """"fo""o"""" ::
       Nil
     for ( d <- allDialects; g <- goodNames ) {
       val goodTableName = g.replace( '"', d.quoteChar)

@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.Types
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.SqlIdentifierUtil._
+import org.apache.spark.sql.SqlIdUtil._
 import org.apache.spark.sql.types._
 import org.apache.spark.annotation.DeveloperApi
 
@@ -136,15 +136,8 @@ abstract class JdbcDialect {
     */
   def vetSqlIdentifier(rawId: String) {
 
-    val parsed : Array[String] = parseMultiPartSQLIdentifier(rawId,
-      quoteChar, true)
-
-    parsed.length match {
-      case 1 => (null, null, parsed(0))
-      case 2 => (null, parsed(0), parsed(1))
-      case 3 => (parsed(0), parsed(1), parsed(2))
-      case _ => throw new SparkException("Unparsable object id: " + rawId)
-    }
+    // raises a SparkException if the string doesn't parse
+    parseSqlIds(rawId, quoteChar, true)
   }
 }
 
