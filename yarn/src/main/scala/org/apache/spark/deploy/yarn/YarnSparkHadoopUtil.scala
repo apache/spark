@@ -177,8 +177,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         logInfo(s"$service class not found $e")
         logDebug("Hive Class not found", e)
       case t: Throwable => {
-        val msg = s"$service: Unexpected Exception " + t
-        logError(msg, t)
         throw t
       }
     }
