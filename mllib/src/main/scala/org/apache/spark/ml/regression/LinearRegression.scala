@@ -23,13 +23,9 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
 import org.apache.spark.{Logging, SparkException}
-<<<<<<< HEAD
 import org.apache.spark.annotation.{Experimental, Since}
-=======
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.WeightedLeastSquares
->>>>>>> 360ed832f5213b805ac28cf1d2828be09480f2d6
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
