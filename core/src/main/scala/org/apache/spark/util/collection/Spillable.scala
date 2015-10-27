@@ -17,8 +17,8 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.spark.Logging
-import org.apache.spark.SparkEnv
+import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.{Logging, SparkEnv}
 
 /**
  * Spills contents of an in-memory collection to disk when the memory threshold
@@ -40,7 +40,7 @@ private[spark] trait Spillable[C] extends Logging {
   protected def addElementsRead(): Unit = { _elementsRead += 1 }
 
   // Memory manager that can be used to acquire/release memory
-  private[this] val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
+  protected[this] def taskMemoryManager: TaskMemoryManager
 
   // Initial threshold for the size of a collection before we start tracking its memory usage
   // For testing only
@@ -78,7 +78,7 @@ private[spark] trait Spillable[C] extends Logging {
     if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
-      val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
+      val granted = taskMemoryManager.acquireExecutionMemory(amountToRequest)
       myMemoryThreshold += granted
       // If we were granted too little memory to grow further (either tryToAcquire returned 0,
       // or we already had more memory than myMemoryThreshold), spill the current collection
@@ -92,7 +92,7 @@ private[spark] trait Spillable[C] extends Logging {
       spill(collection)
       _elementsRead = 0
       _memoryBytesSpilled += currentMemory
-      releaseMemoryForThisThread()
+      releaseMemory()
     }
     shouldSpill
   }
@@ -103,11 +103,11 @@ private[spark] trait Spillable[C] extends Logging {
   def memoryBytesSpilled: Long = _memoryBytesSpilled
 
   /**
-   * Release our memory back to the shuffle pool so that other threads can grab it.
+   * Release our memory back to the execution pool so that other tasks can grab it.
    */
-  private def releaseMemoryForThisThread(): Unit = {
+  def releaseMemory(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
-    shuffleMemoryManager.release(myMemoryThreshold - initialMemoryThreshold)
+    taskMemoryManager.releaseExecutionMemory(myMemoryThreshold - initialMemoryThreshold)
     myMemoryThreshold = initialMemoryThreshold
   }
 

@@ -21,7 +21,7 @@ import java.util.Comparator;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.Sorter;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 
 /**
  * Sorts records using an AlphaSort-style key-prefix sort. This sort stores pointers to records

@@ -105,6 +105,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.head(2).head.schema === testData.schema)
   }
 
+  test("dataframe alias") {
+    val df = Seq(Tuple1(1)).toDF("c").as("t")
+    val dfAlias = df.alias("t2")
+    df.col("t.c")
+    dfAlias.col("t2.c")
+  }
+
   test("simple explode") {
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
@@ -388,13 +395,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
-  test("drop unknown column with same name (no-op) with column reference") {
+  test("drop unknown column with same name with column reference") {
     val col = Column("key")
     val df = testData.drop(col)
     checkAnswer(
       df,
-      testData.collect().toSeq)
-    assert(df.schema.map(_.name) === Seq("key", "value"))
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
   }
 
   test("drop column after join with duplicate columns using column reference") {
@@ -974,5 +981,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       except.filter('i < rand(7) * 10),
       expected(except)
     )
+  }
+
+  test("SPARK-10743: keep the name of expression if possible when do cast") {
+    val df = (1 to 10).map(Tuple1.apply).toDF("i").as("src")
+    assert(df.select($"src.i".cast(StringType)).columns.head === "i")
   }
 }
