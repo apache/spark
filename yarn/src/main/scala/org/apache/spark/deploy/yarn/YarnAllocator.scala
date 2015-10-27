@@ -479,7 +479,7 @@ private[yarn] class YarnAllocator(
       } else {
         // If we have already released this container, then it must mean
         // that the driver has explicitly requested it to be killed
-        ExecutorExited(completedContainer.getExitStatus, exitCausedByApp = true,
+        ExecutorExited(completedContainer.getExitStatus, exitCausedByApp = false,
           s"Container $containerId exited from explicit termination request.")
       }
 

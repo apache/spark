@@ -57,7 +57,7 @@ sealed trait TaskFailedReason extends TaskEndReason {
    * Whether this task failure should be counted towards the maximum number of times the task is
    * allowed to fail before the stage is aborted.  Set to false in cases where the task's failure
    * was unrelated to the task; for example, if the task failed because the executor it was running
-   * on it was killed.
+   * on was killed.
    */
   def countTowardsTaskFailures: Boolean = true
 }
