@@ -525,6 +525,16 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   override val evaluateExpression = Cast(currentSum, resultType)
 }
 
+/**
+ * Compute Pearson correlation between two expressions.
+ * When applied on empty data (i.e., count is zero), it returns NaN.
+ *
+ * Definition of Pearson correlation can be found at
+ * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
+ *
+ * @param left one of the expressions to compute correlation with.
+ * @param right another expression to compute correlation with.
+ */
 case class Corr(
     left: Expression,
     right: Expression,
@@ -591,6 +601,8 @@ case class Corr(
     buffer.setLong(mutableAggBufferOffset + 5, count)
   }
 
+  // Merge counters from other partitions. Formula can be found at:
+  // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     val count2 = buffer2.getLong(inputAggBufferOffset + 5)
 
@@ -628,10 +640,15 @@ case class Corr(
   }
 
   override def eval(buffer: InternalRow): Any = {
-    val Ck = buffer.getDouble(mutableAggBufferOffset + 2)
-    val MkX = buffer.getDouble(mutableAggBufferOffset + 3)
-    val MkY = buffer.getDouble(mutableAggBufferOffset + 4)
-    Ck / math.sqrt(MkX * MkY)
+    val count = buffer.getLong(mutableAggBufferOffset + 5)
+    if (count > 0) {
+      val Ck = buffer.getDouble(mutableAggBufferOffset + 2)
+      val MkX = buffer.getDouble(mutableAggBufferOffset + 3)
+      val MkY = buffer.getDouble(mutableAggBufferOffset + 4)
+      Ck / math.sqrt(MkX * MkY)
+    } else {
+      Double.NaN
+    }
   }
 }
 

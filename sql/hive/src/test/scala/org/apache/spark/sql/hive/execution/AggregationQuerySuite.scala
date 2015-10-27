@@ -577,6 +577,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     val df2 = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
     val corr3 = df2.groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
+
+    val df3 = Seq.tabulate(0)(i => (1.0 * i, 2.0 * i)).toDF("a", "b")
+    val corr4 = df3.groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    assert(corr4.isNaN)
   }
 
   test("test Last implemented based on AggregateExpression1") {
