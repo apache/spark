@@ -714,6 +714,10 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
+#' @rdname cumeDist
+#' @export
+setGeneric("cumeDist", function(x) { standardGeneric("cumeDist") })
+
 #' @rdname datediff
 #' @export
 setGeneric("datediff", function(y, x) { standardGeneric("datediff") })
@@ -790,6 +794,10 @@ setGeneric("instr", function(y, x) { standardGeneric("instr") })
 #' @export
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
+#' @rdname lag
+#' @export
+setGeneric("lag", function(x, offset, defaultValue = NULL) { standardGeneric("lag") })
+
 #' @rdname last
 #' @export
 setGeneric("last", function(x) { standardGeneric("last") })
@@ -797,6 +805,10 @@ setGeneric("last", function(x) { standardGeneric("last") })
 #' @rdname last_day
 #' @export
 setGeneric("last_day", function(x) { standardGeneric("last_day") })
+
+#' @rdname lead
+#' @export
+setGeneric("lead", function(x, offset, defaultValue = NULL) { standardGeneric("lead") })
 
 #' @rdname least
 #' @export
@@ -857,6 +869,10 @@ setGeneric("negate", function(x) { standardGeneric("negate") })
 #' @rdname next_day
 #' @export
 setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
+
+#' @rdname ntile
+#' @export
+setGeneric("ntile", function(x) { standardGeneric("ntile") })
 
 #' @rdname countDistinct
 #' @export

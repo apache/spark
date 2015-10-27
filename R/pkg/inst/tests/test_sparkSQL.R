@@ -829,6 +829,8 @@ test_that("column functions", {
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
+  c12 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
+  c13 <- cumeDist() + ntile(1)
 
   df <- jsonFile(sqlContext, jsonPath)
   df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
@@ -1105,11 +1107,40 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(count(joined9), 4)
   expect_true(is.na(collect(orderBy(joined9, joined9$age))$age[2]))
 
-  merged <- select(merge(df, df2, df$name == df2$name, "outer"),
-                   alias(df$age + 5, "newAge"), df$name, df2$test)
-  expect_equal(names(merged), c("newAge", "name", "test"))
+  merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
   expect_equal(count(merged), 4)
-  expect_equal(collect(orderBy(merged, merged$name))$newAge[3], 24)
+  expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
+  expect_equal(collect(orderBy(merged, merged$name_x))$age[3], 19)
+
+  merged <- merge(df, df2, suffixes = c("-X","-Y"))
+  expect_equal(count(merged), 3)
+  expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name-X"))$age[1], 30)
+
+  merged <- merge(df, df2, by = "name", suffixes = c("-X","-Y"), sort = FALSE)
+  expect_equal(count(merged), 3)
+  expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name-Y"))$"name-X"[3], "Michael")
+
+  merged <- merge(df, df2, by = "name", all = T, sort = T)
+  expect_equal(count(merged), 4)
+  expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name_y"))$"name_x"[1], "Andy")
+
+  merged <- merge(df, df2, by = NULL)
+  expect_equal(count(merged), 12)
+  expect_equal(names(merged), c("age", "name", "name", "test"))
+
+  mockLines3 <- c("{\"name\":\"Michael\", \"name_y\":\"Michael\", \"test\": \"yes\"}",
+                  "{\"name\":\"Andy\", \"name_y\":\"Andy\", \"test\": \"no\"}",
+                  "{\"name\":\"Justin\", \"name_y\":\"Justin\", \"test\": \"yes\"}",
+                  "{\"name\":\"Bob\", \"name_y\":\"Bob\", \"test\": \"yes\"}")
+  jsonPath3 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines3, jsonPath3)
+  df3 <- jsonFile(sqlContext, jsonPath3)
+  expect_error(merge(df, df3),
+               paste("The following column name: name_y occurs more than once in the 'DataFrame'.",
+                     "Please use different suffixes for the intersected columns.", sep = ""))
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
