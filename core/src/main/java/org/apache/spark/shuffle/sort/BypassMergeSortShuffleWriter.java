@@ -127,9 +127,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public Seq<Tuple2<File, File>> write(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
-    final File indexFile = blockManager.diskBlockManager().getFile(new ShuffleIndexBlockId(
-        shuffleId, mapId, IndexShuffleBlockResolver$.MODULE$.NOOP_REDUCE_ID())
-    );
+    final File indexFile = shuffleBlockResolver.getIndexFile(shuffleId, mapId);
     final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];

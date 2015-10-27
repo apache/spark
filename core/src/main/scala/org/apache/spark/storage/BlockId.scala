@@ -105,6 +105,16 @@ private[spark] case class TempShuffleBlockId(id: UUID) extends BlockId {
   override def name: String = "temp_shuffle_" + id
 }
 
+/**
+ * Id associated with temporary shuffle data managed as blocks, which is not
+ * compressed, regardless of spark.shuffle.compress and spark.shuffle.spill.compress.  Used
+ * for the temporary location of data files until they are moved into place by the
+ * [[org.apache.spark.shuffle.ShuffleOutputCoordinator]].  Not serializable.
+ */
+private[spark] case class TempUncompressedShuffleBlockId(id: UUID) extends BlockId {
+  override def name: String = "temp_uncompressed_shuffle_" + id
+}
+
 // Intended only for testing purposes
 private[spark] case class TestBlockId(id: String) extends BlockId {
   override def name: String = "test_" + id

@@ -57,7 +57,6 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver$;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.ShuffleIndexBlockId;
-import org.apache.spark.storage.ShuffleMapStatusBlockId;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
 
@@ -234,9 +233,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
     final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
-    final File indexFile = blockManager.diskBlockManager().getFile(
-      new ShuffleIndexBlockId(shuffleId, mapId, IndexShuffleBlockResolver$.MODULE$.NOOP_REDUCE_ID())
-    );
+    final File indexFile = shuffleBlockResolver.getIndexFile(shuffleId, mapId);
 
     return JavaConverters.asScalaBufferConverter(Arrays.asList(
       new Tuple2<>(tmpIndexFile, indexFile),

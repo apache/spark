@@ -85,7 +85,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
         Array.tabulate[(DiskBlockObjectWriter, File)](numReducers) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
-          val (_, tmpBlockFile) = blockManager.diskBlockManager.createTempLocalBlock()
+          val (_, tmpBlockFile) = blockManager.diskBlockManager.createTempShuffleBlock()
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
           if (blockFile.exists) {
