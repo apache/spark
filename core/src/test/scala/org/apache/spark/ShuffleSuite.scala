@@ -17,8 +17,13 @@
 
 package org.apache.spark
 
+import java.io.File
 import java.util.concurrent.{Callable, CyclicBarrier, ExecutorService, Executors}
 
+import scala.collection.JavaConverters._
+
+import org.apache.commons.io.FileUtils
+import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
@@ -28,7 +33,7 @@ import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListene
 import org.apache.spark.serializer.{KryoSerializer, Serializer}
 import org.apache.spark.shuffle.{ShuffleOutputCoordinator, ShuffleWriter}
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleMapStatusBlockId}
-import org.apache.spark.util.MutablePair
+import org.apache.spark.util.{MutablePair, Utils}
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -303,6 +308,44 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(metrics.recordsWritten === numRecords)
     assert(metrics.bytesWritten === metrics.byresRead)
     assert(metrics.bytesWritten > 0)
+  }
+
+  /**
+   * ShuffleOutputCoordinator requires that a given shuffle always generate the same set of files on
+   * all attempts, even if the data is non-deterministic.  We test the extreme case where the data
+   * is completely missing in one case
+   */
+  test("same set of shuffle files regardless of data") {
+
+    def shuffleAndGetShuffleFiles(data: Seq[Int]): Map[String, Long] = {
+      var tempDir: File = null
+      try {
+        tempDir = Utils.createTempDir()
+        conf.set("spark.local.dir", tempDir.getAbsolutePath)
+        sc = new SparkContext("local", "test", conf)
+        val rdd = sc.parallelize(data, 10).map(x => (x, x))
+        val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
+        shuffledRdd.count()
+        val shuffleFiles =
+          FileUtils.listFiles(tempDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE)
+        sc.stop()
+        shuffleFiles.asScala.map { file: File =>
+          file.getName -> file.length()
+        }.toMap
+      } finally {
+        conf.remove("spark.local.dir")
+        Utils.deleteRecursively(tempDir)
+      }
+    }
+
+    val shuffleFilesWithData = shuffleAndGetShuffleFiles(0 until 100)
+    val shuffleFilesNoData = shuffleAndGetShuffleFiles(Seq[Int]())
+    assert(shuffleFilesNoData.keySet === shuffleFilesWithData.keySet)
+    // make sure our test is doing what it is supposed to -- at least some of the
+    // "no data" files are empty
+    assert(shuffleFilesNoData.filter{ case (name, size) =>
+      size == 0L && shuffleFilesWithData(name) != 0L
+    }.nonEmpty)
   }
 
   test("multiple simultaneous attempts for one task (SPARK-8029)") {
