@@ -806,6 +806,14 @@ class SparkContext(object):
             import importlib
             importlib.invalidate_caches()
 
+    def addJar(self, path):
+        """
+        Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
+        The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+        filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+        """
+        self._jsc.sc().addJar(path)
+
     def setCheckpointDir(self, dirName):
         """
         Set the directory under which RDDs are going to be checkpointed. The

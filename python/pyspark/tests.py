@@ -410,6 +410,10 @@ class AddFileTests(PySparkTestCase):
         with open(download_path) as test_file:
             self.assertEqual("Hello World!\n", test_file.readline())
 
+    def test_add_jar(self):
+        path = os.path.join(SPARK_HOME, "./R/pkg/inst/test_support/sparktestjar_2.10-1.0.jar")
+        self.assertTrue(self._jsc.sc().addedJars().toString().find("sparktestjar") != -1)
+
     def test_add_py_file_locally(self):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
