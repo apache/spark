@@ -148,7 +148,7 @@ private[ui] class ExecutorsPage(
         if (logsExist) {
           <td>
             {
-              info.executorLogs.map { case (logName, logUrl) =>
+              info.executorLogs.toSeq.sortBy(_._1).map { case (logName, logUrl) =>
                 <div>
                   <a href={logUrl}>
                     {logName}

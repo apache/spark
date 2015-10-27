@@ -143,6 +143,8 @@ private[deploy] class ExecutorRunner(
         s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
+      builder.environment.put("SPARK_APPLICATION_ID", s"$appId")
+      builder.environment.put("SPARK_WORKER_URL", s"$publicAddress:$webUiPort")
 
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
