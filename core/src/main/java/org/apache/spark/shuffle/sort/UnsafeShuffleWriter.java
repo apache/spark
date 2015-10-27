@@ -175,7 +175,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
       }
-      Seq<Tuple2<File, File>> result = closeAndWriteOutput();
+      final Seq<Tuple2<File, File>> result = closeAndWriteOutput();
       success = true;
       return result;
     } finally {
@@ -221,7 +221,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final long[] partitionLengths;
     final File tmpDataFile;
     try {
-      Tuple2<File, long[]> t = mergeSpills(spills);
+      final Tuple2<File, long[]> t = mergeSpills(spills);
       partitionLengths = t._2();
       tmpDataFile = t._1();
     } finally {
@@ -231,10 +231,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    final File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
-    File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
-    File indexFile = blockManager.diskBlockManager().getFile(
+    final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final File indexFile = blockManager.diskBlockManager().getFile(
       new ShuffleIndexBlockId(shuffleId, mapId, IndexShuffleBlockResolver$.MODULE$.NOOP_REDUCE_ID())
     );
 
@@ -275,10 +275,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    */
   private Tuple2<File, long[]> mergeSpills(SpillInfo[] spills) throws IOException {
     final File outputFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
-    return new Tuple2<>(outputFile, mergeSpills(spills, outputFile));
-  }
-
-  private long[] mergeSpills(SpillInfo[] spills, File outputFile) throws IOException {
     final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
@@ -288,12 +284,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       if (spills.length == 0) {
         new FileOutputStream(outputFile).close(); // Create an empty file
-        return new long[partitioner.numPartitions()];
+        return new Tuple2<>(outputFile, new long[partitioner.numPartitions()]);
       } else if (spills.length == 1) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
         Files.move(spills[0].file, outputFile);
-        return spills[0].partitionLengths;
+        return new Tuple2<>(outputFile, spills[0].partitionLengths);
       } else {
         final long[] partitionLengths;
         // There are multiple spills to merge, so none of these spill files' lengths were counted
@@ -328,7 +324,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // SpillInfo's bytes.
         writeMetrics.decShuffleBytesWritten(spills[spills.length - 1].file.length());
         writeMetrics.incShuffleBytesWritten(outputFile.length());
-        return partitionLengths;
+        return new Tuple2<>(outputFile, partitionLengths);
       }
     } catch (IOException e) {
       if (outputFile.exists() && !outputFile.delete()) {

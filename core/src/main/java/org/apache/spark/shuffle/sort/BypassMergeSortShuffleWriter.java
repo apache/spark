@@ -133,11 +133,11 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];
-      File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+      final File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
       mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
       // create empty data file so we always commit same set of shuffle output files, even if
       // data is non-deterministic
-      File tmpDataFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
+      final File tmpDataFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
       tmpDataFile.createNewFile();
       return JavaConverters.asScalaBufferConverter(Arrays.asList(
         new Tuple2<>(tmpIndexFile, indexFile),
@@ -170,10 +170,10 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       writer.commitAndClose();
     }
 
-    File tmpDataFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
+    final File tmpDataFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
 
     partitionLengths = writePartitionedFile(tmpDataFile);
-    File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    final File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
     return JavaConverters.asScalaBufferConverter(Arrays.asList(
       new Tuple2<>(tmpIndexFile, indexFile),
@@ -257,5 +257,4 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
   }
-
 }
