@@ -203,6 +203,21 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
     assert(writtenData === dataToWrite)
   }
 
+  test("FileBasedWriteAheadLog - close after write flag") {
+    // Write data with rotation using WriteAheadLog class
+    val numFiles = 3
+    val dataToWrite = Seq.tabulate(numFiles)(_.toString)
+    // total advance time is less than 1000, therefore log shouldn't be rolled, but manually closed
+    writeDataUsingWriteAheadLog(testDir, dataToWrite, closeLog = false, clockAdvanceTime = 100,
+      closeFileAfterWrite = true)
+
+    // Read data manually to verify the written data
+    val logFiles = getLogFilesInDirectory(testDir)
+    assert(logFiles.size === numFiles)
+    val writtenData = logFiles.flatMap { file => readDataManually(file)}
+    assert(writtenData === dataToWrite)
+  }
+
   test("FileBasedWriteAheadLog - read rotating logs") {
     // Write data manually for testing reading through WriteAheadLog
     val writtenData = (1 to 10).map { i =>
@@ -296,8 +311,8 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!nonexistentTempPath.exists())
 
     val writtenSegment = writeDataManually(generateRandomData(), testFile)
-    val wal = new FileBasedWriteAheadLog(
-      new SparkConf(), tempDir.getAbsolutePath, new Configuration(), 1, 1)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), tempDir.getAbsolutePath,
+      new Configuration(), 1, 1, closeFileAfterWrite = false)
     assert(!nonexistentTempPath.exists(), "Directory created just by creating log object")
     wal.read(writtenSegment.head)
     assert(!nonexistentTempPath.exists(), "Directory created just by attempting to read segment")
@@ -356,14 +371,16 @@ object WriteAheadLogSuite {
       logDirectory: String,
       data: Seq[String],
       manualClock: ManualClock = new ManualClock,
-      closeLog: Boolean = true
-    ): FileBasedWriteAheadLog = {
+      closeLog: Boolean = true,
+      clockAdvanceTime: Int = 500,
+      closeFileAfterWrite: Boolean = false): FileBasedWriteAheadLog = {
     if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
-    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1,
+      closeFileAfterWrite)
 
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
-      manualClock.advance(500)
+      manualClock.advance(clockAdvanceTime)
       wal.write(item, manualClock.getTimeMillis())
     }
     if (closeLog) wal.close()
@@ -418,7 +435,8 @@ object WriteAheadLogSuite {
 
   /** Read all the data in the log file in a directory using the WriteAheadLog class. */
   def readDataUsingWriteAheadLog(logDirectory: String): Seq[String] = {
-    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1,
+      closeFileAfterWrite = false)
     val data = wal.readAll().asScala.map(byteBufferToString).toSeq
     wal.close()
     data

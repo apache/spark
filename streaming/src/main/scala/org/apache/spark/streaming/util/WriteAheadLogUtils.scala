@@ -31,11 +31,15 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   val RECEIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.receiver.writeAheadLog.rollingIntervalSecs"
   val RECEIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.receiver.writeAheadLog.maxFailures"
+  val RECEIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
+    "spark.streaming.receiver.writeAheadLog.closeFileAfterWrite"
 
   val DRIVER_WAL_CLASS_CONF_KEY = "spark.streaming.driver.writeAheadLog.class"
   val DRIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.driver.writeAheadLog.rollingIntervalSecs"
   val DRIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.driver.writeAheadLog.maxFailures"
+  val DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
+    "spark.streaming.driver.writeAheadLog.closeFileAfterWrite"
 
   val DEFAULT_ROLLING_INTERVAL_SECS = 60
   val DEFAULT_MAX_FAILURES = 3
@@ -57,6 +61,14 @@ private[streaming] object WriteAheadLogUtils extends Logging {
       conf.getInt(DRIVER_WAL_MAX_FAILURES_CONF_KEY, DEFAULT_MAX_FAILURES)
     } else {
       conf.getInt(RECEIVER_WAL_MAX_FAILURES_CONF_KEY, DEFAULT_MAX_FAILURES)
+    }
+  }
+
+  def shouldCloseFileAfterWrite(conf: SparkConf, isDriver: Boolean): Boolean = {
+    if (isDriver) {
+      conf.getBoolean(DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY, defaultValue = false)
+    } else {
+      conf.getBoolean(RECEIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY, defaultValue = false)
     }
   }
 
@@ -113,7 +125,8 @@ private[streaming] object WriteAheadLogUtils extends Logging {
       }
     }.getOrElse {
       new FileBasedWriteAheadLog(sparkConf, fileWalLogDirectory, fileWalHadoopConf,
-        getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver))
+        getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver),
+        shouldCloseFileAfterWrite(sparkConf, isDriver))
     }
   }
 
