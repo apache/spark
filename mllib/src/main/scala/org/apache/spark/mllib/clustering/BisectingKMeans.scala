@@ -656,59 +656,6 @@ class BisectingClusterNode private (
 
   @Since("1.6.0")
   def setLocalHeight(height: Double): Unit = this.localHeight = height
-
-  /**
-   * Converts to an adjacency list
-   *
-   * @return List[(fromNodeId, toNodeId, distance)]
-   */
-  @Since("1.6.0")
-  def toAdjacencyList: Array[(Int, Int, Double)] = {
-    val nodes = toArray
-
-    var adjacencyList = Array.empty[(Int, Int, Double)]
-    nodes.foreach { parent =>
-      if (parent.children.size > 1) {
-        val parentIndex = nodes.indexOf(parent)
-        parent.children.foreach { child =>
-          val childIndex = nodes.indexOf(child)
-          adjacencyList = adjacencyList :+(parentIndex, childIndex, parent.localHeight)
-        }
-      }
-    }
-    adjacencyList
-  }
-
-  /**
-   * Converts to a linkage matrix
-   * Returned data format is fit for scipy's dendrogram function
-   *
-   * @return List[(node1, node2, distance, tree size)]
-   */
-  @Since("1.6.0")
-  def toLinkageMatrix: Array[(Int, Int, Double, Int)] = {
-    val nodes = toArray.sortWith { case (a, b) => a.getHeight < b.getHeight}
-    val leaves = nodes.filter(_.isLeaf)
-    val notLeaves = nodes.filterNot(_.isLeaf).filter(_.getChildren.size > 1)
-    val clusters = leaves ++ notLeaves
-    val treeMap = clusters.zipWithIndex.map { case (node, idx) => node -> idx}.toMap
-
-    // If a node only has one-child, the child is regarded as the cluster of the child.
-    // Cluster A has cluster B and Cluster B. B is a leaf. C only has cluster D.
-    // ==> A merge list is (B, D), not (B, C).
-    def getIndex(map: Map[BisectingClusterNode, Int], node: BisectingClusterNode): Int = {
-      node.children.size match {
-        case 1 => getIndex(map, node.children.head)
-        case _ => map(node)
-      }
-    }
-    clusters.filterNot(_.isLeaf).map { node =>
-      (getIndex(treeMap, node.children.head),
-        getIndex(treeMap, node.children(1)),
-        node.getHeight,
-        node.toArray.filter(_.isLeaf).length)
-    }
-  }
 }
 
 
