@@ -184,8 +184,8 @@ Next, we discuss how to use this approach in your streaming application.
 		offsetRanges = []
 
 		def storeOffsetRanges(rdd):
-		    del offsetRanges[:]
-		    offsetRanges.extend(rdd.offsetRanges())
+		    global offsetRanges
+		    offsetRanges = rdd.offsetRanges()
 		    return rdd
 
 		def printOffsetRanges(rdd):
