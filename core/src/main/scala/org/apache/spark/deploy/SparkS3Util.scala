@@ -86,7 +86,7 @@ object SparkS3Util extends Logging {
     val maxErrorRetries: Int = sparkConf.getInt(S3_MAX_ERROR_RETRIES, 10)
     val connectTimeout: Int = sparkConf.getInt(S3_CONNECT_TIMEOUT, 5000)
     val socketTimeout: Int = sparkConf.getInt(S3_SOCKET_TIMEOUT, 5000)
-    val maxConnections: Int = sparkConf.getInt(S3_MAX_CONNECTIONS, 500)
+    val maxConnections: Int = sparkConf.getInt(S3_MAX_CONNECTIONS, 5)
     val useInstanceCredentials: Boolean = sparkConf.getBoolean(S3_USE_INSTANCE_CREDENTIALS, false)
 
     val clientConf: ClientConfiguration = new ClientConfiguration
