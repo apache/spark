@@ -34,6 +34,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       data: _*)
   }
 
+  test("as tuple") {
+    val data = Seq(("a", 1), ("b", 2)).toDF("a", "b")
+    checkAnswer(
+      data.as[(String, Int)],
+      ("a", 1), ("b", 2))
+  }
+
   test("as case class / collect") {
     val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDF("a", "b").as[ClassData]
     checkAnswer(
@@ -61,14 +68,40 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       2, 3, 4)
   }
 
-  test("select 3") {
+  test("select 2") {
     val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(
         expr("_1").as[String],
-        expr("_2").as[Int],
-        expr("_2 + 1").as[Int]),
-      ("a", 1, 2), ("b", 2, 3), ("c", 3, 4))
+        expr("_2").as[Int]) : Dataset[(String, Int)],
+      ("a", 1), ("b", 2), ("c", 3))
+  }
+
+  test("select 2, primitive and tuple") {
+    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    checkAnswer(
+      ds.select(
+        expr("_1").as[String],
+        expr("struct(_2, _2)").as[(Int, Int)]),
+      ("a", (1, 1)), ("b", (2, 2)), ("c", (3, 3)))
+  }
+
+  test("select 2, primitive and class") {
+    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    checkAnswer(
+      ds.select(
+        expr("_1").as[String],
+        expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+      ("a", ClassData("a", 1)), ("b", ClassData("b", 2)), ("c", ClassData("c", 3)))
+  }
+
+  test("select 2, primitive and class, fields reordered") {
+    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    checkDecoding(
+      ds.select(
+        expr("_1").as[String],
+        expr("named_struct('b', _2, 'a', _1)").as[ClassData]),
+      ("a", ClassData("a", 1)), ("b", ClassData("b", 2)), ("c", ClassData("c", 3)))
   }
 
   test("filter") {
@@ -100,6 +133,54 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("fold") {
     val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
     assert(ds.fold(("", 0))((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
+  }
+
+  test("joinWith, flat schema") {
+    val ds1 = Seq(1, 2, 3).toDS().as("a")
+    val ds2 = Seq(1, 2).toDS().as("b")
+
+    checkAnswer(
+      ds1.joinWith(ds2, $"a.value" === $"b.value"),
+      (1, 1), (2, 2))
+  }
+
+  test("joinWith, expression condition") {
+    val ds1 = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+    val ds2 = Seq(("a", 1), ("b", 2)).toDS()
+
+    checkAnswer(
+      ds1.joinWith(ds2, $"_1" === $"a"),
+      (ClassData("a", 1), ("a", 1)), (ClassData("b", 2), ("b", 2)))
+  }
+
+  test("joinWith tuple with primitive, expression") {
+    val ds1 = Seq(1, 1, 2).toDS()
+    val ds2 = Seq(("a", 1), ("b", 2)).toDS()
+
+    checkAnswer(
+      ds1.joinWith(ds2, $"value" === $"_2"),
+      (1, ("a", 1)), (1, ("a", 1)), (2, ("b", 2)))
+  }
+
+  test("joinWith class with primitive, toDF") {
+    val ds1 = Seq(1, 1, 2).toDS()
+    val ds2 = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+
+    checkAnswer(
+      ds1.joinWith(ds2, $"value" === $"b").toDF().select($"_1", $"_2.a", $"_2.b"),
+      Row(1, "a", 1) :: Row(1, "a", 1) :: Row(2, "b", 2) :: Nil)
+  }
+
+  test("multi-level joinWith") {
+    val ds1 = Seq(("a", 1), ("b", 2)).toDS().as("a")
+    val ds2 = Seq(("a", 1), ("b", 2)).toDS().as("b")
+    val ds3 = Seq(("a", 1), ("b", 2)).toDS().as("c")
+
+    checkAnswer(
+      ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"),
+      ((("a", 1), ("a", 1)), ("a", 1)),
+      ((("b", 2), ("b", 2)), ("b", 2)))
+
   }
 
   test("groupBy function, keys") {

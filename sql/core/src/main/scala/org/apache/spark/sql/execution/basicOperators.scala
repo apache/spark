@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.Encoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -319,8 +319,8 @@ case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPl
  */
 case class MapPartitions[T, U](
     func: Iterator[T] => Iterator[U],
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
 
@@ -337,8 +337,8 @@ case class MapPartitions[T, U](
  */
 case class AppendColumns[T, U](
     func: T => U,
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     newColumns: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
 
@@ -363,9 +363,9 @@ case class AppendColumns[T, U](
  */
 case class MapGroups[K, T, U](
     func: (K, Iterator[T]) => Iterator[U],
-    kEncoder: Encoder[K],
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    kEncoder: ExpressionEncoder[K],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
