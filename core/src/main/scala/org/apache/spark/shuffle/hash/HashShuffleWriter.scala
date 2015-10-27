@@ -103,10 +103,6 @@ private[spark] class HashShuffleWriter[K, V](
     }
   }
 
-  override def mapStatusFile: File = {
-    blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(handle.shuffleId, mapId))
-  }
-
   private def commitWritesAndBuildStatus(): MapStatus = {
     // Commit the writes. Get the size of each bucket block (total block size).
     val sizes: Array[Long] = shuffle.writers.map { case (writer: DiskBlockObjectWriter, _) =>

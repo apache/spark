@@ -16,7 +16,7 @@
  */
 package org.apache.spark.shuffle
 
-import java.io.{FileInputStream, FileOutputStream, File}
+import java.io.{File, FileInputStream, FileOutputStream}
 
 import org.scalatest.BeforeAndAfterEach
 

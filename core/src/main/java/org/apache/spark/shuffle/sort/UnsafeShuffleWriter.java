@@ -505,9 +505,4 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
   }
 
-  @Override
-  public File mapStatusFile() {
-    return blockManager.diskBlockManager().getFile(new ShuffleMapStatusBlockId(shuffleId, mapId));
-  }
-
 }

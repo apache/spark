@@ -339,9 +339,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       iter: Iterator[(Int, Int)]): Option[(Boolean, MapStatus)] = {
       val files = writer.write(iter)
       val output = writer.stop(true)
-      output.map(ShuffleOutputCoordinator.commitOutputs(0, 0, files, _, mapStatusFile,
-          serializer = SparkEnv.get.serializer.newInstance())
-      )
+      output.map(ShuffleOutputCoordinator.commitOutputs(0, 0, files, _, SparkEnv.get))
     }
     val interleaver = new InterleaveIterators(
       data1, writeAndClose(writer1), data2, writeAndClose(writer2))

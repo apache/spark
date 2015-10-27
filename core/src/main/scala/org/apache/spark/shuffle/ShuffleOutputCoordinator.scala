@@ -18,7 +18,10 @@ package org.apache.spark.shuffle
 
 import java.io.{FileOutputStream, FileInputStream, File}
 
-import org.apache.spark.Logging
+import com.google.common.annotations.VisibleForTesting
+
+import org.apache.spark.storage.ShuffleMapStatusBlockId
+import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.SerializerInstance
 
@@ -39,13 +42,23 @@ private[spark] object ShuffleOutputCoordinator extends Logging {
    * @param partitionId
    * @param tmpToDest  Seq of (temporary, destination) file pairs
    * @param mapStatus the [[MapStatus]] for the output already written to the the temporary files
-   * @param mapStatusFile canonical location to store the mapStatus, for future attempts.  See
-   *                      [[org.apache.spark.storage.ShuffleMapStatusBlockId]]
-   * @param serializer to serialize the mapStatus to disk
    * @return pair of (true iff the set of temporary files was moved to the destination, the
    *         MapStatus of the winn
    *
    */
+  def commitOutputs(
+      shuffleId: Int,
+      partitionId: Int,
+      tmpToDest: Seq[(File, File)],
+      mapStatus: MapStatus,
+      sparkEnv: SparkEnv): (Boolean, MapStatus) = synchronized {
+    val mapStatusFile = sparkEnv.blockManager.diskBlockManager.getFile(
+      ShuffleMapStatusBlockId(shuffleId, partitionId))
+    val ser = sparkEnv.serializer.newInstance()
+    commitOutputs(shuffleId, partitionId, tmpToDest, mapStatus, mapStatusFile, ser)
+  }
+
+  @VisibleForTesting
   def commitOutputs(
       shuffleId: Int,
       partitionId: Int,

@@ -108,10 +108,6 @@ private[spark] class SortShuffleWriter[K, V, C](
     }
   }
 
-  override def mapStatusFile: File = {
-    blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(handle.shuffleId, mapId))
-  }
-
 }
 
 private[spark] object SortShuffleWriter {

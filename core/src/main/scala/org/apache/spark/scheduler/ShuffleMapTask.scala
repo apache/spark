@@ -75,7 +75,7 @@ private[spark] class ShuffleMapTask(
       val mapStatus = writer.stop(success = true).get
       // SPARK-8029 make sure only one task on this executor writes the final shuffle files
       ShuffleOutputCoordinator.commitOutputs(dep.shuffleId, partitionId, tmpToDestFiles, mapStatus,
-        writer.mapStatusFile, SparkEnv.get.serializer.newInstance())._2
+        SparkEnv.get)._2
     } catch {
       case e: Exception =>
         try {
