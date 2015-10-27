@@ -331,14 +331,17 @@ class LinearRegression(override val uid: String)
 @Experimental
 class LinearRegressionModel private[ml] (
     override val uid: String,
-    val weights: Vector,
+    val coefficients: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
-  override val numFeatures: Int = weights.size
+  @deprecated("Use coefficients instead.", "1.6.0")
+  def weights: Vector = coefficients
+
+  override val numFeatures: Int = coefficients.size
 
   /**
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
@@ -387,11 +390,11 @@ class LinearRegressionModel private[ml] (
 
 
   override protected def predict(features: Vector): Double = {
-    dot(features, weights) + intercept
+    dot(features, coefficients) + intercept
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    val newModel = copyValues(new LinearRegressionModel(uid, weights, intercept), extra)
+    val newModel = copyValues(new LinearRegressionModel(uid, coefficients, intercept), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     newModel.setParent(parent)
   }

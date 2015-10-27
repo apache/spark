@@ -397,7 +397,7 @@ class LogisticRegressionModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  @deprecated("Use coefficients instead.","1.6.0")
+  @deprecated("Use coefficients instead.", "1.6.0")
   def weights: Vector = coefficients
 
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
