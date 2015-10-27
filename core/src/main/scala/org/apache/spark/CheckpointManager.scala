@@ -20,10 +20,7 @@ package org.apache.spark
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-
-import org.apache.spark.rdd.{ReliableRDDCheckpointData, ReliableCheckpointRDD, RDD}
+import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData, ReliableCheckpointRDD}
 import org.apache.spark.storage._
 
 private[spark] class CheckpointManager extends Logging {
@@ -31,38 +28,32 @@ private[spark] class CheckpointManager extends Logging {
   /** Keys of RDD partitions that are being checkpointed. */
   private val checkpointingRDDPartitions = new mutable.HashSet[RDDBlockId]
 
-  /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is about to be
-    * checkpointed. */
-  def getOrCompute[T: ClassTag](
+  /**
+   * Checkpoint the RDD partition. If it's being checkpointed, just wait until finishing
+   * checkpointing.
+   */
+  def doCheckpoint[T: ClassTag](
       rdd: RDD[T],
       checkpointData: ReliableRDDCheckpointData[T],
       partition: Partition,
-      context: TaskContext): Iterator[T] = {
-    val conf = checkpointData.broadcastedConf.value.value
-    val path =
-      new Path(checkpointData.cpDir, ReliableCheckpointRDD.checkpointFileName(partition.index))
+      context: TaskContext): Unit = {
+    val hadoopConf = checkpointData.broadcastedConf.value.value
     val key = RDDBlockId(rdd.id, partition.index)
     logDebug(s"Looking for partition $key")
-    if (checkpointData.isCheckpointed) {
-      // TODO how to know we should checkpoint
-      return new InterruptibleIterator[T](context,
-        ReliableCheckpointRDD.readCheckpointFile(path, conf, context))
-    } else {
-      // Acquire a lock for loading this partition
-      // If another thread already holds the lock, wait for it to finish return its results
-      val checkpoint = acquireLockForPartition[T](rdd, partition, key, context)
-      if (checkpoint.isDefined) {
-        return new InterruptibleIterator[T](context, checkpoint.get)
-      }
-    }
 
-    // Otherwise, we have to load the partition ourselves
     try {
-      logInfo(s"Partition $key not found, computing it")
-      val computedValues = rdd.computeOrReadCache(partition, context)
-      ReliableCheckpointRDD.writeCheckpointFile(
-        context, computedValues, checkpointData.cpDir, conf, partition.index)
-      rdd.computeOrReadCache(partition, context)
+      // Acquire a lock for loading this partition
+      // If another thread already holds the lock, wait for it to finish
+      if (acquireLockForPartition[T](rdd, partition, key, context)) {
+        // Acquired the lock. We have to load the partition ourselves
+        logInfo(s"Partition $key not found, computing it")
+        val computedValues = rdd.computeOrReadCache(partition, context)
+        // TODO Some operators may use the same partition of a RDD in different executors, such as
+        // `cartesian`. `writeCheckpointFile` has already handled this corner case for speculation.
+        // However, we may need to optimize for this case in future.
+        ReliableCheckpointRDD.writeCheckpointFile(
+          context, computedValues, checkpointData.cpDir, hadoopConf, partition.index)
+      }
     } finally {
       checkpointingRDDPartitions.synchronized {
         checkpointingRDDPartitions.remove(key)
@@ -82,12 +73,12 @@ private[spark] class CheckpointManager extends Logging {
       rdd: RDD[T],
       partition: Partition,
       id: RDDBlockId,
-      context: TaskContext): Option[Iterator[T]] = {
+      context: TaskContext): Boolean = {
     checkpointingRDDPartitions.synchronized {
       if (!checkpointingRDDPartitions.contains(id)) {
         // If the partition is free, acquire its lock to compute its value
         checkpointingRDDPartitions.add(id)
-       return None
+        true
       } else {
         // Otherwise, wait for another thread to finish and return its result
         logInfo(s"Another thread is checkpointing $id, waiting for it to finish...")
@@ -95,9 +86,9 @@ private[spark] class CheckpointManager extends Logging {
           checkpointingRDDPartitions.wait()
         }
         logInfo(s"Finished waiting for $id")
+        false
       }
     }
-    Some(rdd.computeOrReadCache(partition, context))
   }
 
 }
