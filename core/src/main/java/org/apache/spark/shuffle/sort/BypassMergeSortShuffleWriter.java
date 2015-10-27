@@ -135,8 +135,13 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       partitionLengths = new long[numPartitions];
       File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
       mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+      // create empty data file so we always commit same set of shuffle output files, even if
+      // data is non-deterministic
+      File tmpDataFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
+      tmpDataFile.createNewFile();
       return JavaConverters.asScalaBufferConverter(Arrays.asList(
-        new Tuple2<>(tmpIndexFile, indexFile)
+        new Tuple2<>(tmpIndexFile, indexFile),
+        new Tuple2<>(tmpDataFile, dataFile)
       )).asScala();
     }
     final SerializerInstance serInstance = serializer.newInstance();

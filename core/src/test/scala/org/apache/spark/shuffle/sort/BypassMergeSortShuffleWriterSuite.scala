@@ -150,12 +150,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     val ser = new JavaSerializer(conf).newInstance()
     assert(ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile, ser)._1)
     assert(writer.getPartitionLengths.sum === 0)
-    if (outputFile.exists()) {
-      assert(outputFile.length() === 0)
-      assert(temporaryFilesCreated.size === 2)
-    } else {
-      assert(temporaryFilesCreated.size === 1)
-    }
+    assert(outputFile.exists())
+    assert(outputFile.length() === 0)
+    assert(temporaryFilesCreated.size === 2)
     val shuffleWriteMetrics = taskContext.taskMetrics().shuffleWriteMetrics.get
     assert(shuffleWriteMetrics.shuffleBytesWritten === 0)
     assert(shuffleWriteMetrics.shuffleRecordsWritten === 0)

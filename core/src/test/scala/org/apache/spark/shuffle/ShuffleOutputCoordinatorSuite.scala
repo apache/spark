@@ -114,34 +114,11 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     secondAttempt.foreach{ case (t, d) => assert(!t.exists())}
   }
 
-//  test("ignore missing tmp files") {
-//    // HashShuffle doesn't necessarily even create 0 length files for all of its output,
-//    // so just ignore tmp files that are missing
-//    val firstAttempt = generateAttempt(0) ++
-//      Seq(new File(tempDir, "bogus") -> new File(tempDir, "blah"))
-//    assert(ShuffleOutputCoordinator.commitOutputs(0, 0, firstAttempt))
-//    verifyFiles(0)
-//    assert(!new File(tempDir, "blah").exists())
-//    firstAttempt.foreach{ case (t, d) => assert(!t.exists())}
-//
-//    // if we try again, once more with the missing tmp file, commit fails even though dest
-//    // is "partially missing"
-//    // TODO figure out right semantics, esp wrt non-determinstic data
-//    val secondAttempt = generateAttempt(1) ++
-//      Seq(new File(tempDir, "bogus") -> new File(tempDir, "blah"))
-//    assert(!ShuffleOutputCoordinator.commitOutputs(0, 0, secondAttempt))
-//    verifyFiles(0)
-//    assert(!new File(tempDir, "blah").exists())
-//    secondAttempt.foreach{ case (t, d) => assert(!t.exists())}
-//
-//    // but now if we delete one of the real dest files, and try again, it goes through
-//    val thirdAttempt = generateAttempt(2) ++
-//      Seq(new File(tempDir, "bogus") -> new File(tempDir, "blah"))
-//    firstAttempt(0)._2.delete()
-//    assert(ShuffleOutputCoordinator.commitOutputs(0, 0, thirdAttempt))
-//    verifyFiles(2)
-//    assert(!new File(tempDir, "blah").exists())
-//    thirdAttempt.foreach{ case (t, d) => assert(!t.exists())}
-//  }
+  test("no missing tmp files") {
+    val firstAttempt = generateAttempt(0) ++
+      Seq(new File(tempDir, "bogus") -> new File(tempDir, "blah"))
+    val ex = intercept[IllegalArgumentException] {commit(firstAttempt, 1)}
+    assert(ex.getMessage.contains("Cannot commit non-existent shuffle output"))
+  }
 
 }
