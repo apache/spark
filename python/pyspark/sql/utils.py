@@ -17,10 +17,12 @@
 
 import py4j
 
+
 class CapturedException(Exception):
     def __init__(self, desc, stackTrace):
         self.desc = desc
         self.stackTrace = stackTrace
+
     def __str__(self):
         return repr(self.desc)
 
