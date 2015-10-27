@@ -207,11 +207,9 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
     // Write data with rotation using WriteAheadLog class
     val numFiles = 3
     val dataToWrite = Seq.tabulate(numFiles)(_.toString)
-    val conf = new SparkConf()
-    conf.set(WriteAheadLogUtils.WAL_CLOSE_AFTER_WRITE, "true")
     // total advance time is less than 1000, therefore log shouldn't be rolled, but manually closed
     writeDataUsingWriteAheadLog(testDir, dataToWrite, closeLog = false, clockAdvanceTime = 100,
-      sparkConf = conf)
+      closeFileAfterWrite = true)
 
     // Read data manually to verify the written data
     val logFiles = getLogFilesInDirectory(testDir)
@@ -375,10 +373,10 @@ object WriteAheadLogSuite {
       manualClock: ManualClock = new ManualClock,
       closeLog: Boolean = true,
       clockAdvanceTime: Int = 500,
-      sparkConf: SparkConf = new SparkConf()
-    ): FileBasedWriteAheadLog = {
+      closeFileAfterWrite: Boolean = false): FileBasedWriteAheadLog = {
     if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
-    val wal = new FileBasedWriteAheadLog(sparkConf, logDirectory, hadoopConf, 1, 1)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1,
+      closeFileAfterWrite)
 
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
