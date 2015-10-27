@@ -22,7 +22,7 @@
 # Starts a worker on each node specified in conf/slaves
 
 if [ -z "${SPARK_HOME}" ]; then
-    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
 TACHYON_STR=""

@@ -21,7 +21,7 @@
 
 # symlink and absolute path should rely on SPARK_HOME to resolve
 if [ -z "${SPARK_HOME}" ]; then
-    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
 export SPARK_CONF_DIR="${SPARK_CONF_DIR:-"$SPARK_HOME/conf"}"

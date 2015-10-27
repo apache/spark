@@ -21,7 +21,7 @@
 # Run this on the master node.
 
 if [ -z "${SPARK_HOME}" ]; then
-    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
 # Load the Spark configuration

@@ -24,7 +24,7 @@
 set -o posix
 
 if [ -z "${SPARK_HOME}" ]; then
-    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
 # NOTE: This exact class name is matched downstream by SparkSubmit.

@@ -20,7 +20,7 @@
 # Starts a slave instance on each machine specified in the conf/slaves file.
 
 if [ -z "${SPARK_HOME}" ]; then
-    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
 START_TACHYON=false
