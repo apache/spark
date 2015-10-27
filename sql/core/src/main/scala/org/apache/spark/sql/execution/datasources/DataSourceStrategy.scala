@@ -17,22 +17,21 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, TaskContext}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -211,7 +210,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[InternalRow]) => {
         val mutableJoinedRow = new JoinedRow()
         val unsafePartitionValues = UnsafeProjection.create(partitionColumnSchema)(partitionValues)
-        val unsafeProjection = UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
+        val unsafeProjection =
+          UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
 
         iterator.map { dataRow =>
           val unsafeDataRow = dataRow.asInstanceOf[UnsafeRow]
