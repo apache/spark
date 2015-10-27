@@ -200,6 +200,13 @@ class RFormulaModel private[feature](
       dataset.schema(labelName).dataType match {
         case _: NumericType | BooleanType =>
           dataset.withColumn($(labelCol), dataset(labelName).cast(DoubleType))
+        case _: StringType => {
+          val indexer = new StringIndexer()
+            .setInputCol(labelName)
+            .setOutputCol($(labelCol))
+            .fit(dataset)
+          indexer.transform(dataset)
+        }
         case other =>
           throw new IllegalArgumentException("Unsupported type for label: " + other)
       }
