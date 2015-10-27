@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{Arrays, ArrayList => JArrayList, List => JList}
+import org.apache.log4j.LogManager
+import org.apache.spark.sql.AnalysisException
 
 import scala.collection.JavaConverters._
 
@@ -63,9 +65,26 @@ private[hive] class SparkSQLDriver(
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
-      case cause: Throwable =>
-        logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)
+        case ae: AnalysisException =>
+          // On analysis exception we will supress printing of the exception
+          // on to console. We do that by removing the console appender. If
+          // Logging is setup to log to both console and file , we will still
+          // log the error to the file.
+          val appender = LogManager.getRootLogger().getAppender("console")
+          if (appender != null) {
+            LogManager.getRootLogger().removeAppender("console")
+          }
+
+          logError(s"Failed in [$command]", ae)
+
+          // Restore the console appender.
+          if (appender != null) {
+            LogManager.getRootLogger().addAppender(appender)
+          }
+          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(ae), null, ae)
+        case cause: Throwable =>
+          logError(s"Failed in [$command]", cause)
+          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)
     }
   }
 
