@@ -282,6 +282,8 @@ private[sql] class ParquetRelation(
     }
   }
 
+  override private[sql] def outputsUnsafeRows: Boolean = true
+
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],

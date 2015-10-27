@@ -21,6 +21,7 @@ import org.apache.parquet.io.api.{GroupConverter, RecordMaterializer}
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -35,7 +36,7 @@ private[parquet] class CatalystRecordMaterializer(
 
   private val rootConverter = new CatalystRowConverter(parquetSchema, catalystSchema, NoopUpdater)
 
-  override def getCurrentRecord: InternalRow = rootConverter.currentRow
+  override def getCurrentRecord: InternalRow = rootConverter.currentRecord
 
   override def getRootConverter: GroupConverter = rootConverter
 }

@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{TableIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.execution.ConvertToUnsafe
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -560,6 +561,32 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       nullable = true)
 
     assert(CatalystReadSupport.expandUDT(schema) === expected)
+  }
+
+  test("ParquetRelation produces UnsafeRow") {
+    withTempTable("test_unsafe") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sqlContext.range(3).write.parquet(path)
+        sqlContext.read.parquet(path).registerTempTable("test_unsafe")
+
+        val df = sqlContext.sql(
+          """SELECT COUNT(*)
+            |FROM test_unsafe a JOIN test_unsafe b
+            |WHERE a.id = b.id
+          """.stripMargin)
+
+        val plan = df.queryExecution.executedPlan
+
+        assert(
+          plan.collect { case plan: ConvertToUnsafe => plan }.isEmpty,
+          s"""Query plan shouldn't have ${classOf[ConvertToUnsafe].getSimpleName} node(s):
+             |$plan
+           """.stripMargin)
+
+        checkAnswer(df, Row(3))
+      }
+    }
   }
 }
 

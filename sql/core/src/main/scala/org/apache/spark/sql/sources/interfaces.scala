@@ -231,8 +231,27 @@ abstract class BaseRelation {
    * of Spark SQL should leave this as true.
    *
    * @since 1.4.0
+   * @deprecated As of 1.6.0, replaced by `!outputsInternalRows`.
    */
+  @deprecated("Use !outputsInternalRows", "1.6.0")
   def needConversion: Boolean = true
+
+  /**
+   * Whether does it produce [[InternalRow]]s, which use internal representation for row fields, for
+   * example:
+   *  java.lang.String -> UTF8String
+   *  java.lang.Decimal -> Decimal
+   *
+   * If `outputsInternalRows` is `true`, `buildScan()` should return an [[RDD]] of [[InternalRow]]
+   *
+   * Note: The internal representation is not stable across releases and thus data sources outside
+   * of Spark SQL should leave this as true.
+   *
+   * @since 1.6.0
+   */
+  def outputsInternalRows: Boolean = !needConversion
+
+  private[sql] def outputsUnsafeRows: Boolean = false
 }
 
 /**
@@ -652,7 +671,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
     val codegenEnabled = this.codegenEnabled
-    val needConversion = this.needConversion
+    val outputsInternalRows = this.outputsInternalRows
 
     val requiredOutput = requiredColumns.map { col =>
       val field = dataSchema(col)
@@ -661,7 +680,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     val rdd: RDD[Row] = buildScan(inputFiles)
     val converted: RDD[InternalRow] =
-      if (needConversion) {
+      if (!outputsInternalRows) {
         RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
       } else {
         rdd.asInstanceOf[RDD[InternalRow]]
@@ -679,7 +698,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         rows.map(r => mutableProjection(r))
       }
 
-      if (needConversion) {
+      if (!outputsInternalRows) {
         val requiredSchema = StructType(requiredColumns.map(dataSchema(_)))
         val toScala = CatalystTypeConverters.createToScalaConverter(requiredSchema)
         projectedRows.map(toScala(_).asInstanceOf[Row])
