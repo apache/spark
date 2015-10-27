@@ -32,7 +32,8 @@ private[spark] class ApplicationInfo(
     val desc: ApplicationDescription,
     val submitDate: Date,
     val driver: RpcEndpointRef,
-    defaultCores: Int)
+    defaultCores: Int,
+    var appUiUrl: String)
   extends Serializable {
 
   @transient var state: ApplicationState.Value = _
