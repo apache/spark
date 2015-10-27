@@ -134,7 +134,7 @@ sparkR.init <- function(
     # spark.driver.memory cannot be set in env:
     # http://spark.apache.org/docs/latest/configuration.html#application-properties
     # Add spark.driver.memory if set in sparkEnvir and not already set in SPARKR_SUBMIT_ARGS
-    if (!grepl("--spark.driver.memory", submitOps)) {
+    if (!grepl("--driver-memory", submitOps)) {
       driverMemory <- sparkEnvirMap[["spark.driver.memory"]]
       # format for memory properties is 2 characters
       if (!is.null(driverMemory) && nchar(driverMemory) > 1) {
