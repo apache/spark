@@ -217,8 +217,7 @@ private[streaming] class ReceiverSchedulingPolicy {
         val scheduledLocations = receiverTrackingInfo.scheduledLocations.get
         // The probability that a scheduled receiver will run in an executor is
         // 1.0 / scheduledLocations.size
-        scheduledLocations.filter(_.isInstanceOf[ExecutorCacheTaskLocation]).
-          map { location =>
+        scheduledLocations.filter(_.isInstanceOf[ExecutorCacheTaskLocation]).map { location =>
           location.asInstanceOf[ExecutorCacheTaskLocation] -> (1.0 / scheduledLocations.size)
         }
       case ReceiverState.ACTIVE => Seq(receiverTrackingInfo.runningExecutor.get -> 1.0)
