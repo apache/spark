@@ -153,6 +153,18 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("similar columns") {
+    val A = new IndexedRowMatrix(indexedRows)
+    val gram = A.computeGramianMatrix().toBreeze.toDenseMatrix
+
+    val G = A.columnSimilarities().toBreeze()
+
+    for (i <- 0 until n; j <- i + 1 until n) {
+      val trueResult = gram(i, j) / scala.math.sqrt(gram(i, i) * gram(j, j))
+      assert(math.abs(G(i, j) - trueResult) < 1e-6)
+    }
+  }
+
   def closeToZero(G: BDM[Double]): Boolean = {
     G.valuesIterator.map(math.abs).sum < 1e-6
   }
