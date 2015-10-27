@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.fpm.FPGrowth._
@@ -33,15 +33,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: Experimental ::
- *
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
  * @param freqItemsets frequent itemset, which is an RDD of [[FreqItemset]]
  * @tparam Item item type
- *
  */
 @Since("1.3.0")
-@Experimental
 class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
     @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable {
   /**
@@ -56,8 +52,6 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
 }
 
 /**
- * :: Experimental ::
- *
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
  * [[http://dx.doi.org/10.1145/1454008.1454027 Li et al., PFP: Parallel FP-Growth for Query
  *  Recommendation]]. PFP distributes computation in such a way that each worker executes an
@@ -74,7 +68,6 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
  *
  */
 @Since("1.3.0")
-@Experimental
 class FPGrowth private (
     private var minSupport: Double,
     private var numPartitions: Int) extends Logging with Serializable {
@@ -213,12 +206,7 @@ class FPGrowth private (
   }
 }
 
-/**
- * :: Experimental ::
- *
- */
 @Since("1.3.0")
-@Experimental
 object FPGrowth {
 
   /**

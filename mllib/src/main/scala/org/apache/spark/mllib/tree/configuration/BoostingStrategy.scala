@@ -19,12 +19,11 @@ package org.apache.spark.mllib.tree.configuration
 
 import scala.beans.BeanProperty
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
 
 /**
- * :: Experimental ::
  * Configuration options for [[org.apache.spark.mllib.tree.GradientBoostedTrees]].
  *
  * @param treeStrategy Parameters for the tree algorithm. We support regression and binary
@@ -47,7 +46,6 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                      [[org.apache.spark.mllib.tree.GradientBoostedTrees.run()]] is used.
  */
 @Since("1.2.0")
-@Experimental
 case class BoostingStrategy @Since("1.4.0") (
     // Required boosting parameters
     @Since("1.2.0") @BeanProperty var treeStrategy: Strategy,
@@ -79,7 +77,6 @@ case class BoostingStrategy @Since("1.4.0") (
 }
 
 @Since("1.2.0")
-@Experimental
 object BoostingStrategy {
 
   /**

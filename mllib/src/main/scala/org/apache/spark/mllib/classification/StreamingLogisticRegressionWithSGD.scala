@@ -17,12 +17,11 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
 
 /**
- * :: Experimental ::
  * Train or predict a logistic regression model on streaming data. Training uses
  * Stochastic Gradient Descent to update the model based on each new batch of
  * incoming data from a DStream (see `LogisticRegressionWithSGD` for model equation)
@@ -43,7 +42,6 @@ import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
  *    .trainOn(DStream)
  * }}}
  */
-@Experimental
 @Since("1.3.0")
 class StreamingLogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,

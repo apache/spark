@@ -20,11 +20,9 @@ package org.apache.spark.mllib.stat.test
 import org.apache.spark.annotation.{Experimental, Since}
 
 /**
- * :: Experimental ::
  * Trait for hypothesis test results.
  * @tparam DF Return type of `degreesOfFreedom`.
  */
-@Experimental
 @Since("1.1.0")
 trait TestResult[DF] {
 
@@ -79,10 +77,8 @@ trait TestResult[DF] {
 }
 
 /**
- * :: Experimental ::
  * Object containing the test results for the chi-squared hypothesis test.
  */
-@Experimental
 @Since("1.1.0")
 class ChiSqTestResult private[stat] (override val pValue: Double,
     @Since("1.1.0") override val degreesOfFreedom: Int,

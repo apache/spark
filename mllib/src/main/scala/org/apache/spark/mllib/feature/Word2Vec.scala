@@ -31,15 +31,14 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, BLAS, DenseVector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.SQLContext
 
 /**
  *  Entry in vocabulary
@@ -53,7 +52,6 @@ private case class VocabWord(
 )
 
 /**
- * :: Experimental ::
  * Word2Vec creates vector representation of words in a text corpus.
  * The algorithm first constructs a vocabulary from the corpus
  * and then learns vector representation of words in the vocabulary.
@@ -71,7 +69,6 @@ private case class VocabWord(
  * Distributed Representations of Words and Phrases and their Compositionality.
  */
 @Since("1.1.0")
-@Experimental
 class Word2Vec extends Serializable with Logging {
 
   private var vectorSize = 100
@@ -427,7 +424,6 @@ class Word2Vec extends Serializable with Logging {
 }
 
 /**
- * :: Experimental ::
  * Word2Vec model
  * @param wordIndex maps each word to an index, which can retrieve the corresponding
  *                  vector from wordVectors
@@ -435,7 +431,6 @@ class Word2Vec extends Serializable with Logging {
  *                    to the word mapped with index i can be retrieved by the slice
  *                    (i * vectorSize, i * vectorSize + vectorSize)
  */
-@Experimental
 @Since("1.1.0")
 class Word2VecModel private[mllib] (
     private val wordIndex: Map[String, Int],
@@ -558,7 +553,6 @@ class Word2VecModel private[mllib] (
 }
 
 @Since("1.4.0")
-@Experimental
 object Word2VecModel extends Loader[Word2VecModel] {
 
   private def buildWordIndex(model: Map[String, Array[Float]]): Map[String, Int] = {

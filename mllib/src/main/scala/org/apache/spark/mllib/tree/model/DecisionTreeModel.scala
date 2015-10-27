@@ -24,7 +24,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
@@ -35,14 +35,12 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.util.Utils
 
 /**
- * :: Experimental ::
  * Decision tree model for classification or regression.
  * This model stores the decision tree structure and parameters.
  * @param topNode root node
  * @param algo algorithm type -- classification or regression
  */
 @Since("1.0.0")
-@Experimental
 class DecisionTreeModel @Since("1.0.0") (
     @Since("1.0.0") val topNode: Node,
     @Since("1.0.0") val algo: Algo) extends Serializable with Saveable {

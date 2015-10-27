@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -28,8 +28,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
- * :: Experimental ::
- *
  * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
  *
  * Terminology:
@@ -45,7 +43,6 @@ import org.apache.spark.util.Utils
  *       (Wikipedia)]]
  */
 @Since("1.3.0")
-@Experimental
 class LDA private (
     private var k: Int,
     private var maxIterations: Int,

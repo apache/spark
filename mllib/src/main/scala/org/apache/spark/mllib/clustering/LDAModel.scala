@@ -35,14 +35,11 @@ import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
- * :: Experimental ::
- *
  * Latent Dirichlet Allocation (LDA) model.
  *
  * This abstraction permits for different underlying representations,
  * including local and distributed data structures.
  */
-@Experimental
 @Since("1.3.0")
 abstract class LDAModel private[clustering] extends Saveable {
 
@@ -184,15 +181,12 @@ abstract class LDAModel private[clustering] extends Saveable {
 }
 
 /**
- * :: Experimental ::
- *
  * Local LDA model.
  * This model stores only the inferred topics.
  * It may be used for computing topics for new documents, but it may give less accurate answers
  * than the [[DistributedLDAModel]].
  * @param topics Inferred topics (vocabSize x k matrix).
  */
-@Experimental
 @Since("1.3.0")
 class LocalLDAModel private[clustering] (
     @Since("1.3.0") val topics: Matrix,
@@ -481,14 +475,11 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 }
 
 /**
- * :: Experimental ::
- *
  * Distributed LDA model.
  * This model stores the inferred topics, the full training dataset, and the topic distributions.
  * When computing topics for new documents, it may give more accurate answers
  * than the [[LocalLDAModel]].
  */
-@Experimental
 @Since("1.3.0")
 class DistributedLDAModel private[clustering] (
     private[clustering] val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
