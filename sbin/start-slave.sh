@@ -39,32 +39,13 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 
-realpath () {
-(
-  TARGET_FILE="$1"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-sbin="$(dirname "$(realpath "$0")")"
-sbin="$(cd "$sbin"; pwd)"
-
-. "$sbin/spark-config.sh"
-
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
 # First argument should be the master; we need to store it aside because we may
 # need to insert arguments between it and the other arguments
@@ -91,7 +72,7 @@ function start_instance {
   fi
   WEBUI_PORT=$(( $SPARK_WORKER_WEBUI_PORT + $WORKER_NUM - 1 ))
 
-  "$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker $WORKER_NUM \
+  "${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker $WORKER_NUM \
      --webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
 }
 

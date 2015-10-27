@@ -20,43 +20,23 @@
 # Stop all spark daemons.
 # Run this on the master node.
 
-
-realpath () {
-(
-  TARGET_FILE="$1"
-
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
-
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-sbin="$(dirname "$(realpath "$0")")"
-sbin="$(cd "$sbin"; pwd)"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
 # Load the Spark configuration
-. "$sbin/spark-config.sh"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
 # Stop the slaves, then the master
-"$sbin"/stop-slaves.sh
-"$sbin"/stop-master.sh
+"${SPARK_HOME}/sbin"/stop-slaves.sh
+"${SPARK_HOME}/sbin"/stop-master.sh
 
 if [ "$1" == "--wait" ]
 then
   printf "Waiting for workers to shut down..."
   while true
   do
-    running=`$sbin/slaves.sh ps -ef | grep -v grep | grep deploy.worker.Worker`
+    running=`${SPARK_HOME}/sbin/slaves.sh ps -ef | grep -v grep | grep deploy.worker.Worker`
     if [ -z "$running" ]
     then
       printf "\nAll workers successfully shut down.\n"

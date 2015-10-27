@@ -19,27 +19,8 @@
 
 # Stops the external shuffle service on the machine this script is executed on.
 
-realpath () {
-(
-  TARGET_FILE="$1"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
-
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-sbin="$(dirname "$(realpath "$0")")"
-sbin="$(cd "$sbin"; pwd)"
-
-"$sbin"/spark-daemon.sh stop org.apache.spark.deploy.ExternalShuffleService 1
+"${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.ExternalShuffleService 1

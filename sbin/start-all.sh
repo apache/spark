@@ -21,28 +21,9 @@
 # Starts the master on this node.
 # Starts a worker on each node specified in conf/slaves
 
-realpath () {
-(
-  TARGET_FILE="$1"
-
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
-
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-sbin="$(dirname "$(realpath "$0")")"
-sbin="$(cd "$sbin"; pwd)"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
 TACHYON_STR=""
 
@@ -56,10 +37,10 @@ shift
 done
 
 # Load the Spark configuration
-. "$sbin/spark-config.sh"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
 # Start Master
-"$sbin"/start-master.sh $TACHYON_STR
+"${SPARK_HOME}sbin"/start-master.sh $TACHYON_STR
 
 # Start Workers
-"$sbin"/start-slaves.sh $TACHYON_STR
+"${SPARK_HOME}/sbin"/start-slaves.sh $TACHYON_STR

@@ -17,30 +17,10 @@
 # limitations under the License.
 #
 
-realpath () {
-(
-  TARGET_FILE="$1"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
-
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-# Figure out where Spark is installed
-DIR="$(dirname "$(realpath "$0")")"
-
-export SPARK_HOME="$(cd "$DIR/.."; pwd)"
-source "$SPARK_HOME"/bin/load-spark-env.sh
+source "${SPARK_HOME}"/bin/load-spark-env.sh
 export _SPARK_CMD_USAGE="Usage: ./bin/sparkR [options]"
-exec "$SPARK_HOME"/bin/spark-submit sparkr-shell-main "$@"
+exec "${SPARK_HOME}"/bin/spark-submit sparkr-shell-main "$@"

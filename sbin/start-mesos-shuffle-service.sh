@@ -26,30 +26,11 @@
 # Use the SPARK_SHUFFLE_OPTS environment variable to set shuffle service configuration.
 #
 
-realpath () {
-(
-  TARGET_FILE="$1"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
+. "${SPARK_HOME}/sbin/spark-config.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-sbin="$(dirname "$(realpath "$0")")"
-sbin="$(cd "$sbin"; pwd)"
-
-. "$sbin/spark-config.sh"
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
-
-exec "$sbin"/spark-daemon.sh start org.apache.spark.deploy.mesos.MesosExternalShuffleService 1
+exec "${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.mesos.MesosExternalShuffleService 1

@@ -20,35 +20,17 @@
 # This script loads spark-env.sh if it exists, and ensures it is only loaded once.
 # spark-env.sh is loaded from SPARK_CONF_DIR if set, or within the current directory's
 # conf/ subdirectory.
-realpath () {
-(
-  TARGET_FILE="$1"
-
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
-
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
 
 # Figure out where Spark is installed
-DIR="$(dirname "$(realpath "$0")")"
-FWDIR="$(cd "$DIR/.."; pwd)"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
 if [ -z "$SPARK_ENV_LOADED" ]; then
   export SPARK_ENV_LOADED=1
 
   # Returns the parent of the directory this script lives in.
-  parent_dir="$(cd "`dirname "$0"`"/..; pwd)"
+  parent_dir="${SPARK_HOME}"
 
   user_conf_dir="${SPARK_CONF_DIR:-"$parent_dir"/conf}"
 
@@ -64,8 +46,8 @@ fi
 
 if [ -z "$SPARK_SCALA_VERSION" ]; then
 
-    ASSEMBLY_DIR2="$FWDIR/assembly/target/scala-2.11"
-    ASSEMBLY_DIR1="$FWDIR/assembly/target/scala-2.10"
+    ASSEMBLY_DIR2="${SPARK_HOME}/assembly/target/scala-2.11"
+    ASSEMBLY_DIR1="${SPARK_HOME}/assembly/target/scala-2.10"
 
     if [[ -d "$ASSEMBLY_DIR2" && -d "$ASSEMBLY_DIR1" ]]; then
         echo -e "Presence of build for both scala versions(SCALA 2.10 and SCALA 2.11) detected." 1>&2

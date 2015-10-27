@@ -27,37 +27,18 @@
 # Usage: stop-slave.sh
 #   Stops all slaves on this worker machine
 
-realpath () {
-(
-  TARGET_FILE="$1"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-sbin="$(dirname "$(realpath "$0")")"
-sbin="$(cd "$sbin"; pwd)"
-
-. "$sbin/spark-config.sh"
-
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker 1
+  "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker 1
 else
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
+    "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
   done
 fi

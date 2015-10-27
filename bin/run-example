@@ -17,32 +17,13 @@
 # limitations under the License.
 #
 
-realpath () {
-(
-  TARGET_FILE="$1"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
+EXAMPLES_DIR="${SPARK_HOME}"/examples
 
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-DIR="$(dirname "$(realpath "$0")")"
-FWDIR="$(cd "$DIR/.."; pwd)"
-export SPARK_HOME="$FWDIR"
-EXAMPLES_DIR="$FWDIR"/examples
-
-. "$FWDIR"/bin/load-spark-env.sh
+. "${SPARK_HOME}"/bin/load-spark-env.sh
 
 if [ -n "$1" ]; then
   EXAMPLE_CLASS="$1"
@@ -55,8 +36,8 @@ else
   exit 1
 fi
 
-if [ -f "$FWDIR/RELEASE" ]; then
-  JAR_PATH="${FWDIR}/lib"
+if [ -f "${SPARK_HOME}/RELEASE" ]; then
+  JAR_PATH="${SPARK_HOME}/lib"
 else
   JAR_PATH="${EXAMPLES_DIR}/target/scala-${SPARK_SCALA_VERSION}"
 fi
@@ -65,7 +46,7 @@ JAR_COUNT=0
 
 for f in "${JAR_PATH}"/spark-examples-*hadoop*.jar; do
   if [[ ! -e "$f" ]]; then
-    echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" 1>&2
+    echo "Failed to find Spark examples assembly in ${SPARK_HOME}/lib or $SPARK_HOME/examples/target" 1>&2
     echo "You need to build Spark before running this program" 1>&2
     exit 1
   fi
@@ -88,7 +69,7 @@ if [[ ! $EXAMPLE_CLASS == org.apache.spark.examples* ]]; then
   EXAMPLE_CLASS="org.apache.spark.examples.$EXAMPLE_CLASS"
 fi
 
-exec "$FWDIR"/bin/spark-submit \
+exec "${SPARK_HOME}"/bin/spark-submit \
   --master $EXAMPLE_MASTER \
   --class $EXAMPLE_CLASS \
   "$SPARK_EXAMPLES_JAR" \

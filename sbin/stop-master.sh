@@ -19,34 +19,14 @@
 
 # Stops the master on the machine this script is executed on.
 
-realpath () {
-(
-  TARGET_FILE="$1"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
+"${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1
 
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-sbin="$(dirname "$(realpath "$0")")"
-sbin="$(cd "$sbin"; pwd)"
-
-
-. "$sbin/spark-config.sh"
-
-"$sbin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1
-
-if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
-  "$sbin"/../tachyon/bin/tachyon killAll tachyon.master.Master
+if [ -e "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon ]; then
+  "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon killAll tachyon.master.Master
 fi

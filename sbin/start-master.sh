@@ -19,28 +19,9 @@
 
 # Starts the master on the machine this script is executed on.
 
-realpath () {
-(
-  TARGET_FILE="$1"
-
-  cd "$(dirname "$TARGET_FILE")"
-  TARGET_FILE="$(basename "$TARGET_FILE")"
-
-  COUNT=0
-  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
-  do
-      TARGET_FILE="$(readlink "$TARGET_FILE")"
-      cd $(dirname "$TARGET_FILE")
-      TARGET_FILE="$(basename $TARGET_FILE)"
-      COUNT=$(($COUNT + 1))
-  done
-
-  echo "$(pwd -P)/"$TARGET_FILE""
-)
-}
-
-sbin="$(dirname "$(realpath "$0")")"
-sbin="$(cd "$sbin"; pwd)"
+if [ -z "${SPARK_HOME}" ]; then
+    export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
 ORIGINAL_ARGS="$@"
 
@@ -59,9 +40,9 @@ case $1 in
 shift
 done
 
-. "$sbin/spark-config.sh"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
@@ -75,12 +56,12 @@ if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
   SPARK_MASTER_WEBUI_PORT=8080
 fi
 
-"$sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 \
+"${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 \
   --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
   $ORIGINAL_ARGS
 
 if [ "$START_TACHYON" == "true" ]; then
-  "$sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
-  "$sbin"/../tachyon/bin/tachyon format -s
-  "$sbin"/../tachyon/bin/tachyon-start.sh master
+  "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
+  "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon format -s
+  "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon-start.sh master
 fi
