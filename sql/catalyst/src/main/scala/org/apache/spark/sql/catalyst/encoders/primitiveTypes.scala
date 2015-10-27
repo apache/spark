@@ -36,7 +36,7 @@ case class LongEncoder(fieldName: String = "value", ordinal: Int = 0) extends En
   override def fromRow(row: InternalRow): Long = row.getLong(ordinal)
 
   override def toRow(t: Long): InternalRow = {
-    row.setLong(ordinal, t)
+    row.setLong(0, t)
     row
   }
 
@@ -56,7 +56,7 @@ case class IntEncoder(fieldName: String = "value", ordinal: Int = 0) extends Enc
   override def fromRow(row: InternalRow): Int = row.getInt(ordinal)
 
   override def toRow(t: Int): InternalRow = {
-    row.setInt(ordinal, t)
+    row.setInt(0, t)
     row
   }
 
