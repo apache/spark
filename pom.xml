@@ -927,6 +927,14 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2384,7 +2392,7 @@
       <id>hadoop-2.3</id>
       <properties>
         <hadoop.version>2.3.0</hadoop.version>
-        <jets3t.version>0.9.3</jets3t.version>
+        <jets3t.version>0.9.4</jets3t.version>
       </properties>
     </profile>
 
@@ -2392,7 +2400,7 @@
       <id>hadoop-2.4</id>
       <properties>
         <hadoop.version>2.4.0</hadoop.version>
-        <jets3t.version>0.9.3</jets3t.version>
+        <jets3t.version>0.9.4</jets3t.version>
       </properties>
     </profile>
 
@@ -2400,7 +2408,7 @@
       <id>hadoop-2.6</id>
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
-        <jets3t.version>0.9.3</jets3t.version>
+        <jets3t.version>0.9.4</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
       </properties>
