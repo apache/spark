@@ -123,16 +123,30 @@ sparkR.init <- function(
     uriSep <- "////"
   }
 
+  sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
+
   existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
   if (existingPort != "") {
     backendPort <- existingPort
   } else {
     path <- tempfile(pattern = "backend_port")
+    submitOps <- Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell")
+    # spark.driver.memory cannot be set in env:
+    # http://spark.apache.org/docs/latest/configuration.html#application-properties
+    # Add spark.driver.memory if set in sparkEnvir and not already set in SPARKR_SUBMIT_ARGS
+    if (!grepl("--spark.driver.memory", submitOps)) {
+      driverMemory <- sparkEnvirMap[["spark.driver.memory"]]
+      # format for memory properties is 2 characters
+      if (!is.null(driverMemory) && nchar(driverMemory) > 1) {
+        # --option must be before the application class "sparkr-shell"
+        submitOps <- paste("--driver-memory", driverMemory, submitOps, sep = " ")
+      }
+    }
     launchBackend(
         args = path,
         sparkHome = sparkHome,
         jars = jars,
-        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
+        sparkSubmitOpts = submitOps,
         packages = sparkPackages)
     # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
@@ -170,8 +184,6 @@ sparkR.init <- function(
   if (nchar(sparkHome) != 0) {
     sparkHome <- suppressWarnings(normalizePath(sparkHome))
   }
-
-  sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
 
   sparkExecutorEnvMap <- convertNamedListToEnv(sparkExecutorEnv)
   if(is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
