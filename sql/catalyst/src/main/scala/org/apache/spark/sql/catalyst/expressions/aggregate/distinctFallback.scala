@@ -146,8 +146,9 @@ case class ReduceSetUsingDeclarativeAggregate(left: Expression, right: Declarati
   }
 }
 
+/** Operator that drops a row when it contains any nulls. */
 case class DropAnyNull(child: Expression) extends UnaryExpression {
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
 
   protected override def nullSafeEval(input: Any): InternalRow = {
