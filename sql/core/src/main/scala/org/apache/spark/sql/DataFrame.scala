@@ -699,6 +699,20 @@ class DataFrame private[sql](
   def as(alias: Symbol): DataFrame = as(alias.name)
 
   /**
+   * Returns a new [[DataFrame]] with an alias set. Same as `as`.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def alias(alias: String): DataFrame = as(alias)
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] with an alias set. Same as `as`.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def alias(alias: Symbol): DataFrame = as(alias)
+
+  /**
    * Selects a set of column based expressions.
    * {{{
    *   df.select($"colA", $"colB" + 1)
@@ -1974,6 +1988,9 @@ class DataFrame private[sql](
    */
   private def withCallback[T](name: String, df: DataFrame)(action: DataFrame => T) = {
     try {
+      df.queryExecution.executedPlan.foreach { plan =>
+        plan.metrics.valuesIterator.foreach(_.reset())
+      }
       val start = System.nanoTime()
       val result = action(df)
       val end = System.nanoTime()
