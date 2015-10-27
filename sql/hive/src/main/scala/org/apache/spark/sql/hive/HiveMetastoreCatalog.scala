@@ -238,7 +238,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
         tableProperties.put(s"spark.sql.sources.schema.partCol.$index", partCol)
       }
-    } else {
+    }
+
+    if (userSpecifiedSchema.isEmpty && partitionColumns.length > 0) {
       // The table does not have a specified schema, which means that the schema will be inferred
       // when we load the table. So, we are not expecting partition columns and we will discover
       // partitions when we load the table. However, if there are specified partition columns,
