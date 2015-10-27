@@ -73,7 +73,7 @@ class BisectingKMeans private (
    * Constructs with the default configuration
    */
   @Since("1.6.0")
-  def this() = this(20, 20, 1)
+  def this() = this(2, 20, 1)
 
   /**
    * Sets the number of clusters you want
