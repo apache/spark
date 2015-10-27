@@ -18,15 +18,17 @@
 package org.apache.spark.api.python
 
 import java.io.File
+import java.net.{URL, URI}
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
-private[spark] object PythonUtils {
+private[spark] object PythonUtils extends Logging {
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
   def sparkPythonPath: String = {
     val pythonPath = new ArrayBuffer[String]
@@ -73,5 +75,29 @@ private[spark] object PythonUtils {
    */
   def toScalaMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
     jm.asScala.toMap
+  }
+
+  /**
+   * Update the current threads class loader.
+   * Requires the current class loader is a MutableURLClassLoader, otherwise skips updating with a
+   * warning. Intended for use by addJar(), although constructing an instance of the class will
+   * still require:
+   * sc._jvm.java.lang.Thread.currentThread().getContextClassLoader().loadClass("class name")
+   * as described in SPARK-5185.
+   */
+  def updatePrimaryClassLoader(jsc: JavaSparkContext) {
+    val sc = jsc.sc
+    val jars = sc.addedJars.keys
+    val currentCL = Utils.getContextOrSparkClassLoader
+    currentCL match {
+      case cl: MutableURLClassLoader => {
+        val existingJars = cl.getURLs().map(_.toString).toSet
+        val newJars = (jars.toSet -- existingJars)
+        logDebug(s"Adding jars ${newJars} to ${existingJars}")
+        val newJarURLs = newJars.map(new URI(_).toURL())
+        newJarURLs.foreach(cl.addURL(_))
+      }
+      case _ => logWarning(s"Unsupported class loader $currentCL will not update jars")
+    }
   }
 }

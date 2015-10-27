@@ -813,6 +813,16 @@ class SparkContext(object):
         filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
         """
         self._jsc.sc().addJar(path)
+        self._jvm.PythonUtils.updatePrimaryClassLoader(self._jsc)
+
+    def _loadClass(self, className):
+        """
+        .. note:: Experimental
+
+        Loads a JVM class using the MutableClass loader used by spark.
+        This function exists because Py4J uses a different class loader.
+        """
+        self._jvm.java.lang.Thread.currentThread().getContextClassLoader().loadClass(className)
 
     def setCheckpointDir(self, dirName):
         """
