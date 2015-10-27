@@ -38,8 +38,8 @@ public class PackedRecordPointerSuite {
     final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
-    final MemoryBlock page0 = memoryManager.allocatePage(128);
-    final MemoryBlock page1 = memoryManager.allocatePage(128);
+    final MemoryBlock page0 = memoryManager.allocatePage(128, null);
+    final MemoryBlock page1 = memoryManager.allocatePage(128, null);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
       page1.getBaseOffset() + 42);
     PackedRecordPointer packedPointer = new PackedRecordPointer();
@@ -57,8 +57,8 @@ public class PackedRecordPointerSuite {
     final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "true");
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
-    final MemoryBlock page0 = memoryManager.allocatePage(128);
-    final MemoryBlock page1 = memoryManager.allocatePage(128);
+    final MemoryBlock page0 = memoryManager.allocatePage(128, null);
+    final MemoryBlock page1 = memoryManager.allocatePage(128, null);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
       page1.getBaseOffset() + 42);
     PackedRecordPointer packedPointer = new PackedRecordPointer();

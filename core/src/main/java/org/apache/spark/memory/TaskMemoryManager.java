@@ -25,7 +25,10 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.SparkException;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.util.Utils;
 
 /**
  * Manages the memory allocated by an individual task.
@@ -118,14 +121,6 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
-   * @return number of bytes successfully granted (<= N).
-   */
-  public long acquireExecutionMemory(long size) {
-    return memoryManager.acquireExecutionMemory(size, taskAttemptId);
-  }
-
-  /**
    * Acquire N bytes of memory for a consumer. If there is no enough memory, it will call
    * spill() of consumers to release more memory.
    *
@@ -133,26 +128,26 @@ public class TaskMemoryManager {
    */
   public long acquireExecutionMemory(long size, MemoryConsumer consumer) throws IOException {
     synchronized (this) {
-      long got = acquireExecutionMemory(size);
+      long got = memoryManager.acquireExecutionMemory(size, taskAttemptId);
 
+      // call spill() on itself to release some memory
       if (got < size && consumer != null) {
-        // call spill() on itself to release some memory
         consumer.spill(size - got);
-        got += acquireExecutionMemory(size - got);
+        got += memoryManager.acquireExecutionMemory(size - got, taskAttemptId);
+      }
 
-        if (got < size) {
-          long needed = size - got;
-          // call spill() on other consumers to release memory
-          for (MemoryConsumer c: consumers.keySet()) {
-            if (c != consumer) {
-              needed -= c.spill(size - got);
-              if (needed < 0) {
-                break;
-              }
+      if (got < size) {
+        long needed = size - got;
+        // call spill() on other consumers to release memory
+        for (MemoryConsumer c: consumers.keySet()) {
+          if (c != null && c != consumer) {
+            needed -= c.spill(size - got);
+            if (needed < 0) {
+              break;
             }
           }
-          got += acquireExecutionMemory(size - got);
         }
+        got += memoryManager.acquireExecutionMemory(size - got, taskAttemptId);
       }
 
       long old = 0L;
@@ -166,29 +161,34 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Release N bytes of execution memory.
-   */
-  public void releaseExecutionMemory(long size) {
-    memoryManager.releaseExecutionMemory(size, taskAttemptId);
-  }
-
-  /**
    * Release N bytes of execution memory for a MemoryConsumer.
    */
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
     synchronized (this) {
-      if (consumer != null && consumers.containsKey(consumer)) {
+      if (consumers.containsKey(consumer)) {
         long old = consumers.get(consumer);
         if (old > size) {
           consumers.put(consumer, old - size);
         } else {
           if (old < size) {
-            // TODO
+            if (Utils.isTesting()) {
+              Platform.throwException(
+                new SparkException("Release more memory " + size + "than acquired " + old + " for "
+                  + consumer));
+            } else {
+              logger.warn("Release more memory " + size + " than acquired " + old + "for "
+                + consumer);
+            }
           }
           consumers.remove(consumer);
         }
       } else {
-        // TODO
+        if (Utils.isTesting()) {
+          Platform.throwException(
+            new SparkException("Release memory " + size + " for not existed " + consumer));
+        } else {
+          logger.warn("Release memory " + size + " for not existed " + consumer);
+        }
       }
       memoryManager.releaseExecutionMemory(size, taskAttemptId);
     }
@@ -196,16 +196,6 @@ public class TaskMemoryManager {
 
   public long pageSizeBytes() {
     return memoryManager.pageSizeBytes();
-  }
-
-  /**
-   * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
-   * intended for allocating large blocks of Tungsten memory that will be shared between operators.
-   *
-   * Returns `null` if there was not enough memory to allocate the page.
-   */
-  public MemoryBlock allocatePage(long size) throws IOException {
-    return allocatePage(size, null);
   }
 
   /**
@@ -244,14 +234,7 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage(long)}.
-   */
-  public void freePage(MemoryBlock page) {
-    freePage(page, null);
-  }
-
-  /**
-   * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage(long)}.
+   * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage}.
    */
   public void freePage(MemoryBlock page, MemoryConsumer consumer) {
     assert (page.pageNumber != -1) :
@@ -273,7 +256,7 @@ public class TaskMemoryManager {
    * Given a memory page and offset within that page, encode this address into a 64-bit long.
    * This address will remain valid as long as the corresponding page has not been freed.
    *
-   * @param page a data page allocated by {@link TaskMemoryManager#allocatePage(long)}/
+   * @param page a data page allocated by {@link TaskMemoryManager#allocatePage}/
    * @param offsetInPage an offset in this page which incorporates the base offset. In other words,
    *                     this should be the value that you would pass as the base offset into an
    *                     UNSAFE call (e.g. page.baseOffset() + something).
@@ -349,7 +332,7 @@ public class TaskMemoryManager {
     for (MemoryBlock page : pageTable) {
       if (page != null) {
         freedBytes += page.size();
-        freePage(page);
+        freePage(page, null);
       }
     }
 

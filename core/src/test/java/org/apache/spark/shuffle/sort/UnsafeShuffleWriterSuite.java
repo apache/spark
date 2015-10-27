@@ -402,7 +402,7 @@ public class UnsafeShuffleWriterSuite {
       .doCallRealMethod() // allocate initial data page
       .doReturn(0L) // deny request to allocate new page
       .doCallRealMethod() // grant new sort buffer and data page
-      .when(taskMemoryManager).acquireExecutionMemory(anyLong());
+      .when(taskMemoryManager).acquireExecutionMemory(anyLong(), null);
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<Product2<Object, Object>>();
     final byte[] bigByteArray = new byte[PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES / 128];
@@ -430,7 +430,7 @@ public class UnsafeShuffleWriterSuite {
       .doCallRealMethod() // allocate initial data page
       .doReturn(0L) // deny request to allocate new page
       .doCallRealMethod() // grant new sort buffer and data page
-      .when(taskMemoryManager).acquireExecutionMemory(anyLong());
+      .when(taskMemoryManager).acquireExecutionMemory(anyLong(), null);
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     for (int i = 0; i < UnsafeShuffleWriter.INITIAL_SORT_BUFFER_SIZE; i++) {
