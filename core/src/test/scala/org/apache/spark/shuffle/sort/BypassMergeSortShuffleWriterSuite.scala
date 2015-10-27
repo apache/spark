@@ -76,6 +76,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(dependency.serializer).thenReturn(Some(new JavaSerializer(conf)))
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
     when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
+    when(blockResolver.getIndexFile(0, 0)).thenReturn(indexFile)
     // the index file will be empty, but that is fine for these tests
     when(blockResolver.writeIndexFile(anyInt(), anyInt(), any())).thenAnswer(new Answer[File] {
       override def answer(invocationOnMock: InvocationOnMock): File = {
@@ -120,12 +121,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(diskBlockManager.getFile(any[BlockId])).thenAnswer(
       new Answer[File] {
         override def answer(invocation: InvocationOnMock): File = {
-          val blk = invocation.getArguments.head.asInstanceOf[BlockId]
-          if (blk == new ShuffleIndexBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID)) {
-            indexFile
-          } else {
-            blockIdToFileMap.get(invocation.getArguments.head.asInstanceOf[BlockId]).get
-          }
+          blockIdToFileMap.get(invocation.getArguments.head.asInstanceOf[BlockId]).get
         }
     })
   }

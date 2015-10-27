@@ -66,6 +66,7 @@ public class UnsafeShuffleWriterSuite {
   TaskMemoryManager taskMemoryManager;
   final HashPartitioner hashPartitioner = new HashPartitioner(NUM_PARTITITONS);
   File mergedOutputFile;
+  File indexFile;
   File mapStatusFile;
   File tempDir;
   long[] partitionSizesInMergedFile;
@@ -106,9 +107,11 @@ public class UnsafeShuffleWriterSuite {
     MockitoAnnotations.initMocks(this);
     tempDir = Utils.createTempDir("test", "test");
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
+    indexFile = File.createTempFile("shuffle",".index", tempDir);
     mapStatusFile = File.createTempFile("shuffle", ".mapstatus", tempDir);
     // the ShuffleOutputCoordinator requires that this file does not exist
     mergedOutputFile.delete();
+    indexFile.delete();
     mapStatusFile.delete();
     partitionSizesInMergedFile = null;
     tmpShuffleFilesCreated.clear();
@@ -171,6 +174,7 @@ public class UnsafeShuffleWriterSuite {
     when(blockManager.shuffleServerId()).thenReturn(BlockManagerId$.MODULE$.apply("1", "a.b.c", 1));
 
     when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
+    when(shuffleBlockResolver.getIndexFile(anyInt(), anyInt())).thenReturn(indexFile);
     doAnswer(new Answer<File>() {
       @Override
       public File answer(InvocationOnMock invocationOnMock) throws Throwable {
@@ -190,18 +194,6 @@ public class UnsafeShuffleWriterSuite {
           return Tuple2$.MODULE$.apply(blockId, file);
         }
       });
-
-    when(diskBlockManager.getFile(any(BlockId.class))).thenAnswer(
-      new Answer<File>() {
-        @Override
-        public File answer(InvocationOnMock invocationOnMock) throws Throwable {
-          File f = File.createTempFile("shuffleFile",".index", tempDir);
-          // the ShuffleOutputCoordinator requires that this file does not exist
-          f.delete();
-          return f;
-        }
-      }
-    );
 
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
     when(taskContext.internalMetricsToAccumulators()).thenReturn(null);
