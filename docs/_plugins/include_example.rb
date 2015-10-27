@@ -38,9 +38,7 @@ module Jekyll
       code = File.open(@file).read.encode("UTF-8")
       code = select_lines(code)
  
-      rendered_code = Pygments.highlight(code, :lexer => @lang)
-      trimed = rendered_code.sub("<div class=\"highlight\"><pre>", "").sub("</pre></div>", "")
-      add_code_tag(trimed)
+      Pygments.highlight(code, :lexer => @lang)
     end
  
     # Trim the code block so as to have the same indention, regardless of their positions in the
@@ -53,16 +51,6 @@ module Jekyll
         .min
 
       lines.map { |l| l[min_start_spaces .. -1] }
-    end
-
-    # Add new code tags outside the Pygments generated code example, to keep the same look and feel
-    # with previous documents.
-    def add_code_tag(code)
-      code_attributes = [
-        "class=\"language-#{@lang.to_s.gsub('+', '-')}\"",
-        "data-lang=\"#{@lang.to_s}\""
-      ].join(" ")
-      "<div class=\"highlight\"><pre><code #{code_attributes}>#{code.chomp}</code></pre></div>"
     end
 
     # Select lines according to labels in code. Currently we use "$example on$" and "$example off$"
