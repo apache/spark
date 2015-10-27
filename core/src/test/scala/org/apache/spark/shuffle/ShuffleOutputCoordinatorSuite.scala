@@ -31,7 +31,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
   var tempDir: File = _
   var mapStatusFile: File = _
   // use the "port" as a way to distinguish mapstatuses, just for the test
-  def mapStatus(id: Int) = MapStatus(BlockManagerId("1", "a.b.c", id), Array(0L, 1L))
+  def mapStatus(id: Int): MapStatus = MapStatus(BlockManagerId("1", "a.b.c", id), Array(0L, 1L))
   def ser: SerializerInstance = new JavaSerializer(new SparkConf()).newInstance()
 
   override def beforeEach(): Unit = {
@@ -114,11 +114,23 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     secondAttempt.foreach{ case (t, d) => assert(!t.exists())}
   }
 
-  test("no missing tmp files") {
+  test("missing tmp files become zero-length destination files") {
+    val extraDestFile = new File(tempDir, "blah")
     val firstAttempt = generateAttempt(0) ++
-      Seq(new File(tempDir, "bogus") -> new File(tempDir, "blah"))
-    val ex = intercept[IllegalArgumentException] {commit(firstAttempt, 1)}
-    assert(ex.getMessage.contains("Cannot commit non-existent shuffle output"))
-  }
+      Seq(new File(tempDir, "bogus") -> extraDestFile)
+    assert(commit(firstAttempt, 1)._1)
+    verifyFiles(0)
+    assert(extraDestFile.exists())
+    assert(extraDestFile.length() === 0)
 
+    // if we attempt the move again and *only* the missing tmp file is missing, we still
+    // do the move
+    extraDestFile.delete()
+    val secondAttempt = generateAttempt(1) ++
+      Seq(new File(tempDir, "flippy") -> extraDestFile)
+    assert(commit(secondAttempt, 2)._1)
+    verifyFiles(1)
+    assert(extraDestFile.exists())
+    assert(extraDestFile.length() === 0)
+  }
 }

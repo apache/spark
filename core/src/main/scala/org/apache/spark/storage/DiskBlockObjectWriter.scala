@@ -133,11 +133,6 @@ private[spark] class DiskBlockObjectWriter(
       // In certain compression codecs, more bytes are written after close() is called
       writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
     } else {
-      if (!file.exists()) {
-        // SPARK-8029 -- we need to write a zero-length file so we can commit the same set of files
-        // on all attempts (even if the data is non-deterministic)
-        file.createNewFile()
-      }
       finalPosition = file.length()
     }
     commitAndCloseHasBeenCalled = true

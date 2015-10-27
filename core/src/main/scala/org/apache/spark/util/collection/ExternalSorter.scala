@@ -679,12 +679,6 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    // SPARK-8029 the ShuffleOutputCoordinator requires all shuffle output files to always exist,
-    // even if they are zero-length
-    if (!outputFile.exists()) {
-      outputFile.createNewFile()
-    }
-
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     context.internalMetricsToAccumulators(

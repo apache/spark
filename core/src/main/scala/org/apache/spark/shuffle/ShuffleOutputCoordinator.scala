@@ -37,13 +37,16 @@ private[spark] object ShuffleOutputCoordinator extends Logging {
    * destinations, and return (true, the given MapStatus).  If all destination files exist, then
    * delete all temporary files, and return (false, the MapStatus from previously committed shuffle
    * output).
-
-   * @param shuffleId
-   * @param partitionId
+   *
+   * Note that this will write to all destination files.  If the tmp file is missing, then a
+   * zero-length destination file will be created.  This is so the ShuffleOutputCoordinator can work
+   * even when there is a non-determinstic data, where the output exists in one attempt, but is
+   * empty in another attempt.
+   *
    * @param tmpToDest  Seq of (temporary, destination) file pairs
    * @param mapStatus the [[MapStatus]] for the output already written to the the temporary files
-   * @return pair of (true iff the set of temporary files was moved to the destination, the
-   *         MapStatus of the winn
+   * @return pair of: (1) true iff the set of temporary files was moved to the destination and (2)
+   *         the MapStatus of the committed attempt.
    *
    */
   def commitOutputs(
@@ -66,8 +69,6 @@ private[spark] object ShuffleOutputCoordinator extends Logging {
       mapStatus: MapStatus,
       mapStatusFile: File,
       serializer: SerializerInstance): (Boolean, MapStatus) = synchronized {
-    tmpToDest.foreach { case (tmp, _) => require(tmp.exists(), s"Cannot commit non-existent " +
-      s"shuffle output $tmp -- must be at least a zero-length file.")}
     val destAlreadyExists = tmpToDest.forall{_._2.exists()} && mapStatusFile.exists()
     if (!destAlreadyExists) {
       tmpToDest.foreach { case (tmp, dest) =>
@@ -78,7 +79,14 @@ private[spark] object ShuffleOutputCoordinator extends Logging {
         if (dest.exists()) {
           dest.delete()
         }
-        tmp.renameTo(dest)
+        if (tmp.exists()) {
+          tmp.renameTo(dest)
+        } else {
+          // we always create the destination files, so this works correctly even when the
+          // input data is non-deterministic (potentially empty in one iteration, and non-empty
+          // in another)
+          dest.createNewFile()
+        }
       }
       val out = serializer.serializeStream(new FileOutputStream(mapStatusFile))
       out.writeObject(mapStatus)
