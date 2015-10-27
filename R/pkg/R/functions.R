@@ -2013,3 +2013,101 @@ setMethod("ifelse",
                                 "otherwise", no)
               column(jc)
           })
+
+###################### Window functions######################
+
+#' cumeDist
+#'
+#' Window function: returns the cumulative distribution of values within a window partition,
+#' i.e. the fraction of rows that are below the current row.
+#' 
+#'   N = total number of rows in the partition
+#'   cumeDist(x) = number of values before (and including) x / N
+#'   
+#' This is equivalent to the CUME_DIST function in SQL.
+#'
+#' @rdname cumeDist
+#' @name cumeDist
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{cumeDist()}
+setMethod("cumeDist",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "cumeDist")
+            column(jc)
+          })
+
+#' lag
+#'
+#' Window function: returns the value that is `offset` rows before the current row, and
+#' `defaultValue` if there is less than `offset` rows before the current row. For example,
+#' an `offset` of one will return the previous row at any given point in the window partition.
+#' 
+#' This is equivalent to the LAG function in SQL.
+#'
+#' @rdname lag
+#' @name lag
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{lag(df$c)}
+setMethod("lag",
+          signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
+          function(x, offset, defaultValue = NULL) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              x
+            }
+
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "lag", col, as.integer(offset), defaultValue)
+            column(jc)
+          })
+
+#' lead
+#'
+#' Window function: returns the value that is `offset` rows after the current row, and
+#' `null` if there is less than `offset` rows after the current row. For example,
+#' an `offset` of one will return the next row at any given point in the window partition.
+#' 
+#' This is equivalent to the LEAD function in SQL.
+#'
+#' @rdname lead
+#' @name lead
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{lead(df$c)}
+setMethod("lead",
+          signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
+          function(x, offset, defaultValue = NULL) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              x
+            }
+
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "lead", col, as.integer(offset), defaultValue)
+            column(jc)
+          })
+
+#' ntile
+#'
+#' Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
+#' partition. Fow example, if `n` is 4, the first quarter of the rows will get value 1, the second
+#' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
+#' 
+#' This is equivalent to the NTILE function in SQL.
+#'
+#' @rdname ntile
+#' @name ntile
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{ntile(1)}
+setMethod("ntile",
+          signature(x = "numeric"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "ntile", as.integer(x))
+            column(jc)
+          })
