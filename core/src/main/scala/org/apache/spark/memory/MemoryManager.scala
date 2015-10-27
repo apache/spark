@@ -311,7 +311,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    * sun.misc.Unsafe.
    */
   final val tungstenMemoryIsAllocatedInHeap: Boolean =
-    !conf.getBoolean("spark.unsafe.offHeap", false)
+    !conf.getBoolean("spark.unsafe.offHeap", true)
 
   /**
    * Allocates memory for use by Unsafe/Tungsten code.
