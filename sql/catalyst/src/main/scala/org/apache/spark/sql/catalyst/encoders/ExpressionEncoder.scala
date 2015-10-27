@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{StructField, DataType, ObjectType, StructType
 /**
  * A factory for constructing encoders that convert objects and primitves to and from the
  * internal row format using catalyst expressions and code generation.  By default, the
- * expressions used to retrieve values from an input row when producing an object will occur as
+ * expressions used to retrieve values from an input row when producing an object will be created as
  * follows:
  *  - Classes will have their sub fields extracted by name using [[UnresolvedAttribute]] expressions
  *    and [[UnresolvedExtractValue]] expressions.
@@ -128,7 +128,8 @@ case class ExpressionEncoder[T](
 
   /**
    * Returns an object of type `T`, extracting the required values from the provided row.  Note that
-   * you must `bind` an encoder to a specific schema before you can call this function.
+   * you must `resolve` and `bind` an encoder to a specific schema before you can call this
+   * function.
    */
   def fromRow(row: InternalRow): T = try {
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
@@ -157,7 +158,7 @@ case class ExpressionEncoder[T](
   }
 
   /**
-   * Replaces any bound references in the schema with the attributes at the coresponding ordinal
+   * Replaces any bound references in the schema with the attributes at the corresponding ordinal
    * in the provided schema.  This can be used to "relocate" a given encoder to pull values from
    * a different schema than it was initially bound to.  It can also be used to assign attributes
    * to ordinal based extraction (i.e. because the input data was a tuple).
@@ -170,9 +171,9 @@ case class ExpressionEncoder[T](
   }
 
   /**
-   * Given an encoder that has already been bound to a given schema, returns a new encoder that
+   * Given an encoder that has already been bound to a given schema, returns a new encoder
    * where the positions are mapped from `oldSchema` to `newSchema`.  This can be used, for example,
-   * when you are trying to use an encoder on grouping keys that were orriginally part of a larger
+   * when you are trying to use an encoder on grouping keys that were originally part of a larger
    * row, but now you have projected out only the key expressions.
    */
   def rebind(oldSchema: Seq[Attribute], newSchema: Seq[Attribute]): ExpressionEncoder[T] = {

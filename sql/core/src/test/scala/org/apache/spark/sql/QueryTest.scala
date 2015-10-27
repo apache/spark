@@ -99,7 +99,6 @@ abstract class QueryTest extends PlanTest {
     }
   }
 
-
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param df the [[DataFrame]] to be executed

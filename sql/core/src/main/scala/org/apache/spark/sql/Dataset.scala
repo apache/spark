@@ -59,6 +59,7 @@ class Dataset[T] private(
     @transient val queryExecution: QueryExecution,
     unresolvedEncoder: Encoder[T]) extends Serializable {
 
+  /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] implicit val encoder: ExpressionEncoder[T] = unresolvedEncoder match {
     case e: ExpressionEncoder[T] => e.resolve(queryExecution.analyzed.output)
     case _ => throw new IllegalArgumentException("Only expression encoders are currently supported")
@@ -83,7 +84,7 @@ class Dataset[T] private(
    * @since 1.6.0
    */
   def as[U : Encoder]: Dataset[U] = {
-    new Dataset(sqlContext, queryExecution, encoderFor[U].resolve(logicalPlan.output))
+    new Dataset(sqlContext, queryExecution, encoderFor[U])
   }
 
   /**
@@ -279,8 +280,6 @@ class Dataset[T] private(
   def select[U1, U2](c1: TypedColumn[U1], c2: TypedColumn[U2]): Dataset[(U1, U2)] =
     selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
 
-
-
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    * @since 1.6.0
@@ -290,8 +289,6 @@ class Dataset[T] private(
       c2: TypedColumn[U2],
       c3: TypedColumn[U3]): Dataset[(U1, U2, U3)] =
     selectUntyped(c1, c2, c3).asInstanceOf[Dataset[(U1, U2, U3)]]
-
-
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
@@ -364,7 +361,6 @@ class Dataset[T] private(
    *  Joins *
    * ****** */
 
-
   /**
    * Joins this [[Dataset]] returning a [[Tuple2]] for each pair where `condition` evaluates to
    * true.
@@ -402,7 +398,6 @@ class Dataset[T] private(
         Join(left, right, Inner, Some(condition.expr)))
     }
   }
-
 
   /* ************************** *
    *  Gather to Driver Actions  *
