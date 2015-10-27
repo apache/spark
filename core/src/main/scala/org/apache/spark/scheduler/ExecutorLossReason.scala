@@ -28,12 +28,15 @@ class ExecutorLossReason(val message: String) extends Serializable {
 }
 
 private[spark]
-case class ExecutorExited(exitCode: Int, isNormalExit: Boolean, reason: String)
+case class ExecutorExited(exitCode: Int, exitCausedByApp: Boolean, reason: String)
   extends ExecutorLossReason(reason)
 
 private[spark] object ExecutorExited {
-  def apply(exitCode: Int, isNormalExit: Boolean): ExecutorExited = {
-    ExecutorExited(exitCode, isNormalExit, ExecutorExitCode.explainExitCode(exitCode))
+  def apply(exitCode: Int, exitCausedByApp: Boolean): ExecutorExited = {
+    ExecutorExited(
+      exitCode,
+      exitCausedByApp,
+      ExecutorExitCode.explainExitCode(exitCode))
   }
 }
 

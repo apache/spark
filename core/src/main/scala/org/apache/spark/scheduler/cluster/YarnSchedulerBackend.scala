@@ -111,10 +111,10 @@ private[spark] abstract class YarnSchedulerBackend(
      * immediately.
      *
      * In YARN's case however it is crucial to talk to the application master and ask why the
-     * executor had exited. In particular, the executor may have exited due to the executor
-     * having been preempted. If the executor "exited normally" according to the application
-     * master then we pass that information down to the TaskSetManager to inform the
-     * TaskSetManager that tasks on that lost executor should not count towards a job failure.
+     * executor had exited. If the executor exited for some reason unrelated to the running tasks
+     * (e.g., preemption), according to the application master, then we pass that information down
+     * to the TaskSetManager to inform the TaskSetManager that tasks on that lost executor should
+     * not count towards a job failure.
      *
      * TODO there's a race condition where while we are querying the ApplicationMaster for
      * the executor loss reason, there is the potential that tasks will be scheduled on

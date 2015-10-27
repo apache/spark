@@ -603,10 +603,10 @@ class JsonProtocolSuite extends SparkFunSuite {
         assert(jobId1 === jobId2)
         assert(partitionId1 === partitionId2)
         assert(attemptNumber1 === attemptNumber2)
-      case (ExecutorLostFailure(execId1, isNormalExit1),
-          ExecutorLostFailure(execId2, isNormalExit2)) =>
+      case (ExecutorLostFailure(execId1, exit1CausedByApp),
+          ExecutorLostFailure(execId2, exit2CausedByApp)) =>
         assert(execId1 === execId2)
-        assert(isNormalExit1 === isNormalExit2)
+        assert(exit1CausedByApp === exit2CausedByApp)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }
