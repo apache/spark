@@ -98,7 +98,7 @@ private[spark] object CoarseGrainedClusterMessages {
       hostToLocalTaskCount: Map[String, Int])
     extends CoarseGrainedClusterMessage
 
-  // Check if an executor was force-killed but for a normal reason.
+  // Check if an executor was force-killed but for a reason unrelated to the running tasks.
   // This could be the case if the executor is preempted, for instance.
   case class GetExecutorLossReason(executorId: String) extends CoarseGrainedClusterMessage
 
