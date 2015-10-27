@@ -887,6 +887,16 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
 
+    def test_topic_and_partition_equality(self):
+        topic_and_partition_a = TopicAndPartition("foo", 0)
+        topic_and_partition_b = TopicAndPartition("foo", 0)
+        topic_and_partition_c = TopicAndPartition("bar", 0)
+        topic_and_partition_d = TopicAndPartition("foo", 1)
+
+        self.assertEqual(topic_and_partition_a, topic_and_partition_b)
+        self.assertNotEqual(topic_and_partition_a, topic_and_partition_c)
+        self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
+
 
 class FlumeStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds
