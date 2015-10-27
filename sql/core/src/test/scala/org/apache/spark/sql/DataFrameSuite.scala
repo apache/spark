@@ -105,6 +105,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.head(2).head.schema === testData.schema)
   }
 
+  test("dataframe alias") {
+    val df = Seq(Tuple1(1)).toDF("c").as("t")
+    val dfAlias = df.alias("t2")
+    df.col("t.c")
+    dfAlias.col("t2.c")
+  }
+
   test("simple explode") {
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
