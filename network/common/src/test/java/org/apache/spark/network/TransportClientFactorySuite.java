@@ -177,4 +177,14 @@ public class TransportClientFactorySuite {
     assertFalse(c1.isActive());
     assertFalse(c2.isActive());
   }
+
+  @Test
+  public void closeIdleConnectionForRequestTimeOut() throws IOException, InterruptedException {
+    TransportClientFactory factory = context.createClientFactory();
+    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    assertTrue(c1.isActive());
+    Thread.sleep(conf.connectionTimeoutMs());
+    assertFalse(c1.isActive());
+    factory.close();
+  }
 }

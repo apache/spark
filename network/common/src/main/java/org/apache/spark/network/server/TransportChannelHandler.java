@@ -109,17 +109,20 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
     if (evt instanceof IdleStateEvent) {
       IdleStateEvent e = (IdleStateEvent) evt;
-      // See class comment for timeout semantics. In addition to ensuring we only timeout while
-      // there are outstanding requests, we also do a secondary consistency check to ensure
-      // there's no race between the idle timeout and incrementing the numOutstandingRequests.
-      boolean hasInFlightRequests = responseHandler.numOutstandingRequests() > 0;
+      // While an IdleStateEvent has been triggered, we can close idle connection
+      // because it has no read/write events for requestTimeoutNs.
       boolean isActuallyOverdue =
         System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
-      if (e.state() == IdleState.ALL_IDLE && hasInFlightRequests && isActuallyOverdue) {
-        String address = NettyUtils.getRemoteAddress(ctx.channel());
-        logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
-          "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
-          "is wrong.", address, requestTimeoutNs / 1000 / 1000);
+      if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
+        // In addition to ensuring we only timeout while there are outstanding requests, we also
+        // do a secondary consistency check to ensure there's no race between the idle timeout
+        // and incrementing the numOutstandingRequests.
+        if (responseHandler.numOutstandingRequests() > 0) {
+          String address = NettyUtils.getRemoteAddress(ctx.channel());
+          logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
+            "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
+            "is wrong.", address, requestTimeoutNs / 1000 / 1000);
+        }
         ctx.close();
       }
     }
