@@ -20,12 +20,11 @@ package org.apache.spark.sql
 import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
-import scala.reflect.runtime.universe._
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.catalyst.encoders.{ProductEncoder, Encoder}
+import org.apache.spark.sql.catalyst.encoders.Encoder
 
 abstract class QueryTest extends PlanTest {
 
@@ -55,10 +54,49 @@ abstract class QueryTest extends PlanTest {
     }
   }
 
-  protected def checkAnswer[T : Encoder](ds: => Dataset[T], expectedAnswer: T*): Unit = {
+  /**
+   * Evaluates a dataset to make sure that the result of calling collect matches the given
+   * expected answer.
+   *  - Special handling is done based on whether the query plan should be expected to return
+   *    the results in sorted order.
+   *  - This function also checks to make sure that the schema for serializing the expected answer
+   *    matches that produced by the dataset (i.e. does manual construction of object match
+   *    the constructed encoder for cases like joins, etc).  Note that this means that it will fail
+   *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
+   *    which performs a subset of the checks done by this function.
+   */
+  protected def checkAnswer[T : Encoder](
+      ds: => Dataset[T],
+      expectedAnswer: T*): Unit = {
     checkAnswer(
       ds.toDF(),
       sqlContext.createDataset(expectedAnswer).toDF().collect().toSeq)
+
+    checkDecoding(ds, expectedAnswer: _*)
+  }
+
+  protected def checkDecoding[T](
+      ds: => Dataset[T],
+      expectedAnswer: T*): Unit = {
+    val decoded = try ds.collect().toSet catch {
+      case e: Exception =>
+        fail(
+          s"""
+             |Exception collecting dataset as objects
+             |${ds.encoder}
+             |${ds.encoder.constructExpression.treeString}
+             |${ds.queryExecution}
+           """.stripMargin, e)
+    }
+
+    if (decoded != expectedAnswer.toSet) {
+      fail(
+        s"""Decoded objects do not match expected objects:
+           |Expected: ${expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted}
+            |Actual ${decoded.toSet.toSeq.map((a: Any) => a.toString).sorted}
+            |${ds.encoder.constructExpression.treeString}
+         """.stripMargin)
+    }
   }
 
   /**

@@ -15,29 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.encoders
+package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkFunSuite
-
-class PrimitiveEncoderSuite extends SparkFunSuite {
-  test("long encoder") {
-    val enc = new LongEncoder()
-    val row = enc.toRow(10)
-    assert(row.getLong(0) == 10)
-    assert(enc.fromRow(row) == 10)
-  }
-
-  test("int encoder") {
-    val enc = new IntEncoder()
-    val row = enc.toRow(10)
-    assert(row.getInt(0) == 10)
-    assert(enc.fromRow(row) == 10)
-  }
-
-  test("string encoder") {
-    val enc = new StringEncoder()
-    val row = enc.toRow("test")
-    assert(row.getString(0) == "test")
-    assert(enc.fromRow(row) == "test")
+package object encoders {
+  private[sql] def encoderFor[A : Encoder]: ExpressionEncoder[A] = implicitly[Encoder[A]] match {
+    case e: ExpressionEncoder[A] => e
+    case _ => sys.error(s"Only expression encoders are supported today")
   }
 }
+

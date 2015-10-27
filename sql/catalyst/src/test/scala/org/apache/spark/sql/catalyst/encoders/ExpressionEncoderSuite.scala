@@ -47,7 +47,16 @@ case class RepeatedData(
 
 case class SpecificCollection(l: List[Int])
 
-class ProductEncoderSuite extends SparkFunSuite {
+class ExpressionEncoderSuite extends SparkFunSuite {
+
+  encodeDecodeTest(1)
+  encodeDecodeTest(1L)
+  encodeDecodeTest(1.toDouble)
+  encodeDecodeTest(1.toFloat)
+  encodeDecodeTest(true)
+  encodeDecodeTest(false)
+  encodeDecodeTest(1.toShort)
+  encodeDecodeTest(1.toByte)
 
   encodeDecodeTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
@@ -210,24 +219,24 @@ class ProductEncoderSuite extends SparkFunSuite {
     { (l, r) => l._2.toString == r._2.toString }
 
   /** Simplified encodeDecodeTestCustom, where the comparison function can be `Object.equals`. */
-  protected def encodeDecodeTest[T <: Product : TypeTag](inputData: T) =
+  protected def encodeDecodeTest[T : TypeTag](inputData: T) =
     encodeDecodeTestCustom[T](inputData)((l, r) => l == r)
 
   /**
    * Constructs a test that round-trips `t` through an encoder, checking the results to ensure it
    * matches the original.
    */
-  protected def encodeDecodeTestCustom[T <: Product : TypeTag](
+  protected def encodeDecodeTestCustom[T : TypeTag](
       inputData: T)(
       c: (T, T) => Boolean) = {
-    test(s"encode/decode: $inputData") {
-      val encoder = try ProductEncoder[T] catch {
+    test(s"encode/decode: $inputData - ${inputData.getClass.getName}") {
+      val encoder = try ExpressionEncoder[T]() catch {
         case e: Exception =>
           fail(s"Exception thrown generating encoder", e)
       }
       val convertedData = encoder.toRow(inputData)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.bind(schema)
+      val boundEncoder = encoder.resolve(schema).bind(schema)
       val convertedBack = try boundEncoder.fromRow(convertedData) catch {
         case e: Exception =>
           fail(
@@ -236,15 +245,19 @@ class ProductEncoderSuite extends SparkFunSuite {
               |Schema: ${schema.mkString(",")}
               |${encoder.schema.treeString}
               |
-              |Construct Expressions:
-              |${boundEncoder.constructExpression.treeString}
+              |Encoder:
+              |$boundEncoder
               |
             """.stripMargin, e)
       }
 
       if (!c(inputData, convertedBack)) {
-        val types =
-          convertedBack.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
+        val types = convertedBack match {
+          case c: Product =>
+            c.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
+          case other => other.getClass.getName
+        }
+
 
         val encodedData = try {
           convertedData.toSeq(encoder.schema).zip(encoder.schema).map {
@@ -269,11 +282,7 @@ class ProductEncoderSuite extends SparkFunSuite {
              |${encoder.schema.treeString}
              |
              |Extract Expressions:
-             |${boundEncoder.extractExpressions.map(_.treeString).mkString("\n")}
-             |
-             |Construct Expressions:
-             |${boundEncoder.constructExpression.treeString}
-             |
+             |$boundEncoder
          """.stripMargin)
         }
       }

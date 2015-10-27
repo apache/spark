@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
@@ -53,15 +54,21 @@ import org.apache.spark.sql.types.StructType
  * @since 1.6.0
  */
 @Experimental
-class Dataset[T] private[sql](
+class Dataset[T] private(
     @transient val sqlContext: SQLContext,
-    @transient val queryExecution: QueryExecution)(
-    implicit val encoder: Encoder[T]) extends Serializable {
+    @transient val queryExecution: QueryExecution,
+    unresolvedEncoder: Encoder[T]) extends Serializable {
+
+  /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
+  private[sql] implicit val encoder: ExpressionEncoder[T] = unresolvedEncoder match {
+    case e: ExpressionEncoder[T] => e.resolve(queryExecution.analyzed.output)
+    case _ => throw new IllegalArgumentException("Only expression encoders are currently supported")
+  }
 
   private implicit def classTag = encoder.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
-    this(sqlContext, new QueryExecution(sqlContext, plan))
+    this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
 
   /** Returns the schema of the encoded form of the objects in this [[Dataset]]. */
   def schema: StructType = encoder.schema
@@ -76,7 +83,9 @@ class Dataset[T] private[sql](
    * TODO: document binding rules
    * @since 1.6.0
    */
-  def as[U : Encoder]: Dataset[U] = new Dataset(sqlContext, queryExecution)(implicitly[Encoder[U]])
+  def as[U : Encoder]: Dataset[U] = {
+    new Dataset(sqlContext, queryExecution, encoderFor[U])
+  }
 
   /**
    * Applies a logical alias to this [[Dataset]] that can be used to disambiguate columns that have
@@ -103,7 +112,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def rdd: RDD[T] = {
-    val tEnc = implicitly[Encoder[T]]
+    val tEnc = encoderFor[T]
     val input = queryExecution.analyzed.output
     queryExecution.toRdd.mapPartitions { iter =>
       val bound = tEnc.bind(input)
@@ -150,9 +159,9 @@ class Dataset[T] private[sql](
       sqlContext,
       MapPartitions[T, U](
         func,
-        implicitly[Encoder[T]],
-        implicitly[Encoder[U]],
-        implicitly[Encoder[U]].schema.toAttributes,
+        encoderFor[T],
+        encoderFor[U],
+        encoderFor[U].schema.toAttributes,
         logicalPlan))
   }
 
@@ -209,8 +218,8 @@ class Dataset[T] private[sql](
     val executed = sqlContext.executePlan(withGroupingKey)
 
     new GroupedDataset(
-      implicitly[Encoder[K]].bindOrdinals(withGroupingKey.newColumns),
-      implicitly[Encoder[T]].bind(inputPlan.output),
+      encoderFor[K].resolve(withGroupingKey.newColumns),
+      encoderFor[T].bind(inputPlan.output),
       executed,
       inputPlan.output,
       withGroupingKey.newColumns)
@@ -219,6 +228,18 @@ class Dataset[T] private[sql](
   /* ****************** *
    *  Typed Relational  *
    * ****************** */
+
+  /**
+   * Selects a set of column based expressions.
+   * {{{
+   *   df.select($"colA", $"colB" + 1)
+   * }}}
+   * @group dfops
+   * @since 1.3.0
+   */
+  // Copied from Dataframe to make sure we don't have invalid overloads.
+  @scala.annotation.varargs
+  def select(cols: Column*): DataFrame = toDF().select(cols: _*)
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expression for each element.
@@ -233,88 +254,64 @@ class Dataset[T] private[sql](
     new Dataset[U1](sqlContext, Project(Alias(c1.expr, "_1")() :: Nil, logicalPlan))
   }
 
-  // Codegen
-  // scalastyle:off
-
-  /** sbt scalaShell; println(Seq(1).toDS().genSelect) */
-  private def genSelect: String = {
-    (2 to 5).map { n =>
-      val types = (1 to n).map(i =>s"U$i").mkString(", ")
-      val args = (1 to n).map(i => s"c$i: TypedColumn[U$i]").mkString(", ")
-      val encoders = (1 to n).map(i => s"c$i.encoder").mkString(", ")
-      val schema = (1 to n).map(i => s"""Alias(c$i.expr, "_$i")()""").mkString(" :: ")
-      s"""
-         |/**
-         | * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
-         | * @since 1.6.0
-         | */
-         |def select[$types]($args): Dataset[($types)] = {
-         |  implicit val te = new Tuple${n}Encoder($encoders)
-         |  new Dataset[($types)](sqlContext,
-         |    Project(
-         |      $schema :: Nil,
-         |      logicalPlan))
-         |}
-         |
-       """.stripMargin
-    }.mkString("\n")
+  /**
+   * Internal helper function for building typed selects that return tuples.  For simplicity and
+   * code reuse, we do this without the help of the type system and then use helper functions
+   * that cast appropriately for the user facing interface.
+   */
+  protected def selectUntyped(columns: TypedColumn[_]*): Dataset[_] = {
+    val aliases = columns.zipWithIndex.map { case (c, i) => Alias(c.expr, s"_${i + 1}")() }
+    val unresolvedPlan = Project(aliases, logicalPlan)
+    val execution = new QueryExecution(sqlContext, unresolvedPlan)
+    // Rebind the encoders to the nested schema that will be produced by the select.
+    val encoders = columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]]).zip(aliases).map {
+      case (e: ExpressionEncoder[_], a) if !e.flat =>
+        e.nested(a.toAttribute).resolve(execution.analyzed.output)
+      case (e, a) =>
+        e.unbind(a.toAttribute :: Nil).resolve(execution.analyzed.output)
+    }
+    new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
   }
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    * @since 1.6.0
    */
-  def select[U1, U2](c1: TypedColumn[U1], c2: TypedColumn[U2]): Dataset[(U1, U2)] = {
-    implicit val te = new Tuple2Encoder(c1.encoder, c2.encoder)
-    new Dataset[(U1, U2)](sqlContext,
-      Project(
-        Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Nil,
-        logicalPlan))
-  }
-
-
+  def select[U1, U2](c1: TypedColumn[U1], c2: TypedColumn[U2]): Dataset[(U1, U2)] =
+    selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    * @since 1.6.0
    */
-  def select[U1, U2, U3](c1: TypedColumn[U1], c2: TypedColumn[U2], c3: TypedColumn[U3]): Dataset[(U1, U2, U3)] = {
-    implicit val te = new Tuple3Encoder(c1.encoder, c2.encoder, c3.encoder)
-    new Dataset[(U1, U2, U3)](sqlContext,
-      Project(
-        Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Alias(c3.expr, "_3")() :: Nil,
-        logicalPlan))
-  }
-
-
+  def select[U1, U2, U3](
+      c1: TypedColumn[U1],
+      c2: TypedColumn[U2],
+      c3: TypedColumn[U3]): Dataset[(U1, U2, U3)] =
+    selectUntyped(c1, c2, c3).asInstanceOf[Dataset[(U1, U2, U3)]]
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    * @since 1.6.0
    */
-  def select[U1, U2, U3, U4](c1: TypedColumn[U1], c2: TypedColumn[U2], c3: TypedColumn[U3], c4: TypedColumn[U4]): Dataset[(U1, U2, U3, U4)] = {
-    implicit val te = new Tuple4Encoder(c1.encoder, c2.encoder, c3.encoder, c4.encoder)
-    new Dataset[(U1, U2, U3, U4)](sqlContext,
-      Project(
-        Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Alias(c3.expr, "_3")() :: Alias(c4.expr, "_4")() :: Nil,
-        logicalPlan))
-  }
-
-
+  def select[U1, U2, U3, U4](
+      c1: TypedColumn[U1],
+      c2: TypedColumn[U2],
+      c3: TypedColumn[U3],
+      c4: TypedColumn[U4]): Dataset[(U1, U2, U3, U4)] =
+    selectUntyped(c1, c2, c3, c4).asInstanceOf[Dataset[(U1, U2, U3, U4)]]
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    * @since 1.6.0
    */
-  def select[U1, U2, U3, U4, U5](c1: TypedColumn[U1], c2: TypedColumn[U2], c3: TypedColumn[U3], c4: TypedColumn[U4], c5: TypedColumn[U5]): Dataset[(U1, U2, U3, U4, U5)] = {
-    implicit val te = new Tuple5Encoder(c1.encoder, c2.encoder, c3.encoder, c4.encoder, c5.encoder)
-    new Dataset[(U1, U2, U3, U4, U5)](sqlContext,
-      Project(
-        Alias(c1.expr, "_1")() :: Alias(c2.expr, "_2")() :: Alias(c3.expr, "_3")() :: Alias(c4.expr, "_4")() :: Alias(c5.expr, "_5")() :: Nil,
-        logicalPlan))
-  }
-
-  // scalastyle:on
+  def select[U1, U2, U3, U4, U5](
+      c1: TypedColumn[U1],
+      c2: TypedColumn[U2],
+      c3: TypedColumn[U3],
+      c4: TypedColumn[U4],
+      c5: TypedColumn[U5]): Dataset[(U1, U2, U3, U4, U5)] =
+    selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
   /* **************** *
    *  Set operations  *
@@ -360,6 +357,48 @@ class Dataset[T] private[sql](
    */
   def subtract(other: Dataset[T]): Dataset[T] = withPlan[T](other)(Except)
 
+  /* ****** *
+   *  Joins *
+   * ****** */
+
+  /**
+   * Joins this [[Dataset]] returning a [[Tuple2]] for each pair where `condition` evaluates to
+   * true.
+   *
+   * This is similar to the relation `join` function with one important difference in the
+   * result schema. Since `joinWith` preserves objects present on either side of the join, the
+   * result schema is similarly nested into a tuple under the column names `_1` and `_2`.
+   *
+   * This type of join can be useful both for preserving type-safety with the original object
+   * types as well as working with relational data where either side of the join has column
+   * names in common.
+   */
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+    val left = this.logicalPlan
+    val right = other.logicalPlan
+
+    val leftData = this.encoder match {
+      case e if e.flat => Alias(left.output.head, "_1")()
+      case _ => Alias(CreateStruct(left.output), "_1")()
+    }
+    val rightData = other.encoder match {
+      case e if e.flat => Alias(right.output.head, "_2")()
+      case _ => Alias(CreateStruct(right.output), "_2")()
+    }
+    val leftEncoder =
+      if (encoder.flat) encoder else encoder.nested(leftData.toAttribute)
+    val rightEncoder =
+      if (other.encoder.flat) other.encoder else other.encoder.nested(rightData.toAttribute)
+    implicit val tuple2Encoder: Encoder[(T, U)] =
+      ExpressionEncoder.tuple(leftEncoder, rightEncoder)
+
+    withPlan[(T, U)](other) { (left, right) =>
+      Project(
+        leftData :: rightData :: Nil,
+        Join(left, right, Inner, Some(condition.expr)))
+    }
+  }
+
   /* ************************** *
    *  Gather to Driver Actions  *
    * ************************** */
@@ -380,13 +419,10 @@ class Dataset[T] private[sql](
   private[sql] def logicalPlan = queryExecution.analyzed
 
   private[sql] def withPlan(f: LogicalPlan => LogicalPlan): Dataset[T] =
-    new Dataset[T](sqlContext, sqlContext.executePlan(f(logicalPlan)))
+    new Dataset[T](sqlContext, sqlContext.executePlan(f(logicalPlan)), encoder)
 
   private[sql] def withPlan[R : Encoder](
       other: Dataset[_])(
       f: (LogicalPlan, LogicalPlan) => LogicalPlan): Dataset[R] =
-    new Dataset[R](
-      sqlContext,
-      sqlContext.executePlan(
-        f(logicalPlan, other.logicalPlan)))
+    new Dataset[R](sqlContext, f(logicalPlan, other.logicalPlan))
 }

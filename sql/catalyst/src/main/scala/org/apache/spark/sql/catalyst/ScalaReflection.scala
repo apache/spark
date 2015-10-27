@@ -146,6 +146,10 @@ trait ScalaReflection {
    * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
    * of the same name as the constructor arguments.  Nested classes will have their fields accessed
    * using UnresolvedExtractValue.
+   *
+   * When used on a primitive type, the constructor will instead default to extracting the value
+   * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
+   * calling unbind/bind with a new schema.
    */
   def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], None)
 
@@ -159,8 +163,14 @@ trait ScalaReflection {
         .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
         .getOrElse(UnresolvedAttribute(part))
 
+    /** Returns the current path with a field at ordinal extracted. */
+    def addToPathOrdinal(ordinal: Int, dataType: DataType) =
+      path
+        .map(p => GetStructField(p, StructField(s"_$ordinal", dataType), ordinal))
+        .getOrElse(BoundReference(ordinal, dataType, false))
+
     /** Returns the current path or throws an error. */
-    def getPath = path.getOrElse(sys.error("Constructors must start at a class type"))
+    def getPath = path.getOrElse(BoundReference(0, dataTypeFor(tpe), true))
 
     tpe match {
       case t if !dataTypeFor(t).isInstanceOf[ObjectType] =>
@@ -387,12 +397,17 @@ trait ScalaReflection {
         val className: String = t.erasure.typeSymbol.asClass.fullName
         val cls = Utils.classForName(className)
 
-        val arguments = params.head.map { p =>
+        val arguments = params.head.zipWithIndex.map { case (p, i) =>
           val fieldName = p.name.toString
           val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
-          val dataType = dataTypeFor(fieldType)
+          val dataType = schemaFor(fieldType).dataType
 
-          constructorFor(fieldType, Some(addToPath(fieldName)))
+          // For tuples, we based grab the inner fields by ordinal instead of name.
+          if (className startsWith "scala.Tuple") {
+            constructorFor(fieldType, Some(addToPathOrdinal(i, dataType)))
+          } else {
+            constructorFor(fieldType, Some(addToPath(fieldName)))
+          }
         }
 
         val newInstance = NewInstance(cls, arguments, propagateNull = false, ObjectType(cls))
@@ -413,7 +428,10 @@ trait ScalaReflection {
   /** Returns expressions for extracting all the fields from the given type. */
   def extractorsFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
     ScalaReflectionLock.synchronized {
-      extractorFor(inputObject, typeTag[T].tpe).asInstanceOf[CreateNamedStruct]
+      extractorFor(inputObject, typeTag[T].tpe) match {
+        case s: CreateNamedStruct => s
+        case o => CreateNamedStruct(expressions.Literal("value") :: o :: Nil)
+      }
     }
   }
 
@@ -601,6 +619,21 @@ trait ScalaReflection {
           Invoke(inputObject, "byteValue", ByteType)
         case t if t <:< localTypeOf[java.lang.Boolean] =>
           Invoke(inputObject, "booleanValue", BooleanType)
+
+        case t if t <:< definitions.IntTpe =>
+          BoundReference(0, IntegerType, false)
+        case t if t <:< definitions.LongTpe =>
+          BoundReference(0, LongType, false)
+        case t if t <:< definitions.DoubleTpe =>
+          BoundReference(0, DoubleType, false)
+        case t if t <:< definitions.FloatTpe =>
+          BoundReference(0, FloatType, false)
+        case t if t <:< definitions.ShortTpe =>
+          BoundReference(0, ShortType, false)
+        case t if t <:< definitions.ByteTpe =>
+          BoundReference(0, ByteType, false)
+        case t if t <:< definitions.BooleanTpe =>
+          BoundReference(0, BooleanType, false)
 
         case other =>
           throw new UnsupportedOperationException(s"Extractor for type $other is not supported")
