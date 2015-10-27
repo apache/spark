@@ -166,8 +166,8 @@ trait ScalaReflection {
     /** Returns the current path with a field at ordinal extracted. */
     def addToPathOrdinal(ordinal: Int, dataType: DataType) =
       path
-        .map(p => GetStructField(p, StructField(s"_$ordinal", dataType), ordinal)) // TODOD
-        .getOrElse(BoundReference(ordinal, dataType, false)) // TODO
+        .map(p => GetStructField(p, StructField(s"_$ordinal", dataType), ordinal))
+        .getOrElse(BoundReference(ordinal, dataType, false))
 
     /** Returns the current path or throws an error. */
     def getPath = path.getOrElse(BoundReference(0, dataTypeFor(tpe), true))
