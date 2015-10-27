@@ -56,10 +56,10 @@ class MultivariateGaussian @Since("1.3.0") (
 
   /**
    * Compute distribution dependent constants:
-   *    rootSigmaInv = D^(-1/2)^ * U, where sigma = U * D * U.t
+   *    sigmaInv = sigma^-1^, where sigma = U * D * U.t
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
-  private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
+  private val (sigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
 
   /** Returns density of this multivariate Gaussian at given point, x
     */
@@ -83,8 +83,7 @@ class MultivariateGaussian @Since("1.3.0") (
   /** Returns the log-density of this multivariate Gaussian at given point, x */
   private[mllib] def logpdf(x: BV[Double]): Double = {
     val delta = x - breezeMu
-    val v = rootSigmaInv * delta
-    u + v.t * v * -0.5
+    u - 0.5 * (delta.t * (sigmaInv * delta))
   }
 
   /**
@@ -104,11 +103,6 @@ class MultivariateGaussian @Since("1.3.0") (
    *
    *    sigma = U * D * U.t
    *    inv(Sigma) = U * inv(D) * U.t
-   *               = (D^{-1/2}^ * U).t * (D^{-1/2}^ * U)
-   *
-   * and thus
-   *
-   *    -0.5 * (x-mu).t * inv(Sigma) * (x-mu) = -0.5 * norm(D^{-1/2}^ * U  * (x-mu))^2^
    *
    * To guard against singular covariance matrices, this method computes both the
    * pseudo-determinant and the pseudo-inverse (Moore-Penrose).  Singular values are considered
@@ -126,11 +120,11 @@ class MultivariateGaussian @Since("1.3.0") (
       // log(pseudo-determinant) is sum of the logs of all non-zero singular values
       val logPseudoDetSigma = d.activeValuesIterator.filter(_ > tol).map(math.log).sum
 
-      // calculate the root-pseudo-inverse of the diagonal matrix of singular values
-      // by inverting the square root of all non-zero values
-      val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
+      // calculate the pseudo-inverse of the diagonal matrix of singular values
+      // by inverting the non-zero values
+      val pinvS = diag(new DBV(d.map(v => if (v > tol) 1.0 / v else 0.0).toArray))
 
-      (pinvS * u, -0.5 * (mu.size * math.log(2.0 * math.Pi) + logPseudoDetSigma))
+      (u * pinvS * u.t, -0.5 * (mu.size * math.log(2.0 * math.Pi) + logPseudoDetSigma))
     } catch {
       case uex: UnsupportedOperationException =>
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")
