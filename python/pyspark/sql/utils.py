@@ -17,14 +17,21 @@
 
 import py4j
 
+class CapturedException(Exception):
+    def __init__(self, desc, stackTrace):
+        self.desc = desc
+        self.stackTrace = stackTrace
+    def __str__(self):
+        return repr(self.desc)
 
-class AnalysisException(Exception):
+
+class AnalysisException(CapturedException):
     """
     Failed to analyze a SQL query plan.
     """
 
 
-class IllegalArgumentException(Exception):
+class IllegalArgumentException(CapturedException):
     """
     Passed an illegal or inappropriate argument.
     """

@@ -1082,8 +1082,9 @@ class SQLTests(ReusedPySparkTestCase):
         try:
             df.select(sha2(df.a, 1024)).collect()
         except IllegalArgumentException as e:
-            self.assertRegexpMatches(e.args[0], "1024 is not in the permitted values")
-            self.assertRegexpMatches(e.args[1],
+            self.assertEqual(repr(e), "IllegalArgumentException()")
+            self.assertRegexpMatches(e.desc, "1024 is not in the permitted values")
+            self.assertRegexpMatches(e.stackTrace,
                                      "org.apache.spark.sql.functions")
 
     def test_with_column_with_existing_name(self):
