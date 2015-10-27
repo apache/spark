@@ -6,6 +6,7 @@ import re
 import fnmatch
 import configparser
 from urllib.parse import urlparse
+import warnings
 
 import boto
 from boto.s3.connection import S3Connection
@@ -114,6 +115,14 @@ class S3Hook(BaseHook):
         self.__dict__['connection'] = self.get_conn()
 
     def _parse_s3_url(self, s3url):
+        warnings.warn(
+            'Please note: S3Hook._parse_s3_url() is now '
+            'S3Hook.parse_s3_url() (no leading underscore).', 
+            DeprecationWarning)
+        return self.parse_s3_url(s3url)
+        
+    @staticmethod
+    def parse_s3_url(s3url):
         parsed_url = urlparse(s3url)
         if not parsed_url.netloc:
             raise AirflowException('Please provide a bucket_name')
@@ -210,7 +219,7 @@ class S3Hook(BaseHook):
         Checks that a key exists in a bucket
         """
         if not bucket_name:
-            (bucket_name, key) = self._parse_s3_url(key)
+            (bucket_name, key) = self.parse_s3_url(key)
         bucket = self.get_bucket(bucket_name)
         return bucket.get_key(key) is not None
 
@@ -224,7 +233,7 @@ class S3Hook(BaseHook):
         :type bucket_name: str
         """
         if not bucket_name:
-            (bucket_name, key) = self._parse_s3_url(key)
+            (bucket_name, key) = self.parse_s3_url(key)
         bucket = self.get_bucket(bucket_name)
         return bucket.get_key(key)
 
@@ -247,7 +256,7 @@ class S3Hook(BaseHook):
         :type bucket_name: str
         """
         if not bucket_name:
-            (bucket_name, wildcard_key) = self._parse_s3_url(wildcard_key)
+            (bucket_name, wildcard_key) = self.parse_s3_url(wildcard_key)
         bucket = self.get_bucket(bucket_name)
         prefix = re.split(r'[*]', wildcard_key, 1)[0]
         klist = self.list_keys(bucket_name, prefix=prefix, delimiter=delimiter)
@@ -287,7 +296,7 @@ class S3Hook(BaseHook):
         :type replace: bool
         """
         if not bucket_name:
-            (bucket_name, key) = self._parse_s3_url(key)
+            (bucket_name, key) = self.parse_s3_url(key)
         bucket = self.get_bucket(bucket_name)
         if not self.check_for_key(key, bucket_name):
             key_obj = bucket.new_key(key_name=key)
@@ -319,7 +328,7 @@ class S3Hook(BaseHook):
         :type replace: bool
         """
         if not bucket_name:
-            (bucket_name, key) = self._parse_s3_url(key)
+            (bucket_name, key) = self.parse_s3_url(key)
         bucket = self.get_bucket(bucket_name)
         if not self.check_for_key(key, bucket_name):
             key_obj = bucket.new_key(key_name=key)
