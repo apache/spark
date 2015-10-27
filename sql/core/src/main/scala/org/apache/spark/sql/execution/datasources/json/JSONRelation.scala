@@ -34,6 +34,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -122,14 +123,21 @@ private[sql] class JSONRelation(
     jsonSchema
   }
 
-  override def buildScan(
+  override private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputPaths: Array[FileStatus]): RDD[Row] = {
-    JacksonParser(
+      inputPaths: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+    val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
+    val rows = JacksonParser(
       inputRDD.getOrElse(createBaseRdd(inputPaths)),
-      StructType(requiredColumns.map(dataSchema(_))),
-      sqlContext.conf.columnNameOfCorruptRecord).asInstanceOf[RDD[Row]]
+      requiredDataSchema,
+      sqlContext.conf.columnNameOfCorruptRecord)
+
+    rows.mapPartitions { iterator =>
+      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
+      iterator.map(unsafeProjection)
+    }
   }
 
   override def equals(other: Any): Boolean = other match {
