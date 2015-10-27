@@ -30,7 +30,7 @@ public class TaskMemoryManagerSuite {
   @Test
   public void leakedPageMemoryIsDetected() throws IOException {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
+      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
     manager.allocatePage(4096, null);  // leak memory
     Assert.assertEquals(4096, manager.cleanUpAllAllocatedMemory());
   }
@@ -38,7 +38,7 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOffHeap() throws IOException {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "true")), 0);
+      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "true")), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
     // encode. This test exercises that corner-case:
@@ -51,7 +51,7 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOnHeap() throws IOException {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
+      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
     Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));

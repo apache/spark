@@ -39,7 +39,7 @@ import org.mockito.stubbing.Answer;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.executor.ShuffleWriteMetrics;
-import org.apache.spark.memory.GrantEverythingMemoryManager;
+import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.*;
@@ -62,7 +62,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private final Random rand = new Random(42);
 
-  private GrantEverythingMemoryManager memoryManager;
+  private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
   private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
@@ -82,7 +82,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Before
   public void setup() {
     memoryManager =
-      new GrantEverythingMemoryManager(
+      new TestMemoryManager(
         new SparkConf().set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator()));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
@@ -492,7 +492,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToAllocateFirstPage() {
-    memoryManager.markExecutionAsOutOfMemoryAlways();
+    memoryManager.limit(0);
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, PAGE_SIZE_BYTES);
     try {
       final long[] emptyArray = new long[0];
@@ -503,7 +503,6 @@ public abstract class AbstractBytesToBytesMapSuite {
         emptyArray, Platform.LONG_ARRAY_OFFSET, 0, emptyArray, Platform.LONG_ARRAY_OFFSET, 0));
     } finally {
       map.free();
-      memoryManager.resetOutOfMemory();
     }
   }
 
@@ -516,7 +515,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       int i;
       for (i = 0; i < 127; i++) {
         if (i > 0) {
-          memoryManager.markExecutionAsOutOfMemoryAlways();
+          memoryManager.limit(0);
         }
         final long[] arr = new long[]{i};
         final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
@@ -530,7 +529,6 @@ public abstract class AbstractBytesToBytesMapSuite {
       Assert.assertFalse(success);
     } finally {
       map.free();
-      memoryManager.resetOutOfMemory();
     }
   }
 

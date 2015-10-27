@@ -66,14 +66,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
 
   private final int numPartitions;
-  private final int pageSizeBytes;
-  @VisibleForTesting
-  final int maxRecordSizeBytes;
   private final TaskMemoryManager taskMemoryManager;
   private final BlockManager blockManager;
   private final TaskContext taskContext;
   private final ShuffleWriteMetrics writeMetrics;
-  private long numRecordsInsertedSinceLastSpill = 0;
 
   /** Force this sorter to spill when there are this many elements in memory. For testing only */
   private final long numElementsForSpillThreshold;
@@ -117,13 +113,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.numElementsForSpillThreshold =
       conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MAX_VALUE);
-    this.pageSizeBytes = (int) Math.min(
-      PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, taskMemoryManager.pageSizeBytes());
-    this.maxRecordSizeBytes = pageSizeBytes - 4;
     this.writeMetrics = writeMetrics;
     acquireMemory(initialSize * 8L);
     this.inMemSorter = new ShuffleInMemorySorter(initialSize);
-    numRecordsInsertedSinceLastSpill = 0;
   }
 
   /**
@@ -248,9 +240,12 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   /**
    * Sort and spill the current records in response to memory pressure.
    */
-  @VisibleForTesting
   @Override
-  public long spill(long size) throws IOException {
+  public long spill(long size, MemoryConsumer trigger) throws IOException {
+    if (trigger != this || inMemSorter == null || inMemSorter.numRecords() == 0) {
+      return 0L;
+    }
+
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
       Utils.bytesToString(getMemoryUsage()),
@@ -290,8 +285,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
-      freePage(block);
       memoryFreed += block.size();
+      freePage(block);
     }
     allocatedPages.clear();
     currentPage = null;
@@ -325,9 +320,15 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       logger.debug("Attempting to expand sort pointer array");
-      final long oldPointerArrayMemoryUsage = inMemSorter.getMemoryUsage();
-      acquireMemory(oldPointerArrayMemoryUsage);  //TODO actual memory may be less
-      inMemSorter.expandPointerArray();
+      long used = inMemSorter.getMemoryUsage();
+      long needed = inMemSorter.getMemoryToExpand();
+      acquireMemory(used + needed);  // could trigger spilling
+      if (inMemSorter.hasSpaceForAnotherRecord()) {
+        releaseMemory(used + needed);
+      } else {
+        inMemSorter.expandPointerArray();
+        releaseMemory(used);
+      }
     }
   }
 
@@ -341,11 +342,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    *                      special overflow pages).
    */
   private void acquireNewPageIfNecessary(int required) throws IOException {
-    growPointerArrayIfNecessary();
     if (currentPage == null ||
       pageCursor + required > currentPage.getBaseOffset() + currentPage.size() ) {
       // TODO: try to find space in previous pages
-      currentPage = allocatePage(pageSizeBytes);
+      currentPage = allocatePage(required);
       pageCursor = currentPage.getBaseOffset();
       allocatedPages.add(currentPage);
     }
@@ -358,22 +358,23 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     throws IOException {
 
     // for tests
-    if (numRecordsInsertedSinceLastSpill > numElementsForSpillThreshold) {
-      spill(0);
+    assert(inMemSorter != null);
+    if (inMemSorter.numRecords() > numElementsForSpillThreshold) {
+      spill();
     }
 
+    growPointerArrayIfNecessary();
     final int required = length + 4;
     acquireNewPageIfNecessary(required);
 
+    assert(currentPage != null);
     final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
     Platform.putInt(base, pageCursor, length);
     pageCursor += 4;
     Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
     pageCursor += length;
-    assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, partitionId);
-    numRecordsInsertedSinceLastSpill += 1;
   }
 
   /**

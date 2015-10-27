@@ -41,7 +41,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
-import org.apache.spark.memory.GrantEverythingMemoryManager;
+import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.*;
@@ -57,8 +57,8 @@ import static org.mockito.Mockito.*;
 public class UnsafeExternalSorterSuite {
 
   final LinkedList<File> spillFilesCreated = new LinkedList<File>();
-  final GrantEverythingMemoryManager memoryManager =
-    new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"));
+  final TestMemoryManager memoryManager =
+    new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {
@@ -184,9 +184,9 @@ public class UnsafeExternalSorterSuite {
     insertNumber(sorter, 5);
     insertNumber(sorter, 1);
     insertNumber(sorter, 3);
-    sorter.spill(0);
+    sorter.spill();
     insertNumber(sorter, 4);
-    sorter.spill(0);
+    sorter.spill();
     insertNumber(sorter, 2);
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
@@ -207,9 +207,9 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = newSorter();
     sorter.insertRecord(null, 0, 0, 0);
     sorter.insertRecord(null, 0, 0, 0);
-    sorter.spill(0L);
+    sorter.spill();
     sorter.insertRecord(null, 0, 0, 0);
-    sorter.spill(0L);
+    sorter.spill();
     sorter.insertRecord(null, 0, 0, 0);
     sorter.insertRecord(null, 0, 0, 0);
 
@@ -275,9 +275,9 @@ public class UnsafeExternalSorterSuite {
     Arrays.fill(smallRecord, 123);
 
     insertRecord(sorter, largeRecord, 456);
-    sorter.spill(0L);
+    sorter.spill();
     insertRecord(sorter, smallRecord, 123);
-    sorter.spill(0L);
+    sorter.spill();
     insertRecord(sorter, smallRecord, 123);
     insertRecord(sorter, largeRecord, 456);
 
@@ -345,7 +345,7 @@ public class UnsafeExternalSorterSuite {
       }
 
       // Spilling should not change peak memory
-      sorter.spill(0L);
+      sorter.spill();
       newPeakMemory = sorter.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
       for (int i = 0; i < numRecordsPerPage; i++) {

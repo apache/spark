@@ -166,7 +166,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private long peakMemoryUsedBytes = 0L;
 
   private final BlockManager blockManager;
-  private MapIterator destructiveIterator = null;
+  private volatile MapIterator destructiveIterator = null;
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
@@ -695,8 +695,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   @Override
-  public long spill(long size) throws IOException {
-    if (destructiveIterator != null) {
+  public long spill(long size, MemoryConsumer trigger) throws IOException {
+    if (trigger != this && destructiveIterator != null) {
       return destructiveIterator.spill(size);
     }
     return 0L;

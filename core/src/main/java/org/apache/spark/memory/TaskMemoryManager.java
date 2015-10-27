@@ -132,7 +132,7 @@ public class TaskMemoryManager {
 
       // call spill() on itself to release some memory
       if (got < size && consumer != null) {
-        consumer.spill(size - got);
+        consumer.spill(size - got, consumer);
         got += memoryManager.acquireExecutionMemory(size - got, taskAttemptId);
       }
 
@@ -141,7 +141,7 @@ public class TaskMemoryManager {
         // call spill() on other consumers to release memory
         for (MemoryConsumer c: consumers.keySet()) {
           if (c != null && c != consumer) {
-            needed -= c.spill(size - got);
+            needed -= c.spill(size - got, consumer);
             if (needed < 0) {
               break;
             }
@@ -227,11 +227,11 @@ public class TaskMemoryManager {
       }
       allocatedPages.set(pageNumber);
     }
-    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(size);
+    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
-      logger.trace("Allocate page number {} ({} bytes)", pageNumber, size);
+      logger.trace("Allocate page number {} ({} bytes)", pageNumber, acquired);
     }
     return page;
   }

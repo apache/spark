@@ -135,7 +135,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    * that control global sharing of memory between execution and storage.
    */
   private[memory]
-  final def acquireExecutionMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
+  def acquireExecutionMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
     assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number

@@ -22,7 +22,7 @@ import java.io.IOException;
 import org.junit.Test;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.memory.GrantEverythingMemoryManager;
+import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
@@ -37,7 +37,7 @@ public class PackedRecordPointerSuite {
   public void heap() throws IOException {
     final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
+      new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock page0 = memoryManager.allocatePage(128, null);
     final MemoryBlock page1 = memoryManager.allocatePage(128, null);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
@@ -56,7 +56,7 @@ public class PackedRecordPointerSuite {
   public void offHeap() throws IOException {
     final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "true");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
+      new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock page0 = memoryManager.allocatePage(128, null);
     final MemoryBlock page1 = memoryManager.allocatePage(128, null);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,

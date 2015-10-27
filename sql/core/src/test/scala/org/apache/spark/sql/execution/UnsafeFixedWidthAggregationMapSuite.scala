@@ -24,7 +24,7 @@ import scala.util.{Try, Random}
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, TaskContextImpl, TaskContext, SparkFunSuite}
-import org.apache.spark.memory.{TaskMemoryManager, GrantEverythingMemoryManager}
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -48,7 +48,7 @@ class UnsafeFixedWidthAggregationMapSuite
   private def emptyAggregationBuffer: InternalRow = InternalRow(0)
   private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
-  private var memoryManager: GrantEverythingMemoryManager = null
+  private var memoryManager: TestMemoryManager = null
   private var taskMemoryManager: TaskMemoryManager = null
 
   def testWithMemoryLeakDetection(name: String)(f: => Unit) {
@@ -62,7 +62,7 @@ class UnsafeFixedWidthAggregationMapSuite
 
     test(name) {
       val conf = new SparkConf().set("spark.unsafe.offHeap", "false")
-      memoryManager = new GrantEverythingMemoryManager(conf)
+      memoryManager = new TestMemoryManager(conf)
       taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
 
       TaskContext.setTaskContext(new TaskContextImpl(

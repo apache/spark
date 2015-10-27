@@ -125,7 +125,7 @@ public final class UnsafeKVExternalSorter {
         pageSizeBytes,
         inMemSorter);
 
-      sorter.spill(Long.MAX_VALUE);
+      sorter.spill();
       map.free();
     }
   }

@@ -41,14 +41,24 @@ public class MemoryConsumer {
   }
 
   /**
+   * Force spill during during.
+   *
+   * For testing.
+   */
+  public long spill() throws IOException {
+    return spill(Long.MAX_VALUE, this);
+  }
+
+  /**
    * Spill some data to disk to release memory, which will be called by TaskMemoryManager
    * when there is not enough memory for the task.
    *
    * @param size the amount of memory should be released
+   * @param trigger the MemoryConsumer that trigger this spilling
    * @return the amount of released memory in bytes
    * @throws IOException
    */
-  public long spill(long size) throws IOException {
+  public long spill(long size, MemoryConsumer trigger) throws IOException {
     return 0L;
   }
 
