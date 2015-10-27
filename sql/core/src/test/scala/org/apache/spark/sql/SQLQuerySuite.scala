@@ -1755,4 +1755,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Seq(Row(1), Row(1)))
     }
   }
+
+  test("SPARK-11303: filter should not be pushed down into sample") {
+    val df = sqlContext.range(100)
+    List(true, false).foreach { withReplacement =>
+      val sampled = df.sample(withReplacement, 0.1, 1)
+      val sampledOdd = sampled.filter("id % 2 != 0")
+      val sampledEven = sampled.filter("id % 2 = 0")
+      assert(sampled.count() == sampledOdd.count() + sampledEven.count())
+    }
+  }
 }

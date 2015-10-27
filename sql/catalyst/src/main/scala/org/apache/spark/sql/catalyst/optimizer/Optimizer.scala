@@ -73,10 +73,6 @@ object DefaultOptimizer extends Optimizer {
 object SamplePushDown extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down filter into sample
-    case Filter(condition, s @ Sample(lb, up, replace, seed, child)) =>
-      Sample(lb, up, replace, seed,
-        Filter(condition, child))
     // Push down projection into sample
     case Project(projectList, s @ Sample(lb, up, replace, seed, child)) =>
       Sample(lb, up, replace, seed,
