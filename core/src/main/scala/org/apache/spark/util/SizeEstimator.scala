@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import com.google.common.collect.MapMaker
+
 import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
@@ -28,7 +30,6 @@ import scala.runtime.ScalaRunTime
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.OpenHashSet
-
 
 /**
  * :: DeveloperApi ::
@@ -73,7 +74,8 @@ object SizeEstimator extends Logging {
   private val ALIGN_SIZE = 8
 
   // A cache of ClassInfo objects for each class
-  private val classInfos = new ConcurrentHashMap[Class[_], ClassInfo]
+  // We use weakKeys to allow GC of dynamically created classes
+  private val classInfos = new MapMaker().weakKeys().makeMap[Class[_], ClassInfo]()
 
   // Object and pointer sizes are arch dependent
   private var is64bit = false
