@@ -275,6 +275,7 @@ class TreeEnsembleParams(DecisionTreeParams):
         self.subsamplingRate = Param(self, "subsamplingRate", "Fraction of the training data " +
                                      "used for learning each decision tree, in range (0, 1].")
 
+    @since("1.4.0")
     def setSubsamplingRate(self, value):
         """
         Sets the value of :py:attr:`subsamplingRate`.
@@ -282,6 +283,7 @@ class TreeEnsembleParams(DecisionTreeParams):
         self._paramMap[self.subsamplingRate] = value
         return self
 
+    @since("1.4.0")
     def getSubsamplingRate(self):
         """
         Gets the value of subsamplingRate or its default value.
@@ -308,6 +310,7 @@ class TreeRegressorParams(Params):
                               "gain calculation (case-insensitive). Supported options: " +
                               ", ".join(self.supportedImpurities))
 
+    @since("1.4.0")
     def setImpurity(self, value):
         """
         Sets the value of :py:attr:`impurity`.
@@ -315,6 +318,7 @@ class TreeRegressorParams(Params):
         self._paramMap[self.impurity] = value
         return self
 
+    @since("1.4.0")
     def getImpurity(self):
         """
         Gets the value of impurity or its default value.
@@ -345,6 +349,7 @@ class RandomForestParams(TreeEnsembleParams):
                   "The number of features to consider for splits at each tree node. Supported " +
                   "options: " + ", ".join(self.supportedFeatureSubsetStrategies))
 
+    @since("1.4.0")
     def setNumTrees(self, value):
         """
         Sets the value of :py:attr:`numTrees`.
@@ -352,12 +357,14 @@ class RandomForestParams(TreeEnsembleParams):
         self._paramMap[self.numTrees] = value
         return self
 
+    @since("1.4.0")
     def getNumTrees(self):
         """
         Gets the value of numTrees or its default value.
         """
         return self.getOrDefault(self.numTrees)
 
+    @since("1.4.0")
     def setFeatureSubsetStrategy(self, value):
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
@@ -365,6 +372,7 @@ class RandomForestParams(TreeEnsembleParams):
         self._paramMap[self.featureSubsetStrategy] = value
         return self
 
+    @since("1.4.0")
     def getFeatureSubsetStrategy(self):
         """
         Gets the value of featureSubsetStrategy or its default value.
