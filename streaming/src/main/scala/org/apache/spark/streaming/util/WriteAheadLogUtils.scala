@@ -64,7 +64,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     }
   }
 
-  def shouldCloseAfterWrite(conf: SparkConf, isDriver: Boolean): Boolean = {
+  def shouldCloseFileAfterWrite(conf: SparkConf, isDriver: Boolean): Boolean = {
     if (isDriver) {
       conf.getBoolean(DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY, defaultValue = false)
     } else {
@@ -126,7 +126,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     }.getOrElse {
       new FileBasedWriteAheadLog(sparkConf, fileWalLogDirectory, fileWalHadoopConf,
         getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver),
-        shouldCloseAfterWrite(sparkConf, isDriver))
+        shouldCloseFileAfterWrite(sparkConf, isDriver))
     }
   }
 

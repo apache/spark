@@ -48,7 +48,7 @@ private[streaming] class FileBasedWriteAheadLog(
     hadoopConf: Configuration,
     rollingIntervalSecs: Int,
     maxFailures: Int,
-    closeAfterWrite: Boolean = false
+    closeFileAfterWrite: Boolean
   ) extends WriteAheadLog with Logging {
 
   import FileBasedWriteAheadLog._
@@ -81,7 +81,7 @@ private[streaming] class FileBasedWriteAheadLog(
     while (!succeeded && failures < maxFailures) {
       try {
         fileSegment = getLogWriter(time).write(byteBuffer)
-        if (closeAfterWrite) {
+        if (closeFileAfterWrite) {
           resetWriter()
         }
         succeeded = true

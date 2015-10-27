@@ -311,8 +311,8 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!nonexistentTempPath.exists())
 
     val writtenSegment = writeDataManually(generateRandomData(), testFile)
-    val wal = new FileBasedWriteAheadLog(
-      new SparkConf(), tempDir.getAbsolutePath, new Configuration(), 1, 1)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), tempDir.getAbsolutePath, 
+      new Configuration(), 1, 1, closeFileAfterWrite = false)
     assert(!nonexistentTempPath.exists(), "Directory created just by creating log object")
     wal.read(writtenSegment.head)
     assert(!nonexistentTempPath.exists(), "Directory created just by attempting to read segment")
@@ -435,7 +435,8 @@ object WriteAheadLogSuite {
 
   /** Read all the data in the log file in a directory using the WriteAheadLog class. */
   def readDataUsingWriteAheadLog(logDirectory: String): Seq[String] = {
-    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1,
+      closeFileAfterWrite = false)
     val data = wal.readAll().asScala.map(byteBufferToString).toSeq
     wal.close()
     data
