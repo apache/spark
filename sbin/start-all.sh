@@ -40,7 +40,7 @@ done
 . "${SPARK_HOME}/sbin/spark-config.sh"
 
 # Start Master
-"${SPARK_HOME}sbin"/start-master.sh $TACHYON_STR
+"${SPARK_HOME}/sbin"/start-master.sh $TACHYON_STR
 
 # Start Workers
 "${SPARK_HOME}/sbin"/start-slaves.sh $TACHYON_STR
