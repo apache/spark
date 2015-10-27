@@ -283,7 +283,8 @@ class S3Hook(BaseHook):
         :param bucket_name: Name of the bucket in which to store the file
         :type bucket_name: str
         :param replace: A flag to decide whether or not to overwrite the key
-            if it already exists
+            if it already exists. If replace is False and the key exists, an
+            error will be raised.
         :type replace: bool
         """
         if not bucket_name:
@@ -293,8 +294,8 @@ class S3Hook(BaseHook):
             key_obj = bucket.new_key(key_name=key)
         else:
             if not replace:
-                logging.info("The key {key} already exists.".format(**locals()))
-                return
+                raise ValueError("The key {key} already exists.".format(
+                    **locals()))
             key_obj = bucket.get_key(key)
         key_size = key_obj.set_contents_from_filename(filename,
                                                       replace=replace)
