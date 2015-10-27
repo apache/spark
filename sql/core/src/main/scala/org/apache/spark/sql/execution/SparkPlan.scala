@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.ui.sql.{LongSQLMetric, SQLMetric}
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
@@ -34,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.ui.sql.{LongSQLMetric, SQLMetric}
 
 object SparkPlan {
   protected[sql] val currentContext = new ThreadLocal[SQLContext]()

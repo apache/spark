@@ -21,8 +21,6 @@ import java.beans.{BeanInfo, Introspector}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.ui.sql.{SQLTab, SQLListener}
-
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
@@ -48,6 +46,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.ui.sql.{SQLTab, SQLListener}
 import org.apache.spark.util.Utils
 
 /**

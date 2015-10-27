@@ -19,8 +19,6 @@ package org.apache.spark.ui.sql
 
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable
 
 /**

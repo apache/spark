@@ -17,8 +17,8 @@
 
 package org.apache.spark.ui.sql
 
-import org.apache.spark.{SparkContext, AccumulableParam, Accumulable}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
 
 /**
  * Create a layer for specialized metric. We cannot add `@specialized` to
@@ -144,6 +144,9 @@ private[spark] object SQLMetrics {
    * spill size, etc.
    */
   def createSizeMetric(sc: SparkContext, name: String): LongSQLMetric = {
+    // The final result of this metric in physical operator UI may looks like:
+    // data size total (min, med, max):
+    // 100GB (100MB, 1GB, 10GB)
     createLongMetric(sc, s"$name total (min, med, max)", StaticsLongSQLMetricParam)
   }
 
