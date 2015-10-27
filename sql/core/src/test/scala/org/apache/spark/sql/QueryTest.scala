@@ -20,10 +20,12 @@ package org.apache.spark.sql
 import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
+import scala.reflect.runtime.universe._
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.catalyst.encoders.{ProductEncoder, Encoder}
 
 abstract class QueryTest extends PlanTest {
 
@@ -51,6 +53,12 @@ abstract class QueryTest extends PlanTest {
         assert(!outputs.contains(key), s"Failed for $df ($key existed in the result)")
       }
     }
+  }
+
+  protected def checkAnswer[T : Encoder](ds: => Dataset[T], expectedAnswer: T*): Unit = {
+    checkAnswer(
+      ds.toDF(),
+      sqlContext.createDataset(expectedAnswer).toDF().collect().toSeq)
   }
 
   /**
