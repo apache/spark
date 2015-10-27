@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData}
 import org.apache.spark.sql.types._
 
 
 /**
- * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
- * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
+ * Generates byte code that produces a [[MutableRow]] object (not an [[UnsafeRow]]) that can update
+ * itself based on a new input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection] {
 
@@ -51,7 +52,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       s"""
         if (!$tmp.isNullAt($i)) {
           ${converter.code}
-          $values[$i] = ${converter.primitive};
+          $values[$i] = ${converter.value};
         }
       """
     }
@@ -85,7 +86,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       for (int $index = 0; $index < $numElements; $index++) {
         if (!$tmp.isNullAt($index)) {
           ${elementConverter.code}
-          $values[$index] = ${elementConverter.primitive};
+          $values[$index] = ${elementConverter.value};
         }
       }
       final ArrayData $output = new $arrayClass($values);
@@ -109,7 +110,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final MapData $tmp = $input;
       ${keyConverter.code}
       ${valueConverter.code}
-      final MapData $output = new $mapClass(${keyConverter.primitive}, ${valueConverter.primitive});
+      final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
     GeneratedExpressionCode(code, "false", output)
@@ -124,6 +125,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     // UTF8String act as a pointer if it's inside UnsafeRow, so copy it to make it safe.
     case StringType => GeneratedExpressionCode("", "false", s"$input.clone()")
+    case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
     case _ => GeneratedExpressionCode("", "false", input)
   }
 
@@ -133,18 +135,18 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       case (NoOp, _) => ""
       case (e, i) =>
         val evaluationCode = e.gen(ctx)
-        val converter = convertToSafe(ctx, evaluationCode.primitive, e.dataType)
+        val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
         evaluationCode.code +
           s"""
             if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);
             } else {
               ${converter.code}
-              ${ctx.setColumn("mutableRow", e.dataType, i, converter.primitive)};
+              ${ctx.setColumn("mutableRow", e.dataType, i, converter.value)};
             }
           """
     }
-    val allExpressions = ctx.splitExpressions("i", expressionCodes)
+    val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificSafeProjection(expr);
@@ -164,7 +166,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
         }
 
         public Object apply(Object _i) {
-          InternalRow i = (InternalRow) _i;
+          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allExpressions
           return mutableRow;
         }

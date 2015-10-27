@@ -108,7 +108,21 @@ object RandomDataGenerator {
         arr
       })
       case BooleanType => Some(() => rand.nextBoolean())
-      case DateType => Some(() => new java.sql.Date(rand.nextInt()))
+      case DateType =>
+        val generator =
+          () => {
+            var milliseconds = rand.nextLong() % 253402329599999L
+            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+            // for "0001-01-01 00:00:00.000000". We need to find a
+            // number that is greater or equals to this number as a valid timestamp value.
+            while (milliseconds < -62135740800000L) {
+              // 253402329599999L is the the number of milliseconds since
+              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+              milliseconds = rand.nextLong() % 253402329599999L
+            }
+            DateTimeUtils.toJavaDate((milliseconds / DateTimeUtils.MILLIS_PER_DAY).toInt)
+          }
+        Some(generator)
       case TimestampType =>
         val generator =
           () => {
@@ -134,7 +148,7 @@ object RandomDataGenerator {
         () => BigDecimal.apply(
           rand.nextLong() % math.pow(10, precision).toLong,
           scale,
-          new MathContext(precision)))
+          new MathContext(precision)).bigDecimal)
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
           Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
@@ -152,7 +166,7 @@ object RandomDataGenerator {
       case NullType => Some(() => null)
       case ArrayType(elementType, containsNull) => {
         forType(elementType, nullable = containsNull, seed = Some(rand.nextLong())).map {
-          elementGenerator => () => Array.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
+          elementGenerator => () => Seq.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
         }
       }
       case MapType(keyType, valueType, valueContainsNull) => {

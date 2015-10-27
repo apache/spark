@@ -52,14 +52,23 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+    val primitivesAsString = parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
 
-    new JSONRelation(None, samplingRatio, dataSchema, None, partitionColumns, paths)(sqlContext)
+    new JSONRelation(
+      None,
+      samplingRatio,
+      primitivesAsString,
+      dataSchema,
+      None,
+      partitionColumns,
+      paths)(sqlContext)
   }
 }
 
 private[sql] class JSONRelation(
     val inputRDD: Option[RDD[String]],
     val samplingRatio: Double,
+    val primitivesAsString: Boolean,
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
@@ -81,7 +90,7 @@ private[sql] class JSONRelation(
 
   private def createBaseRdd(inputPaths: Array[FileStatus]): RDD[String] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = job.getConfiguration
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
     val paths = inputPaths.map(_.getPath)
 
@@ -105,7 +114,8 @@ private[sql] class JSONRelation(
       InferSchema(
         inputRDD.getOrElse(createBaseRdd(files)),
         samplingRatio,
-        sqlContext.conf.columnNameOfCorruptRecord)
+        sqlContext.conf.columnNameOfCorruptRecord,
+        primitivesAsString)
     }
     checkConstraints(jsonSchema)
 
@@ -161,11 +171,10 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with SparkHadoopMapRedUtil with Logging {
 
-  val writer = new CharArrayWriter()
+  private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
-  val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
-
-  val result = new Text()
+  private[this] val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+  private[this] val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
@@ -182,7 +191,7 @@ private[json] class JsonOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    JacksonGenerator(dataSchema, gen, row)
+    JacksonGenerator(dataSchema, gen)(row)
     gen.flush()
 
     result.set(writer.toString)

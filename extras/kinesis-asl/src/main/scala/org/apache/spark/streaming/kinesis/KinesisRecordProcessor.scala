@@ -41,8 +41,8 @@ import org.apache.spark.Logging
  * @param checkpointState represents the checkpoint state including the next checkpoint time.
  *   It's injected here for mocking purposes.
  */
-private[kinesis] class KinesisRecordProcessor(
-    receiver: KinesisReceiver,
+private[kinesis] class KinesisRecordProcessor[T](
+    receiver: KinesisReceiver[T],
     workerId: String,
     checkpointState: KinesisCheckpointState) extends IRecordProcessor with Logging {
 

@@ -19,21 +19,18 @@ package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
 
 /**
- * :: Experimental ::
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
  */
 @Since("1.0.0")
-@Experimental
 case class IndexedRow(index: Long, vector: Vector)
 
 /**
- * :: Experimental ::
  * Represents a row-oriented [[org.apache.spark.mllib.linalg.distributed.DistributedMatrix]] with
  * indexed rows.
  *
@@ -44,7 +41,6 @@ case class IndexedRow(index: Long, vector: Vector)
  *              columns will be determined by the size of the first row.
  */
 @Since("1.0.0")
-@Experimental
 class IndexedRowMatrix @Since("1.0.0") (
     @Since("1.0.0") val rows: RDD[IndexedRow],
     private var nRows: Long,
@@ -70,6 +66,19 @@ class IndexedRowMatrix @Since("1.0.0") (
       nRows = rows.map(_.index).reduce(math.max) + 1L
     }
     nRows
+  }
+
+
+  /**
+   * Compute all cosine similarities between columns of this matrix using the brute-force
+   * approach of computing normalized dot products.
+   *
+   * @return An n x n sparse upper-triangular matrix of cosine similarities between
+   *         columns of this matrix.
+   */
+  @Since("1.6.0")
+  def columnSimilarities(): CoordinateMatrix = {
+    toRowMatrix().columnSimilarities()
   }
 
   /**

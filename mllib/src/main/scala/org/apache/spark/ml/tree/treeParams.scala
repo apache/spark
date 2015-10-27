@@ -17,10 +17,9 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasMaxIter, HasSeed, HasThresholds}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
@@ -87,7 +86,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointI
   /**
    * If false, the algorithm will pass trees to executors to match instances with nodes.
    * If true, the algorithm will cache node IDs for each instance.
-   * Caching can speed up training of deeper trees.
+   * Caching can speed up training of deeper trees. Users can set how often should the
+   * cache be checkpointed or disable it by setting checkpointInterval.
    * (default = false)
    * @group expertParam
    */
@@ -365,17 +365,7 @@ private[ml] object RandomForestParams {
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
-
-  /**
-   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
-   * estimator.
-   * (default = 0.1)
-   * @group param
-   */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size (a.k.a." +
-    " learning rate) in interval (0, 1] for shrinking the contribution of each estimator",
-    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
@@ -393,11 +383,19 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-  /** @group setParam */
+  /**
+   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
+   * estimator.
+   * (default = 0.1)
+   * @group setParam
+   */
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
-  /** @group getParam */
-  final def getStepSize: Double = $(stepSize)
+  override def validateParams(): Unit = {
+    require(ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)(
+      getStepSize), "GBT parameter stepSize should be in interval (0, 1], " +
+      s"but it given invalid value $getStepSize.")
+  }
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(

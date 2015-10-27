@@ -649,6 +649,7 @@ private[spark] object Utils extends Logging {
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
+    val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -657,13 +658,23 @@ private[spark] object Utils extends Logging {
       getYarnLocalDirs(conf).split(",")
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
+    } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
+      conf.getenv("SPARK_LOCAL_DIRS").split(",")
+    } else if (conf.getenv("MESOS_DIRECTORY") != null && !shuffleServiceEnabled) {
+      // Mesos already creates a directory per Mesos task. Spark should use that directory
+      // instead so all temporary files are automatically cleaned up when the Mesos task ends.
+      // Note that we don't want this if the shuffle service is enabled because we want to
+      // continue to serve shuffle files after the executors that wrote them have already exited.
+      Array(conf.getenv("MESOS_DIRECTORY"))
     } else {
+      if (conf.getenv("MESOS_DIRECTORY") != null && shuffleServiceEnabled) {
+        logInfo("MESOS_DIRECTORY available but not using provided Mesos sandbox because " +
+          "spark.shuffle.service.enabled is enabled.")
+      }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
       // permissions under each listed directory.
-      Option(conf.getenv("SPARK_LOCAL_DIRS"))
-        .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-        .split(",")
+      conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")).split(",")
     }
   }
 
@@ -941,7 +952,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
   def timeStringAsSeconds(str: String): Long = {
@@ -1749,6 +1760,13 @@ private[spark] object Utils extends Logging {
       if (uri.getScheme() != null) {
         return uri
       }
+      // make sure to handle if the path has a fragment (applies to yarn
+      // distributed cache)
+      if (uri.getFragment() != null) {
+        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
+        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+          uri.getFragment())
+      }
     } catch {
       case e: URISyntaxException =>
     }
@@ -1888,6 +1906,7 @@ private[spark] object Utils extends Logging {
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
    * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
    */
   def startServiceOnPort[T](
       startPort: Int,
@@ -2145,6 +2164,10 @@ private[spark] object Utils extends Logging {
       conf.getInt("spark.executor.instances", 0) == 0
   }
 
+  def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
+    val resource = createResource
+    try f.apply(resource) finally resource.close()
+  }
 }
 
 /**

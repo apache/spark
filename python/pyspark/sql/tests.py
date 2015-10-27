@@ -31,6 +31,10 @@ import time
 import datetime
 
 import py4j
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -157,7 +161,7 @@ class DataTypeTests(unittest.TestCase):
     def test_data_type_eq(self):
         lt = LongType()
         lt2 = pickle.loads(pickle.dumps(LongType()))
-        self.assertEquals(lt, lt2)
+        self.assertEqual(lt, lt2)
 
     # regression test for SPARK-7978
     def test_decimal_type(self):
@@ -172,6 +176,20 @@ class DataTypeTests(unittest.TestCase):
     def test_datetype_equal_zero(self):
         dt = DateType()
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
+
+
+class SQLContextTests(ReusedPySparkTestCase):
+    def test_get_or_create(self):
+        sqlCtx = SQLContext.getOrCreate(self.sc)
+        self.assertTrue(SQLContext.getOrCreate(self.sc) is sqlCtx)
+
+    def test_new_session(self):
+        sqlCtx = SQLContext.getOrCreate(self.sc)
+        sqlCtx.setConf("test_key", "a")
+        sqlCtx2 = sqlCtx.newSession()
+        sqlCtx2.setConf("test_key", "b")
+        self.assertEqual(sqlCtx.getConf("test_key", ""), "a")
+        self.assertEqual(sqlCtx2.getConf("test_key", ""), "b")
 
 
 class SQLTests(ReusedPySparkTestCase):
@@ -393,7 +411,7 @@ class SQLTests(ReusedPySparkTestCase):
                                    CustomRow(field1=2, field2="row2"),
                                    CustomRow(field1=3, field2="row3")])
         df = self.sqlCtx.inferSchema(rdd)
-        self.assertEquals(Row(field1=1, field2=u'row1'), df.first())
+        self.assertEqual(Row(field1=1, field2=u'row1'), df.first())
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -403,7 +421,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_select_null_literal(self):
         df = self.sqlCtx.sql("select null as col")
-        self.assertEquals(Row(col=None), df.first())
+        self.assertEqual(Row(col=None), df.first())
 
     def test_apply_schema(self):
         from datetime import date, datetime
@@ -519,14 +537,14 @@ class SQLTests(ReusedPySparkTestCase):
                              StructField("point", ExamplePointUDT(), False)])
         df = self.sqlCtx.createDataFrame([row], schema)
         point = df.head().point
-        self.assertEquals(point, ExamplePoint(1.0, 2.0))
+        self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
         row = (1.0, PythonOnlyPoint(1.0, 2.0))
         schema = StructType([StructField("label", DoubleType(), False),
                              StructField("point", PythonOnlyUDT(), False)])
         df = self.sqlCtx.createDataFrame([row], schema)
         point = df.head().point
-        self.assertEquals(point, PythonOnlyPoint(1.0, 2.0))
+        self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
     def test_udf_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
@@ -554,21 +572,21 @@ class SQLTests(ReusedPySparkTestCase):
         df0.write.parquet(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
         point = df1.head().point
-        self.assertEquals(point, ExamplePoint(1.0, 2.0))
+        self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
         row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
         df0 = self.sqlCtx.createDataFrame([row])
         df0.write.parquet(output_dir, mode='overwrite')
         df1 = self.sqlCtx.parquetFile(output_dir)
         point = df1.head().point
-        self.assertEquals(point, PythonOnlyPoint(1.0, 2.0))
+        self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
     def test_column_operators(self):
         ci = self.df.key
         cs = self.df.value
         c = ci == cs
         self.assertTrue(isinstance((- ci - 1 - 2) % 3 * 2.5 / 3.5, Column))
-        rcc = (1 + ci), (1 - ci), (1 * ci), (1 / ci), (1 % ci)
+        rcc = (1 + ci), (1 - ci), (1 * ci), (1 / ci), (1 % ci), (1 ** ci), (ci ** 1)
         self.assertTrue(all(isinstance(c, Column) for c in rcc))
         cb = [ci == 5, ci != 0, ci > 3, ci < 4, ci >= 0, ci <= 7]
         self.assertTrue(all(isinstance(c, Column) for c in cb))
@@ -826,8 +844,8 @@ class SQLTests(ReusedPySparkTestCase):
         output_dir = os.path.join(self.tempdir.name, "infer_long_type")
         df.saveAsParquetFile(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
-        self.assertEquals('a', df1.first().f1)
-        self.assertEquals(100000000000000, df1.first().f2)
+        self.assertEqual('a', df1.first().f1)
+        self.assertEqual(100000000000000, df1.first().f2)
 
         self.assertEqual(_infer_type(1), LongType())
         self.assertEqual(_infer_type(2**10), LongType())
@@ -1075,6 +1093,24 @@ class SQLTests(ReusedPySparkTestCase):
 
         self.assertRaises(TypeError, foo)
 
+    # add test for SPARK-10577 (test broadcast join hint)
+    def test_functions_broadcast(self):
+        from pyspark.sql.functions import broadcast
+
+        df1 = self.sqlCtx.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
+        df2 = self.sqlCtx.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
+
+        # equijoin - should be converted into broadcast join
+        plan1 = df1.join(broadcast(df2), "key")._jdf.queryExecution().executedPlan()
+        self.assertEqual(1, plan1.toString().count("BroadcastHashJoin"))
+
+        # no join key -- should not be a broadcast join
+        plan2 = df1.join(broadcast(df2))._jdf.queryExecution().executedPlan()
+        self.assertEqual(0, plan2.toString().count("BroadcastHashJoin"))
+
+        # planner should not crash without a join
+        broadcast(df1)._jdf.queryExecution().executedPlan()
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
@@ -1190,4 +1226,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()

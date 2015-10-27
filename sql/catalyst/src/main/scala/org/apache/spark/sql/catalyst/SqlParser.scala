@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -37,9 +38,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
-class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
+object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
-  def parseExpression(input: String): Expression = {
+  def parseExpression(input: String): Expression = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(projection)(new lexical.Scanner(input)) match {
@@ -48,7 +49,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     }
   }
 
-  def parseTableIdentifier(input: String): TableIdentifier = {
+  def parseTableIdentifier(input: String): TableIdentifier = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(tableIdentifier)(new lexical.Scanner(input)) match {
@@ -170,7 +171,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     joinedRelation | relationFactor
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
-    ( rep1sep(ident, ".") ~ (opt(AS) ~> opt(ident)) ^^ {
+    ( tableIdentifier ~ (opt(AS) ~> opt(ident)) ^^ {
         case tableIdent ~ alias => UnresolvedRelation(tableIdent, alias)
       }
       | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }
@@ -218,7 +219,10 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     andExpression * (OR ^^^ { (e1: Expression, e2: Expression) => Or(e1, e2) })
 
   protected lazy val andExpression: Parser[Expression] =
-    comparisonExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
+    notExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
+
+  protected lazy val notExpression: Parser[Expression] =
+    NOT.? ~ comparisonExpression ^^ { case maybeNot ~ e => maybeNot.map(_ => Not(e)).getOrElse(e) }
 
   protected lazy val comparisonExpression: Parser[Expression] =
     ( termExpression ~ ("="  ~> termExpression) ^^ { case e1 ~ e2 => EqualTo(e1, e2) }
@@ -246,7 +250,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       }
     | termExpression <~ IS ~ NULL ^^ { case e => IsNull(e) }
     | termExpression <~ IS ~ NOT ~ NULL ^^ { case e => IsNotNull(e) }
-    | NOT ~> termExpression ^^ {e => Not(e)}
     | termExpression
     )
 

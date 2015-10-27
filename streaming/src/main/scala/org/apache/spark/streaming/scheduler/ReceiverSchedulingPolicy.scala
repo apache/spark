@@ -21,6 +21,7 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.Utils
 
 /**
  * A class that tries to schedule receivers with evenly distributed. There are two phases for
@@ -79,7 +80,7 @@ private[streaming] class ReceiverSchedulingPolicy {
       return receivers.map(_.streamId -> Seq.empty).toMap
     }
 
-    val hostToExecutors = executors.groupBy(_.split(":")(0))
+    val hostToExecutors = executors.groupBy(executor => Utils.parseHostPort(executor)._1)
     val scheduledExecutors = Array.fill(receivers.length)(new mutable.ArrayBuffer[String])
     val numReceiversOnExecutor = mutable.HashMap[String, Int]()
     // Set the initial value to 0

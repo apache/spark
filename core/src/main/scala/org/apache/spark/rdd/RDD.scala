@@ -294,7 +294,11 @@ abstract class RDD[T: ClassTag](
    */
   private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
   {
-    if (isCheckpointed) firstParent[T].iterator(split, context) else compute(split, context)
+    if (isCheckpointedAndMaterialized) {
+      firstParent[T].iterator(split, context)
+    } else {
+      compute(split, context)
+    }
   }
 
   /**
@@ -469,50 +473,44 @@ abstract class RDD[T: ClassTag](
    * @param seed seed for the random number generator
    * @return sample of specified size in an array
    */
-  // TODO: rewrite this without return statements so we can wrap it in a scope
   def takeSample(
       withReplacement: Boolean,
       num: Int,
-      seed: Long = Utils.random.nextLong): Array[T] = {
+      seed: Long = Utils.random.nextLong): Array[T] = withScope {
     val numStDev = 10.0
 
-    if (num < 0) {
-      throw new IllegalArgumentException("Negative number of elements requested")
-    } else if (num == 0) {
-      return new Array[T](0)
+    require(num >= 0, "Negative number of elements requested")
+    require(num <= (Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt),
+      "Cannot support a sample size > Int.MaxValue - " +
+      s"$numStDev * math.sqrt(Int.MaxValue)")
+
+    if (num == 0) {
+      new Array[T](0)
+    } else {
+      val initialCount = this.count()
+      if (initialCount == 0) {
+        new Array[T](0)
+      } else {
+        val rand = new Random(seed)
+        if (!withReplacement && num >= initialCount) {
+          Utils.randomizeInPlace(this.collect(), rand)
+        } else {
+          val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
+            withReplacement)
+          var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+
+          // If the first sample didn't turn out large enough, keep trying to take samples;
+          // this shouldn't happen often because we use a big multiplier for the initial size
+          var numIters = 0
+          while (samples.length < num) {
+            logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
+            samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+            numIters += 1
+          }
+          Utils.randomizeInPlace(samples, rand).take(num)
+        }
+      }
     }
-
-    val initialCount = this.count()
-    if (initialCount == 0) {
-      return new Array[T](0)
-    }
-
-    val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
-    if (num > maxSampleSize) {
-      throw new IllegalArgumentException("Cannot support a sample size > Int.MaxValue - " +
-        s"$numStDev * math.sqrt(Int.MaxValue)")
-    }
-
-    val rand = new Random(seed)
-    if (!withReplacement && num >= initialCount) {
-      return Utils.randomizeInPlace(this.collect(), rand)
-    }
-
-    val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
-      withReplacement)
-
-    var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
-
-    // If the first sample didn't turn out large enough, keep trying to take samples;
-    // this shouldn't happen often because we use a big multiplier for the initial size
-    var numIters = 0
-    while (samples.length < num) {
-      logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
-      samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
-      numIters += 1
-    }
-
-    Utils.randomizeInPlace(samples, rand).take(num)
   }
 
   /**
@@ -1526,19 +1524,36 @@ abstract class RDD[T: ClassTag](
       persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
     }
 
-    checkpointData match {
-      case Some(reliable: ReliableRDDCheckpointData[_]) => logWarning(
-        "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
-      case _ =>
+    // If this RDD is already checkpointed and materialized, its lineage is already truncated.
+    // We must not override our `checkpointData` in this case because it is needed to recover
+    // the checkpointed data. If it is overridden, next time materializing on this RDD will
+    // cause error.
+    if (isCheckpointedAndMaterialized) {
+      logWarning("Not marking RDD for local checkpoint because it was already " +
+        "checkpointed and materialized")
+    } else {
+      // Lineage is not truncated yet, so just override any existing checkpoint data with ours
+      checkpointData match {
+        case Some(_: ReliableRDDCheckpointData[_]) => logWarning(
+          "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
+        case _ =>
+      }
+      checkpointData = Some(new LocalRDDCheckpointData(this))
     }
-    checkpointData = Some(new LocalRDDCheckpointData(this))
     this
   }
 
   /**
-   * Return whether this RDD is marked for checkpointing, either reliably or locally.
+   * Return whether this RDD is checkpointed and materialized, either reliably or locally.
    */
   def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
+
+  /**
+   * Return whether this RDD is checkpointed and materialized, either reliably or locally.
+   * This is introduced as an alias for `isCheckpointed` to clarify the semantics of the
+   * return value. Exposed for testing.
+   */
+  private[spark] def isCheckpointedAndMaterialized: Boolean = isCheckpointed
 
   /**
    * Return whether this RDD is marked for local checkpointing.

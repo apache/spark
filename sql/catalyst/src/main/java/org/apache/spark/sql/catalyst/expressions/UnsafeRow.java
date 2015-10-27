@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -35,6 +40,7 @@ import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.spark.sql.types.DataTypes.*;
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -52,7 +58,7 @@ import static org.apache.spark.sql.types.DataTypes.*;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow extends MutableRow {
+public final class UnsafeRow extends MutableRow implements Externalizable, KryoSerializable {
 
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
@@ -321,6 +327,8 @@ public final class UnsafeRow extends MutableRow {
       return getArray(ordinal);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof UserDefinedType) {
+      return get(ordinal, ((UserDefinedType)dataType).sqlType());
     } else {
       throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
@@ -394,7 +402,7 @@ public final class UnsafeRow extends MutableRow {
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+    final int size = (int) offsetAndSize;
     return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
@@ -405,7 +413,7 @@ public final class UnsafeRow extends MutableRow {
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final int size = (int) offsetAndSize;
       final byte[] bytes = new byte[size];
       Platform.copyMemory(
         baseObject,
@@ -438,7 +446,7 @@ public final class UnsafeRow extends MutableRow {
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final int size = (int) offsetAndSize;
       final UnsafeRow row = new UnsafeRow();
       row.pointTo(baseObject, baseOffset + offset, numFields, size);
       return row;
@@ -446,26 +454,30 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public ArrayData getArray(int ordinal) {
+  public UnsafeArrayData getArray(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
-      return UnsafeReaders.readArray(baseObject, baseOffset + offset, size);
+      final int size = (int) offsetAndSize;
+      final UnsafeArrayData array = new UnsafeArrayData();
+      array.pointTo(baseObject, baseOffset + offset, size);
+      return array;
     }
   }
 
   @Override
-  public MapData getMap(int ordinal) {
+  public UnsafeMapData getMap(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
-      return UnsafeReaders.readMap(baseObject, baseOffset + offset, size);
+      final int size = (int) offsetAndSize;
+      final UnsafeMapData map = new UnsafeMapData();
+      map.pointTo(baseObject, baseOffset + offset, size);
+      return map;
     }
   }
 
@@ -595,5 +607,71 @@ public final class UnsafeRow extends MutableRow {
    */
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert (buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + sizeInBytes);
+  }
+
+  /**
+   * Write the bytes of var-length field into ByteBuffer
+   *
+   * Note: only work with HeapByteBuffer
+   */
+  public void writeFieldTo(int ordinal, ByteBuffer buffer) {
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
+
+    buffer.putInt(size);
+    int pos = buffer.position();
+    buffer.position(pos + size);
+    Platform.copyMemory(
+      baseObject,
+      baseOffset + offset,
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + pos,
+      size);
+  }
+
+  @Override
+  public void writeExternal(ObjectOutput out) throws IOException {
+    byte[] bytes = getBytes();
+    out.writeInt(bytes.length);
+    out.writeInt(this.numFields);
+    out.write(bytes);
+  }
+
+  @Override
+  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+    this.baseOffset = BYTE_ARRAY_OFFSET;
+    this.sizeInBytes = in.readInt();
+    this.numFields = in.readInt();
+    this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
+    this.baseObject = new byte[sizeInBytes];
+    in.readFully((byte[]) baseObject);
+  }
+
+  @Override
+  public void write(Kryo kryo, Output out) {
+    byte[] bytes = getBytes();
+    out.writeInt(bytes.length);
+    out.writeInt(this.numFields);
+    out.write(bytes);
+  }
+
+  @Override
+  public void read(Kryo kryo, Input in) {
+    this.baseOffset = BYTE_ARRAY_OFFSET;
+    this.sizeInBytes = in.readInt();
+    this.numFields = in.readInt();
+    this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
+    this.baseObject = new byte[sizeInBytes];
+    in.read((byte[]) baseObject);
   }
 }

@@ -297,11 +297,18 @@ object HiveTypeCoercion {
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case SumDistinct(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
+      case Stddev(e @ StringType()) => Stddev(Cast(e, DoubleType))
+      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
+      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
     }
   }
 
   /**
-   * Convert all expressions in in() list to the left operator type
+   * Convert the value and in list expressions to the common operator type
+   * by looking at all the argument types and finding the closest one that
+   * all the arguments can be cast to. When no common operator type is found
+   * the original expression will be returned and an Analysis Exception will
+   * be raised at type checking phase.
    */
   object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
@@ -309,7 +316,10 @@ object HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-        i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
+        findWiderCommonType(i.children.map(_.dataType)) match {
+          case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+          case None => i
+        }
     }
   }
 

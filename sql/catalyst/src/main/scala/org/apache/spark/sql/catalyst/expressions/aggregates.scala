@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -630,64 +631,363 @@ case class CombineSetsAndSumFunction(
   }
 }
 
-case class First(child: Expression) extends UnaryExpression with PartialAggregate1 {
+case class First(
+    child: Expression,
+    ignoreNullsExpr: Expression)
+  extends UnaryExpression with PartialAggregate1 {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
+
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"FIRST($child)"
+  override def toString: String = s"FIRST(${child}${if (ignoreNulls) " IGNORE NULLS"})"
 
   override def asPartial: SplitEvaluation = {
-    val partialFirst = Alias(First(child), "PartialFirst")()
+    val partialFirst = Alias(First(child, ignoreNulls), "PartialFirst")()
     SplitEvaluation(
-      First(partialFirst.toAttribute),
+      First(partialFirst.toAttribute, ignoreNulls),
       partialFirst :: Nil)
   }
-  override def newInstance(): FirstFunction = new FirstFunction(child, this)
+  override def newInstance(): FirstFunction = new FirstFunction(child, ignoreNulls, this)
 }
 
-case class FirstFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
-  def this() = this(null, null) // Required for serialization.
+object First {
+  def apply(child: Expression): First = First(child, ignoreNulls = false)
 
-  var result: Any = null
+  def apply(child: Expression, ignoreNulls: Boolean): First =
+    First(child, Literal.create(ignoreNulls, BooleanType))
+}
+
+case class FirstFunction(
+    expr: Expression,
+    ignoreNulls: Boolean,
+    base: AggregateExpression1)
+  extends AggregateFunction1 {
+
+  def this() = this(null, null.asInstanceOf[Boolean], null) // Required for serialization.
+
+  private[this] var result: Any = null
+
+  private[this] var valueSet: Boolean = false
 
   override def update(input: InternalRow): Unit = {
-    // We ignore null values.
-    if (result == null) {
-      result = expr.eval(input)
+    if (!valueSet) {
+      val value = expr.eval(input)
+      // When we have not set the result, we will set the result if we respect nulls
+      // (i.e. ignoreNulls is false), or we ignore nulls and the evaluated value is not null.
+      if (!ignoreNulls || (ignoreNulls && value != null)) {
+        result = value
+        valueSet = true
+      }
     }
   }
 
   override def eval(input: InternalRow): Any = result
 }
 
-case class Last(child: Expression) extends UnaryExpression with PartialAggregate1 {
+case class Last(
+    child: Expression,
+    ignoreNullsExpr: Expression)
+  extends UnaryExpression with PartialAggregate1 {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
+
   override def references: AttributeSet = child.references
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"LAST($child)"
+  override def toString: String = s"LAST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 
   override def asPartial: SplitEvaluation = {
-    val partialLast = Alias(Last(child), "PartialLast")()
+    val partialLast = Alias(Last(child, ignoreNulls), "PartialLast")()
     SplitEvaluation(
-      Last(partialLast.toAttribute),
+      Last(partialLast.toAttribute, ignoreNulls),
       partialLast :: Nil)
   }
-  override def newInstance(): LastFunction = new LastFunction(child, this)
+  override def newInstance(): LastFunction = new LastFunction(child, ignoreNulls, this)
 }
 
-case class LastFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
-  def this() = this(null, null) // Required for serialization.
+object Last {
+  def apply(child: Expression): Last = Last(child, ignoreNulls = false)
+
+  def apply(child: Expression, ignoreNulls: Boolean): Last =
+    Last(child, Literal.create(ignoreNulls, BooleanType))
+}
+
+case class LastFunction(
+    expr: Expression,
+    ignoreNulls: Boolean,
+    base: AggregateExpression1)
+  extends AggregateFunction1 {
+
+  def this() = this(null, null.asInstanceOf[Boolean], null) // Required for serialization.
 
   var result: Any = null
 
   override def update(input: InternalRow): Unit = {
     val value = expr.eval(input)
-    // We ignore null values.
-    if (value != null) {
+    if (!ignoreNulls || (ignoreNulls && value != null)) {
       result = value
     }
   }
 
   override def eval(input: InternalRow): Any = {
     result
+  }
+}
+
+// Compute standard deviation based on online algorithm specified here:
+// http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+abstract class StddevAgg1(child: Expression) extends UnaryExpression with PartialAggregate1 {
+  override def nullable: Boolean = true
+  override def dataType: DataType = DoubleType
+
+  def isSample: Boolean
+
+  override def asPartial: SplitEvaluation = {
+    val partialStd = Alias(ComputePartialStd(child), "PartialStddev")()
+    SplitEvaluation(MergePartialStd(partialStd.toAttribute, isSample), partialStd :: Nil)
+  }
+
+  override def newInstance(): StddevFunction = new StddevFunction(child, this, isSample)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function stddev")
+
+}
+
+// Compute the sample standard deviation of a column
+case class Stddev(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"STDDEV($child)"
+  override def isSample: Boolean = true
+}
+
+// Compute the population standard deviation of a column
+case class StddevPop(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"STDDEV_POP($child)"
+  override def isSample: Boolean = false
+}
+
+// Compute the sample standard deviation of a column
+case class StddevSamp(child: Expression) extends StddevAgg1(child) {
+
+  override def toString: String = s"STDDEV_SAMP($child)"
+  override def isSample: Boolean = true
+}
+
+case class ComputePartialStd(child: Expression) extends UnaryExpression with AggregateExpression1 {
+    def this() = this(null)
+
+    override def children: Seq[Expression] = child :: Nil
+    override def nullable: Boolean = false
+    override def dataType: DataType = ArrayType(DoubleType)
+    override def toString: String = s"computePartialStddev($child)"
+    override def newInstance(): ComputePartialStdFunction =
+      new ComputePartialStdFunction(child, this)
+}
+
+case class ComputePartialStdFunction (
+    expr: Expression,
+    base: AggregateExpression1
+) extends AggregateFunction1 {
+  def this() = this(null, null)  // Required for serialization
+
+  private val computeType = DoubleType
+  private val zero = Cast(Literal(0), computeType)
+  private var partialCount: Long = 0L
+
+  // the mean of data processed so far
+  private val partialAvg: MutableLiteral = MutableLiteral(zero.eval(null), computeType)
+
+  // update average based on this formula:
+  // avg = avg + (value - avg)/count
+  private def avgAddFunction (value: Literal): Expression = {
+    val delta = Subtract(Cast(value, computeType), partialAvg)
+    Add(partialAvg, Divide(delta, Cast(Literal(partialCount), computeType)))
+  }
+
+  // the sum of squares of difference from mean
+  private val partialMk: MutableLiteral = MutableLiteral(zero.eval(null), computeType)
+
+  // update sum of square of difference from mean based on following formula:
+  // Mk = Mk + (value - preAvg) * (value - updatedAvg)
+  private def mkAddFunction(value: Literal, prePartialAvg: MutableLiteral): Expression = {
+    val delta1 = Subtract(Cast(value, computeType), prePartialAvg)
+    val delta2 = Subtract(Cast(value, computeType), partialAvg)
+    Add(partialMk, Multiply(delta1, delta2))
+  }
+
+  override def update(input: InternalRow): Unit = {
+    val evaluatedExpr = expr.eval(input)
+    if (evaluatedExpr != null) {
+      val exprValue = Literal.create(evaluatedExpr, expr.dataType)
+      val prePartialAvg = partialAvg.copy()
+      partialCount += 1
+      partialAvg.update(avgAddFunction(exprValue), input)
+      partialMk.update(mkAddFunction(exprValue, prePartialAvg), input)
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    new GenericArrayData(Array(Cast(Literal(partialCount), computeType).eval(null),
+        partialAvg.eval(null),
+        partialMk.eval(null)))
+  }
+}
+
+case class MergePartialStd(
+    child: Expression,
+    isSample: Boolean
+) extends UnaryExpression with AggregateExpression1 {
+  def this() = this(null, false) // required for serialization
+
+  override def children: Seq[Expression] = child:: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = DoubleType
+  override def toString: String = s"MergePartialStd($child)"
+  override def newInstance(): MergePartialStdFunction = {
+    new MergePartialStdFunction(child, this, isSample)
+  }
+}
+
+case class MergePartialStdFunction(
+    expr: Expression,
+    base: AggregateExpression1,
+    isSample: Boolean
+) extends AggregateFunction1 {
+  def this() = this (null, null, false) // Required for serialization
+
+  private val computeType = DoubleType
+  private val zero = Cast(Literal(0), computeType)
+  private val combineCount = MutableLiteral(zero.eval(null), computeType)
+  private val combineAvg = MutableLiteral(zero.eval(null), computeType)
+  private val combineMk = MutableLiteral(zero.eval(null), computeType)
+
+  private def avgUpdateFunction(preCount: Expression,
+                                partialCount: Expression,
+                                partialAvg: Expression): Expression = {
+    Divide(Add(Multiply(combineAvg, preCount),
+               Multiply(partialAvg, partialCount)),
+           Add(preCount, partialCount))
+  }
+
+  override def update(input: InternalRow): Unit = {
+    val evaluatedExpr = expr.eval(input).asInstanceOf[ArrayData]
+
+    if (evaluatedExpr != null) {
+      val exprValue = evaluatedExpr.toArray(computeType)
+      val (partialCount, partialAvg, partialMk) =
+        (Literal.create(exprValue(0), computeType),
+         Literal.create(exprValue(1), computeType),
+         Literal.create(exprValue(2), computeType))
+
+      if (Cast(partialCount, LongType).eval(null).asInstanceOf[Long] > 0) {
+        val preCount = combineCount.copy()
+        combineCount.update(Add(combineCount, partialCount), input)
+
+        val preAvg = combineAvg.copy()
+        val avgDelta = Subtract(partialAvg, preAvg)
+        val mkDelta = Multiply(Multiply(avgDelta, avgDelta),
+                               Divide(Multiply(preCount, partialCount),
+                                      combineCount))
+
+        // update average based on following formula
+        // (combineAvg * preCount + partialAvg * partialCount) / (preCount + partialCount)
+        combineAvg.update(avgUpdateFunction(preCount, partialCount, partialAvg), input)
+
+        // update sum of square differences from mean based on following formula
+        // (combineMk + partialMk + (avgDelta * avgDelta) * (preCount * partialCount/combineCount)
+        combineMk.update(Add(combineMk, Add(partialMk, mkDelta)), input)
+      }
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val count: Long = Cast(combineCount, LongType).eval(null).asInstanceOf[Long]
+
+    if (count == 0) null
+    else if (count < 2) zero.eval(null)
+    else {
+      // when total count > 2
+      // stddev_samp = sqrt (combineMk/(combineCount -1))
+      // stddev_pop = sqrt (combineMk/combineCount)
+      val varCol = {
+        if (isSample) {
+          Divide(combineMk, Cast(Literal(count - 1), computeType))
+        }
+        else {
+          Divide(combineMk, Cast(Literal(count), computeType))
+        }
+      }
+      Sqrt(varCol).eval(null)
+    }
+  }
+}
+
+case class StddevFunction(
+    expr: Expression,
+    base: AggregateExpression1,
+    isSample: Boolean
+) extends AggregateFunction1 {
+
+  def this() = this(null, null, false) // Required for serialization
+
+  private val computeType = DoubleType
+  private var curCount: Long = 0L
+  private val zero = Cast(Literal(0), computeType)
+  private val curAvg = MutableLiteral(zero.eval(null), computeType)
+  private val curMk = MutableLiteral(zero.eval(null), computeType)
+
+  private def curAvgAddFunction(value: Literal): Expression = {
+    val delta = Subtract(Cast(value, computeType), curAvg)
+    Add(curAvg, Divide(delta, Cast(Literal(curCount), computeType)))
+  }
+  private def curMkAddFunction(value: Literal, preAvg: MutableLiteral): Expression = {
+    val delta1 = Subtract(Cast(value, computeType), preAvg)
+    val delta2 = Subtract(Cast(value, computeType), curAvg)
+    Add(curMk, Multiply(delta1, delta2))
+  }
+
+  override def update(input: InternalRow): Unit = {
+    val evaluatedExpr = expr.eval(input)
+    if (evaluatedExpr != null) {
+      val preAvg: MutableLiteral = curAvg.copy()
+      val exprValue = Literal.create(evaluatedExpr, expr.dataType)
+      curCount += 1L
+      curAvg.update(curAvgAddFunction(exprValue), input)
+      curMk.update(curMkAddFunction(exprValue, preAvg), input)
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    if (curCount == 0) null
+    else if (curCount < 2) zero.eval(null)
+    else {
+      // when total count > 2,
+      // stddev_samp = sqrt(curMk/(curCount - 1))
+      // stddev_pop = sqrt(curMk/curCount)
+      val varCol = {
+        if (isSample) {
+          Divide(curMk, Cast(Literal(curCount - 1), computeType))
+        }
+        else {
+          Divide(curMk, Cast(Literal(curCount), computeType))
+        }
+      }
+      Sqrt(varCol).eval(null)
+    }
   }
 }

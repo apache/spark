@@ -177,14 +177,11 @@ private[spark] class TaskSetManager(
 
   var emittedTaskSizeWarning = false
 
-  /**
-   * Add a task to all the pending-task lists that it should be on. If readding is set, we are
-   * re-adding the task so only include it in each list if it's not already there.
-   */
-  private def addPendingTask(index: Int, readding: Boolean = false) {
-    // Utility method that adds `index` to a list only if readding=false or it's not already there
+  /** Add a task to all the pending-task lists that it should be on. */
+  private def addPendingTask(index: Int) {
+    // Utility method that adds `index` to a list only if it's not already there
     def addTo(list: ArrayBuffer[Int]) {
-      if (!readding || !list.contains(index)) {
+      if (!list.contains(index)) {
         list += index
       }
     }
@@ -219,9 +216,7 @@ private[spark] class TaskSetManager(
       addTo(pendingTasksWithNoPrefs)
     }
 
-    if (!readding) {
-      allPendingTasks += index  // No point scanning this whole list to find the old task there
-    }
+    allPendingTasks += index  // No point scanning this whole list to find the old task there
   }
 
   /**
@@ -487,8 +482,8 @@ private[spark] class TaskSetManager(
           // a good proxy to task serialization time.
           // val timeTaken = clock.getTime() - startTime
           val taskName = s"task ${info.id} in stage ${taskSet.id}"
-          logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
-              taskName, taskId, host, taskLocality, serializedTask.limit))
+          logInfo(s"Starting $taskName (TID $taskId, $host, partition ${task.partitionId}," +
+            s"$taskLocality, ${serializedTask.limit} bytes)")
 
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
@@ -783,18 +778,6 @@ private[spark] class TaskSetManager(
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
   override def executorLost(execId: String, host: String, reason: ExecutorLossReason) {
-    logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
-
-    // Re-enqueue pending tasks for this host based on the status of the cluster. Note
-    // that it's okay if we add a task to the same queue twice (if it had multiple preferred
-    // locations), because dequeueTaskFromList will skip already-running tasks.
-    for (index <- getPendingTasksForExecutor(execId)) {
-      addPendingTask(index, readding = true)
-    }
-    for (index <- getPendingTasksForHost(host)) {
-      addPendingTask(index, readding = true)
-    }
-
     // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor

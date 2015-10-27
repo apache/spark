@@ -20,10 +20,12 @@ package org.apache.spark.sql
 import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
+import scala.reflect.runtime.universe._
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.catalyst.encoders.{ProductEncoder, Encoder}
 
 abstract class QueryTest extends PlanTest {
 
@@ -51,6 +53,12 @@ abstract class QueryTest extends PlanTest {
         assert(!outputs.contains(key), s"Failed for $df ($key existed in the result)")
       }
     }
+  }
+
+  protected def checkAnswer[T : Encoder](ds: => Dataset[T], expectedAnswer: T*): Unit = {
+    checkAnswer(
+      ds.toDF(),
+      sqlContext.createDataset(expectedAnswer).toDF().collect().toSeq)
   }
 
   /**
@@ -115,19 +123,26 @@ object QueryTest {
    */
   def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+
+    // We need to call prepareRow recursively to handle schemas with struct types.
+    def prepareRow(row: Row): Row = {
+      Row.fromSeq(row.toSeq.map {
+        case null => null
+        case d: java.math.BigDecimal => BigDecimal(d)
+        // Convert array to Seq for easy equality check.
+        case b: Array[_] => b.toSeq
+        case r: Row => prepareRow(r)
+        case o => o
+      })
+    }
+
     def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
       // Converts data to types that we can do equality comparison using Scala collections.
       // For BigDecimal type, the Scala type has a better definition of equality test (similar to
       // Java's java.math.BigDecimal.compareTo).
       // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
       // equality test.
-      val converted: Seq[Row] = answer.map { s =>
-        Row.fromSeq(s.toSeq.map {
-          case d: java.math.BigDecimal => BigDecimal(d)
-          case b: Array[Byte] => b.toSeq
-          case o => o
-        })
-      }
+      val converted: Seq[Row] = answer.map(prepareRow)
       if (!isSorted) converted.sortBy(_.toString()) else converted
     }
     val sparkAnswer = try df.collect().toSeq catch {

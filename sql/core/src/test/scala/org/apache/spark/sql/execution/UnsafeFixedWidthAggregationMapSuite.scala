@@ -23,12 +23,12 @@ import scala.util.{Try, Random}
 
 import org.scalatest.Matchers
 
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
-import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, TaskContextImpl, TaskContext, SparkFunSuite}
+import org.apache.spark.memory.{TaskMemoryManager, GrantEverythingMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -48,23 +48,22 @@ class UnsafeFixedWidthAggregationMapSuite
   private def emptyAggregationBuffer: InternalRow = InternalRow(0)
   private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
+  private var memoryManager: GrantEverythingMemoryManager = null
   private var taskMemoryManager: TaskMemoryManager = null
-  private var shuffleMemoryManager: TestShuffleMemoryManager = null
 
   def testWithMemoryLeakDetection(name: String)(f: => Unit) {
     def cleanup(): Unit = {
       if (taskMemoryManager != null) {
-        val leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask()
         assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0)
-        assert(leakedShuffleMemory === 0)
         taskMemoryManager = null
       }
       TaskContext.unset()
     }
 
     test(name) {
-      taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-      shuffleMemoryManager = new TestShuffleMemoryManager
+      val conf = new SparkConf().set("spark.unsafe.offHeap", "false")
+      memoryManager = new GrantEverythingMemoryManager(conf)
+      taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
 
       TaskContext.setTaskContext(new TaskContextImpl(
         stageId = 0,
@@ -109,7 +108,6 @@ class UnsafeFixedWidthAggregationMapSuite
       aggBufferSchema,
       groupKeySchema,
       taskMemoryManager,
-      shuffleMemoryManager,
       1024, // initial capacity,
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -124,7 +122,6 @@ class UnsafeFixedWidthAggregationMapSuite
       aggBufferSchema,
       groupKeySchema,
       taskMemoryManager,
-      shuffleMemoryManager,
       1024, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -152,7 +149,6 @@ class UnsafeFixedWidthAggregationMapSuite
       aggBufferSchema,
       groupKeySchema,
       taskMemoryManager,
-      shuffleMemoryManager,
       128, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -175,14 +171,13 @@ class UnsafeFixedWidthAggregationMapSuite
 
   testWithMemoryLeakDetection("test external sorting") {
     // Memory consumption in the beginning of the task.
-    val initialMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
+    val initialMemoryConsumption = taskMemoryManager.getMemoryConsumptionForThisTask()
 
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
       taskMemoryManager,
-      shuffleMemoryManager,
       128, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -199,9 +194,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
-      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
-        initialMemoryConsumption + 4096 * 16)
+      assert(taskMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.
@@ -215,7 +208,7 @@ class UnsafeFixedWidthAggregationMapSuite
       sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
 
       if ((i % 100) == 0) {
-        shuffleMemoryManager.markAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemory()
         sorter.closeCurrentPage()
       }
     }
@@ -239,7 +232,6 @@ class UnsafeFixedWidthAggregationMapSuite
       aggBufferSchema,
       groupKeySchema,
       taskMemoryManager,
-      shuffleMemoryManager,
       128, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -259,7 +251,7 @@ class UnsafeFixedWidthAggregationMapSuite
       sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
 
       if ((i % 100) == 0) {
-        shuffleMemoryManager.markAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemory()
         sorter.closeCurrentPage()
       }
     }
@@ -282,14 +274,13 @@ class UnsafeFixedWidthAggregationMapSuite
   testWithMemoryLeakDetection("test external sorting with empty records") {
 
     // Memory consumption in the beginning of the task.
-    val initialMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
+    val initialMemoryConsumption = taskMemoryManager.getMemoryConsumptionForThisTask()
 
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       StructType(Nil),
       StructType(Nil),
       taskMemoryManager,
-      shuffleMemoryManager,
       128, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -304,9 +295,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
-      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
-        initialMemoryConsumption + 4096 * 16)
+      assert(taskMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.
@@ -314,7 +303,7 @@ class UnsafeFixedWidthAggregationMapSuite
       sorter.insertKV(UnsafeRow.createFromByteArray(0, 0), UnsafeRow.createFromByteArray(0, 0))
 
       if ((i % 100) == 0) {
-        shuffleMemoryManager.markAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemory()
         sorter.closeCurrentPage()
       }
     }
@@ -325,7 +314,7 @@ class UnsafeFixedWidthAggregationMapSuite
       // At here, we also test if copy is correct.
       iter.getKey.copy()
       iter.getValue.copy()
-      count += 1;
+      count += 1
     }
 
     // 1 record was from the map and 4096 records were explicitly inserted.
@@ -333,4 +322,42 @@ class UnsafeFixedWidthAggregationMapSuite
 
     map.free()
   }
+
+  testWithMemoryLeakDetection("convert to external sorter under memory pressure (SPARK-10474)") {
+    val pageSize = 4096
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      taskMemoryManager,
+      128, // initial capacity
+      pageSize,
+      false // disable perf metrics
+    )
+
+    val rand = new Random(42)
+    for (i <- 1 to 100) {
+      val str = rand.nextString(1024)
+      val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+      buf.setInt(0, str.length)
+    }
+    // Simulate running out of space
+    memoryManager.markExecutionAsOutOfMemory()
+    val str = rand.nextString(1024)
+    val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+    assert(buf == null)
+
+    // Convert the map into a sorter. This used to fail before the fix for SPARK-10474
+    // because we would try to acquire space for the in-memory sorter pointer array before
+    // actually releasing the pages despite having spilled all of them.
+    var sorter: UnsafeKVExternalSorter = null
+    try {
+      sorter = map.destructAndCreateExternalSorter()
+    } finally {
+      if (sorter != null) {
+        sorter.cleanupResources()
+      }
+    }
+  }
+
 }

@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution
 import java.util.NoSuchElementException
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{ExpressionDescription, Expression, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
@@ -54,29 +53,27 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
    * The `execute()` method of all the physical command classes should reference `sideEffectResult`
    * so that the command can be executed eagerly right after the command query is created.
    */
-  protected[sql] lazy val sideEffectResult: Seq[Row] = cmd.run(sqlContext)
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    cmd.run(sqlContext).map(converter(_).asInstanceOf[InternalRow])
+  }
 
   override def output: Seq[Attribute] = cmd.output
 
   override def children: Seq[SparkPlan] = Nil
 
-  override def executeCollect(): Array[Row] = sideEffectResult.toArray
+  override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
+  override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val convert = CatalystTypeConverters.createToCatalystConverter(schema)
-    val converted = sideEffectResult.map(convert(_).asInstanceOf[InternalRow])
-    sqlContext.sparkContext.parallelize(converted, 1)
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
 
   override def argString: String = cmd.toString
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
@@ -102,6 +99,15 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
           sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
           Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
         }
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.EXTERNAL_SORT, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.EXTERNAL_SORT} is deprecated and will be ignored. " +
+            s"External sort will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.EXTERNAL_SORT, "true"))
       }
       (keyValueOutput, runFunc)
 
@@ -170,10 +176,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
  *
  * Note that this command takes in a logical plan, runs the optimizer on the logical plan
  * (but do NOT actually execute it).
- *
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
@@ -193,10 +196,7 @@ case class ExplainCommand(
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class CacheTableCommand(
     tableName: String,
     plan: Option[LogicalPlan],
@@ -221,10 +221,6 @@ case class CacheTableCommand(
 }
 
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -236,10 +232,8 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 }
 
 /**
- * :: DeveloperApi ::
  * Clear all cached data from the in-memory cache.
  */
-@DeveloperApi
 case object ClearCacheCommand extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -250,10 +244,7 @@ case object ClearCacheCommand extends RunnableCommand {
   override def output: Seq[Attribute] = Seq.empty
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class DescribeCommand(
     child: SparkPlan,
     override val output: Seq[Attribute],
@@ -276,9 +267,7 @@ case class DescribeCommand(
  * {{{
  *    SHOW TABLES [IN databaseName]
  * }}}
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.

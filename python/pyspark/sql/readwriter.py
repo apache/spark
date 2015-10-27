@@ -116,6 +116,10 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+        >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
+        ...     'python/test_support/sql/people1.json'])
+        >>> df.dtypes
+        [('age', 'bigint'), ('aka', 'string'), ('name', 'string')]
         """
         if format is not None:
             self.format(format)
@@ -123,7 +127,15 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            return self._df(self._jreader.load(path))
+            if type(path) == list:
+                paths = path
+                gateway = self._sqlContext._sc._gateway
+                jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
+                for i in range(0, len(paths)):
+                    jpaths[i] = paths[i]
+                return self._df(self._jreader.load(jpaths))
+            else:
+                return self._df(self._jreader.load(path))
         else:
             return self._df(self._jreader.load())
 

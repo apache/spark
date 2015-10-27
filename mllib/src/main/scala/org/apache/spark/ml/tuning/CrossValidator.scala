@@ -142,6 +142,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.2.0") override val uid: String)
 /**
  * :: Experimental ::
  * Model from k-fold cross validation.
+ *
+ * @param bestModel The best model selected from k-fold cross validation.
+ * @param avgMetrics Average cross-validation metrics for each paramMap in
+ *                   [[estimatorParamMaps]], in the corresponding order.
  */
 @Experimental
 class CrossValidatorModel private[ml] (
