@@ -513,3 +513,42 @@ case class MapGroups[K, T, U](
   override def missingInput: AttributeSet = AttributeSet.empty
 }
 
+/** Factory for constructing new `CoGroup` nodes. */
+object CoGroup {
+  def apply[K : Encoder, Left : Encoder, Right : Encoder, R : Encoder](
+      func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+      leftGroup: Seq[Attribute],
+      rightGroup: Seq[Attribute],
+      left: LogicalPlan,
+      right: LogicalPlan): CoGroup[K, Left, Right, R] = {
+    CoGroup(
+      func,
+      encoderFor[K],
+      encoderFor[Left],
+      encoderFor[Right],
+      encoderFor[R],
+      encoderFor[R].schema.toAttributes,
+      leftGroup,
+      rightGroup,
+      left,
+      right)
+  }
+}
+
+/**
+ * A relation produced by applying `func` to each grouping key and associated values from left and
+ * right children.
+ */
+case class CoGroup[K, Left, Right, R](
+    func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+    kEncoder: ExpressionEncoder[K],
+    leftEnc: ExpressionEncoder[Left],
+    rightEnc: ExpressionEncoder[Right],
+    rEncoder: ExpressionEncoder[R],
+    output: Seq[Attribute],
+    leftGroup: Seq[Attribute],
+    rightGroup: Seq[Attribute],
+    left: LogicalPlan,
+    right: LogicalPlan) extends BinaryNode {
+  override def missingInput: AttributeSet = AttributeSet.empty
+}
