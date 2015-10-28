@@ -27,6 +27,32 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TaskMemoryManagerSuite {
 
+  class TestMemoryConsumer extends MemoryConsumer {
+    volatile long used = 0L;
+
+    TestMemoryConsumer(TaskMemoryManager memoryManager) {
+      super(memoryManager);
+    }
+
+    @Override
+    public long spill(long size, MemoryConsumer trigger) throws IOException {
+      releaseMemory(used);
+      long released = used;
+      used = 0;
+      return released;
+    }
+
+    void use(long size) throws IOException {
+      acquireMemory(size);
+      used += size;
+    }
+
+    void free(long size) throws IOException {
+      releaseMemory(size);
+      used -= size;
+    }
+  }
+
   @Test
   public void leakedPageMemoryIsDetected() throws IOException {
     final TaskMemoryManager manager = new TaskMemoryManager(
@@ -56,6 +82,48 @@ public class TaskMemoryManagerSuite {
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
     Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
     Assert.assertEquals(64, manager.getOffsetInPage(encodedAddress));
+  }
+
+  @Test
+  public void cooperativeSpilling() throws IOException {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
+    c1.use(100);
+    assert(c1.used == 100);
+    c2.use(100);
+    assert(c2.used == 100);
+    assert(c1.used == 0);  // spilled
+    c1.use(100);
+    assert(c1.used == 100);
+    assert(c2.used == 0);  // spilled
+
+    c1.use(50);
+    assert(c1.used == 50);  // spilled
+    assert(c2.used == 0);
+    c2.use(50);
+    assert(c1.used == 50);
+    assert(c2.used == 50);
+
+    c1.use(100);
+    assert(c1.used == 100);
+    assert(c2.used == 0);  // spilled
+
+    c1.free(20);
+    assert(c1.used == 80);
+    c2.use(10);
+    assert(c1.used == 80);
+    assert(c2.used == 10);
+    c2.use(100);
+    assert(c2.used == 100);
+    assert(c1.used == 0);  // spilled
+
+    c1.free(0);
+    c2.free(100);
+    assert(manager.cleanUpAllAllocatedMemory() == 0);
   }
 
 }

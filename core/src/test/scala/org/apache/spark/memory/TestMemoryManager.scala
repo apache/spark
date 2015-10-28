@@ -35,7 +35,9 @@ class TestMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 
       numBytes
     } else {
       _executionMemoryUsed += available
-      available
+      val grant = available
+      available = 0
+      grant
     }
   }
   override def acquireStorageMemory(
@@ -64,4 +66,5 @@ class TestMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 
   def limit(avail: Long): Unit = {
     available = avail
   }
+
 }

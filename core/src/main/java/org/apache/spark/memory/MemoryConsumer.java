@@ -41,17 +41,21 @@ public abstract class MemoryConsumer {
   }
 
   /**
-   * Force spill during during.
+   * Force spill during building.
    *
    * For testing.
    */
-  public long spill() throws IOException {
-    return spill(Long.MAX_VALUE, this);
+  public void spill() throws IOException {
+    spill(Long.MAX_VALUE, this);
   }
 
   /**
    * Spill some data to disk to release memory, which will be called by TaskMemoryManager
    * when there is not enough memory for the task.
+   *
+   * This should be implemented by subclass.
+   *
+   * Note: In order to avoid possible deadlock, should not call acquireMemory() from spill().
    *
    * @param size the amount of memory should be released
    * @param trigger the MemoryConsumer that trigger this spilling
@@ -70,12 +74,13 @@ public abstract class MemoryConsumer {
   protected void acquireMemory(long size) throws IOException {
     long got = memoryManager.acquireExecutionMemory(size, this);
     if (got < size) {
-      throw new IOException("Could not acquire " + size + " bytes of memory " + got);
+      memoryManager.showMemoryUsage();
+      throw new IOException("Could not acquire " + size + " bytes of memory, got " + got);
     }
   }
 
   /**
-   * Release amount of memory.
+   * Release `size` bytes memory.
    */
   protected void releaseMemory(long size) {
     memoryManager.releaseExecutionMemory(size, this);
@@ -91,10 +96,13 @@ public abstract class MemoryConsumer {
   protected MemoryBlock allocatePage(long required) throws IOException {
     MemoryBlock page = memoryManager.allocatePage(Math.max(pageSize, required), this);
     if (page == null || page.size() < required) {
+      long got = 0;
       if (page != null) {
+        got = page.size();
         freePage(page);
       }
-      throw new IOException("Unable to acquire " + required + " bytes of memory");
+      memoryManager.showMemoryUsage();
+      throw new IOException("Unable to acquire " + required + " bytes of memory, got " + got);
     }
     return page;
   }

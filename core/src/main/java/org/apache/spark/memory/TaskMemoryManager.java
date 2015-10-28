@@ -126,37 +126,42 @@ public class TaskMemoryManager {
    *
    * @return number of bytes successfully granted (<= N).
    */
-  public long acquireExecutionMemory(long size, MemoryConsumer consumer) throws IOException {
-    assert(size >= 0);
+  public long acquireExecutionMemory(long required, MemoryConsumer consumer) throws IOException {
+    assert(required >= 0);
     synchronized (this) {
-      long got = memoryManager.acquireExecutionMemory(size, taskAttemptId);
+      long got = memoryManager.acquireExecutionMemory(required, taskAttemptId);
 
-      // call spill() on itself to release some memory
-      if (got < size && consumer != null) {
-        consumer.spill(size - got, consumer);
-        got += memoryManager.acquireExecutionMemory(size - got, taskAttemptId);
-      }
-
-      if (got < size) {
-        long needed = size - got;
-        // call spill() on other consumers to release memory
-        for (MemoryConsumer c: consumers.keySet()) {
-          if (c != null && c != consumer) {
-            needed -= c.spill(size - got, consumer);
-            if (needed < 0) {
-              break;
+      if (got < required) {
+        // consumers could be modified by spill(), so we should have a copy here.
+        MemoryConsumer[] cs = new MemoryConsumer[consumers.size()];
+        consumers.keySet().toArray(cs);
+        // Call spill() on other consumers to release memory
+        for (MemoryConsumer c: cs) {
+          if (c != null) {
+            long released = c.spill(required - got, consumer);
+            logger.info("released " + Utils.bytesToString(released) + " from " + consumer);
+            if (released >= 0) {
+              got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
+              if (got >= required) {
+                break;
+              }
             }
           }
         }
-        got += memoryManager.acquireExecutionMemory(size - got, taskAttemptId);
       }
 
-      long old = 0L;
-      if (consumers.containsKey(consumer)) {
-        old = consumers.get(consumer);
+      // Update the accounting, even consumer is null
+      if (got > 0) {
+        long old = 0L;
+        if (consumers.containsKey(consumer)) {
+          old = consumers.get(consumer);
+        }
+        consumers.put(consumer, got + old);
       }
-      consumers.put(consumer, got + old);
 
+      if (logger.isTraceEnabled()) {
+        logger.trace("Acquire {} for {}", Utils.bytesToString(got), consumer);
+      }
       return got;
     }
   }
@@ -176,29 +181,45 @@ public class TaskMemoryManager {
           consumers.put(consumer, old - size);
         } else {
           if (old < size) {
+            String msg = "Release " + size + " bytes memory (more than acquired " + old + ") for "
+              + consumer;
+            logger.warn(msg);
             if (Utils.isTesting()) {
-              Platform.throwException(
-                new SparkException("Release more memory " + size + "than acquired " + old + " for "
-                  + consumer));
-            } else {
-              logger.warn("Release more memory " + size + " than acquired " + old + " for "
-                + consumer);
+              Platform.throwException(new SparkException(msg));
             }
           }
           consumers.remove(consumer);
         }
       } else {
+        String msg = "Release " + size + " bytes memory for non-existent " + consumer;
+        logger.warn(msg);
         if (Utils.isTesting()) {
-          Platform.throwException(
-            new SparkException("Release memory " + size + " for not existed " + consumer));
-        } else {
-          logger.warn("Release memory " + size + " for not existed " + consumer);
+          Platform.throwException(new SparkException(msg));
         }
       }
-      memoryManager.releaseExecutionMemory(size, taskAttemptId);
+    }
+
+    if (logger.isTraceEnabled()) {
+      logger.trace("Release {} from {}", Utils.bytesToString(size), consumer);
+    }
+    memoryManager.releaseExecutionMemory(size, taskAttemptId);
+  }
+
+  /**
+   * Dump the memory usage of all consumers.
+   */
+  public void showMemoryUsage() {
+    logger.info("Memory used in task " + taskAttemptId);
+    synchronized (this) {
+      for (MemoryConsumer c: consumers.keySet()) {
+        logger.info("acquired by " + c + ": " + Utils.bytesToString(consumers.get(c)));
+      }
     }
   }
 
+  /**
+   * Return the page size in bytes.
+   */
   public long pageSizeBytes() {
     return memoryManager.pageSizeBytes();
   }
@@ -224,6 +245,7 @@ public class TaskMemoryManager {
     synchronized (this) {
       pageNumber = allocatedPages.nextClearBit(0);
       if (pageNumber >= PAGE_TABLE_SIZE) {
+        releaseExecutionMemory(acquired, consumer);
         throw new IllegalStateException(
           "Have already allocated a maximum of " + PAGE_TABLE_SIZE + " pages");
       }
@@ -340,6 +362,7 @@ public class TaskMemoryManager {
         freePage(page, null);
       }
     }
+    consumers.clear();
 
     freedBytes += memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
 
