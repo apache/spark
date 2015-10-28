@@ -1185,7 +1185,7 @@ class DataFrame private[sql](
     val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false,
-      qualifier = None, names.map(UnresolvedAttribute(_)), logicalPlan)
+      qualifier = None, generatorOutput = Nil, logicalPlan)
   }
 
   /**
@@ -1205,7 +1205,6 @@ class DataFrame private[sql](
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     // TODO handle the metadata?
     val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable, Some(attr.name)) }
-    val names = attributes.map(_.name)
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
@@ -1214,7 +1213,7 @@ class DataFrame private[sql](
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
     Generate(generator, join = true, outer = false,
-      qualifier = None, names.map(UnresolvedAttribute(_)), logicalPlan)
+      qualifier = None, generatorOutput = Nil, logicalPlan)
   }
 
   /////////////////////////////////////////////////////////////////////////////
