@@ -177,14 +177,11 @@ private[spark] class TaskSetManager(
 
   var emittedTaskSizeWarning = false
 
-  /**
-   * Add a task to all the pending-task lists that it should be on. If readding is set, we are
-   * re-adding the task so only include it in each list if it's not already there.
-   */
-  private def addPendingTask(index: Int, readding: Boolean = false) {
-    // Utility method that adds `index` to a list only if readding=false or it's not already there
+  /** Add a task to all the pending-task lists that it should be on. */
+  private def addPendingTask(index: Int) {
+    // Utility method that adds `index` to a list only if it's not already there
     def addTo(list: ArrayBuffer[Int]) {
-      if (!readding || !list.contains(index)) {
+      if (!list.contains(index)) {
         list += index
       }
     }
@@ -219,9 +216,7 @@ private[spark] class TaskSetManager(
       addTo(pendingTasksWithNoPrefs)
     }
 
-    if (!readding) {
-      allPendingTasks += index  // No point scanning this whole list to find the old task there
-    }
+    allPendingTasks += index  // No point scanning this whole list to find the old task there
   }
 
   /**
@@ -709,9 +704,10 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
-      case e: ExecutorLostFailure if e.isNormalExit =>
+      case e: ExecutorLostFailure if !e.exitCausedByApp =>
         logInfo(s"Task $tid failed because while it was being computed, its executor" +
-          s" exited normally. Not marking the task as failed.")
+          "exited for a reason unrelated to the task. Not counting this failure towards the " +
+          "maximum number of failures for the task.")
         None
 
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
@@ -729,7 +725,7 @@ private[spark] class TaskSetManager(
     addPendingTask(index)
     if (!isZombie && state != TaskState.KILLED
         && reason.isInstanceOf[TaskFailedReason]
-        && reason.asInstanceOf[TaskFailedReason].shouldEventuallyFailJob) {
+        && reason.asInstanceOf[TaskFailedReason].countTowardsTaskFailures) {
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
@@ -783,18 +779,6 @@ private[spark] class TaskSetManager(
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
   override def executorLost(execId: String, host: String, reason: ExecutorLossReason) {
-    logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
-
-    // Re-enqueue pending tasks for this host based on the status of the cluster. Note
-    // that it's okay if we add a task to the same queue twice (if it had multiple preferred
-    // locations), because dequeueTaskFromList will skip already-running tasks.
-    for (index <- getPendingTasksForExecutor(execId)) {
-      addPendingTask(index, readding = true)
-    }
-    for (index <- getPendingTasksForHost(host)) {
-      addPendingTask(index, readding = true)
-    }
-
     // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
@@ -814,11 +798,12 @@ private[spark] class TaskSetManager(
       }
     }
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      val isNormalExit: Boolean = reason match {
-        case exited: ExecutorExited => exited.isNormalExit
-        case _ => false
+      val exitCausedByApp: Boolean = reason match {
+        case exited: ExecutorExited => exited.exitCausedByApp
+        case _ => true
       }
-      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
+      handleFailedTask(
+        tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()
