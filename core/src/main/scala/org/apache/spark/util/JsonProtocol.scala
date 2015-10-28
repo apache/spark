@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.io.IOException
 import java.util.{Properties, UUID}
 
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -544,6 +545,7 @@ private[spark] object JsonProtocol {
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
       case `sqlExecutionStart` => sqlExecutionStartFromJson(json)
       case `sqlExecutionEnd` => sqlExecutionEndFromJson(json)
+      case other => throw new IOException(s"Unknown Event $other")
     }
   }
 
