@@ -79,9 +79,8 @@ private[mllib] object PMMLTreeModelUtils {
   }
 
   /** Build a pmml tree stub given the root mllib node. */
-  private def buildStub(
-                         rootDTNode: Node,
-                         algo: Algo): (PMMLNode, List[MiningField], List[DataField], List[PMMLValue]) = {
+  private def buildStub(rootDTNode: Node, algo: Algo):
+    (PMMLNode, List[MiningField], List[DataField], List[PMMLValue]) = {
 
     val miningFields = mutable.MutableList[MiningField]()
     val dataFields = mutable.HashMap[String, DataField]()
