@@ -18,8 +18,9 @@
 package org.apache.spark.streaming.scheduler
 
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.{TimeoutException, ConcurrentHashMap, LinkedBlockingQueue}
 
+import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -266,8 +267,15 @@ private[streaming] class ReceivedBlockTracker(
       val promise = Promise[Boolean]()
       walWriteStatusMap.put(record, promise)
       walWriteQueue.offer(record)
-      Await.result(promise.future.recover { case _ => false }(batchWriterThreadPool),
-        WAL_WRITE_STATUS_TIMEOUT.milliseconds)
+      try {
+        Await.result(promise.future.recover { case _ => false}(batchWriterThreadPool),
+          WAL_WRITE_STATUS_TIMEOUT.milliseconds)
+      } catch {
+        case e: TimeoutException =>
+          logWarning(s"Write to Write Ahead Log promise timed out after $WAL_WRITE_STATUS_TIMEOUT " +
+            s"millis for record: $record")
+          false
+      }
     } else {
       writeAheadLogOption.foreach { logManager =>
         logTrace(s"Writing record: $record")
@@ -332,9 +340,7 @@ private[streaming] class ReceivedBlockTracker(
       val buffer = new ArrayBuffer[ReceivedBlockTrackerLogEvent]()
       try {
         buffer.append(walWriteQueue.take())
-        while (!walWriteQueue.isEmpty) {
-          buffer.append(walWriteQueue.poll())
-        }
+        walWriteQueue.drainTo(buffer)
       } catch {
         case _: InterruptedException =>
           logWarning("Batch Write Ahead Log Writer queue interrupted.")
