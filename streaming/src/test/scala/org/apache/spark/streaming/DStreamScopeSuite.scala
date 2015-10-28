@@ -187,7 +187,7 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
     assert(foreachBaseScope.get.name === "foreachRDD")
 
     val rddScopes = generatedRDDs.map { _.scope }
-    assertDefined(rddScopes:_*)
+    assertDefined(rddScopes: _*)
     rddScopes.zipWithIndex.foreach { case (rddScope, idx) =>
       assert(rddScope.get.name === "reduceByKey")
       assert(rddScope.get.parent.isDefined)
