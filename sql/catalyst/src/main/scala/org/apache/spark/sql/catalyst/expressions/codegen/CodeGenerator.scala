@@ -92,6 +92,34 @@ class CodeGenContext {
     addedFunctions += ((funcName, funcCode))
   }
 
+  /**
+   * Holds expressions that are equivalent. Used to perform subexpression elimination
+   * during codegen.
+   *
+   * For expressions that appear more than once, generate additional code to prevent
+   * recomputing the value.
+   *
+   * For example, consider two exprsesion generated from this SQL statement:
+   *  SELECT (col1 + col2), (col1 + col2) / col3.
+   *
+   *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
+   *  be evaluated once.
+   */
+  val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+
+  // State used for subexpression elimination.
+  case class SubExprEliminationState(
+    val isLoaded: String, code: GeneratedExpressionCode, val fnName: String, val dt: DataType)
+
+  // All the subexpr elimination states. There is one of these states for each group of common
+  // subexpressions.
+  val subExprEliminationStates: mutable.ArrayBuffer[SubExprEliminationState] =
+    mutable.ArrayBuffer.empty[SubExprEliminationState]
+
+  // Foreach expression that is participating in subexpression elimination, the state to use.
+  val subExprEliminationExprs: mutable.HashMap[Expression, SubExprEliminationState] =
+    mutable.HashMap[Expression, SubExprEliminationState]()
+
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -317,6 +345,77 @@ class CodeGenContext {
       functions.map(name => s"$name($row);").mkString("\n")
     }
   }
+
+  /**
+   * Checks and sets up the state and codegen for subexpression elimination. This finds the
+   * common subexpresses, generates the functions that evaluate those expressions and populates
+   * the mapping of common subexpressions to the generated functions.
+   */
+  private def subexpressionElimination(expressions: Seq[Expression]) = {
+    // Add each expression tree and compute the common subexpressions.
+    expressions.foreach(equivalentExpressions.addExprTree(_, true))
+
+    // Get all the exprs that appear at least twice and set up the state for subexpression
+    // elimination.
+    val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
+    commonExprs.foreach(e => {
+      val expr = e.head
+      val isLoaded = freshName("isLoaded")
+      val isNull = freshName("isNull")
+      val primitive = freshName("primitive")
+      val fnName = freshName("evalExpr")
+
+      // Generate the code for this expression tree and wrap it in a function.
+      val code = expr.gen(this)
+      val fn =
+        s"""
+           |private void $fnName(InternalRow ${INPUT_ROW}) {
+           |  if (!$isLoaded) {
+           |    ${code.code.trim}
+           |    $isLoaded = true;
+           |    $isNull = ${code.isNull};
+           |    $primitive = ${code.value};
+           |  }
+           |}
+           """.stripMargin
+      code.code = fn
+      code.isNull = isNull
+      code.value = primitive
+
+      addNewFunction(fnName, fn)
+
+      // Add a state and a mapping of the common subexpressions that are associate with this
+      // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
+      // when it is code generated. This decision should be a cost based one.
+      //
+      // The cost of doing subexpression elimination is:
+      //   1. Extra function call, although this is probably *good* as the JIT can decide to
+      //      inline or not.
+      //   2. Extra branch to check isLoaded. This branch is likely to be predicted correctly
+      //      very often. The reason it is not loaded is because of a prior branch.
+      //   3. Extra store into isLoaded.
+      // The benefit doing subexpression elimination is:
+      //   1. Running the expression logic. Even for a simple expression, it is likely more than 3
+      //      above.
+      //   2. Less code.
+      // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
+      // at least two nodes) as the cost of doing it is expected to be low.
+      val state = SubExprEliminationState(isLoaded, code, fnName, expr.dataType)
+      subExprEliminationStates += state
+      e.foreach(subExprEliminationExprs.put(_, state))
+    })
+  }
+
+  /**
+   * Generates code for expressions. If doSubexpressionElimination is true, subexpression
+   * elimination will be performed. Subexpression elimination assumes that the code will for each
+   * expression will be combined in the `expressions` order.
+   */
+  def generateExpressions(expressions: Seq[Expression],
+      doSubexpressionElimination: Boolean = false): Seq[GeneratedExpressionCode] = {
+    if (doSubexpressionElimination) subexpressionElimination(expressions)
+    expressions.map(e => e.gen(this))
+  }
 }
 
 /**
@@ -341,7 +440,18 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def declareMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
-    }.mkString("\n")
+    }.mkString("\n") + "\n" +
+    // Maintain the loaded value and isNull as member variables. This is necessary if the codegen
+    // function is split across multiple functions.
+    // TODO: maintaining this as a local variable probably allows the compiler to do better
+    // optimizations.
+    ctx.subExprEliminationStates.map { s => {
+      s"""
+         |  private boolean ${s.isLoaded} = false;
+         |  private boolean ${s.code.isNull};
+         |  private ${ctx.javaType(s.dt)} ${s.code.value} = ${ctx.defaultValue(s.dt)};
+       """.stripMargin
+    }}.mkString("\n").trim
   }
 
   protected def initMutableStates(ctx: CodeGenContext): String = {
@@ -349,7 +459,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   }
 
   protected def declareAddedFunctions(ctx: CodeGenContext): String = {
-    ctx.addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
+    ctx.addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n").trim
   }
 
   /**

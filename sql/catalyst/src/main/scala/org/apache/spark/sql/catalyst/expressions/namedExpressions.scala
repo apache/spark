@@ -203,6 +203,10 @@ case class AttributeReference(
     case _ => false
   }
 
+  override def semanticHash(): Int = {
+   this.exprId.hashCode()
+  }
+
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17

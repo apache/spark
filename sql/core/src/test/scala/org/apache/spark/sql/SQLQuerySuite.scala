@@ -2001,4 +2001,43 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
     }
   }
+
+  test("Common subexpression elimination") {
+    // select from a table to prevent constant folding.
+    val df = sql("SELECT a, b from testData2 limit 1")
+    checkAnswer(df, Row(1, 1))
+
+    checkAnswer(df.selectExpr("a + 1", "a + 1"), Row(2, 2))
+    checkAnswer(df.selectExpr("a + 1", "a + 1 + 1"), Row(2, 3))
+
+    // This does not work because the expressions get grouped like (a + a) + 1
+    checkAnswer(df.selectExpr("a + 1", "a + a + 1"), Row(2, 3))
+    checkAnswer(df.selectExpr("a + 1", "a + (a + 1)"), Row(2, 3))
+
+    // Identity udf that tracks the number of times it is called.
+    val countAcc = sparkContext.accumulator(0, "CallCount")
+    sqlContext.udf.register("testUdf", (x: Int) => {
+      countAcc.++=(1)
+      x
+    })
+
+    // Evaluates df, verifying it is equal to the expectedResult and the accumulator's value
+    // is correct.
+    def verifyCallCount(df: DataFrame, expectedResult: Row, expectedCount: Int): Unit = {
+      countAcc.setValue(0)
+      checkAnswer(df, expectedResult)
+      assert(countAcc.value == expectedCount)
+    }
+
+    verifyCallCount(df.selectExpr("testUdf(a)"), Row(1), 1)
+    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
+    verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a + 1)"), Row(2, 2), 1)
+    verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a)"), Row(2, 1), 2)
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(a + 1)", "testUdf(a + 1)"), Row(4, 2), 1)
+
+    // Would be nice if semantic equals for `+` understood commutative
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 2)
+  }
 }
