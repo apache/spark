@@ -2179,6 +2179,13 @@ setMethod("rank",
             column(jc)
           })
 
+# Expose rank() in the R base package
+setMethod("rank",
+          signature(x = "ANY"),
+          function(x, ...) {
+            base::rank(x, ...)
+          })
+
 #' rowNumber
 #'
 #' Window function: returns a sequential number starting at 1 within a window partition.

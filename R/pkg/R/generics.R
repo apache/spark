@@ -904,7 +904,7 @@ setGeneric("randn", function(seed) { standardGeneric("randn") })
 
 #' @rdname rank
 #' @export
-setGeneric("rank", function(x) { standardGeneric("rank") })
+setGeneric("rank", function(x, ...) { standardGeneric("rank") })
 
 #' @rdname regexp_extract
 #' @export

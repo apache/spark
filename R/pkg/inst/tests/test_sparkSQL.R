@@ -833,6 +833,10 @@ test_that("column functions", {
   c13 <- cumeDist() + ntile(1)
   c14 <- denseRank() + percentRank() + rank() + rowNumber()
 
+  # Test if base::rank() is exposed
+  expect_equal(class(rank())[[1]], "Column")
+  expect_equal(rank(1:3), as.numeric(c(1:3)))
+
   df <- jsonFile(sqlContext, jsonPath)
   df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
   expect_equal(collect(df2)[[2, 1]], TRUE)
