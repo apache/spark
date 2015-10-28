@@ -55,8 +55,8 @@ class MultivariateGaussian (
   
   /**
    * Compute distribution dependent constants:
-   *    rootSigmaInv = D^(-1/2)^ * U, where sigma = U * D * U.t
-   *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^) 
+   *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
+   *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
   private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
   
@@ -98,14 +98,14 @@ class MultivariateGaussian (
    * that 
    * 
    *    sigma = U * D * U.t
-   *    inv(Sigma) = U * inv(D) * U.t 
-   *               = (D^{-1/2}^ * U).t * (D^{-1/2}^ * U)
-   * 
+   *    inv(Sigma) = U * inv(D) * U.t
+   *               = (D^{-1/2}^ * U.t).t * (D^{-1/2}^ * U.t)
+   *
    * and thus
-   * 
-   *    -0.5 * (x-mu).t * inv(Sigma) * (x-mu) = -0.5 * norm(D^{-1/2}^ * U  * (x-mu))^2^
-   *  
-   * To guard against singular covariance matrices, this method computes both the 
+   *
+   *    -0.5 * (x-mu).t * inv(Sigma) * (x-mu) = -0.5 * norm(D^{-1/2}^ * U.t  * (x-mu))^2^
+   *
+   * To guard against singular covariance matrices, this method computes both the
    * pseudo-determinant and the pseudo-inverse (Moore-Penrose).  Singular values are considered
    * to be non-zero only if they exceed a tolerance based on machine precision, matrix size, and
    * relation to the maximum singular value (same tolerance used by, e.g., Octave).
@@ -124,8 +124,8 @@ class MultivariateGaussian (
       // calculate the root-pseudo-inverse of the diagonal matrix of singular values 
       // by inverting the square root of all non-zero values
       val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
-    
-      (pinvS * u, -0.5 * (mu.size * math.log(2.0 * math.Pi) + logPseudoDetSigma))
+
+      (pinvS * u.t, -0.5 * (mu.size * math.log(2.0 * math.Pi) + logPseudoDetSigma))
     } catch {
       case uex: UnsupportedOperationException =>
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")
