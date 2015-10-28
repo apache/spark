@@ -161,7 +161,15 @@ class FramedSerializer(Serializer):
         obj = stream.read(length)
         if len(obj) < length:
             raise EOFError
-        return self.loads(obj)
+
+        try:
+            result = self.loads(obj)
+        except TypeError as e:
+            print >>sys.stderr, "Error while decoding"
+            print >>sys.stderr, obj.encode('hex')
+            raise
+
+        return result
 
     def dumps(self, obj):
         """

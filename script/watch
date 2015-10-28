@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -x
+set -e
+
+build/sbt clean assembly
+export SPARK_PREPEND_CLASSES=true
+build/sbt ~compile

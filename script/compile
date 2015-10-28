@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+set -x
+set -e
+
+FWDIR="$(cd `dirname $0`/..; pwd)"
+GIT_SHA=$(git rev-parse HEAD)
+GIT_BRANCH=$(git name-rev HEAD)
+GIT_DESC=$(git describe HEAD)
+GIT_HUMAN=$(git log --pretty=format:"%s (%an)" HEAD...HEAD~1)
+
+# Compile spark jars into dist folder
+export LOCAL_SBT_DIR=1
+export SBT_HOME=$FWDIR/sbt
+export SCALA_HOME=$HOME/.sbt/boot/scala-2.10.4
+
+# Find JAVA_HOME on OS X and Linux
+uname=$(uname)
+if [[ "$uname" == "Darwin" ]]; then
+  JAVA_HOME=$(/usr/libexec/java_home -v 1.7)
+else
+  JAVA_HOME=/usr/lib/jvm/default-java/
+fi
+export JAVA_HOME=$JAVA_HOME
+
+./make-distribution.sh --skip-java-test $(cat SHOPIFY_HADOOP_OPTIONS)
+
+if [ "$?" != "0" ] || [ -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
+  echo "Failed to make spark distro using sbt."
+  exit 1
+fi
+
+# Remove everything not in dist or conf
+find * -maxdepth 0 -name 'dist' -o -name 'conf' -prune -o -exec rm -rf '{}' ';'
+
+# Copy everything out of dist that doesn't exist already
+mv -n dist/* .
+echo $GIT_SHA > ./GIT_SHA
+echo $GIT_BRANCH >> ./GIT_DESC
+echo $GIT_DESC >> ./GIT_DESC
+echo $GIT_HUMAN >> ./GIT_DESC
+
+# Tar the local dir and upload it to s3 for public (passwordless) consumption
+# Packserv also builds this tar after the fact but we need the tar to be accessible everywhere
+# and it has nothing sensitive in it, so we just upload it so we don't need to store the
+# much more sensitive packserv password everywhere we want to fetch spark.
+S3_TAR=/tmp/spark-$GIT_SHA.tgz
+tar -c -z --exclude=.git -f $S3_TAR .
+ls -lA /etc
+s3cmd --config=/etc/packserv-spark-s3cmd.cfg --acl-public put $S3_TAR s3://shopify-sparks/
+rm $S3_TAR
