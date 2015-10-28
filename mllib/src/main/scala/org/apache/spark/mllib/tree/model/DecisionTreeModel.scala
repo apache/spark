@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
 @Since("1.0.0")
 class DecisionTreeModel @Since("1.0.0") (
     @Since("1.0.0") val topNode: Node,
-    @Since("1.0.0") val algo: Algo) extends Serializable with Saveable with PMMLExportable{
+    @Since("1.0.0") val algo: Algo) extends Serializable with Saveable with PMMLExportable {
 
   /**
    * Predict values for a single data point using the model trained.

@@ -27,20 +27,16 @@ import org.apache.spark.mllib.tree.model.DecisionTreeModel
 private[mllib] class DecisionTreePMMLModelExport(model: DecisionTreeModel) extends PMMLModelExport {
 
   val ModelName = "decision-tree"
-
   populateDecisionTreePMMLModel(model)
 
   private def populateDecisionTreePMMLModel(model: DecisionTreeModel): Unit = {
-
     pmml.getHeader.setDescription("decision tree")
-
 
     val (treeModel, dataFields) = PMMLTreeModelUtils.toPMMLTree(model, ModelName)
 
     val dataDictionary = new DataDictionary()
-      .withDataFields(dataFields.asJava)
-      .withNumberOfFields(dataFields.length)
-
+    .withDataFields(dataFields.asJava)
+    .withNumberOfFields(dataFields.length)
 
     pmml.withModels(treeModel)
     pmml.withDataDictionary(dataDictionary)

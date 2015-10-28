@@ -19,18 +19,16 @@ package org.apache.spark.mllib.pmml.export
 
 import scala.collection.JavaConverters._
 
-import org.dmg.pmml._
-import org.dmg.pmml.CompoundPredicate.BooleanOperator
-import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node, Predict, Split}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.dmg.pmml._
+import org.dmg.pmml.CompoundPredicate.BooleanOperator
+import org.scalatest.PrivateMethodTester
 
-class DecisionTreePMMLModelExportSuite extends SparkFunSuite
-with MLlibTestSparkContext
-with PrivateMethodTester {
+class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSparkContext
+  with PrivateMethodTester {
 
   test("PMML export should work as expected for DecisionTree model with regressor") {
 
@@ -67,7 +65,7 @@ with PrivateMethodTester {
     assert(pmmlRootNode.getNodes != null && pmmlRootNode.getNodes.size() == 2)
     assert(pmmlRootNode.getId === "1")
     // validate the root node predicate is populated as expected
-    val predicate = pmmlRootNode.getPredicate()
+    val predicate = pmmlRootNode.getPredicate
     assert(predicate != null)
     assert(predicate.isInstanceOf[True])
 
@@ -83,7 +81,7 @@ with PrivateMethodTester {
     assert(predicate1.asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicate1.asInstanceOf[SimplePredicate].getValue === "10.0")
     assert(predicate1.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator
-          .LESS_OR_EQUAL)
+    .LESS_OR_EQUAL)
 
     // validate the right node is populated as expected
     val pmmlRightNode = pmmlRootNode.getNodes.get(1)
@@ -98,7 +96,7 @@ with PrivateMethodTester {
     assert(predicate2.asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicate2.asInstanceOf[SimplePredicate].getValue === "10.0")
     assert(predicate2.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator
-      .GREATER_THAN)
+    .GREATER_THAN)
 
     // validate the mining schema is populated as expected
     assert(pmmlModelForDT.getMiningSchema != null)
@@ -158,7 +156,7 @@ with PrivateMethodTester {
 
     // validate the pmml root node predicate is a true predicate since its root node
 
-    val predicate = pmmlRootNode.getPredicate()
+    val predicate = pmmlRootNode.getPredicate
     assert(predicate != null)
     assert(predicate.isInstanceOf[True])
 
@@ -181,13 +179,13 @@ with PrivateMethodTester {
     assert(predicatesList1.get(0).asInstanceOf[SimplePredicate].getField.getValue === "field_200")
     assert(predicatesList1.get(0).asInstanceOf[SimplePredicate].getValue === "10.0")
     assert(predicatesList1.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
-      .Operator.EQUAL)
+    .Operator.EQUAL)
 
     assert(predicatesList1.get(1).isInstanceOf[SimplePredicate])
     assert(predicatesList1.get(1).asInstanceOf[SimplePredicate].getField.getValue === "field_200")
     assert(predicatesList1.get(1).asInstanceOf[SimplePredicate].getValue === "20.0")
     assert(predicatesList1.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
-      .Operator.EQUAL)
+    .Operator.EQUAL)
 
     // validate level 1 right node is populated properly
     val pmmlRightNode_L1 = pmmlRootNode.getNodes.get(1)
@@ -201,9 +199,6 @@ with PrivateMethodTester {
     assert(predicateR1 != null)
     assert(predicateR1.isInstanceOf[True])
 
-
-
-
     // validate level 2 left node is populated as expected
     val pmmlLeftNode_L2 = pmmlLeftNode_L1.getNodes.get(0)
     assert(pmmlLeftNode_L2 != null)
@@ -211,7 +206,7 @@ with PrivateMethodTester {
     assert(pmmlLeftNode_L2.getId === "4")
     assert(pmmlLeftNode_L2.getScore == "1.0")
     // validate predicate for level 2 split is populated as expected
-    val predicateL2 = pmmlLeftNode_L2.getPredicate()
+    val predicateL2 = pmmlLeftNode_L2.getPredicate
     assert(predicateL2 != null)
     assert(predicateL2.isInstanceOf[CompoundPredicate])
     val cPredicate2 = predicateL2.asInstanceOf[CompoundPredicate]
@@ -223,13 +218,13 @@ with PrivateMethodTester {
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getValue === "1.0")
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
-      .Operator.EQUAL)
+    .Operator.EQUAL)
 
     assert(predicatesList2.get(1).isInstanceOf[SimplePredicate])
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getValue === "4.0")
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
-      .Operator.EQUAL)
+    .Operator.EQUAL)
 
     // validate level 2 right node is populated as expected
     val pmmlRightNode_L2 = pmmlLeftNode_L1.getNodes.get(1)
@@ -247,7 +242,7 @@ with PrivateMethodTester {
     assert(miningSchema.getMiningFields != null && miningSchema.getMiningFields.size() == 3)
 
     val miningFields = miningSchema.getMiningFields.asScala.toList
-      .sortBy(miningField => miningField.getName.getValue)
+    .sortBy(miningField => miningField.getName.getValue)
     assert(miningFields(0).getName.getValue == "class")
     assert(miningFields(0).getUsageType == FieldUsageType.PREDICTED)
 
@@ -290,7 +285,7 @@ with PrivateMethodTester {
   }
 
   test("TreeModelUtils should return distinct datafields and miningfields for continuous " +
-    "features") {
+  "features") {
 
     // instantiate MLLIb DecisionTreeModel with Classification algo ,5 nodes, 2 levels
     val mlLeftNode_L3 = new Node(6, new Predict(1.0, 0.5), 0.2, true, None, None, None, None)
@@ -326,7 +321,7 @@ with PrivateMethodTester {
     assert(miningSchema.getMiningFields != null && miningSchema.getMiningFields.size() == 3)
 
     val miningFields = miningSchema.getMiningFields.asScala.toList
-     // .sortBy(miningField => miningField.getName.getValue)
+    // .sortBy(miningField => miningField.getName.getValue)
     assert(miningFields(0).getName.getValue == "field_100")
     assert(miningFields(1).getName.getValue == "field_200")
     assert(miningFields(2).getName.getValue == "target")
@@ -354,7 +349,7 @@ with PrivateMethodTester {
   }
 
   test("TreeModelUtils getPredicate should return simple predicate for node with split with " +
-    "continuous feature type") {
+  "continuous feature type") {
     val split = new Split(100, 10.0, FeatureType.Continuous, Nil)
     val field = Some(FieldName.create("field_100"))
     val node = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split), None, None, None)
@@ -364,7 +359,7 @@ with PrivateMethodTester {
     assert(predicateL.isInstanceOf[SimplePredicate])
     assert(predicateL.asInstanceOf[SimplePredicate].getField.getValue == "field_100")
     assert(predicateL.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator
-      .LESS_OR_EQUAL)
+    .LESS_OR_EQUAL)
     assert(predicateL.asInstanceOf[SimplePredicate].getValue == "10.0")
 
     val predicateR = PMMLTreeModelUtils invokePrivate proxy(node, field, false)
@@ -372,12 +367,12 @@ with PrivateMethodTester {
     assert(predicateR.isInstanceOf[SimplePredicate])
     assert(predicateR.asInstanceOf[SimplePredicate].getField.getValue == "field_100")
     assert(predicateR.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator
-      .GREATER_THAN)
+    .GREATER_THAN)
     assert(predicateR.asInstanceOf[SimplePredicate].getValue == "10.0")
   }
 
   test("TreeModelUtils getPredicate should work as expected for node with split with catogorical " +
-    "feature") {
+  "feature") {
     val split1 = new Split(100, 10.0, FeatureType.Categorical, List(1))
     val node1 = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split1), None, None, None)
     val proxy = PrivateMethod[Predicate]('getPredicate)
@@ -388,7 +383,7 @@ with PrivateMethodTester {
     assert(predicateL1.isInstanceOf[SimplePredicate])
     assert(predicateL1.asInstanceOf[SimplePredicate].getField.getValue == "field_100")
     assert(predicateL1.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator
-      .EQUAL)
+    .EQUAL)
     assert(predicateL1.asInstanceOf[SimplePredicate].getValue == "1.0")
 
     val predicateR1 = PMMLTreeModelUtils invokePrivate proxy(node1, field, false)
@@ -408,13 +403,13 @@ with PrivateMethodTester {
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getValue === "1.0")
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
-      .Operator.EQUAL)
+    .Operator.EQUAL)
 
     assert(predicatesList2.get(1).isInstanceOf[SimplePredicate])
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getValue === "2.0")
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
-      .Operator.EQUAL)
+    .Operator.EQUAL)
 
     val predicateR2 = PMMLTreeModelUtils invokePrivate proxy(node2, field, false)
     assert(predicateR2 != null && predicateR2.isInstanceOf[True])
