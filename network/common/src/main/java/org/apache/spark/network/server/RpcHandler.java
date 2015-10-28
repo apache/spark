@@ -54,4 +54,11 @@ public abstract class RpcHandler {
   public void connectionTerminated(TransportClient client) { }
 
   public void exceptionCaught(Throwable cause, TransportClient client) { }
+
+  /**
+    * Whether to close idle connections
+    */
+  public boolean isCloseIdleConnections() {
+    return false;
+  }
 }

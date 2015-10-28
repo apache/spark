@@ -157,4 +157,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       }
     );
   }
+
+  public boolean isCloseIdleConnections() {
+    return rpcHandler.isCloseIdleConnections();
+  }
 }

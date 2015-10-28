@@ -129,4 +129,8 @@ class SaslRpcHandler extends RpcHandler {
     delegate.exceptionCaught(cause, client);
   }
 
+  @Override
+  public boolean isCloseIdleConnections() {
+    return delegate.isCloseIdleConnections();
+  }
 }
