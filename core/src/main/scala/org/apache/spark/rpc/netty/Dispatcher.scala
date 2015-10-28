@@ -17,7 +17,7 @@
 
 package org.apache.spark.rpc.netty
 
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.{ThreadPoolExecutor, ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -29,6 +29,9 @@ import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
 
+/**
+ * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
+ */
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
   private class EndpointData(
@@ -38,17 +41,21 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val inbox = new Inbox(ref, endpoint)
   }
 
-  private val endpoints = new ConcurrentHashMap[String, EndpointData]()
-  private val endpointRefs = new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]()
+  private val endpoints = new ConcurrentHashMap[String, EndpointData]
+  private val endpointRefs = new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
 
   // Track the receivers whose inboxes may contain messages.
-  private val receivers = new LinkedBlockingQueue[EndpointData]()
+  private val receivers = new LinkedBlockingQueue[EndpointData]
 
+  /**
+   * True if the dispatcher has been stopped. Once stopped, all messages posted will be bounced
+   * immediately.
+   */
   @GuardedBy("this")
   private var stopped = false
 
   def registerRpcEndpoint(name: String, endpoint: RpcEndpoint): NettyRpcEndpointRef = {
-    val addr = new NettyRpcAddress(nettyEnv.address.host, nettyEnv.address.port, name)
+    val addr = new RpcEndpointAddress(nettyEnv.address.host, nettyEnv.address.port, name)
     val endpointRef = new NettyRpcEndpointRef(nettyEnv.conf, addr, nettyEnv)
     synchronized {
       if (stopped) {
@@ -59,7 +66,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
       }
       val data = endpoints.get(name)
       endpointRefs.put(data.endpoint, data.ref)
-      receivers.put(data)
+      receivers.offer(data)  // for the OnStart message
     }
     endpointRef
   }
@@ -73,7 +80,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val data = endpoints.remove(name)
     if (data != null) {
       data.inbox.stop()
-      receivers.put(data)
+      receivers.offer(data)  // for the OnStop message
     }
     // Don't clean `endpointRefs` here because it's possible that some messages are being processed
     // now and they can use `getRpcEndpointRef`. So `endpointRefs` will be cleaned in Inbox via
@@ -91,19 +98,23 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
   }
 
   /**
-   * Send a message to all registered [[RpcEndpoint]]s.
-   * @param message
+   * Send a message to all registered [[RpcEndpoint]]s in this process.
+   *
+   * This can be used to make network events known to all end points (e.g. "a new node connected").
    */
-  def broadcastMessage(message: InboxMessage): Unit = {
+  def postToAll(message: InboxMessage): Unit = {
     val iter = endpoints.keySet().iterator()
     while (iter.hasNext) {
       val name = iter.next
-      postMessageToInbox(name, (_) => message,
-        () => { logWarning(s"Drop ${message} because ${name} has been stopped") })
+      postMessage(
+        name,
+        _ => message,
+        () => { logWarning(s"Drop $message because $name has been stopped") })
     }
   }
 
-  def postMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
+  /** Posts a message sent by a remote endpoint. */
+  def postRemoteMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
     def createMessage(sender: NettyRpcEndpointRef): InboxMessage = {
       val rpcCallContext =
         new RemoteNettyRpcCallContext(
@@ -116,10 +127,11 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
         new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
     }
 
-    postMessageToInbox(message.receiver.name, createMessage, onEndpointStopped)
+    postMessage(message.receiver.name, createMessage, onEndpointStopped)
   }
 
-  def postMessage(message: RequestMessage, p: Promise[Any]): Unit = {
+  /** Posts a message sent by a local endpoint. */
+  def postLocalMessage(message: RequestMessage, p: Promise[Any]): Unit = {
     def createMessage(sender: NettyRpcEndpointRef): InboxMessage = {
       val rpcCallContext =
         new LocalNettyRpcCallContext(sender, message.senderAddress, message.needReply, p)
@@ -131,37 +143,34 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
         new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
     }
 
-    postMessageToInbox(message.receiver.name, createMessage, onEndpointStopped)
+    postMessage(message.receiver.name, createMessage, onEndpointStopped)
   }
 
-  private def postMessageToInbox(
+  /**
+   * Posts a message to a specific endpoint.
+   *
+   * @param endpointName name of the endpoint.
+   * @param createMessageFn function to create the message.
+   * @param callbackIfStopped callback function if the endpoint is stopped.
+   */
+  private def postMessage(
       endpointName: String,
       createMessageFn: NettyRpcEndpointRef => InboxMessage,
-      onStopped: () => Unit): Unit = {
-    val shouldCallOnStop =
-      synchronized {
-        val data = endpoints.get(endpointName)
-        if (stopped || data == null) {
-          true
-        } else {
-          data.inbox.post(createMessageFn(data.ref))
-          receivers.put(data)
-          false
-        }
+      callbackIfStopped: () => Unit): Unit = {
+    val shouldCallOnStop = synchronized {
+      val data = endpoints.get(endpointName)
+      if (stopped || data == null) {
+        true
+      } else {
+        data.inbox.post(createMessageFn(data.ref))
+        receivers.offer(data)
+        false
       }
+    }
     if (shouldCallOnStop) {
       // We don't need to call `onStop` in the `synchronized` block
-      onStopped()
+      callbackIfStopped()
     }
-  }
-
-  private val parallelism = nettyEnv.conf.getInt("spark.rpc.netty.dispatcher.parallelism",
-    Runtime.getRuntime.availableProcessors())
-
-  private val executor = ThreadUtils.newDaemonFixedThreadPool(parallelism, "dispatcher-event-loop")
-
-  (0 until parallelism) foreach { _ =>
-    executor.execute(new MessageLoop)
   }
 
   def stop(): Unit = {
@@ -174,12 +183,12 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     // Stop all endpoints. This will queue all endpoints for processing by the message loops.
     endpoints.keySet().asScala.foreach(unregisterRpcEndpoint)
     // Enqueue a message that tells the message loops to stop.
-    receivers.put(PoisonEndpoint)
-    executor.shutdown()
+    receivers.offer(PoisonPill)
+    threadpool.shutdown()
   }
 
   def awaitTermination(): Unit = {
-    executor.awaitTermination(Long.MaxValue, TimeUnit.MILLISECONDS)
+    threadpool.awaitTermination(Long.MaxValue, TimeUnit.MILLISECONDS)
   }
 
   /**
@@ -189,15 +198,27 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     endpoints.containsKey(name)
   }
 
+  /** Thread pool used for dispatching messages. */
+  private val threadpool: ThreadPoolExecutor = {
+    val numThreads = nettyEnv.conf.getInt("spark.rpc.netty.dispatcher.numThreads",
+      Runtime.getRuntime.availableProcessors())
+    val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop")
+    for (i <- 0 until numThreads) {
+      pool.execute(new MessageLoop)
+    }
+    pool
+  }
+
+  /** Message loop used for dispatching messages. */
   private class MessageLoop extends Runnable {
     override def run(): Unit = {
       try {
         while (true) {
           try {
             val data = receivers.take()
-            if (data == PoisonEndpoint) {
-              // Put PoisonEndpoint back so that other MessageLoops can see it.
-              receivers.put(PoisonEndpoint)
+            if (data == PoisonPill) {
+              // Put PoisonPill back so that other MessageLoops can see it.
+              receivers.offer(PoisonPill)
               return
             }
             data.inbox.process(Dispatcher.this)
@@ -211,8 +232,6 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     }
   }
 
-  /**
-   * A poison endpoint that indicates MessageLoop should exit its loop.
-   */
-  private val PoisonEndpoint = new EndpointData(null, null, null)
+  /** A poison endpoint that indicates MessageLoop should exit its message loop. */
+  private val PoisonPill = new EndpointData(null, null, null)
 }

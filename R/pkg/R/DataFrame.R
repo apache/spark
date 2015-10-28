@@ -1414,9 +1414,10 @@ setMethod("where",
 #' @param x A Spark DataFrame
 #' @param y A Spark DataFrame
 #' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
-#' Column expression. If joinExpr is omitted, join() wil perform a Cartesian join
+#' Column expression. If joinExpr is omitted, join() will perform a Cartesian join
 #' @param joinType The type of join to perform. The following join types are available:
-#' 'inner', 'outer', 'left_outer', 'right_outer', 'semijoin'. The default joinType is "inner".
+#' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
+#' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
 #' @return A DataFrame containing the result of the join operation.
 #' @rdname join
 #' @name join
@@ -1441,26 +1442,162 @@ setMethod("join",
               if (is.null(joinType)) {
                 sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
               } else {
-                if (joinType %in% c("inner", "outer", "left_outer", "right_outer", "semijoin")) {
+                if (joinType %in% c("inner", "outer", "full", "fullouter",
+                    "leftouter", "left_outer", "left",
+                    "rightouter", "right_outer", "right", "leftsemi")) {
+                  joinType <- gsub("_", "", joinType)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                       "'inner', 'outer', 'left_outer', 'right_outer', 'semijoin'")
+                      "'inner', 'outer', 'full', 'fullouter', 'leftouter', 'left_outer', 'left',
+                      'rightouter', 'right_outer', 'right', 'leftsemi'")
                 }
               }
             }
             dataFrame(sdf)
           })
 
-#' @rdname merge
+#'
 #' @name merge
 #' @aliases join
+#' @title Merges two data frames
+#' @param x the first data frame to be joined
+#' @param y the second data frame to be joined
+#' @param by a character vector specifying the join columns. If by is not
+#'   specified, the common column names in \code{x} and \code{y} will be used.
+#' @param by.x a character vector specifying the joining columns for x.
+#' @param by.y a character vector specifying the joining columns for y.
+#' @param all.x a boolean value indicating whether all the rows in x should
+#'              be including in the join
+#' @param all.y a boolean value indicating whether all the rows in y should
+#'              be including in the join
+#' @param sort a logical argument indicating whether the resulting columns should be sorted
+#' @details  If all.x and all.y are set to FALSE, a natural join will be returned. If
+#'   all.x is set to TRUE and all.y is set to FALSE, a left outer join will
+#'   be returned. If all.x is set to FALSE and all.y is set to TRUE, a right
+#'   outer join will be returned. If all.x and all.y are set to TRUE, a full
+#'   outer join will be returned.
+#' @rdname merge
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlContext, path)
+#' df2 <- jsonFile(sqlContext, path2)
+#' merge(df1, df2) # Performs a Cartesian
+#' merge(df1, df2, by = "col1") # Performs an inner join based on expression
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.y = TRUE)
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE)
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE, all.y = TRUE)
+#' merge(df1, df2, by.x = "col1", by.y = "col2", all = TRUE, sort = FALSE)
+#' merge(df1, df2, by = "col1", all = TRUE, suffixes = c("-X", "-Y"))
+#' }
 setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
-          function(x, y, joinExpr = NULL, joinType = NULL, ...) {
-            join(x, y, joinExpr, joinType)
+          function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
+                   all = FALSE, all.x = all, all.y = all,
+                   sort = TRUE, suffixes = c("_x","_y"), ... ) {
+
+            if (length(suffixes) != 2) {
+              stop("suffixes must have length 2")
+            }
+
+            # join type is identified based on the values of all, all.x and all.y
+            # default join type is inner, according to R it should be natural but since it
+            # is not supported in spark inner join is used
+            joinType <- "inner"
+            if (all || (all.x && all.y)) {
+              joinType <- "outer"
+            } else if (all.x) {
+              joinType <- "left_outer"
+            } else if (all.y) {
+              joinType <- "right_outer"
+            }
+
+            # join expression is based on by.x, by.y if both by.x and by.y are not missing
+            # or on by, if by.x or by.y are missing or have different lengths
+            if (length(by.x) > 0 && length(by.x) == length(by.y)) {
+              joinX <- by.x
+              joinY <- by.y
+            } else if (length(by) > 0) {
+              # if join columns have the same name for both dataframes,
+              # they are used in join expression
+              joinX <- by
+              joinY <- by
+            } else {
+              # if by or both by.x and by.y have length 0, use Cartesian Product
+              joinRes <- join(x, y)
+              return (joinRes)
+            }
+
+            # sets alias for making colnames unique in dataframes 'x' and 'y'
+            colsX <- generateAliasesForIntersectedCols(x, by, suffixes[1])
+            colsY <- generateAliasesForIntersectedCols(y, by, suffixes[2])
+
+            # selects columns with their aliases from dataframes
+            # in case same column names are present in both data frames
+            xsel <- select(x, colsX)
+            ysel <- select(y, colsY)
+
+            # generates join conditions and adds them into a list
+            # it also considers alias names of the columns while generating join conditions
+            joinColumns <- lapply(seq_len(length(joinX)), function(i) {
+              colX <- joinX[[i]]
+              colY <- joinY[[i]]
+
+              if (colX %in% by) {
+                colX <- paste(colX, suffixes[1], sep = "")
+              }
+              if (colY %in% by) {
+                colY <- paste(colY, suffixes[2], sep = "")
+              }
+
+              colX <- getColumn(xsel, colX)
+              colY <- getColumn(ysel, colY)
+
+              colX == colY
+            })
+
+            # concatenates join columns with '&' and executes join
+            joinExpr <- Reduce("&", joinColumns)
+            joinRes <- join(xsel, ysel, joinExpr, joinType)
+
+            # sorts the result by 'by' columns if sort = TRUE
+            if (sort && length(by) > 0) {
+              colNameWithSuffix <- paste(by, suffixes[2], sep = "")
+              joinRes <- do.call("arrange", c(joinRes, colNameWithSuffix, decreasing = FALSE))
+            }
+
+            joinRes
           })
 
+#' 
+#' Creates a list of columns by replacing the intersected ones with aliases.
+#' The name of the alias column is formed by concatanating the original column name and a suffix.
+#'
+#' @param x a DataFrame on which the
+#' @param intersectedColNames a list of intersected column names
+#' @param suffix a suffix for the column name
+#' @return list of columns
+#'
+generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
+  allColNames <- names(x)
+  # sets alias for making colnames unique in dataframe 'x'
+  cols <- lapply(allColNames, function(colName) {
+    col <- getColumn(x, colName)
+    if (colName %in% intersectedColNames) {
+      newJoin <- paste(colName, suffix, sep = "")
+      if (newJoin %in% allColNames){
+        stop ("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
+          "Please use different suffixes for the intersected columns.")
+      }
+      col <- alias(col, newJoin)
+    }
+    col
+  })
+  cols
+}
 
 #' UnionAll
 #'
@@ -1567,18 +1704,17 @@ setMethod("except",
 #' spark.sql.sources.default will be used.
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when
-#' data already exists in the data source. There are four modes:
-#'  append: Contents of this DataFrame are expected to be appended to existing data.
-#'  overwrite: Existing data is expected to be overwritten by the contents of
-#     this DataFrame.
-#'  error: An exception is expected to be thrown.
+#' data already exists in the data source. There are four modes: \cr
+#'  append: Contents of this DataFrame are expected to be appended to existing data. \cr
+#'  overwrite: Existing data is expected to be overwritten by the contents of this DataFrame. \cr
+#'  error: An exception is expected to be thrown. \cr
 #'  ignore: The save operation is expected to not save the contents of the DataFrame
-#     and to not change the existing data.
+#'     and to not change the existing data. \cr
 #'
 #' @param df A SparkSQL DataFrame
 #' @param path A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore'
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
 #'
 #' @rdname write.df
 #' @name write.df
@@ -1591,6 +1727,7 @@ setMethod("except",
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlContext, path)
 #' write.df(df, "myfile", "parquet", "overwrite")
+#' saveDF(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
 #' }
 setMethod("write.df",
           signature(df = "DataFrame", path = "character"),
@@ -1632,18 +1769,17 @@ setMethod("saveDF",
 #' spark.sql.sources.default will be used.
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when
-#' data already exists in the data source. There are four modes:
-#'  append: Contents of this DataFrame are expected to be appended to existing data.
-#'  overwrite: Existing data is expected to be overwritten by the contents of
-#     this DataFrame.
-#'  error: An exception is expected to be thrown.
+#' data already exists in the data source. There are four modes: \cr
+#'  append: Contents of this DataFrame are expected to be appended to existing data. \cr
+#'  overwrite: Existing data is expected to be overwritten by the contents of this DataFrame. \cr
+#'  error: An exception is expected to be thrown. \cr
 #'  ignore: The save operation is expected to not save the contents of the DataFrame
-#     and to not change the existing data.
+#'     and to not change the existing data. \cr
 #'
 #' @param df A SparkSQL DataFrame
 #' @param tableName A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore'
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
 #'
 #' @rdname saveAsTable
 #' @name saveAsTable
@@ -1826,17 +1962,15 @@ setMethod("fillna",
               if (length(colNames) == 0 || !all(colNames != "")) {
                 stop("value should be an a named list with each name being a column name.")
               }
-
-              # Convert to the named list to an environment to be passed to JVM
-              valueMap <- new.env()
-              for (col in colNames) {
-                # Check each item in the named list is of valid type
-                v <- value[[col]]
+              # Check each item in the named list is of valid type
+              lapply(value, function(v) {
                 if (!(class(v) %in% c("integer", "numeric", "character"))) {
                   stop("Each item in value should be an integer, numeric or charactor.")
                 }
-                valueMap[[col]] <- v
-              }
+              })
+
+              # Convert to the named list to an environment to be passed to JVM
+              valueMap <- convertNamedListToEnv(value)
 
               # When value is a named list, caller is expected not to pass in cols
               if (!is.null(cols)) {
@@ -1880,4 +2014,34 @@ setMethod("as.data.frame",
               stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
             }
             collect(x)
+          })
+
+#' The specified DataFrame is attached to the R search path. This means that
+#' the DataFrame is searched by R when evaluating a variable, so columns in
+#' the DataFrame can be accessed by simply giving their names.
+#'
+#' @rdname attach
+#' @title Attach DataFrame to R search path
+#' @param what (DataFrame) The DataFrame to attach
+#' @param pos (integer) Specify position in search() where to attach.
+#' @param name (character) Name to use for the attached DataFrame. Names
+#'   starting with package: are reserved for library.
+#' @param warn.conflicts (logical) If TRUE, warnings are printed about conflicts
+#' from attaching the database, unless that DataFrame contains an object
+#' @examples
+#' \dontrun{
+#' attach(irisDf)
+#' summary(Sepal_Width)
+#' }
+#' @seealso \link{detach}
+setMethod("attach",
+          signature(what = "DataFrame"),
+          function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
+            cols <- columns(what)
+            stopifnot(length(cols) > 0)
+            newEnv <- new.env()
+            for (i in 1:length(cols)) {
+              assign(x = cols[i], value = what[, cols[i]], envir = newEnv)
+            }
+            attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
