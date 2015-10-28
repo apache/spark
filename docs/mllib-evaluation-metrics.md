@@ -141,7 +141,7 @@ precision.foreach { case (t, p) =>
 }
 
 // Recall by threshold
-val recall = metrics.precisionByThreshold
+val recall = metrics.recallByThreshold
 recall.foreach { case (t, r) =>
     println(s"Threshold: $t, Recall: $r")
 }
