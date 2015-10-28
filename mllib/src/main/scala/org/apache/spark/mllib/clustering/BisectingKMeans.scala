@@ -380,7 +380,7 @@ private[clustering] object BisectingKMeans {
     var totalStd = Double.MaxValue
     var oldTotalStd = Double.MaxValue
     var relativeError = Double.MaxValue
-    while (subIter < maxIterations && relativeError > 10e-4) {
+    while (subIter < maxIterations && relativeError > 1e-4) {
       // calculate summary of each cluster
       val eachStats = dividableData.mapPartitions { iter =>
         val map = mutable.Map.empty[Long, (BV[Double], Double, BV[Double])]
