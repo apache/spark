@@ -300,6 +300,9 @@ object HiveTypeCoercion {
       case Stddev(e @ StringType()) => Stddev(Cast(e, DoubleType))
       case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
       case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
+      case Variance(e @ StringType()) => Variance(Cast(e, DoubleType))
+      case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
+      case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
     }
   }
 
