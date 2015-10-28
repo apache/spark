@@ -273,6 +273,7 @@ class CliTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
+        app = create_app()
         app.config['TESTING'] = True
         self.parser = cli.get_parser()
         self.dagbag = models.DagBag(
