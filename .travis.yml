@@ -25,6 +25,7 @@ matrix:
 cache:
   directories:
     - $HOME/.wheelhouse/
+    - $HOME/.cache/
 install:
   - pip install --upgrade pip
   - pip install tox
