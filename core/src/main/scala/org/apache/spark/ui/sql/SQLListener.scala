@@ -224,6 +224,7 @@ private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Log
             }
           }
         }
+      case _ => //ignore
     }
   }
 
