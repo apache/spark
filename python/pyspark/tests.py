@@ -416,10 +416,10 @@ class AddFileTests(PySparkTestCase):
                           lambda: sc._loadClass("sparkR.test.hello"))
         # Load the new jar
         path = os.path.join(SPARK_HOME, "./R/pkg/inst/test_support/sparktestjar_2.10-1.0.jar")
-        sc.addJar(path)
-        self.assertTrue(self._jsc.sc().addedJars().toString().find("sparktestjar") != -1)
+        self.sc.addJar(path)
+        self.assertTrue(self.sc._jsc.sc().addedJars().toString().find("sparktestjar") != -1)
         # Try and load a different one of the classes
-        cls = sc._loadClass("sparkR.test.basicFunction")
+        cls = self.sc._loadClass("sparkR.test.basicFunction")
 
     def test_add_py_file_locally(self):
         # To ensure that we're actually testing addPyFile's effects, check that
