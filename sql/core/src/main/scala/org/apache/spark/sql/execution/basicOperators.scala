@@ -390,3 +390,44 @@ case class MapGroups[K, T, U](
     }
   }
 }
+
+/**
+ * Co-groups the data from left and right children, and calls the function with each group and 2
+ * iterators containing all elements in the group from left and right side.
+ * The result of this function is encoded and flattened before being output.
+ */
+case class CoGroup[K, Left, Right, R](
+    func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+    kEncoder: ExpressionEncoder[K],
+    leftEnc: ExpressionEncoder[Left],
+    rightEnc: ExpressionEncoder[Right],
+    rEncoder: ExpressionEncoder[R],
+    output: Seq[Attribute],
+    leftGroup: Seq[Attribute],
+    rightGroup: Seq[Attribute],
+    left: SparkPlan,
+    right: SparkPlan) extends BinaryNode {
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    leftGroup.map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
+      val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
+      val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
+      val groupKeyEncoder = kEncoder.bind(leftGroup)
+
+      new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
+        case (key, leftResult, rightResult) =>
+          val result = func(
+            groupKeyEncoder.fromRow(key),
+            leftResult.map(leftEnc.fromRow),
+            rightResult.map(rightEnc.fromRow))
+          result.map(rEncoder.toRow)
+      }
+    }
+  }
+}

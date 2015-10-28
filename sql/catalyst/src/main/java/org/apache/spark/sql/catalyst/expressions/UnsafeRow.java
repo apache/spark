@@ -591,6 +591,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       build.append(java.lang.Long.toHexString(Platform.getLong(baseObject, baseOffset + i)));
       build.append(',');
     }
+    build.deleteCharAt(build.length() - 1);
     build.append(']');
     return build.toString();
   }

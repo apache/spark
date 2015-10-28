@@ -202,4 +202,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
+
+  test("cogroup") {
+    val ds1 = Seq(1 -> "a", 3 -> "abc", 5 -> "hello", 3 -> "foo").toDS()
+    val ds2 = Seq(2 -> "q", 3 -> "w", 5 -> "e", 5 -> "r").toDS()
+    val cogrouped = ds1.groupBy(_._1).cogroup(ds2.groupBy(_._1)) { case (key, data1, data2) =>
+      Iterator(key -> (data1.map(_._2).mkString + "#" + data2.map(_._2).mkString))
+    }
+
+    checkAnswer(
+      cogrouped,
+      1 -> "a#", 2 -> "#q", 3 -> "abcfoo#w", 5 -> "hello#er")
+  }
 }

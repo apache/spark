@@ -65,4 +65,24 @@ class GroupedDataset[K, T] private[sql](
       sqlContext,
       MapGroups(f, groupingAttributes, logicalPlan))
   }
+
+  /**
+   * Applies the given function to each cogrouped data.  For each unique group, the function will
+   * be passed the grouping key and 2 iterators containing all elements in the group from
+   * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an
+   * arbitrary type which will be returned as a new [[Dataset]].
+   */
+  def cogroup[U, R : Encoder](
+      other: GroupedDataset[K, U])(
+      f: (K, Iterator[T], Iterator[U]) => Iterator[R]): Dataset[R] = {
+    implicit def uEnc: Encoder[U] = other.tEncoder
+    new Dataset[R](
+      sqlContext,
+      CoGroup(
+        f,
+        this.groupingAttributes,
+        other.groupingAttributes,
+        this.logicalPlan,
+        other.logicalPlan))
+  }
 }
