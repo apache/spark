@@ -271,8 +271,8 @@ private[streaming] class ReceivedBlockTracker(
           WAL_WRITE_STATUS_TIMEOUT.milliseconds)
       } catch {
         case e: TimeoutException =>
-          logWarning(s"Write to Write Ahead Log promise timed out after $WAL_WRITE_STATUS_TIMEOUT " +
-            s"millis for record: $record")
+          logWarning(s"Write to Write Ahead Log promise timed out after " +
+            s"$WAL_WRITE_STATUS_TIMEOUT millis for record: $record")
           false
       }
     } else {
