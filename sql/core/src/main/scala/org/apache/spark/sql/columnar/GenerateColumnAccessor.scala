@@ -140,7 +140,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private int numRowsInBatch = 0;
 
         private scala.collection.Iterator input = null;
-        private MutableRow mutableRow = null;
         private DataType[] columnTypes = null;
         private int[] columnIndexes = null;
 
