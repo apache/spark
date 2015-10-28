@@ -227,24 +227,27 @@ private[clustering] object BisectingKMeans {
    * @param data pairs of point and its cluster index
    */
   def summarizeClusters(data: RDD[(Long, BV[Double])]): Map[Long, BisectingClusterStat] = {
+    val dimension = data.first()._2.size
+    // zeroValue: (#rows, sum of vectors, sum of squares)
+    val zeroValue = (0L, BV.zeros[Double](dimension), 0.0)
+    val seqOp = (acc: (Long, BV[Double], Double), point: BV[Double]) => {
+      val n = acc._1 + 1L
+      val sums = acc._2 + point
+      val sumOfSquares = acc._3 + math.pow(breezeSum(point), 2.0)
+      (n, sums, sumOfSquares)
+    }
+    val comOp =
+      (acc1: (Long, BV[Double], Double), acc2: (Long, BV[Double], Double)) =>
+        (acc1._1 + acc2._1, acc1._2 + acc2._2, acc1._3 + acc2._3)
 
-    data.mapPartitions { iter =>
-      // calculate the accumulation of the all point in a partition and count the rows
-      val map = mutable.Map.empty[Long, (BV[Double], Double, BV[Double])]
-      iter.foreach { case (idx: Long, point: BV[Double]) =>
-        // get a map value or else get a sparse vector
-        val (sumBV, n, sumOfSquares) = map
-          .getOrElse(idx, (BSV.zeros[Double](point.size), 0.0, BSV.zeros[Double](point.size)))
-        map(idx) = (sumBV + point, n + 1.0, sumOfSquares + (point :* point))
+    val stats = data.aggregateByKey(zeroValue)(seqOp, comOp)
+    stats.map { case (i, (n, sums, sumOfSquare)) =>
+      val meanPoint = calcMean(n, sums)
+      val variance = n match {
+        case n if n < 2 => 0.0
+        case _ => (sumOfSquare / n) - math.pow(breezeSum(sums) / n, 2.0)
       }
-      map.toIterator
-    }.reduceByKey { case ((sum1, n1, sumOfSquares1), (sum2, n2, sumOfSquares2)) =>
-      // sum the accumulation and the count in the all partition
-      (sum1 + sum2, n1 + n2, sumOfSquares1 + sumOfSquares2)
-    }.map { case (i, (sum, n, sumOfSquares)) =>
-      val mean = calcMean(n.toLong, sum)
-      val variance = getVariance(n.toLong, sum, sumOfSquares)
-      (i, new BisectingClusterStat(n.toLong, mean, variance))
+      (i, new BisectingClusterStat(n, meanPoint, variance))
     }.collectAsMap()
   }
 
