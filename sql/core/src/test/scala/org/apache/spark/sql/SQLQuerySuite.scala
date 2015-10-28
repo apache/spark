@@ -2013,5 +2013,5 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(false) :: Row(true) :: Nil)
     }
   }
-  
+
 }
