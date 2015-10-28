@@ -73,18 +73,22 @@ test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whiteli
   expect_equal("--driver-memory \"512m\" sparkrmain", ops)
 
   e[["spark.driver.memory"]] <- "5g"
-  e[["spark.driver.extraClassPath"]] <- "/opt/class_path"
+  e[["spark.driver.extraClassPath"]] <- "/opt/class_path" # nolint
   e[["spark.driver.extraJavaOptions"]] <- "-XX:+UseCompressedOops -XX:+UseCompressedStrings"
-  e[["spark.driver.extraLibraryPath"]] <- "/usr/local/hadoop/lib"
+  e[["spark.driver.extraLibraryPath"]] <- "/usr/local/hadoop/lib" # nolint
   e[["random"]] <- "skipthis"
   ops2 <- getClientModeSparkSubmitOpts("sparkr-shell", e)
+  # nolint start
   expect_equal(ops2, paste0("--driver-class-path \"/opt/class_path\" --driver-java-options \"",
                       "-XX:+UseCompressedOops -XX:+UseCompressedStrings\" --driver-library-path \"",
                       "/usr/local/hadoop/lib\" --driver-memory \"5g\" sparkr-shell"))
+  # nolint end
 
   e[["spark.driver.extraClassPath"]] <- "/" # too short
   ops3 <- getClientModeSparkSubmitOpts("--driver-memory 4g sparkr-shell2", e)
+  # nolint start
   expect_equal(ops3, paste0("--driver-java-options \"-XX:+UseCompressedOops ",
                       "-XX:+UseCompressedStrings\" --driver-library-path \"/usr/local/hadoop/lib\"",
                       " --driver-memory 4g sparkr-shell2"))
+  # nolint end
 })
