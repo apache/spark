@@ -78,6 +78,10 @@ div .highlight pre {
   font-size: 12px;
 }
 
+div .hint {
+  font-size: 10px;
+}
+
 a code {
   color: #0088cc;
 }
