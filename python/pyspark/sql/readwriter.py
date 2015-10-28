@@ -22,8 +22,7 @@ if sys.version >= '3':
 
 from py4j.java_gateway import JavaClass
 
-from pyspark import RDD
-from pyspark.sql import since
+from pyspark import RDD, since
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
 

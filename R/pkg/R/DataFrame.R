@@ -271,7 +271,7 @@ setMethod("names<-",
           signature(x = "DataFrame"),
           function(x, value) {
             if (!is.null(value)) {
-              sdf <- callJMethod(x@sdf, "toDF", listToSeq(as.list(value)))
+              sdf <- callJMethod(x@sdf, "toDF", as.list(value))
               dataFrame(sdf)
             }
           })
@@ -843,10 +843,10 @@ setMethod("groupBy",
            function(x, ...) {
              cols <- list(...)
              if (length(cols) >= 1 && class(cols[[1]]) == "character") {
-               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], listToSeq(cols[-1]))
+               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], cols[-1])
              } else {
                jcol <- lapply(cols, function(c) { c@jc })
-               sgd <- callJMethod(x@sdf, "groupBy", listToSeq(jcol))
+               sgd <- callJMethod(x@sdf, "groupBy", jcol)
              }
              groupedData(sgd)
            })
@@ -1075,12 +1075,20 @@ setMethod("subset", signature(x = "DataFrame"),
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
 #'   # Similar to R data frames columns can also be selected using `$`
-#'   df$age
+#'   df[,df$age]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
-            sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
-            dataFrame(sdf)
+            if (length(col) > 1) {
+              if (length(list(...)) > 0) {
+                stop("To select multiple columns, use a character vector or list for col")
+              }
+
+              select(x, as.list(col))
+            } else {
+              sdf <- callJMethod(x@sdf, "select", col, list(...))
+              dataFrame(sdf)
+            }
           })
 
 #' @rdname select
@@ -1090,7 +1098,7 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             jcols <- lapply(list(col, ...), function(c) {
               c@jc
             })
-            sdf <- callJMethod(x@sdf, "select", listToSeq(jcols))
+            sdf <- callJMethod(x@sdf, "select", jcols)
             dataFrame(sdf)
           })
 
@@ -1106,7 +1114,7 @@ setMethod("select",
                 col(c)@jc
               }
             })
-            sdf <- callJMethod(x@sdf, "select", listToSeq(cols))
+            sdf <- callJMethod(x@sdf, "select", cols)
             dataFrame(sdf)
           })
 
@@ -1133,7 +1141,7 @@ setMethod("selectExpr",
           signature(x = "DataFrame", expr = "character"),
           function(x, expr, ...) {
             exprList <- list(expr, ...)
-            sdf <- callJMethod(x@sdf, "selectExpr", listToSeq(exprList))
+            sdf <- callJMethod(x@sdf, "selectExpr", exprList)
             dataFrame(sdf)
           })
 
@@ -1290,8 +1298,10 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' Sort a DataFrame by the specified column(s).
 #'
 #' @param x A DataFrame to be sorted.
-#' @param col Either a Column object or character vector indicating the field to sort on
+#' @param col A character or Column object vector indicating the fields to sort on
 #' @param ... Additional sorting fields
+#' @param decreasing A logical argument indicating sorting order for columns when
+#'                   a character vector is specified for col
 #' @return A DataFrame where all elements are sorted.
 #' @rdname arrange
 #' @name arrange
@@ -1304,21 +1314,50 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlContext, path)
 #' arrange(df, df$col1)
-#' arrange(df, "col1")
 #' arrange(df, asc(df$col1), desc(abs(df$col2)))
+#' arrange(df, "col1", decreasing = TRUE)
+#' arrange(df, "col1", "col2", decreasing = c(TRUE, FALSE))
 #' }
 setMethod("arrange",
-          signature(x = "DataFrame", col = "characterOrColumn"),
+          signature(x = "DataFrame", col = "Column"),
           function(x, col, ...) {
-            if (class(col) == "character") {
-              sdf <- callJMethod(x@sdf, "sort", col, toSeq(...))
-            } else if (class(col) == "Column") {
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
               })
-              sdf <- callJMethod(x@sdf, "sort", listToSeq(jcols))
-            }
+
+            sdf <- callJMethod(x@sdf, "sort", jcols)
             dataFrame(sdf)
+          })
+
+#' @rdname arrange
+#' @export
+setMethod("arrange",
+          signature(x = "DataFrame", col = "character"),
+          function(x, col, ..., decreasing = FALSE) {
+
+            # all sorting columns
+            by <- list(col, ...)
+
+            if (length(decreasing) == 1) {
+              # in case only 1 boolean argument - decreasing value is specified,
+              # it will be used for all columns
+              decreasing <- rep(decreasing, length(by))
+            } else if (length(decreasing) != length(by)) {
+              stop("Arguments 'col' and 'decreasing' must have the same length")
+            }
+
+            # builds a list of columns of type Column
+            # example: [[1]] Column Species ASC
+            #          [[2]] Column Petal_Length DESC
+            jcols <- lapply(seq_len(length(decreasing)), function(i){
+              if (decreasing[[i]]) {
+                desc(getColumn(x, by[[i]]))
+              } else {
+                asc(getColumn(x, by[[i]]))
+              }
+            })
+
+            do.call("arrange", c(x, jcols))
           })
 
 #' @rdname arrange
@@ -1664,7 +1703,7 @@ setMethod("describe",
           signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
             colList <- list(col, ...)
-            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            sdf <- callJMethod(x@sdf, "describe", colList)
             dataFrame(sdf)
           })
 
@@ -1674,7 +1713,7 @@ setMethod("describe",
           signature(x = "DataFrame"),
           function(x) {
             colList <- as.list(c(columns(x)))
-            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            sdf <- callJMethod(x@sdf, "describe", colList)
             dataFrame(sdf)
           })
 
@@ -1731,7 +1770,7 @@ setMethod("dropna",
 
             naFunctions <- callJMethod(x@sdf, "na")
             sdf <- callJMethod(naFunctions, "drop",
-                               as.integer(minNonNulls), listToSeq(as.list(cols)))
+                               as.integer(minNonNulls), as.list(cols))
             dataFrame(sdf)
           })
 
@@ -1815,36 +1854,30 @@ setMethod("fillna",
             sdf <- if (length(cols) == 0) {
               callJMethod(naFunctions, "fill", value)
             } else {
-              callJMethod(naFunctions, "fill", value, listToSeq(as.list(cols)))
+              callJMethod(naFunctions, "fill", value, as.list(cols))
             }
             dataFrame(sdf)
           })
 
-#' crosstab
+#' This function downloads the contents of a DataFrame into an R's data.frame.
+#' Since data.frames are held in memory, ensure that you have enough memory
+#' in your system to accommodate the contents.
 #'
-#' Computes a pair-wise frequency table of the given columns. Also known as a contingency
-#' table. The number of distinct values for each column should be less than 1e4. At most 1e6
-#' non-zero pair frequencies will be returned.
+#' @title Download data from a DataFrame into a data.frame
+#' @param x a DataFrame
+#' @return a data.frame
+#' @rdname as.data.frame
+#' @examples \dontrun{
 #'
-#' @param col1 name of the first column. Distinct items will make the first item of each row.
-#' @param col2 name of the second column. Distinct items will make the column names of the output.
-#' @return a local R data.frame representing the contingency table. The first column of each row
-#'         will be the distinct values of `col1` and the column names will be the distinct values
-#'         of `col2`. The name of the first column will be `$col1_$col2`. Pairs that have no
-#'         occurrences will have zero as their counts.
-#'
-#' @rdname statfunctions
-#' @name crosstab
-#' @export
-#' @examples
-#' \dontrun{
-#' df <- jsonFile(sqlCtx, "/path/to/file.json")
-#' ct = crosstab(df, "title", "gender")
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
 #' }
-setMethod("crosstab",
-          signature(x = "DataFrame", col1 = "character", col2 = "character"),
-          function(x, col1, col2) {
-            statFunctions <- callJMethod(x@sdf, "stat")
-            sct <- callJMethod(statFunctions, "crosstab", col1, col2)
-            collect(dataFrame(sct))
+setMethod("as.data.frame",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            # Check if additional parameters have been passed
+            if (length(list(...)) > 0) {
+              stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
+            }
+            collect(x)
           })

@@ -345,7 +345,7 @@ private[spark] class ApplicationMaster(
             if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
               finish(FinalApplicationStatus.FAILED,
                 ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-                "Max number of executor failures reached")
+                s"Max number of executor failures ($maxNumExecutorFailures) reached")
             } else {
               logDebug("Sending progress")
               allocator.allocateResources()
@@ -558,13 +558,15 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
-
     }
 
     override def receive: PartialFunction[Any, Unit] = {
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
         driver.send(x)
+
+      case DriverHello =>
+        // SPARK-10987: no action needed for this message.
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -590,6 +592,13 @@ private[spark] class ApplicationMaster(
           case None => logWarning("Container allocator is not ready to kill executors yet.")
         }
         context.reply(true)
+
+      case GetExecutorLossReason(eid) =>
+        Option(allocator) match {
+          case Some(a) => a.enqueueGetLossReasonRequest(eid, context)
+          case None => logWarning(s"Container allocator is not ready to find" +
+            s" executor loss reasons yet.")
+        }
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

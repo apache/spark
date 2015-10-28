@@ -65,7 +65,12 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
    */
   private[param] def validate(value: T): Unit = {
     if (!isValid(value)) {
-      throw new IllegalArgumentException(s"$parent parameter $name given invalid value $value.")
+      val valueToString = value match {
+        case v: Array[_] => v.mkString("[", ",", "]")
+        case _ => value.toString
+      }
+      throw new IllegalArgumentException(
+        s"$parent parameter $name given invalid value $valueToString.")
     }
   }
 
@@ -449,7 +454,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Clears the user-supplied value for the input param.
    */
-  protected final def clear(param: Param[_]): this.type = {
+  final def clear(param: Param[_]): this.type = {
     shouldOwn(param)
     paramMap.remove(param)
     this

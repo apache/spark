@@ -236,6 +236,14 @@ case class AttributeReference(
     }
   }
 
+  def withExprId(newExprId: ExprId): AttributeReference = {
+    if (exprId == newExprId) {
+      this
+    } else {
+      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifiers)
+    }
+  }
+
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 }
 

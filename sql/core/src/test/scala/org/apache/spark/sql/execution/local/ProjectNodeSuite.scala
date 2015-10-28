@@ -17,28 +17,33 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NamedExpression}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
-class ProjectNodeSuite extends LocalNodeTest with SharedSQLContext {
 
-  test("basic") {
-    val output = testData.queryExecution.sparkPlan.output
-    val columns = Seq(output(1), output(0))
-    checkAnswer(
-      testData,
-      node => ProjectNode(columns, node),
-      testData.select("value", "key").collect()
-    )
+class ProjectNodeSuite extends LocalNodeTest {
+  private val pieAttributes = Seq(
+    AttributeReference("id", IntegerType)(),
+    AttributeReference("age", IntegerType)(),
+    AttributeReference("name", StringType)())
+
+  private def testProject(inputData: Array[(Int, Int, String)] = Array.empty): Unit = {
+    val inputNode = new DummyNode(pieAttributes, inputData)
+    val columns = Seq[NamedExpression](inputNode.output(0), inputNode.output(2))
+    val projectNode = new ProjectNode(conf, columns, inputNode)
+    val expectedOutput = inputData.map { case (id, age, name) => (id, name) }
+    val actualOutput = projectNode.collect().map { case row =>
+      (row.getInt(0), row.getString(1))
+    }
+    assert(actualOutput === expectedOutput)
   }
 
   test("empty") {
-    val output = emptyTestData.queryExecution.sparkPlan.output
-    val columns = Seq(output(1), output(0))
-    checkAnswer(
-      emptyTestData,
-      node => ProjectNode(columns, node),
-      emptyTestData.select("value", "key").collect()
-    )
+    testProject()
+  }
+
+  test("basic") {
+    testProject((1 to 100).map { i => (i, i + 1, "pie" + i) }.toArray)
   }
 
 }

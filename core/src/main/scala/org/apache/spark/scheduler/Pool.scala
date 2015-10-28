@@ -83,8 +83,8 @@ private[spark] class Pool(
     null
   }
 
-  override def executorLost(executorId: String, host: String) {
-    schedulableQueue.asScala.foreach(_.executorLost(executorId, host))
+  override def executorLost(executorId: String, host: String, reason: ExecutorLossReason) {
+    schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
   override def checkSpeculatableTasks(): Boolean = {

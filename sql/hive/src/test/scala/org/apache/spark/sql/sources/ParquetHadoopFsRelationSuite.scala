@@ -24,14 +24,20 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{execution, AnalysisException, SaveMode}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
+  import testImplicits._
+
   override val dataSourceName: String = "parquet"
 
-  import sqlContext._
-  import sqlContext.implicits._
+  // Parquet does not play well with NullType.
+  override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: NullType => false
+    case _: CalendarIntervalType => false
+    case _ => true
+  }
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
@@ -51,7 +57,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.format(dataSourceName)
+        hiveContext.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
@@ -69,7 +75,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .format("parquet")
         .save(s"${dir.getCanonicalPath}/_temporary")
 
-      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df.collect())
+      checkAnswer(hiveContext.read.format("parquet").load(dir.getCanonicalPath), df.collect())
     }
   }
 
@@ -97,7 +103,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
-      checkAnswer(read.format("parquet").load(path), df)
+      checkAnswer(hiveContext.read.format("parquet").load(path), df)
     }
   }
 
@@ -107,7 +113,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
         // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
         // the bug.  Please refer to spark-8079 for more details.
-        range(1, 10)
+        hiveContext.range(1, 10)
           .withColumnRenamed("id", "a b")
           .write
           .format("parquet")
@@ -125,7 +131,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       val summaryPath = new Path(path, "_metadata")
       val commonSummaryPath = new Path(path, "_common_metadata")
 
-      val fs = summaryPath.getFileSystem(configuration)
+      val fs = summaryPath.getFileSystem(hadoopConfiguration)
       fs.delete(summaryPath, true)
       fs.delete(commonSummaryPath, true)
 

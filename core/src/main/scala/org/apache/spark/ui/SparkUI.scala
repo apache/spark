@@ -56,6 +56,8 @@ private[spark] class SparkUI private (
 
   val stagesTab = new StagesTab(this)
 
+  var appId: String = _
+
   /** Initialize all components of the server. */
   def initialize() {
     attachTab(new JobsTab(this))
@@ -75,9 +77,8 @@ private[spark] class SparkUI private (
 
   def getAppName: String = appName
 
-  /** Set the app name for this UI. */
-  def setAppName(name: String) {
-    appName = name
+  def setAppId(id: String): Unit = {
+    appId = id
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
@@ -94,12 +95,12 @@ private[spark] class SparkUI private (
   private[spark] def appUIAddress = s"http://$appUIHostPort"
 
   def getSparkUI(appId: String): Option[SparkUI] = {
-    if (appId == appName) Some(this) else None
+    if (appId == this.appId) Some(this) else None
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
-      id = appName,
+      id = appId,
       name = appName,
       attempts = Seq(new ApplicationAttemptInfo(
         attemptId = None,

@@ -57,7 +57,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   with SparkHadoopMapReduceUtil
   with Serializable
 {
+
   /**
+   * :: Experimental ::
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
    * Note that V and C can be different -- for example, one might group an RDD of type
@@ -70,12 +72,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
-  def combineByKey[C](createCombiner: V => C,
+  @Experimental
+  def combineByKeyWithClassTag[C](
+      createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
-      serializer: Serializer = null): RDD[(K, C)] = self.withScope {
+      serializer: Serializer = null)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (keyClass.isArray) {
       if (mapSideCombine) {
@@ -103,13 +107,50 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Simplified version of combineByKey that hash-partitions the output RDD.
+   * Generic function to combine the elements for each key using a custom set of aggregation
+   * functions. This method is here for backward compatibility. It does not provide combiner
+   * classtag information to the shuffle.
+   *
+   * @see [[combineByKeyWithClassTag]]
    */
-  def combineByKey[C](createCombiner: V => C,
+  def combineByKey[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      partitioner: Partitioner,
+      mapSideCombine: Boolean = true,
+      serializer: Serializer = null): RDD[(K, C)] = self.withScope {
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners,
+      partitioner, mapSideCombine, serializer)(null)
+  }
+
+  /**
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the output RDD.
+   * This method is here for backward compatibility. It does not provide combiner
+   * classtag information to the shuffle.
+   *
+   * @see [[combineByKeyWithClassTag]]
+   */
+  def combineByKey[C](
+      createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       numPartitions: Int): RDD[(K, C)] = self.withScope {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numPartitions))
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners, numPartitions)(null)
+  }
+
+  /**
+   * :: Experimental ::
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the output RDD.
+   */
+  @Experimental
+  def combineByKeyWithClassTag[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      numPartitions: Int)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners,
+      new HashPartitioner(numPartitions))
   }
 
   /**
@@ -133,7 +174,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     // We will clean the combiner closure later in `combineByKey`
     val cleanedSeqOp = self.context.clean(seqOp)
-    combineByKey[U]((v: V) => cleanedSeqOp(createZero(), v), cleanedSeqOp, combOp, partitioner)
+    combineByKeyWithClassTag[U]((v: V) => cleanedSeqOp(createZero(), v),
+      cleanedSeqOp, combOp, partitioner)
   }
 
   /**
@@ -182,7 +224,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val createZero = () => cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
 
     val cleanedFunc = self.context.clean(func)
-    combineByKey[V]((v: V) => cleanedFunc(createZero(), v), cleanedFunc, cleanedFunc, partitioner)
+    combineByKeyWithClassTag[V]((v: V) => cleanedFunc(createZero(), v),
+      cleanedFunc, cleanedFunc, partitioner)
   }
 
   /**
@@ -268,7 +311,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * "combiner" in MapReduce.
    */
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
-    combineByKey[V]((v: V) => v, func, func, partitioner)
+    combineByKeyWithClassTag[V]((v: V) => v, func, func, partitioner)
   }
 
   /**
@@ -392,7 +435,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       h1
     }
 
-    combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).mapValues(_.cardinality())
+    combineByKeyWithClassTag(createHLL, mergeValueHLL, mergeHLL, partitioner)
+      .mapValues(_.cardinality())
   }
 
   /**
@@ -466,7 +510,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val createCombiner = (v: V) => CompactBuffer(v)
     val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v
     val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2
-    val bufs = combineByKey[CompactBuffer[V]](
+    val bufs = combineByKeyWithClassTag[CompactBuffer[V]](
       createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine = false)
     bufs.asInstanceOf[RDD[(K, Iterable[V])]]
   }
@@ -565,12 +609,30 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Simplified version of combineByKey that hash-partitions the resulting RDD using the
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the resulting RDD using the
+   * existing partitioner/parallelism level. This method is here for backward compatibility. It
+   * does not provide combiner classtag information to the shuffle.
+   *
+   * @see [[combineByKeyWithClassTag]]
+   */
+  def combineByKey[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C): RDD[(K, C)] = self.withScope {
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners)(null)
+  }
+
+  /**
+   * :: Experimental ::
+   * Simplified version of combineByKeyWithClassTag that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
-  def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
-    : RDD[(K, C)] = self.withScope {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
+  @Experimental
+  def combineByKeyWithClassTag[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
+    combineByKeyWithClassTag(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
   }
 
   /**
@@ -934,8 +996,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
     job.setOutputFormatClass(outputFormatClass)
-    job.getConfiguration.set("mapred.output.dir", path)
-    saveAsNewAPIHadoopDataset(job.getConfiguration)
+    val jobConfiguration = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    jobConfiguration.set("mapred.output.dir", path)
+    saveAsNewAPIHadoopDataset(jobConfiguration)
   }
 
   /**
@@ -955,6 +1018,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
+   *
+   * Note that, we should make sure our tasks are idempotent when speculation is enabled, i.e. do
+   * not use output committer that writes data directly.
+   * There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
+   * result of using direct output committer with speculation enabled.
    */
   def saveAsHadoopFile(
       path: String,
@@ -967,10 +1035,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val hadoopConf = conf
     hadoopConf.setOutputKeyClass(keyClass)
     hadoopConf.setOutputValueClass(valueClass)
-    // Doesn't work in Scala 2.9 due to what may be a generics bug
-    // TODO: Should we uncomment this for Scala 2.10?
-    // conf.setOutputFormat(outputFormatClass)
-    hadoopConf.set("mapred.output.format.class", outputFormatClass.getName)
+    conf.setOutputFormat(outputFormatClass)
     for (c <- codec) {
       hadoopConf.setCompressMapOutput(true)
       hadoopConf.set("mapred.output.compress", "true")
@@ -984,6 +1049,19 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
     }
 
+    // When speculation is on and output committer class name contains "Direct", we should warn
+    // users that they may loss data if they are using a direct output committer.
+    val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
+    val outputCommitterClass = hadoopConf.get("mapred.output.committer.class", "")
+    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+      val warningMessage =
+        s"$outputCommitterClass may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
+    }
+
     FileOutputFormat.setOutputPath(hadoopConf,
       SparkHadoopWriter.createPathFromString(path, hadoopConf))
     saveAsHadoopDataset(hadoopConf)
@@ -994,6 +1072,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Configuration object for that storage system. The Conf should set an OutputFormat and any
    * output paths required (e.g. a table name to write to) in the same way as it would be
    * configured for a Hadoop MapReduce job.
+   *
+   * Note that, we should make sure our tasks are idempotent when speculation is enabled, i.e. do
+   * not use output committer that writes data directly.
+   * There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
+   * result of using direct output committer with speculation enabled.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
@@ -1002,7 +1085,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
-    val wrappedConf = new SerializableConfiguration(job.getConfiguration)
+    val jobConfiguration = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val wrappedConf = new SerializableConfiguration(jobConfiguration)
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
@@ -1051,6 +1135,20 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
+
+    // When speculation is on and output committer class name contains "Direct", we should warn
+    // users that they may loss data if they are using a direct output committer.
+    val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
+    val outputCommitterClass = jobCommitter.getClass.getSimpleName
+    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+      val warningMessage =
+        s"$outputCommitterClass may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
+    }
+
     jobCommitter.setupJob(jobTaskContext)
     self.context.runJob(self, writeShard)
     jobCommitter.commitJob(jobTaskContext)
@@ -1065,7 +1163,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def saveAsHadoopDataset(conf: JobConf): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
-    val wrappedConf = new SerializableConfiguration(hadoopConf)
     val outputFormatInstance = hadoopConf.getOutputFormat
     val keyClass = hadoopConf.getOutputKeyClass
     val valueClass = hadoopConf.getOutputValueClass
@@ -1093,7 +1190,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     writer.preSetup()
 
     val writeToFile = (context: TaskContext, iter: Iterator[(K, V)]) => {
-      val config = wrappedConf.value
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt

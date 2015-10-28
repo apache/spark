@@ -174,7 +174,13 @@ abstract class Expression extends TreeNode[Expression] {
     }.toString
   }
 
-  override def toString: String = prettyName + children.mkString("(", ",", ")")
+
+  private def flatArguments = productIterator.flatMap {
+    case t: Traversable[_] => t
+    case single => single :: Nil
+  }
+
+  override def toString: String = prettyName + flatArguments.mkString("(", ",", ")")
 }
 
 
@@ -276,7 +282,7 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"${ev.primitive} = ${f(eval)};"
+      s"${ev.value} = ${f(eval)};"
     })
   }
 
@@ -292,10 +298,10 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     val eval = child.gen(ctx)
-    val resultCode = f(eval.primitive)
+    val resultCode = f(eval.value)
     eval.code + s"""
       boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $resultCode
       }
@@ -357,7 +363,7 @@ abstract class BinaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: (String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"${ev.primitive} = ${f(eval1, eval2)};"
+      s"${ev.value} = ${f(eval1, eval2)};"
     })
   }
 
@@ -375,11 +381,11 @@ abstract class BinaryExpression extends Expression {
       f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val resultCode = f(eval1.primitive, eval2.primitive)
+    val resultCode = f(eval1.value, eval2.value)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${eval2.code}
         if (!${eval2.isNull}) {
@@ -482,7 +488,7 @@ abstract class TernaryExpression extends Expression {
     ev: GeneratedExpressionCode,
     f: (String, String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
-      s"${ev.primitive} = ${f(eval1, eval2, eval3)};"
+      s"${ev.value} = ${f(eval1, eval2, eval3)};"
     })
   }
 
@@ -499,11 +505,11 @@ abstract class TernaryExpression extends Expression {
     ev: GeneratedExpressionCode,
     f: (String, String, String) => String): String = {
     val evals = children.map(_.gen(ctx))
-    val resultCode = f(evals(0).primitive, evals(1).primitive, evals(2).primitive)
+    val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
     s"""
       ${evals(0).code}
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${evals(0).isNull}) {
         ${evals(1).code}
         if (!${evals(1).isNull}) {

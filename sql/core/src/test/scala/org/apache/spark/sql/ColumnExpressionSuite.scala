@@ -29,7 +29,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private lazy val booleanData = {
-    ctx.createDataFrame(ctx.sparkContext.parallelize(
+    sqlContext.createDataFrame(sparkContext.parallelize(
       Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
@@ -286,7 +286,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("isNaN") {
-    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
       Row(Double.NaN, Float.NaN) ::
       Row(math.log(-1), math.log(-3).toFloat) ::
       Row(null, null) ::
@@ -307,7 +307,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("nanvl") {
-    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
       Row(null, 3.0, Double.NaN, Double.PositiveInfinity, 1.0f, 4) :: Nil),
       StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
         StructField("c", DoubleType), StructField("d", DoubleType),
@@ -350,7 +350,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("!==") {
-    val nullData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+    val nullData = sqlContext.createDataFrame(sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -411,7 +411,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("between") {
-    val testData = ctx.sparkContext.parallelize(
+    val testData = sparkContext.parallelize(
       (0, 1, 2) ::
       (1, 2, 3) ::
       (2, 1, 0) ::
@@ -556,7 +556,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("monotonicallyIncreasingId") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = ctx.sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+    val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
@@ -567,7 +567,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("sparkPartitionId") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = ctx.sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+    val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
@@ -578,7 +578,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("InputFileName") {
     withTempPath { dir =>
-      val data = sqlContext.sparkContext.parallelize(0 to 10).toDF("id")
+      val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
       val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(inputFileName())
         .head.getString(0)

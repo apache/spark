@@ -88,6 +88,17 @@ abstract class JdbcDialect {
   def quoteIdentifier(colName: String): String = {
     s""""$colName""""
   }
+
+  /**
+   * Get the SQL query that should be used to find if the given table exists. Dialects can
+   * override this method to return a query that works best in a particular database.
+   * @param table  The name of the table.
+   * @return The SQL query to use for checking the table.
+   */
+  def getTableExistsQuery(table: String): String = {
+    s"SELECT * FROM $table WHERE 1=0"
+  }
+
 }
 
 /**
@@ -126,6 +137,9 @@ object JdbcDialects {
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
   registerDialect(DB2Dialect)
+  registerDialect(MsSqlServerDialect)
+  registerDialect(DerbyDialect)
+
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -189,6 +203,10 @@ case object PostgresDialect extends JdbcDialect {
       Some(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
       Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("json")) {
+      Some(StringType)
+    } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
+      Some(StringType)
     } else None
   }
 
@@ -198,6 +216,11 @@ case object PostgresDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case _ => None
   }
+
+  override def getTableExistsQuery(table: String): String = {
+    s"SELECT 1 FROM $table LIMIT 1"
+  }
+
 }
 
 /**
@@ -222,6 +245,10 @@ case object MySQLDialect extends JdbcDialect {
   override def quoteIdentifier(colName: String): String = {
     s"`$colName`"
   }
+
+  override def getTableExistsQuery(table: String): String = {
+    s"SELECT 1 FROM $table LIMIT 1"
+  }
 }
 
 /**
@@ -240,3 +267,51 @@ case object DB2Dialect extends JdbcDialect {
     case _ => None
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ * Default Microsoft SQL Server dialect, mapping the datetimeoffset types to a String on read.
+ */
+@DeveloperApi
+case object MsSqlServerDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (typeName.contains("datetimeoffset")) {
+      // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
+      Some(StringType)
+    } else None
+  }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case _ => None
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Default Apache Derby dialect, mapping real on read
+ * and string/byte/short/boolean/decimal on write.
+ */
+@DeveloperApi
+case object DerbyDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:derby")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (sqlType == Types.REAL) Option(FloatType) else None
+  }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
+    case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
+    // 31 is the maximum precision and 5 is the default scale for a Derby DECIMAL
+    case (t: DecimalType) if (t.precision > 31) =>
+      Some(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
+    case _ => None
+  }
+
+}
+

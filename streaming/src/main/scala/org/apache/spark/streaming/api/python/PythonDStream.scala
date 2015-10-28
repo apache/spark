@@ -170,7 +170,7 @@ private[python] object PythonDStream {
  */
 private[python] abstract class PythonDStream(
     parent: DStream[_],
-    @transient pfunc: PythonTransformFunction)
+    pfunc: PythonTransformFunction)
   extends DStream[Array[Byte]] (parent.ssc) {
 
   val func = new TransformFunction(pfunc)
@@ -187,7 +187,7 @@ private[python] abstract class PythonDStream(
  */
 private[python] class PythonTransformedDStream (
     parent: DStream[_],
-    @transient pfunc: PythonTransformFunction)
+    pfunc: PythonTransformFunction)
   extends PythonDStream(parent, pfunc) {
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
@@ -206,7 +206,7 @@ private[python] class PythonTransformedDStream (
 private[python] class PythonTransformed2DStream(
     parent: DStream[_],
     parent2: DStream[_],
-    @transient pfunc: PythonTransformFunction)
+    pfunc: PythonTransformFunction)
   extends DStream[Array[Byte]] (parent.ssc) {
 
   val func = new TransformFunction(pfunc)
@@ -230,7 +230,7 @@ private[python] class PythonTransformed2DStream(
  */
 private[python] class PythonStateDStream(
     parent: DStream[Array[Byte]],
-    @transient reduceFunc: PythonTransformFunction)
+    reduceFunc: PythonTransformFunction)
   extends PythonDStream(parent, reduceFunc) {
 
   super.persist(StorageLevel.MEMORY_ONLY)
@@ -252,8 +252,8 @@ private[python] class PythonStateDStream(
  */
 private[python] class PythonReducedWindowedDStream(
     parent: DStream[Array[Byte]],
-    @transient preduceFunc: PythonTransformFunction,
-    @transient pinvReduceFunc: PythonTransformFunction,
+    preduceFunc: PythonTransformFunction,
+    @transient private val pinvReduceFunc: PythonTransformFunction,
     _windowDuration: Duration,
     _slideDuration: Duration)
   extends PythonDStream(parent, preduceFunc) {
