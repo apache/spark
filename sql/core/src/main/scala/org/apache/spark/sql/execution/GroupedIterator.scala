@@ -88,7 +88,7 @@ class GroupedIterator private(
   var currentIterator = createGroupValuesIterator()
 
   // Return true if we already have the next iterator or fetching a new iterator is successful.
-  def hasNext: Boolean = currentIterator.ne(null) || fetchNextGroupIterator
+  def hasNext: Boolean = currentIterator != null || fetchNextGroupIterator
 
   def next(): (InternalRow, Iterator[InternalRow]) = {
     assert(hasNext) // Ensure we have fetched the next iterator.
@@ -98,13 +98,13 @@ class GroupedIterator private(
   }
 
   private def fetchNextGroupIterator(): Boolean = {
-    assert(currentIterator eq null)
+    assert(currentIterator == null)
 
-    if (currentRow.eq(null) && input.hasNext) {
+    if (currentRow == null && input.hasNext) {
       currentRow = input.next()
     }
 
-    if (currentRow eq null) {
+    if (currentRow == null) {
       // These is no data left, return false.
       false
     } else {
@@ -114,7 +114,7 @@ class GroupedIterator private(
       }
 
       if (keyOrdering.compare(currentGroup, currentRow) == 0) {
-        // These is no more group. return false.
+        // We are in the last group, there is no more groups, return false.
         false
       } else {
         // Now the `currentRow` is the first row of next group.
@@ -137,7 +137,7 @@ class GroupedIterator private(
       }
 
       private def fetchNextRowInGroup(): Boolean = {
-        assert(currentRow eq null)
+        assert(currentRow == null)
 
         if (input.hasNext) {
           // The inner iterator should NOT consume the input into next group, here we use `head` to
