@@ -17,6 +17,7 @@ fi
 
 echo "Getting minikdc dependencies"
 java -jar ${MINIKDC_CACHE}/ivy.jar -dependency org.apache.hadoop hadoop-minikdc ${MINIKDC_VERSION} \
+           -cache ${MINIKDC_CACHE} \
            -retrieve "${MINIKDC_CACHE}/lib/[artifact]-[revision](-[classifier]).[ext]"
 
 if [ $? != 0 ]; then
