@@ -19,8 +19,6 @@ package org.apache.spark.mllib.classification
 
 import java.lang.{Iterable => JIterable}
 
-import org.apache.spark.mllib.pmml.PMMLExportable
-
 import scala.collection.JavaConverters._
 
 import org.json4s.JsonDSL._
@@ -29,6 +27,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD

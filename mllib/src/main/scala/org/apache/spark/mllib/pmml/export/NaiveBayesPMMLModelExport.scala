@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.pmml.export
 
+// Scala Array is conflict with Array imported in PMML.
 import scala.{Array => SArray}
 
 import org.dmg.pmml._
@@ -24,7 +25,7 @@ import org.dmg.pmml._
 import org.apache.spark.mllib.classification.{NaiveBayesModel => SNaiveBayesModel}
 
 /**
- * PMML Model Export for GeneralizedLinearModel abstract class
+ * PMML Model Export for Naive Bayes abstract class
  */
 private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, description: String)
   extends PMMLModelExport {
