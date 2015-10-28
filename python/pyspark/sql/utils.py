@@ -45,7 +45,7 @@ def capture_sql_exception(f):
             return f(*a, **kw)
         except py4j.protocol.Py4JJavaError as e:
             s = e.java_exception.toString()
-            stackTrace = '\n'.join(map(lambda x: x.toString(), e.java_exception.getStackTrace()))
+            stackTrace = '\n\t at'.join(map(lambda x: x.toString(), e.java_exception.getStackTrace()))
             if s.startswith('org.apache.spark.sql.AnalysisException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('java.lang.IllegalArgumentException: '):
