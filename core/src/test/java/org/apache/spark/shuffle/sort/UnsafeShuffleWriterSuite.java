@@ -403,7 +403,7 @@ public class UnsafeShuffleWriterSuite {
       .doCallRealMethod() // allocate initial data page
       .doReturn(0L) // deny request to allocate new page
       .doCallRealMethod() // grant new sort buffer and data page
-      .when(taskMemoryManager).acquireExecutionMemory(anyLong());
+      .when(taskMemoryManager).acquireOnHeapExecutionMemory(anyLong());
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<Product2<Object, Object>>();
     final byte[] bigByteArray = new byte[PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES / 128];
@@ -411,7 +411,7 @@ public class UnsafeShuffleWriterSuite {
       dataToWrite.add(new Tuple2<Object, Object>(i, bigByteArray));
     }
     writer.write(dataToWrite.iterator());
-    verify(taskMemoryManager, times(5)).acquireExecutionMemory(anyLong());
+    verify(taskMemoryManager, times(5)).acquireOnHeapExecutionMemory(anyLong());
     assertEquals(2, spillFilesCreated.size());
     writer.stop(true);
     readRecordsFromFile();
@@ -431,14 +431,14 @@ public class UnsafeShuffleWriterSuite {
       .doCallRealMethod() // allocate initial data page
       .doReturn(0L) // deny request to allocate new page
       .doCallRealMethod() // grant new sort buffer and data page
-      .when(taskMemoryManager).acquireExecutionMemory(anyLong());
+      .when(taskMemoryManager).acquireOnHeapExecutionMemory(anyLong());
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     for (int i = 0; i < UnsafeShuffleWriter.INITIAL_SORT_BUFFER_SIZE; i++) {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
     writer.write(dataToWrite.iterator());
-    verify(taskMemoryManager, times(5)).acquireExecutionMemory(anyLong());
+    verify(taskMemoryManager, times(5)).acquireOnHeapExecutionMemory(anyLong());
     assertEquals(2, spillFilesCreated.size());
     writer.stop(true);
     readRecordsFromFile();

@@ -36,7 +36,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
       maxExecutionMem: Long,
       maxStorageMem: Long): (StaticMemoryManager, MemoryStore) = {
     val mm = new StaticMemoryManager(
-      conf, maxExecutionMemory = maxExecutionMem, maxStorageMemory = maxStorageMem, numCores = 1)
+      conf, maxOnHeapExecutionMemory = maxExecutionMem, maxStorageMemory = maxStorageMem, numCores = 1)
     val ms = makeMemoryStore(mm)
     (mm, ms)
   }
@@ -44,7 +44,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
   override protected def createMemoryManager(maxMemory: Long): MemoryManager = {
     new StaticMemoryManager(
       conf,
-      maxExecutionMemory = maxMemory,
+      maxOnHeapExecutionMemory = maxMemory,
       maxStorageMemory = 0,
       numCores = 1)
   }
@@ -61,13 +61,13 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.executionMemoryUsed === maxExecutionMem)
     assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 0L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    mm.releaseExecutionMemory(800L)
+    mm.releaseOnHeapExecutionMemory(800L)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
     assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
-    mm.releaseExecutionMemory(maxExecutionMem)
+    mm.releaseOnHeapExecutionMemory(maxExecutionMem)
     assert(mm.executionMemoryUsed === 0L)
   }
 
@@ -128,7 +128,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 200L)
     // Only execution memory should be released
-    mm.releaseExecutionMemory(133L)
+    mm.releaseOnHeapExecutionMemory(133L)
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 67L)
     // Only storage memory should be released

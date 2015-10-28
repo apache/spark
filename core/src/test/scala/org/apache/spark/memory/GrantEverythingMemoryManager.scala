@@ -30,7 +30,17 @@ class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, 
       oom = false
       0
     } else {
-      _executionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
+      _onHeapExecutionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
+      numBytes
+    }
+  }
+  // TODO(josh): this code is becoming very confusing; refactoring needed
+  override def acquireOffHeapExecutionMemory(numBytes: Long, taskId: Long): Long = synchronized {
+    if (oom) {
+      oom = false
+      0
+    } else {
+      _offHeapExecutionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
       numBytes
     }
   }
@@ -43,7 +53,7 @@ class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, 
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
   override def releaseStorageMemory(numBytes: Long): Unit = { }
-  override def maxExecutionMemory: Long = Long.MaxValue
+  override def maxOnHeapExecutionMemory: Long = Long.MaxValue
   override def maxStorageMemory: Long = Long.MaxValue
 
   private var oom = false

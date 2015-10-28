@@ -66,17 +66,17 @@ private[spark] class UnifiedMemoryManager(
    * Total amount of memory, in bytes, not currently occupied by either execution or storage.
    */
   private def totalFreeMemory: Long = synchronized {
-    assert(_executionMemoryUsed <= maxMemory)
+    assert(_onHeapExecutionMemoryUsed <= maxMemory)
     assert(_storageMemoryUsed <= maxMemory)
-    assert(_executionMemoryUsed + _storageMemoryUsed <= maxMemory)
-    maxMemory - _executionMemoryUsed - _storageMemoryUsed
+    assert(_onHeapExecutionMemoryUsed + _storageMemoryUsed <= maxMemory)
+    maxMemory - _onHeapExecutionMemoryUsed - _storageMemoryUsed
   }
 
   /**
    * Total available memory for execution, in bytes.
    * In this model, this is equivalent to the amount of memory not occupied by storage.
    */
-  override def maxExecutionMemory: Long = synchronized {
+  override def maxOnHeapExecutionMemory: Long = synchronized {
     maxMemory - _storageMemoryUsed
   }
 
@@ -85,7 +85,7 @@ private[spark] class UnifiedMemoryManager(
    * In this model, this is equivalent to the amount of memory not occupied by execution.
    */
   override def maxStorageMemory: Long = synchronized {
-    maxMemory - _executionMemoryUsed
+    maxMemory - _onHeapExecutionMemoryUsed
   }
 
   /**
@@ -108,7 +108,7 @@ private[spark] class UnifiedMemoryManager(
       memoryStore.ensureFreeSpace(spaceToEnsure, evictedBlocks)
     }
     val bytesToGrant = math.min(numBytes, totalFreeMemory)
-    _executionMemoryUsed += bytesToGrant
+    _onHeapExecutionMemoryUsed += bytesToGrant
     bytesToGrant
   }
 

@@ -68,13 +68,13 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.executionMemoryUsed === maxMemory)
     assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 0L)
     assert(mm.executionMemoryUsed === maxMemory)
-    mm.releaseExecutionMemory(800L)
+    mm.releaseOnHeapExecutionMemory(800L)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
     assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
-    mm.releaseExecutionMemory(maxMemory)
+    mm.releaseOnHeapExecutionMemory(maxMemory)
     assert(mm.executionMemoryUsed === 0L)
   }
 
@@ -189,7 +189,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.executionMemoryUsed === 800L)
     assert(mm.storageMemoryUsed === 100L)
     assertEnsureFreeSpaceCalled(ms, 250L)
-    mm.releaseExecutionMemory(maxMemory)
+    mm.releaseOnHeapExecutionMemory(maxMemory)
     mm.releaseStorageMemory(maxMemory)
     // Acquire some execution memory again, but this time keep it within the execution region
     assert(mm.doAcquireExecutionMemory(200L, evictedBlocks) === 200L)

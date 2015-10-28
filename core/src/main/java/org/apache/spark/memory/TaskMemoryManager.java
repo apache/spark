@@ -110,18 +110,33 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
+   * Acquire N bytes of on-heap memory for execution, evicting cached blocks if necessary.
    * @return number of bytes successfully granted (<= N).
    */
-  public long acquireExecutionMemory(long size) {
-    return memoryManager.acquireExecutionMemory(size, taskAttemptId);
+  public long acquireOnHeapExecutionMemory(long size) {
+    return memoryManager.acquireOnHeapExecutionMemory(size, taskAttemptId);
   }
 
   /**
-   * Release N bytes of execution memory.
+   * Acquire N bytes of off-heap memory for execution.
+   * @return number of bytes successfully granted (<= N).
    */
-  public void releaseExecutionMemory(long size) {
-    memoryManager.releaseExecutionMemory(size, taskAttemptId);
+  public long acquireOffHeapExecutionMemory(long size) {
+    return memoryManager.acquireOffHeapExecutionMemory(size, taskAttemptId);
+  }
+
+  /**
+   * Release N bytes of on-heap execution memory.
+   */
+  public void releaseOnHeapExecutionMemory(long size) {
+    memoryManager.releaseOnHeapExecutionMemory(size, taskAttemptId);
+  }
+
+  /**
+   * Release N bytes of off-heap execution memory.
+   */
+  public void releaseOffHeapExecutionMemory(long size) {
+    memoryManager.releaseOffHeapExecutionMemory(size, taskAttemptId);
   }
 
   public long pageSizeBytes() {
@@ -149,9 +164,18 @@ public class TaskMemoryManager {
       }
       allocatedPages.set(pageNumber);
     }
-    final long acquiredExecutionMemory = acquireExecutionMemory(size);
+    final long acquiredExecutionMemory;
+    if (memoryManager.tungstenMemoryIsAllocatedInHeap()) {
+      acquiredExecutionMemory = acquireOnHeapExecutionMemory(size);
+    } else {
+      acquiredExecutionMemory = acquireOffHeapExecutionMemory(size);
+    }
     if (acquiredExecutionMemory != size) {
-      releaseExecutionMemory(acquiredExecutionMemory);
+      if (memoryManager.tungstenMemoryIsAllocatedInHeap()) {
+        releaseOnHeapExecutionMemory(acquiredExecutionMemory);
+      } else {
+        releaseOffHeapExecutionMemory(acquiredExecutionMemory);
+      }
       synchronized (this) {
         allocatedPages.clear(pageNumber);
       }
@@ -182,7 +206,11 @@ public class TaskMemoryManager {
     }
     long pageSize = page.size();
     memoryManager.tungstenMemoryAllocator().free(page);
-    releaseExecutionMemory(pageSize);
+    if (memoryManager.tungstenMemoryIsAllocatedInHeap()) {
+      releaseOnHeapExecutionMemory(pageSize);
+    } else {
+      releaseOffHeapExecutionMemory(pageSize);
+    }
   }
 
   /**

@@ -32,7 +32,7 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  */
 private[spark] class StaticMemoryManager(
     conf: SparkConf,
-    override val maxExecutionMemory: Long,
+    override val maxOnHeapExecutionMemory: Long,
     override val maxStorageMemory: Long,
     numCores: Int)
   extends MemoryManager(conf, numCores) {
@@ -58,9 +58,9 @@ private[spark] class StaticMemoryManager(
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
     assert(numBytes >= 0)
-    assert(_executionMemoryUsed <= maxExecutionMemory)
-    val bytesToGrant = math.min(numBytes, maxExecutionMemory - _executionMemoryUsed)
-    _executionMemoryUsed += bytesToGrant
+    assert(_onHeapExecutionMemoryUsed <= maxOnHeapExecutionMemory)
+    val bytesToGrant = math.min(numBytes, maxOnHeapExecutionMemory - _onHeapExecutionMemoryUsed)
+    _onHeapExecutionMemoryUsed += bytesToGrant
     bytesToGrant
   }
 

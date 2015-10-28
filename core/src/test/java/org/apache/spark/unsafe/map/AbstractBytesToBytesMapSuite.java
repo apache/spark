@@ -45,7 +45,9 @@ public abstract class AbstractBytesToBytesMapSuite {
   public void setup() {
     memoryManager =
       new GrantEverythingMemoryManager(
-        new SparkConf().set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator()));
+        new SparkConf()
+          .set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator())
+          .set("spark.memory.offHeapSize", "256mb"));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   }
 

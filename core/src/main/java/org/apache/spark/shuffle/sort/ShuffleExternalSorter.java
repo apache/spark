@@ -136,9 +136,9 @@ final class ShuffleExternalSorter {
   private void initializeForWriting() throws IOException {
     // TODO: move this sizing calculation logic into a static method of sorter:
     final long memoryRequested = initialSize * 8L;
-    final long memoryAcquired = taskMemoryManager.acquireExecutionMemory(memoryRequested);
+    final long memoryAcquired = taskMemoryManager.acquireOnHeapExecutionMemory(memoryRequested);
     if (memoryAcquired != memoryRequested) {
-      taskMemoryManager.releaseExecutionMemory(memoryAcquired);
+      taskMemoryManager.releaseOnHeapExecutionMemory(memoryAcquired);
       throw new IOException("Could not acquire " + memoryRequested + " bytes of memory");
     }
 
@@ -278,7 +278,7 @@ final class ShuffleExternalSorter {
     writeSortedFile(false);
     final long inMemSorterMemoryUsage = inMemSorter.getMemoryUsage();
     inMemSorter = null;
-    taskMemoryManager.releaseExecutionMemory(inMemSorterMemoryUsage);
+    taskMemoryManager.releaseOnHeapExecutionMemory(inMemSorterMemoryUsage);
     final long spillSize = freeMemory();
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
 
@@ -318,7 +318,7 @@ final class ShuffleExternalSorter {
     if (inMemSorter != null) {
       long sorterMemoryUsage = inMemSorter.getMemoryUsage();
       inMemSorter = null;
-      taskMemoryManager.releaseExecutionMemory(sorterMemoryUsage);
+      taskMemoryManager.releaseOnHeapExecutionMemory(sorterMemoryUsage);
     }
     allocatedPages.clear();
     currentPage = null;
@@ -340,7 +340,7 @@ final class ShuffleExternalSorter {
     if (inMemSorter != null) {
       long sorterMemoryUsage = inMemSorter.getMemoryUsage();
       inMemSorter = null;
-      taskMemoryManager.releaseExecutionMemory(sorterMemoryUsage);
+      taskMemoryManager.releaseOnHeapExecutionMemory(sorterMemoryUsage);
     }
   }
 
@@ -355,13 +355,13 @@ final class ShuffleExternalSorter {
       logger.debug("Attempting to expand sort pointer array");
       final long oldPointerArrayMemoryUsage = inMemSorter.getMemoryUsage();
       final long memoryToGrowPointerArray = oldPointerArrayMemoryUsage * 2;
-      final long memoryAcquired = taskMemoryManager.acquireExecutionMemory(memoryToGrowPointerArray);
+      final long memoryAcquired = taskMemoryManager.acquireOnHeapExecutionMemory(memoryToGrowPointerArray);
       if (memoryAcquired < memoryToGrowPointerArray) {
-        taskMemoryManager.releaseExecutionMemory(memoryAcquired);
+        taskMemoryManager.releaseOnHeapExecutionMemory(memoryAcquired);
         spill();
       } else {
         inMemSorter.expandPointerArray();
-        taskMemoryManager.releaseExecutionMemory(oldPointerArrayMemoryUsage);
+        taskMemoryManager.releaseOnHeapExecutionMemory(oldPointerArrayMemoryUsage);
       }
     }
   }

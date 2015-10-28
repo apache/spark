@@ -36,7 +36,9 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOffHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "true")), 0);
+      new GrantEverythingMemoryManager(
+        new SparkConf().set("spark.unsafe.offHeap", "true")
+          .set("spark.memory.offHeapSize", "1024b")), 0);
     final MemoryBlock dataPage = manager.allocatePage(256);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
     // encode. This test exercises that corner-case:
