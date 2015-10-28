@@ -29,7 +29,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -37,8 +37,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 
 /**
- * :: Experimental ::
- *
  * Regression model for isotonic regression.
  *
  * @param boundaries Array of boundaries for which predictions are known.
@@ -49,7 +47,6 @@ import org.apache.spark.sql.SQLContext
  *
  */
 @Since("1.3.0")
-@Experimental
 class IsotonicRegressionModel @Since("1.3.0") (
     @Since("1.3.0") val boundaries: Array[Double],
     @Since("1.3.0") val predictions: Array[Double],
@@ -233,8 +230,6 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 }
 
 /**
- * :: Experimental ::
- *
  * Isotonic regression.
  * Currently implemented using parallelized pool adjacent violators algorithm.
  * Only univariate (single feature) algorithm supported.
@@ -252,7 +247,6 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  *
  * @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
  */
-@Experimental
 @Since("1.3.0")
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
 

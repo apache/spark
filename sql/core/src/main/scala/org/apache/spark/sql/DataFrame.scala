@@ -267,7 +267,7 @@ class DataFrame private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def as[U : Encoder]: Dataset[U] = new Dataset[U](sqlContext, queryExecution)
+  def as[U : Encoder]: Dataset[U] = new Dataset[U](sqlContext, logicalPlan)
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
@@ -697,6 +697,20 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def as(alias: Symbol): DataFrame = as(alias.name)
+
+  /**
+   * Returns a new [[DataFrame]] with an alias set. Same as `as`.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def alias(alias: String): DataFrame = as(alias)
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] with an alias set. Same as `as`.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def alias(alias: Symbol): DataFrame = as(alias)
 
   /**
    * Selects a set of column based expressions.

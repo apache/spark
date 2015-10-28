@@ -37,23 +37,7 @@ In the following code segment, we start with a set of sentences.  We split each 
 Refer to the [HashingTF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.HashingTF) and
 the [IDF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IDF) for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
-
-val sentenceData = sqlContext.createDataFrame(Seq(
-  (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
-)).toDF("label", "sentence")
-val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-val wordsData = tokenizer.transform(sentenceData)
-val hashingTF = new HashingTF().setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(20)
-val featurizedData = hashingTF.transform(wordsData)
-val idf = new IDF().setInputCol("rawFeatures").setOutputCol("features")
-val idfModel = idf.fit(featurizedData)
-val rescaledData = idfModel.transform(featurizedData)
-rescaledData.select("features", "label").take(3).foreach(println)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/TfIdfExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -61,49 +45,7 @@ rescaledData.select("features", "label").take(3).foreach(println)
 Refer to the [HashingTF Java docs](api/java/org/apache/spark/ml/feature/HashingTF.html) and the
 [IDF Java docs](api/java/org/apache/spark/ml/feature/IDF.html) for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.HashingTF;
-import org.apache.spark.ml.feature.IDF;
-import org.apache.spark.ml.feature.Tokenizer;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(0, "Hi I heard about Spark"),
-  RowFactory.create(0, "I wish Java could use case classes"),
-  RowFactory.create(1, "Logistic regression models are neat")
-));
-StructType schema = new StructType(new StructField[]{
-  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-  new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
-});
-DataFrame sentenceData = sqlContext.createDataFrame(jrdd, schema);
-Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
-DataFrame wordsData = tokenizer.transform(sentenceData);
-int numFeatures = 20;
-HashingTF hashingTF = new HashingTF()
-  .setInputCol("words")
-  .setOutputCol("rawFeatures")
-  .setNumFeatures(numFeatures);
-DataFrame featurizedData = hashingTF.transform(wordsData);
-IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
-IDFModel idfModel = idf.fit(featurizedData);
-DataFrame rescaledData = idfModel.transform(featurizedData);
-for (Row r : rescaledData.select("features", "label").take(3)) {
-  Vector features = r.getAs(0);
-  Double label = r.getDouble(1);
-  System.out.println(features);
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaTfIdfExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -111,24 +53,7 @@ for (Row r : rescaledData.select("features", "label").take(3)) {
 Refer to the [HashingTF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.HashingTF) and
 the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for more details on the API.
 
-{% highlight python %}
-from pyspark.ml.feature import HashingTF, IDF, Tokenizer
-
-sentenceData = sqlContext.createDataFrame([
-  (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
-], ["label", "sentence"])
-tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
-wordsData = tokenizer.transform(sentenceData)
-hashingTF = HashingTF(inputCol="words", outputCol="rawFeatures", numFeatures=20)
-featurizedData = hashingTF.transform(wordsData)
-idf = IDF(inputCol="rawFeatures", outputCol="features")
-idfModel = idf.fit(featurizedData)
-rescaledData = idfModel.transform(featurizedData)
-for features_label in rescaledData.select("features", "label").take(3):
-  print(features_label)
-{% endhighlight %}
+{% include_example python/ml/tf_idf_example.py %}
 </div>
 </div>
 
@@ -149,26 +74,7 @@ In the following code segment, we start with a set of documents, each of which i
 Refer to the [Word2Vec Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec)
 for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.Word2Vec
-
-// Input data: Each row is a bag of words from a sentence or document.
-val documentDF = sqlContext.createDataFrame(Seq(
-  "Hi I heard about Spark".split(" "),
-  "I wish Java could use case classes".split(" "),
-  "Logistic regression models are neat".split(" ")
-).map(Tuple1.apply)).toDF("text")
-
-// Learn a mapping from words to Vectors.
-val word2Vec = new Word2Vec()
-  .setInputCol("text")
-  .setOutputCol("result")
-  .setVectorSize(3)
-  .setMinCount(0)
-val model = word2Vec.fit(documentDF)
-val result = model.transform(documentDF)
-result.select("result").take(3).foreach(println)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/Word2VecExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -176,43 +82,7 @@ result.select("result").take(3).foreach(println)
 Refer to the [Word2Vec Java docs](api/java/org/apache/spark/ml/feature/Word2Vec.html)
 for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.*;
-
-JavaSparkContext jsc = ...
-SQLContext sqlContext = ...
-
-// Input data: Each row is a bag of words from a sentence or document.
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
-  RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
-  RowFactory.create(Arrays.asList("Logistic regression models are neat".split(" ")))
-));
-StructType schema = new StructType(new StructField[]{
-  new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
-});
-DataFrame documentDF = sqlContext.createDataFrame(jrdd, schema);
-
-// Learn a mapping from words to Vectors.
-Word2Vec word2Vec = new Word2Vec()
-  .setInputCol("text")
-  .setOutputCol("result")
-  .setVectorSize(3)
-  .setMinCount(0);
-Word2VecModel model = word2Vec.fit(documentDF);
-DataFrame result = model.transform(documentDF);
-for (Row r: result.select("result").take(3)) {
-  System.out.println(r);
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaWord2VecExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -220,22 +90,7 @@ for (Row r: result.select("result").take(3)) {
 Refer to the [Word2Vec Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Word2Vec)
 for more details on the API.
 
-{% highlight python %}
-from pyspark.ml.feature import Word2Vec
-
-# Input data: Each row is a bag of words from a sentence or document.
-documentDF = sqlContext.createDataFrame([
-  ("Hi I heard about Spark".split(" "), ),
-  ("I wish Java could use case classes".split(" "), ),
-  ("Logistic regression models are neat".split(" "), )
-], ["text"])
-# Learn a mapping from words to Vectors.
-word2Vec = Word2Vec(vectorSize=3, minCount=0, inputCol="text", outputCol="result")
-model = word2Vec.fit(documentDF)
-result = model.transform(documentDF)
-for feature in result.select("result").take(3):
-  print(feature)
-{% endhighlight %}
+{% include_example python/ml/word2vec_example.py %}
 </div>
 </div>
 
@@ -283,30 +138,7 @@ Refer to the [CountVectorizer Scala docs](api/scala/index.html#org.apache.spark.
 and the [CountVectorizerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel)
 for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.CountVectorizer
-import org.apache.spark.mllib.util.CountVectorizerModel
-
-val df = sqlContext.createDataFrame(Seq(
-  (0, Array("a", "b", "c")),
-  (1, Array("a", "b", "b", "c", "a"))
-)).toDF("id", "words")
-
-// fit a CountVectorizerModel from the corpus
-val cvModel: CountVectorizerModel = new CountVectorizer()
-  .setInputCol("words")
-  .setOutputCol("features")
-  .setVocabSize(3)
-  .setMinDF(2) // a term must appear in more or equal to 2 documents to be included in the vocabulary
-  .fit(df)
-
-// alternatively, define CountVectorizerModel with a-priori vocabulary
-val cvm = new CountVectorizerModel(Array("a", "b", "c"))
-  .setInputCol("words")
-  .setOutputCol("features")
-
-cvModel.transform(df).select("features").show()
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/CountVectorizerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -315,40 +147,7 @@ Refer to the [CountVectorizer Java docs](api/java/org/apache/spark/ml/feature/Co
 and the [CountVectorizerModel Java docs](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html)
 for more details on the API.
 
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.CountVectorizer;
-import org.apache.spark.ml.feature.CountVectorizerModel;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.*;
-
-// Input data: Each row is a bag of words from a sentence or document.
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Arrays.asList("a", "b", "c")),
-  RowFactory.create(Arrays.asList("a", "b", "b", "c", "a"))
-));
-StructType schema = new StructType(new StructField [] {
-  new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
-});
-DataFrame df = sqlContext.createDataFrame(jrdd, schema);
-
-// fit a CountVectorizerModel from the corpus
-CountVectorizerModel cvModel = new CountVectorizer()
-  .setInputCol("text")
-  .setOutputCol("feature")
-  .setVocabSize(3)
-  .setMinDF(2) // a term must appear in more or equal to 2 documents to be included in the vocabulary
-  .fit(df);
-
-// alternatively, define CountVectorizerModel with a-priori vocabulary
-CountVectorizerModel cvm = new CountVectorizerModel(new String[]{"a", "b", "c"})
-  .setInputCol("text")
-  .setOutputCol("feature");
-
-cvModel.transform(df).show();
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaCountVectorizerExample.java %}
 </div>
 </div>
 
