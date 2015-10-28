@@ -24,7 +24,7 @@ if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-export SPARK_CONF_DIR="${SPARK_CONF_DIR:-"$SPARK_HOME/conf"}"
+export SPARK_CONF_DIR="${SPARK_CONF_DIR:-"${SPARK_HOME}/conf"}"
 # Add the PySpark classes to the PYTHONPATH:
-export PYTHONPATH="$SPARK_HOME/python:$PYTHONPATH"
-export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.9-src.zip:$PYTHONPATH"
+export PYTHONPATH="${SPARK_HOME}/python:${PYTHONPATH}"
+export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.9-src.zip:${PYTHONPATH}"

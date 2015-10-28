@@ -98,7 +98,7 @@ export SPARK_PRINT_LAUNCH_COMMAND="1"
 
 # get log directory
 if [ "$SPARK_LOG_DIR" = "" ]; then
-  export SPARK_LOG_DIR="$SPARK_HOME/logs"
+  export SPARK_LOG_DIR="${SPARK_HOME}/logs"
 fi
 mkdir -p "$SPARK_LOG_DIR"
 touch "$SPARK_LOG_DIR"/.spark_test > /dev/null 2>&1
@@ -138,7 +138,7 @@ run_command() {
 
   if [ "$SPARK_MASTER" != "" ]; then
     echo rsync from "$SPARK_MASTER"
-    rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' "$SPARK_MASTER/" "$SPARK_HOME"
+    rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' "$SPARK_MASTER/" "${SPARK_HOME}"
   fi
 
   spark_rotate_log "$log"

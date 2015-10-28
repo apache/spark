@@ -46,7 +46,7 @@ JAR_COUNT=0
 
 for f in "${JAR_PATH}"/spark-examples-*hadoop*.jar; do
   if [[ ! -e "$f" ]]; then
-    echo "Failed to find Spark examples assembly in ${SPARK_HOME}/lib or $SPARK_HOME/examples/target" 1>&2
+    echo "Failed to find Spark examples assembly in ${SPARK_HOME}/lib or ${SPARK_HOME}/examples/target" 1>&2
     echo "You need to build Spark before running this program" 1>&2
     exit 1
   fi
