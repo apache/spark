@@ -55,7 +55,7 @@ abstract class ReceivedBlockTrackerSuite
     conf = new SparkConf().setMaster("local[2]").setAppName("ReceivedBlockTrackerSuite")
     checkpointDirectory = Utils.createTempDir()
     if (isBatchingEnabled) {
-      conf.set("spark.streaming.driver.writeAheadLog.enableBatching", "true")
+      conf.set("spark.streaming.driver.writeAheadLog.allowBatching", "true")
     }
   }
 
@@ -68,28 +68,8 @@ abstract class ReceivedBlockTrackerSuite
   def addBlockInfos(
       tracker: ReceivedBlockTracker,
       blockInfos: Seq[ReceivedBlockInfo] = generateBlockInfos()): Seq[ReceivedBlockInfo] = {
-    if (isBatchingEnabled) {
-      blockInfos.map(tracker.addBlockAsync)
-    } else {
-      blockInfos.map(tracker.addBlock)
-    }
+    blockInfos.map(tracker.addBlock)
     blockInfos
-  }
-
-  def allocateBlocksToBatch(t: Time, tracker: ReceivedBlockTracker): Unit = {
-    if (isBatchingEnabled) {
-      tracker.allocateBlocksToBatchAsync(t)
-    } else {
-      tracker.allocateBlocksToBatch(t)
-    }
-  }
-
-  def cleanupOldBatches(t: Time, wait: Boolean, tracker: ReceivedBlockTracker): Unit = {
-    if (isBatchingEnabled) {
-      tracker.cleanupOldBatchesAsync(t, wait)
-    } else {
-      tracker.cleanupOldBatches(t, wait)
-    }
   }
 
   test("block addition, and block to batch allocation") {
@@ -104,24 +84,24 @@ abstract class ReceivedBlockTrackerSuite
     receivedBlockTracker.hasUnallocatedReceivedBlocks should be (true)
 
     // Allocate the blocks to a batch and verify that all of them have been allocated
-    allocateBlocksToBatch(1, receivedBlockTracker)
+    receivedBlockTracker.allocateBlocksToBatch(1)
     receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
     receivedBlockTracker.getBlocksOfBatch(1) shouldEqual Map(streamId -> blockInfos)
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldBe empty
     receivedBlockTracker.hasUnallocatedReceivedBlocks should be (false)
 
     // Allocate no blocks to another batch
-    allocateBlocksToBatch(2, receivedBlockTracker)
+    receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
     receivedBlockTracker.getBlocksOfBatch(2) shouldEqual Map(streamId -> Seq.empty)
 
     // Verify that older batches have no operation on batch allocation,
     // will return the same blocks as previously allocated.
-    allocateBlocksToBatch(1, receivedBlockTracker)
+    receivedBlockTracker.allocateBlocksToBatch(1)
     receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
 
     addBlockInfos(receivedBlockTracker, blockInfos)
-    allocateBlocksToBatch(2, receivedBlockTracker)
+    receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
   }
@@ -177,7 +157,7 @@ abstract class ReceivedBlockTrackerSuite
 
     // Allocate blocks to batch and verify whether the unallocated blocks got allocated
     val batchTime1 = manualClock.getTimeMillis()
-    allocateBlocksToBatch(batchTime1, tracker2)
+    tracker2.allocateBlocksToBatch(batchTime1)
     tracker2.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
     tracker2.getBlocksOfBatch(batchTime1) shouldEqual Map(streamId -> blockInfos1)
 
@@ -185,7 +165,7 @@ abstract class ReceivedBlockTrackerSuite
     incrementTime()
     val batchTime2 = manualClock.getTimeMillis()
     val blockInfos2 = addBlockInfos(tracker2)
-    allocateBlocksToBatch(batchTime2, tracker2)
+    tracker2.allocateBlocksToBatch(batchTime2)
     tracker2.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
     // Verify whether log has correct contents
     val expectedWrittenData2 = expectedWrittenData1 ++
@@ -204,7 +184,7 @@ abstract class ReceivedBlockTrackerSuite
     // Cleanup first batch but not second batch
     val oldestLogFile = getWriteAheadLogFiles().head
     incrementTime()
-    cleanupOldBatches(batchTime2, true, tracker3)
+    tracker3.cleanupOldBatches(batchTime2, true)
     // Verify that the batch allocations have been cleaned, and the act has been written to log
     tracker3.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual Seq.empty
     getWrittenLogData(getWriteAheadLogFiles().last) should contain(createBatchCleanup(batchTime1))
@@ -266,7 +246,7 @@ abstract class ReceivedBlockTrackerSuite
       file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq
     }.flatMap { byteBuffer =>
       Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array) match {
-        case CombinedRBTLogEvent(events) => events
+        case CombinedReceivedBlockTrackerLogEvent(events) => events
         case others: ReceivedBlockTrackerLogEvent => Seq(others)
       }
     }.toList
@@ -312,15 +292,16 @@ class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with Mock
 
     override def createBatchWriteAheadLogWriter(): Option[BatchLogWriter] = None
 
-    def updateWALWriteStatus(event: ReceivedBlockTrackerLogEvent, status: WALWriteStatus): Unit = {
-      walWriteStatusMap.put(event, status)
+    def updateWALWriteStatus(event: ReceivedBlockTrackerLogEvent, successful: Boolean): Unit = {
+      val promise = walWriteStatusMap.get(event)
+      promise.success(successful)
       walWriteQueue.poll()
     }
 
     def getQueueLength(): Int = walWriteQueue.size()
 
     def addToQueue(event: ReceivedBlockTrackerLogEvent): Boolean = {
-      writeToLogAsync(event)
+      writeToLog(event)
     }
   }
 
@@ -335,8 +316,6 @@ class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with Mock
     result
   }
 
-  import WALWriteStatus._
-
   test("records get added to a queue") {
     val numSuccess = new AtomicInteger()
     val numFail = new AtomicInteger()
@@ -350,7 +329,7 @@ class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with Mock
 
     def eventFuture(event: ReceivedBlockTrackerLogEvent): Unit = {
       val f = Future(rbt.addToQueue(event))(walBatchingThreadPool)
-      f.onSuccess{ case v =>
+      f.onSuccess { case v =>
         if (v) numSuccess.incrementAndGet() else numFail.incrementAndGet()
       }(walBatchingThreadPool)
     }
@@ -367,7 +346,7 @@ class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with Mock
     assert(numSuccess.get() === 0)
     assert(numFail.get() === 0)
 
-    rbt.updateWALWriteStatus(event1, Fail)
+    rbt.updateWALWriteStatus(event1, successful = false)
     assert(waitUntilTrue(getNumFail, 1))
     assert(waitUntilTrue(rbt.getQueueLength, 0))
 
@@ -375,15 +354,15 @@ class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with Mock
     eventFuture(event3)
     eventFuture(event4)
     assert(waitUntilTrue(rbt.getQueueLength, 3))
-    rbt.updateWALWriteStatus(event2, Success)
-    rbt.updateWALWriteStatus(event3, Success)
+    rbt.updateWALWriteStatus(event2, successful = true)
+    rbt.updateWALWriteStatus(event3, successful = true)
     assert(waitUntilTrue(getNumSuccess, 2))
     assert(waitUntilTrue(rbt.getQueueLength, 1))
 
     eventFuture(event5)
     assert(waitUntilTrue(rbt.getQueueLength, 2))
-    rbt.updateWALWriteStatus(event4, Success)
-    rbt.updateWALWriteStatus(event5, Success)
+    rbt.updateWALWriteStatus(event4, successful = true)
+    rbt.updateWALWriteStatus(event5, successful = true)
     assert(waitUntilTrue(getNumSuccess, 4))
     assert(waitUntilTrue(rbt.getQueueLength, 0))
   }

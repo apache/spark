@@ -38,7 +38,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   val DRIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.driver.writeAheadLog.rollingIntervalSecs"
   val DRIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.driver.writeAheadLog.maxFailures"
-  val DRIVER_WAL_BATCHING_CONF_KEY = "spark.streaming.driver.writeAheadLog.enableBatching"
+  val DRIVER_WAL_BATCHING_CONF_KEY = "spark.streaming.driver.writeAheadLog.allowBatching"
   val DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
     "spark.streaming.driver.writeAheadLog.closeFileAfterWrite"
 

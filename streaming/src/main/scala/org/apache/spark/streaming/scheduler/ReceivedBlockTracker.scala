@@ -18,19 +18,22 @@
 package org.apache.spark.streaming.scheduler
 
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Await, Promise}
+import scala.concurrent.duration._
 import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.{ThreadUtils, Clock, Utils}
 import org.apache.spark.{Logging, SparkConf}
 
 /** Trait representing any event in the ReceivedBlockTracker that updates its state. */
@@ -42,8 +45,8 @@ private[streaming] case class BatchAllocationEvent(time: Time, allocatedBlocks: 
   extends ReceivedBlockTrackerLogEvent
 private[streaming] case class BatchCleanupEvent(times: Seq[Time])
   extends ReceivedBlockTrackerLogEvent
-private[streaming] case class CombinedRBTLogEvent(events: List[ReceivedBlockTrackerLogEvent])
-  extends ReceivedBlockTrackerLogEvent
+private[streaming] case class CombinedReceivedBlockTrackerLogEvent(
+    events: Seq[ReceivedBlockTrackerLogEvent]) extends ReceivedBlockTrackerLogEvent
 
 /** Class representing the blocks of all the streams allocated to a batch */
 private[streaming]
@@ -77,16 +80,17 @@ private[streaming] class ReceivedBlockTracker(
   private val timeToAllocatedBlocks = new mutable.HashMap[Time, AllocatedBlocks]
   private val writeAheadLogOption = createWriteAheadLog()
   // exposed for tests
-  protected val walWriteQueue = new ConcurrentLinkedQueue[ReceivedBlockTrackerLogEvent]()
+  protected val walWriteQueue = new LinkedBlockingQueue[ReceivedBlockTrackerLogEvent]()
 
   // stores the status for wal writes added to the queue. Exposed for tests
   protected val walWriteStatusMap =
-    new ConcurrentHashMap[ReceivedBlockTrackerLogEvent, WALWriteStatus]()
+    new ConcurrentHashMap[ReceivedBlockTrackerLogEvent, Promise[Boolean]]()
 
-  private val WAL_WRITE_STATUS_CHECK_BACKOFF = 10 // 10 millis
   private val WAL_WRITE_STATUS_TIMEOUT = 5000 // 5 seconds
 
   private val writeAheadLogBatchWriter: Option[BatchLogWriter] = createBatchWriteAheadLogWriter()
+  private val batchWriterThreadPool = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("wal-batch-writer-thead-pool"))
 
   private var lastAllocatedBatchTime: Time = null
 
@@ -96,12 +100,10 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Add received block. This event will get written to the write ahead log (if enabled). */
-  private def addBlock0(
-      receivedBlockInfo: ReceivedBlockInfo,
-      writeOp: ReceivedBlockTrackerLogEvent => Boolean): Boolean = {
+  def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
     try {
-      val result = writeOp(BlockAdditionEvent(receivedBlockInfo))
-      if (result) {
+      val writeResult = writeToLog(BlockAdditionEvent(receivedBlockInfo))
+      if (writeResult) {
         afterBlockAddAcknowledged(receivedBlockInfo)
         logDebug(s"Stream ${receivedBlockInfo.streamId} received " +
           s"block ${receivedBlockInfo.blockStoreResult.blockId}")
@@ -109,9 +111,9 @@ private[streaming] class ReceivedBlockTracker(
         logDebug(s"Failed to acknowledge stream ${receivedBlockInfo.streamId} receiving " +
           s"block ${receivedBlockInfo.blockStoreResult.blockId} in the Write Ahead Log.")
       }
-      result
+      writeResult
     } catch {
-      case e: Exception =>
+      case NonFatal(e) =>
         logError(s"Error adding block $receivedBlockInfo", e)
         false
     }
@@ -122,29 +124,17 @@ private[streaming] class ReceivedBlockTracker(
     getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
   }
 
-  /** Add received block. This event will get written to the write ahead log (if enabled). */
-  def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
-    addBlock0(receivedBlockInfo, writeToLog)
-  }
-
-  def addBlockAsync(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
-    addBlock0(receivedBlockInfo, writeToLogAsync)
-  }
-
   /**
    * Allocate all unallocated blocks to the given batch.
    * This event will get written to the write ahead log (if enabled).
    */
-  private def allocateBlocksToBatch0(
-      batchTime: Time,
-      writeOp: ReceivedBlockTrackerLogEvent => Boolean): Unit = {
+  def allocateBlocksToBatch(batchTime: Time): Unit = {
     if (lastAllocatedBatchTime == null || batchTime > lastAllocatedBatchTime) {
       val streamIdToBlocks = streamIds.map { streamId =>
           (streamId, getReceivedBlockQueue(streamId).dequeueAll(x => true))
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
-      val result = writeOp(BatchAllocationEvent(batchTime, allocatedBlocks))
-      if (result) {
+      if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {
         afterBatchAllocationAcknowledged(batchTime, allocatedBlocks)
       } else {
         logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
@@ -159,18 +149,6 @@ private[streaming] class ReceivedBlockTracker(
       // This situation will only occurs in recovery time.
       logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
     }
-  }
-
-  /**
-   * Allocate all unallocated blocks to the given batch.
-   * This event will get written to the write ahead log (if enabled).
-   */
-  def allocateBlocksToBatch(batchTime: Time): Unit = {
-    allocateBlocksToBatch0(batchTime, writeToLog)
-  }
-
-  def allocateBlocksToBatchAsync(batchTime: Time): Unit = {
-    allocateBlocksToBatch0(batchTime, writeToLogAsync)
   }
 
   /** Update in-memory state after batch allocation event has been logged to WAL. */
@@ -212,50 +190,23 @@ private[streaming] class ReceivedBlockTracker(
    * Clean up block information of old batches. If waitForCompletion is true, this method
    * returns only after the files are cleaned up.
    */
-  private def cleanupOldBatches0(
-      cleanupThreshTime: Time,
-      waitForCompletion: Boolean,
-      writeOp: ReceivedBlockTrackerLogEvent => Boolean): Unit = {
+  def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
     require(cleanupThreshTime.milliseconds < clock.getTimeMillis())
     val timesToCleanup = timeToAllocatedBlocks.keys.filter { _ < cleanupThreshTime }.toSeq
     logInfo("Deleting batches " + timesToCleanup)
-    if (writeOp(BatchCleanupEvent(timesToCleanup))) {
-      afterBatchCleanupAcknowledged(cleanupThreshTime, waitForCompletion, timesToCleanup)
+    if (writeToLog(BatchCleanupEvent(timesToCleanup))) {
+      timeToAllocatedBlocks --= timesToCleanup
+      writeAheadLogOption.foreach(_.clean(cleanupThreshTime.milliseconds, waitForCompletion))
     } else {
       logWarning("Failed to acknowledge batch clean up in the Write Ahead Log.")
     }
-  }
-
-  /**
-   * Clean up block information of old batches. If waitForCompletion is true, this method
-   * returns only after the files are cleaned up.
-   */
-  def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = {
-    cleanupOldBatches0(cleanupThreshTime, waitForCompletion, writeToLog)
-  }
-
-  /**
-   * Clean up block information of old batches. If waitForCompletion is true, this method
-   * returns only after the files are cleaned up. Not really async, the event will be written to
-   * a WAL within a batch, if WAL's are enabled.
-   */
-  def cleanupOldBatchesAsync(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = {
-    cleanupOldBatches0(cleanupThreshTime, waitForCompletion, writeToLogAsync)
-  }
-
-  /** Update in-memory state after clean up event has been logged to WAL. */
-  private def afterBatchCleanupAcknowledged(
-      cleanupThreshTime: Time,
-      waitForCompletion: Boolean,
-      timesToCleanup: Seq[Time]): Unit = synchronized {
-    timeToAllocatedBlocks --= timesToCleanup
-    writeAheadLogOption.foreach(_.clean(cleanupThreshTime.milliseconds, waitForCompletion))
   }
 
   /** Stop the block tracker. */
   def stop() {
     writeAheadLogBatchWriter.foreach { _.stop() }
     writeAheadLogOption.foreach { _.close() }
+    batchWriterThreadPool.shutdownNow()
   }
 
   /**
@@ -287,7 +238,8 @@ private[streaming] class ReceivedBlockTracker(
 
     def resolveEvent(event: ReceivedBlockTrackerLogEvent): Unit = {
       event match {
-        case CombinedRBTLogEvent(events) => events.foreach(resolveEvent)
+        case CombinedReceivedBlockTrackerLogEvent(events) =>
+          events.foreach(resolveEvent)
         case BlockAdditionEvent(receivedBlockInfo) =>
           insertAddedBlock(receivedBlockInfo)
         case BatchAllocationEvent(time, allocatedBlocks) =>
@@ -308,33 +260,21 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Write an update to the tracker to the write ahead log */
-  private def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
-    if (isWriteAheadLogEnabled) {
+  private[streaming] def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
+    if (!isWriteAheadLogEnabled) return true
+    if (WriteAheadLogUtils.isBatchingEnabled(conf)) {
+      val promise = Promise[Boolean]()
+      walWriteStatusMap.put(record, promise)
+      walWriteQueue.offer(record)
+      Await.result(promise.future.recover { case _ => false }(batchWriterThreadPool),
+        WAL_WRITE_STATUS_TIMEOUT.milliseconds)
+    } else {
       writeAheadLogOption.foreach { logManager =>
         logTrace(s"Writing record: $record")
         logManager.write(ByteBuffer.wrap(Utils.serialize(record)), clock.getTimeMillis())
       }
+      true
     }
-    true
-  }
-
-  import WALWriteStatus._
-
-  /**
-   * Adds LogEvents to a queue so that they can be batched and written to the WAL.
-   * Exposed for testing.
-   */
-  private[streaming] def writeToLogAsync(event: ReceivedBlockTrackerLogEvent): Boolean = {
-    if (!isWriteAheadLogEnabled) return true // return early if WAL is not enabled
-    walWriteStatusMap.put(event, Pending)
-    walWriteQueue.offer(event)
-    var timedOut = false
-    val start = clock.getTimeMillis()
-    while (walWriteStatusMap.get(event) == Pending) {
-      Thread.sleep(WAL_WRITE_STATUS_CHECK_BACKOFF)
-      if (clock.getTimeMillis() - WAL_WRITE_STATUS_TIMEOUT > start) timedOut = true
-    }
-    walWriteStatusMap.remove(event) == Success
   }
 
   /** Get the queue of received blocks belonging to a particular stream */
@@ -358,10 +298,9 @@ private[streaming] class ReceivedBlockTracker(
     if (!WriteAheadLogUtils.isBatchingEnabled(conf)) return None
     val writer = checkpointDirOption.map(_ => new BatchLogWriter)
     writer.foreach { runnable =>
-      new Thread(runnable, "Batch WAL Writer").start()
-      Runtime.getRuntime.addShutdownHook(new Thread {
-        override def run(): Unit = runnable.stop()
-      })
+      val thread = new Thread(runnable, "Batch WAL Writer")
+      thread.setDaemon(true)
+      thread.start()
     }
     writer
   }
@@ -374,41 +313,60 @@ private[streaming] class ReceivedBlockTracker(
 
     var active: Boolean = true
 
-    private def writeRecords(records: List[ReceivedBlockTrackerLogEvent]): Unit = {
+    private def writeRecords(records: Seq[ReceivedBlockTrackerLogEvent]): Unit = {
       writeAheadLogOption.foreach { logManager =>
         if (records.nonEmpty) {
           logDebug(s"Batched ${records.length} records for WAL write")
-          logManager.write(ByteBuffer.wrap(Utils.serialize(CombinedRBTLogEvent(records))), 
-            clock.getTimeMillis())
+          logManager.write(ByteBuffer.wrap(Utils.serialize(
+            CombinedReceivedBlockTrackerLogEvent(records))), clock.getTimeMillis())
         }
       }
     }
 
     def stop(): Unit = {
+      logInfo("Stopping Batch Write Ahead Log writer.")
       active = false
     }
 
     private def flushRecords(): Unit = {
       val buffer = new ArrayBuffer[ReceivedBlockTrackerLogEvent]()
-      while (!walWriteQueue.isEmpty) {
-        buffer.append(walWriteQueue.poll())
-      }
-      val records = buffer.toList
       try {
-        writeRecords(records)
-        records.foreach(walWriteStatusMap.put(_, Success))
+        buffer.append(walWriteQueue.take())
+        while (!walWriteQueue.isEmpty) {
+          buffer.append(walWriteQueue.poll())
+        }
       } catch {
-        case e: Exception =>
-          logWarning(s"Batch WAL Writer failed to write $records")
-          records.foreach(walWriteStatusMap.put(_, Fail))
+        case _: InterruptedException =>
+          logWarning("Batch Write Ahead Log Writer queue interrupted.")
+      }
+      def updateRecordStatus(record: ReceivedBlockTrackerLogEvent, successful: Boolean): Unit = {
+        val promise = walWriteStatusMap.get(record)
+        if (promise == null) {
+          logError(s"Promise for writing record $record not found in status map!")
+        } else {
+          promise.success(successful)
+        }
+      }
+      try {
+        writeRecords(buffer)
+        buffer.foreach(updateRecordStatus(_, successful = true))
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Batch WAL Writer failed to write $buffer", e)
+          buffer.foreach(updateRecordStatus(_, successful = false))
       }
     }
 
     override def run(): Unit = {
       while (active) {
-        flushRecords()
-        Thread.sleep(WAL_WRITE_STATUS_CHECK_BACKOFF)
+        try {
+          flushRecords()
+        } catch {
+          case NonFatal(e) =>
+            logError("Exception while flushing records in Batch Write Ahead Log writer.", e)
+        }
       }
+      logInfo("Batch Write Ahead Log writer shutting down.")
     }
   }
 }
@@ -417,12 +375,4 @@ private[streaming] object ReceivedBlockTracker {
   def checkpointDirToLogDir(checkpointDir: String): String = {
     new Path(checkpointDir, "receivedBlockMetadata").toString
   }
-}
-
-/** State of LogEvents during batching. */
-private[streaming] trait WALWriteStatus
-private[streaming] object WALWriteStatus {
-  private[streaming] case object Pending extends WALWriteStatus
-  private[streaming] case object Success extends WALWriteStatus
-  private[streaming] case object Fail extends WALWriteStatus
 }

@@ -200,11 +200,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Allocate all unallocated blocks to the given batch. */
   def allocateBlocksToBatch(batchTime: Time): Unit = {
     if (receiverInputStreams.nonEmpty) {
-      if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
-        receivedBlockTracker.allocateBlocksToBatchAsync(batchTime)
-      } else {
-        receivedBlockTracker.allocateBlocksToBatch(batchTime)
-      }
+      receivedBlockTracker.allocateBlocksToBatch(batchTime)
     }
   }
 
@@ -224,11 +220,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    */
   def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
     // Clean up old block and batch metadata
-    if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
-      receivedBlockTracker.cleanupOldBatchesAsync(cleanupThreshTime, waitForCompletion = false)
-    } else {
-      receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
-    }
+    receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
 
     // Signal the receivers to delete old block data
     if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
@@ -327,11 +319,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Add new blocks for the given stream */
   private def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
     receivedBlockTracker.addBlock(receivedBlockInfo)
-  }
-
-  /** Add new blocks for the given stream */
-  private def addBlockAsync(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
-    receivedBlockTracker.addBlockAsync(receivedBlockInfo)
   }
 
   /** Report error sent by a receiver */
@@ -505,7 +492,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
         if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
-          val f = Future(addBlockAsync(receivedBlockInfo))(walBatchingThreadPool)
+          val f = Future(addBlock(receivedBlockInfo))(walBatchingThreadPool)
           f.onComplete(result => context.reply(result.get))(walBatchingThreadPool)
         } else {
           context.reply(addBlock(receivedBlockInfo))
@@ -620,6 +607,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     override def onStop(): Unit = {
       submitJobThreadPool.shutdownNow()
+      walBatchingThreadPool.shutdownNow()
     }
 
     /**
