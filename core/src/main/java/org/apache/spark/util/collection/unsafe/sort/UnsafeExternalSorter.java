@@ -418,7 +418,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         }
 
         UnsafeInMemorySorter.SortedIterator inMemIterator =
-          (UnsafeInMemorySorter.SortedIterator) upstream;
+          ((UnsafeInMemorySorter.SortedIterator) upstream).clone();
 
         final UnsafeSorterSpillWriter spillWriter =
           new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
@@ -431,6 +431,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           spillWriter.write(baseObject, baseOffset, recordLength, inMemIterator.getKeyPrefix());
         }
         spillWriter.close();
+        spillWriters.add(spillWriter);
         nextUpstream = spillWriter.getReader(blockManager);
 
         long released = 0L;
@@ -450,7 +451,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           inMemSorter = null;
           releaseMemory(used);
         }
-
         return released;
       }
     }

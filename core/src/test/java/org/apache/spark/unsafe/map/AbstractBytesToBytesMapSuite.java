@@ -551,6 +551,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       for (i = 100; i < 1024; i++) {
         iter.next();
       }
+
       BytesToBytesMap.MapIterator iter2 = map.destructiveIterator();
       for (i = 0; i < 100; i++) {
         iter2.next();

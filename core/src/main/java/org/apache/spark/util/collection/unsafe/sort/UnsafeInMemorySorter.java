@@ -159,6 +159,16 @@ public final class UnsafeInMemorySorter {
       this.sortBuffer = sortBuffer;
     }
 
+    public SortedIterator clone () {
+      SortedIterator iter = new SortedIterator(memoryManager, sortBufferInsertPosition, sortBuffer);
+      iter.position = position;
+      iter.baseObject = baseObject;
+      iter.baseOffset = baseOffset;
+      iter.keyPrefix = keyPrefix;
+      iter.recordLength = recordLength;
+      return iter;
+    }
+
     @Override
     public boolean hasNext() {
       return position < sortBufferInsertPosition;

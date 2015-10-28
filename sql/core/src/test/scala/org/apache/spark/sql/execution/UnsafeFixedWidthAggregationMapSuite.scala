@@ -342,7 +342,7 @@ class UnsafeFixedWidthAggregationMapSuite
       buf.setInt(0, str.length)
     }
     // Simulate running out of space
-    memoryManager.markExecutionAsOutOfMemoryAlways()
+    memoryManager.limit(0)
     val str = rand.nextString(4096)
     val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
     assert(buf == null)

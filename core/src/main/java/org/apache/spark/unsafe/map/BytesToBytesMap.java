@@ -18,15 +18,20 @@
 package org.apache.spark.unsafe.map;
 
 import javax.annotation.Nullable;
+import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
+
+import scala.runtime.AbstractFunction0;
+import scala.runtime.BoxedUnit;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkEnv;
+import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -235,8 +240,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     // If this iterator destructive or not. When it is true, it frees each page as it moves onto
     // next one.
     private boolean destructive = false;
-    private LinkedList<UnsafeSorterSpillWriter> spillWriters =
-      new LinkedList<UnsafeSorterSpillWriter>();
+    private LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
     private UnsafeSorterSpillReader reader = null;
 
     private MapIterator(int numRecords, Location loc, boolean destructive) {
@@ -264,8 +268,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
           offsetInPage += 4;
         } else {
           currentPage = null;
+          if (reader != null) {
+            // remove the spill file from disk
+            File file = spillWriters.removeFirst().getFile();
+            if (file != null && file.exists()) {
+              if (!file.delete()) {
+                logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+              }
+            }
+          }
           try {
-            reader = spillWriters.removeFirst().getReader(blockManager);
+            reader = spillWriters.getFirst().getReader(blockManager);
             recordsInPage = -1;
           } catch (IOException e) {
             // Scala iterator does not handle exception
@@ -338,18 +351,20 @@ public final class BytesToBytesMap extends MemoryConsumer {
           }
           writer.close();
           spillWriters.add(writer);
-//          taskContext.addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
-//            @Override
-//            public BoxedUnit apply() {
-//              File file = writer.getFile();
-//              if (file != null && file.exists()) {
-//                if (!file.delete()) {
-//                  logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
-//                }
-//              }
-//              return null;
-//            }
-//          });
+          if (TaskContext.get() != null) {
+            TaskContext.get().addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
+              @Override
+              public BoxedUnit apply() {
+                File file = writer.getFile();
+                if (file != null && file.exists()) {
+                  if (!file.delete()) {
+                    logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+                  }
+                }
+                return null;
+              }
+            });
+          }
 
           dataPages.removeLast();
           freePage(block);
