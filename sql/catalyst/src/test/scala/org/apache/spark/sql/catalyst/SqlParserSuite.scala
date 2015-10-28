@@ -77,34 +77,32 @@ class SqlParserSuite extends PlanTest {
   }
 
   test("support hive interval literal") {
-    def checkYearMonth(lit: String): Unit = {
-      val parsed = SqlParser.parse(s"SELECT INTERVAL '$lit' YEAR TO MONTH")
+    def checkInterval(sql: String, result: CalendarInterval): Unit = {
+      val parsed = SqlParser.parse(sql)
       val expected = Project(
         UnresolvedAlias(
-          Literal(CalendarInterval.fromYearMonthString(lit))
+          Literal(result)
         ) :: Nil,
         OneRowRelation)
       comparePlans(parsed, expected)
+    }
+
+    def checkYearMonth(lit: String): Unit = {
+      checkInterval(
+        s"SELECT INTERVAL '$lit' YEAR TO MONTH",
+        CalendarInterval.fromYearMonthString(lit))
     }
 
     def checkDayTime(lit: String): Unit = {
-      val parsed = SqlParser.parse(s"SELECT INTERVAL '$lit' DAY TO SECOND")
-      val expected = Project(
-        UnresolvedAlias(
-          Literal(CalendarInterval.fromDayTimeString(lit))
-        ) :: Nil,
-        OneRowRelation)
-      comparePlans(parsed, expected)
+      checkInterval(
+        s"SELECT INTERVAL '$lit' DAY TO SECOND",
+        CalendarInterval.fromDayTimeString(lit))
     }
 
     def checkSingleUnit(lit: String, unit: String): Unit = {
-      val parsed = SqlParser.parse(s"SELECT INTERVAL '$lit' $unit")
-      val expected = Project(
-        UnresolvedAlias(
-          Literal(CalendarInterval.fromSingleUnitString(unit, lit))
-        ) :: Nil,
-        OneRowRelation)
-      comparePlans(parsed, expected)
+      checkInterval(
+        s"SELECT INTERVAL '$lit' $unit",
+        CalendarInterval.fromSingleUnitString(unit, lit))
     }
 
     checkYearMonth("123-10")

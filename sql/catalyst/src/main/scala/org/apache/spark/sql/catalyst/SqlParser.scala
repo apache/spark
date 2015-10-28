@@ -69,7 +69,6 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val BY = Keyword("BY")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
-  protected val DAY = Keyword("DAY")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
@@ -80,7 +79,6 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
   protected val HAVING = Keyword("HAVING")
-  protected val HOUR = Keyword("HOUR")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
   protected val INSERT = Keyword("INSERT")
@@ -92,14 +90,11 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val LEFT = Keyword("LEFT")
   protected val LIKE = Keyword("LIKE")
   protected val LIMIT = Keyword("LIMIT")
-  protected val MINUTE = Keyword("MINUTE")
-  protected val MONTH = Keyword("MONTH")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
   protected val ORDER = Keyword("ORDER")
-  protected val SECOND = Keyword("SECOND")
   protected val SORT = Keyword("SORT")
   protected val OUTER = Keyword("OUTER")
   protected val OVERWRITE = Keyword("OVERWRITE")
@@ -110,13 +105,11 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val SEMI = Keyword("SEMI")
   protected val TABLE = Keyword("TABLE")
   protected val THEN = Keyword("THEN")
-  protected val TO = Keyword("TO")
   protected val TRUE = Keyword("TRUE")
   protected val UNION = Keyword("UNION")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
   protected val WITH = Keyword("WITH")
-  protected val YEAR = Keyword("YEAR")
 
   protected lazy val start: Parser[LogicalPlan] =
     start1 | insert | cte
@@ -356,13 +349,12 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val integral: Parser[String] =
     sign.? ~ numericLit ^^ { case s ~ n => s.getOrElse("") + n }
 
-  private def intervalUnit(unitName: String) =
-    acceptIf {
-      case lexical.Identifier(str) =>
-        val normalized = lexical.normalizeKeyword(str)
-        normalized == unitName || normalized == unitName + "s"
-      case _ => false
-    } {_ => "wrong interval unit"}
+  private def intervalUnit(unitName: String) = acceptIf {
+    case lexical.Identifier(str) =>
+      val normalized = lexical.normalizeKeyword(str)
+      normalized == unitName || normalized == unitName + "s"
+    case _ => false
+  } {_ => "wrong interval unit"}
 
   protected lazy val month: Parser[Int] =
     integral <~ intervalUnit("month") ^^ { case num => num.toInt }
@@ -403,29 +395,37 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       case num => num.toLong * CalendarInterval.MICROS_PER_WEEK
     }
 
+  private def intervalKeyword(keyword: String) = acceptIf {
+    case lexical.Identifier(str) =>
+      lexical.normalizeKeyword(str) == keyword
+    case _ => false
+  } {_ => "wrong interval keyword"}
+
   protected lazy val intervalLiteral: Parser[Literal] =
-    ( INTERVAL ~> stringLit <~ YEAR ~ TO ~ MONTH ^^ { case s =>
+    ( INTERVAL ~> stringLit <~ intervalKeyword("year") ~ intervalKeyword("to") ~
+        intervalKeyword("month") ^^ { case s =>
       Literal(CalendarInterval.fromYearMonthString(s))
     }
-    | INTERVAL ~> stringLit <~ DAY ~ TO ~ SECOND ^^ { case s =>
+    | INTERVAL ~> stringLit <~ intervalKeyword("day") ~ intervalKeyword("to") ~
+        intervalKeyword("second") ^^ { case s =>
       Literal(CalendarInterval.fromDayTimeString(s))
     }
-    | INTERVAL ~> stringLit <~ YEAR ^^ { case s =>
+    | INTERVAL ~> stringLit <~ intervalKeyword("year") ^^ { case s =>
       Literal(CalendarInterval.fromSingleUnitString("year", s))
     }
-    | INTERVAL ~> stringLit <~ MONTH ^^ { case s =>
+    | INTERVAL ~> stringLit <~ intervalKeyword("month") ^^ { case s =>
       Literal(CalendarInterval.fromSingleUnitString("month", s))
     }
-    | INTERVAL ~> stringLit <~ DAY ^^ { case s =>
+    | INTERVAL ~> stringLit <~ intervalKeyword("day") ^^ { case s =>
       Literal(CalendarInterval.fromSingleUnitString("day", s))
     }
-    | INTERVAL ~> stringLit <~ HOUR ^^ { case s =>
+    | INTERVAL ~> stringLit <~ intervalKeyword("hour") ^^ { case s =>
       Literal(CalendarInterval.fromSingleUnitString("hour", s))
     }
-    | INTERVAL ~> stringLit <~ MINUTE ^^ { case s =>
+    | INTERVAL ~> stringLit <~ intervalKeyword("minute") ^^ { case s =>
       Literal(CalendarInterval.fromSingleUnitString("minute", s))
     }
-    | INTERVAL ~> stringLit <~ SECOND ^^ { case s =>
+    | INTERVAL ~> stringLit <~ intervalKeyword("second") ^^ { case s =>
       Literal(CalendarInterval.fromSingleUnitString("second", s))
     }
     | INTERVAL ~> year.? ~ month.? ~ week.? ~ day.? ~ hour.? ~ minute.? ~ second.? ~
