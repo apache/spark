@@ -86,4 +86,5 @@ import org.apache.spark.sql.DataFrame
  *
  * @see [[http://scikit-learn.org/stable/modules/preprocessing.html scikit-learn.preprocessing]]
  */
-package object feature
+package object
+feature
