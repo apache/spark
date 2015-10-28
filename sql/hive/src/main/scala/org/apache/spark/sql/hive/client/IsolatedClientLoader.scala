@@ -29,7 +29,7 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkSubmitUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
@@ -196,4 +196,15 @@ private[hive] class IsolatedClientLoader(
   } finally {
     Thread.currentThread.setContextClassLoader(baseClassLoader)
   }
+}
+
+/**
+ * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
+ * This class loader cannot be closed (its `close` method is a no-op).
+ */
+private[sql] class NonClosableMutableURLClassLoader(
+    parent: ClassLoader)
+  extends MutableURLClassLoader(Array.empty, parent) {
+
+  override def close(): Unit = {}
 }

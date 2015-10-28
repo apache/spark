@@ -87,12 +87,11 @@ case class AddJar(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val currentClassLoader = Utils.getContextOrSparkClassLoader
 
     // Add jar to current context
     val jarURL = new java.io.File(path).toURI.toURL
-    val newClassLoader = new java.net.URLClassLoader(Array(jarURL), currentClassLoader)
-    Thread.currentThread.setContextClassLoader(newClassLoader)
+    hiveContext.libraryClassLoader.addURL(jarURL)
+    Thread.currentThread.setContextClassLoader(hiveContext.libraryClassLoader)
     // We need to explicitly set the class loader associated with the conf in executionHive's
     // state because this class loader will be used as the context class loader of the current
     // thread to execute any Hive command.
@@ -100,7 +99,7 @@ case class AddJar(path: String) extends RunnableCommand {
     // returns the value of a thread local variable and its HiveConf may not be the HiveConf
     // associated with `executionHive.state` (for example, HiveContext is created in one thread
     // and then add jar is called from another thread).
-    hiveContext.executionHive.state.getConf.setClassLoader(newClassLoader)
+    hiveContext.executionHive.state.getConf.setClassLoader(hiveContext.libraryClassLoader)
     // Add jar to isolated hive (metadataHive) class loader.
     hiveContext.runSqlHive(s"ADD JAR $path")
 
