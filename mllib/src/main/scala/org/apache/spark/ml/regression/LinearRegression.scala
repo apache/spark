@@ -145,7 +145,7 @@ class LinearRegression(override val uid: String)
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).limit(1).map {
       case Row(features: Vector) => features.size
-    }.toArray()(0)
+    }.first()
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     if (($(solver) == "auto" && $(elasticNetParam) == 0.0 && numFeatures <= 4096) ||
