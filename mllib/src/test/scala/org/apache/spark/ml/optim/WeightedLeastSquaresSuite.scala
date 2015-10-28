@@ -18,7 +18,7 @@
 package org.apache.spark.ml.optim
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.optim.WeightedLeastSquares.Instance
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -38,10 +38,10 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
        w <- c(1, 2, 3, 4)
      */
     instances = sc.parallelize(Seq(
-      Instance(1.0, Vectors.dense(0.0, 5.0).toSparse, 17.0),
-      Instance(2.0, Vectors.dense(1.0, 7.0), 19.0),
-      Instance(3.0, Vectors.dense(2.0, 11.0), 23.0),
-      Instance(4.0, Vectors.dense(3.0, 13.0), 29.0)
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
     ), 2)
   }
 

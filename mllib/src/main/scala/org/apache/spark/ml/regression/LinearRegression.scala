@@ -154,10 +154,10 @@ class LinearRegression(override val uid: String)
         "solver is used.'")
       // For low dimensional data, WeightedLeastSquares is more efficiently since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
-      val instances: RDD[WeightedLeastSquares.Instance] = dataset.select(
+      val instances: RDD[Instance] = dataset.select(
         col($(labelCol)), w, col($(featuresCol))).map {
           case Row(label: Double, weight: Double, features: Vector) =>
-            WeightedLeastSquares.Instance(weight, features, label)
+            Instance(label, weight, features)
       }
 
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
