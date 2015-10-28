@@ -29,7 +29,7 @@ All of the examples on this page use sample data included in R or the Spark dist
 The entry point into SparkR is the `SparkContext` which connects your R program to a Spark cluster.
 You can create a `SparkContext` using `sparkR.init` and pass in options such as the application name
 , any spark packages depended on, etc. Further, to work with DataFrames we will need a `SQLContext`,
-which can be created from the  SparkContext. If you are working from the SparkR shell, the
+which can be created from the  SparkContext. If you are working from the `sparkR` shell, the
 `SQLContext` and `SparkContext` should already be created for you.
 
 {% highlight r %}
@@ -37,11 +37,13 @@ sc <- sparkR.init()
 sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
 
-In the event you are creating `SparkContext` instead of using `sparkR` shell or `spark-submit`, you
+In the event you are creating `SparkContext` instead of using `sparkR` shell or `spark-submit`, you 
 could also specify certain Spark driver properties. Normally these
-[Application properties](configuration.html#application-properties) and [Runtime Environment](configuration.html#runtime-environment) cannot be set programmatically, as the
+[Application properties](configuration.html#application-properties) and
+[Runtime Environment](configuration.html#runtime-environment) cannot be set programmatically, as the
 driver JVM process would have been started, in this case SparkR takes care of this for you. To set
-them, pass them as you would other configuration properties in the `sparkEnvir` argument.
+them, pass them as you would other configuration properties in the `sparkEnvir` argument to
+`sparkR.init()`.
 
 {% highlight r %}
 sc <- sparkR.init("local[*]", "SparkR", "/home/spark", list(spark.driver.memory="2g"))

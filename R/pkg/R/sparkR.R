@@ -332,12 +332,11 @@ sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-pat
 
 # Utility function that returns Spark Submit arguments as a string
 #
-# A few Spark Application and Runtime environment properties cannot take effort after driver
+# A few Spark Application and Runtime environment properties cannot take effect after driver
 # JVM has started, as documented in:
 # http://spark.apache.org/docs/latest/configuration.html#application-properties
-# When starting SparkR without using spark-submit, for example, in Rstudio, add them to
-# spark-submit commandline if not already set in SPARKR_SUBMIT_ARGS so that they can be
-# effective.
+# When starting SparkR without using spark-submit, for example, from Rstudio, add them to
+# spark-submit commandline if not already set in SPARKR_SUBMIT_ARGS so that they can be effective.
 getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
   envirToOps <- lapply(ls(sparkConfToSubmitOps), function(conf) {
     opsValue <- sparkEnvirMap[[conf]]
