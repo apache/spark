@@ -35,6 +35,10 @@ import threading
 import hashlib
 
 from py4j.protocol import Py4JJavaError
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -249,10 +253,12 @@ class SerializationTestCase(unittest.TestCase):
 
     # Regression test for SPARK-3415
     def test_pickling_file_handles(self):
-        ser = CloudPickleSerializer()
-        out1 = sys.stderr
-        out2 = ser.loads(ser.dumps(out1))
-        self.assertEqual(out1, out2)
+        # to be corrected with SPARK-11160
+        if not xmlrunner:
+            ser = CloudPickleSerializer()
+            out1 = sys.stderr
+            out2 = ser.loads(ser.dumps(out1))
+            self.assertEqual(out1, out2)
 
     def test_func_globals(self):
 
@@ -1883,6 +1889,10 @@ class ContextTests(unittest.TestCase):
         # Regression test for SPARK-1550
         self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
 
+    def test_get_or_create(self):
+        with SparkContext.getOrCreate() as sc:
+            self.assertTrue(SparkContext.getOrCreate() is sc)
+
     def test_stop(self):
         sc = SparkContext()
         self.assertNotEqual(SparkContext._active_spark_context, None)
@@ -1976,13 +1986,36 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual([3.0, 3.0], s.max().tolist())
         self.assertSequenceEqual([1.0, 1.0], s.sampleStdev().tolist())
 
+        stats_dict = s.asDict()
+        self.assertEqual(3, stats_dict['count'])
+        self.assertSequenceEqual([2.0, 2.0], stats_dict['mean'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['min'].tolist())
+        self.assertSequenceEqual([3.0, 3.0], stats_dict['max'].tolist())
+        self.assertSequenceEqual([6.0, 6.0], stats_dict['sum'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['stdev'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['variance'].tolist())
+
+        stats_sample_dict = s.asDict(sample=True)
+        self.assertEqual(3, stats_dict['count'])
+        self.assertSequenceEqual([2.0, 2.0], stats_sample_dict['mean'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_sample_dict['min'].tolist())
+        self.assertSequenceEqual([3.0, 3.0], stats_sample_dict['max'].tolist())
+        self.assertSequenceEqual([6.0, 6.0], stats_sample_dict['sum'].tolist())
+        self.assertSequenceEqual(
+            [0.816496580927726, 0.816496580927726], stats_sample_dict['stdev'].tolist())
+        self.assertSequenceEqual(
+            [0.6666666666666666, 0.6666666666666666], stats_sample_dict['variance'].tolist())
+
 
 if __name__ == "__main__":
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if not _have_numpy:
         print("NOTE: Skipping NumPy tests as it does not seem to be installed")
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     if not _have_numpy:

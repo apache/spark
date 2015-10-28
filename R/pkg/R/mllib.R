@@ -27,7 +27,7 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '+', '-', and '.'.
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data DataFrame for training
 #' @param family Error distribution. "gaussian" -> linear regression, "binomial" -> logistic reg.
 #' @param lambda Regularization parameter
@@ -41,14 +41,16 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
 #' df <- createDataFrame(sqlContext, iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df)
+#' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
+#' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0) {
+          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
+            solver = "auto") {
             family <- match.arg(family)
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                  "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
-                                 alpha)
+                                 alpha, solver)
             return(new("PipelineModel", model = model))
           })
 

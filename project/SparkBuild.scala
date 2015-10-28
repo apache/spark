@@ -35,11 +35,11 @@ object BuildCommons {
 
   val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
     sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe) =
+    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
       "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq", "launcher", "unsafe").map(ProjectRef(buildLocation, _))
+      "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
 
   val optionallyEnabledProjects@Seq(yarn, yarnStable, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
@@ -156,11 +156,15 @@ object SparkBuild extends PomBuild {
 
     javacOptions in Compile ++= Seq("-encoding", "UTF-8"),
 
+    scalacOptions in Compile ++= Seq(
+      "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
+    ),
+
     // Implements -Xfatal-warnings, ignoring deprecation warnings.
     // Code snippet taken from https://issues.scala-lang.org/browse/SI-8410.
     compile in Compile := {
       val analysis = (compile in Compile).value
-      val s = streams.value
+      val out = streams.value
 
       def logProblem(l: (=> String) => Unit, f: File, p: xsbti.Problem) = {
         l(f.toString + ":" + p.position.line.fold("")(_ + ":") + " " + p.message)
@@ -177,7 +181,14 @@ object SparkBuild extends PomBuild {
             failed = failed + 1
           }
 
-          logProblem(if (deprecation) s.log.warn else s.log.error, k, p)
+          val printer: (=> String) => Unit = s => if (deprecation) {
+            out.log.warn(s)
+          } else {
+            out.log.error("[warn] " + s)
+          }
+
+          logProblem(printer, k, p)
+
         }
       }
 
@@ -202,7 +213,7 @@ object SparkBuild extends PomBuild {
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
   allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, unsafe).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn, unsafe, testTags).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
@@ -489,6 +500,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
   }
 
+  val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
+
   lazy val settings = scalaJavaUnidocSettings ++ Seq (
     publish := {},
 
@@ -531,8 +544,19 @@ object Unidoc {
       "-noqualifier", "java.lang"
     ),
 
-    // Group similar methods together based on the @group annotation.
-    scalacOptions in (ScalaUnidoc, unidoc) ++= Seq("-groups")
+    // Use GitHub repository for Scaladoc source linke
+    unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
+
+    scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
+      "-groups" // Group similar methods together based on the @group annotation.
+    ) ++ (
+      // Add links to sources when generating Scaladoc for a non-snapshot release
+      if (!isSnapshot.value) {
+        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH}.scala")
+      } else {
+        Seq()
+      }
+    )
   )
 }
 
@@ -567,11 +591,20 @@ object TestSettings {
     javaOptions in Test ++= "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
+    // Exclude tags defined in a system property
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
+      sys.props.get("test.exclude.tags").map { tags =>
+        tags.split(",").flatMap { tag => Seq("-l", tag) }.toSeq
+      }.getOrElse(Nil): _*),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit,
+      sys.props.get("test.exclude.tags").map { tags =>
+        Seq("--exclude-categories=" + tags)
+      }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
+    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     // Make sure the test temp directory exists.

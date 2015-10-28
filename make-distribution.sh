@@ -121,7 +121,7 @@ if [ $(command -v git) ]; then
 fi
 
 
-if [ ! $(command -v "$MVN") ] ; then
+if [ ! "$(command -v "$MVN")" ] ; then
     echo -e "Could not locate Maven command: '$MVN'."
     echo -e "Specify the Maven command with the --mvn flag"
     exit -1;
@@ -198,6 +198,7 @@ fi
 
 # Copy license and ASF files
 cp "$SPARK_HOME/LICENSE" "$DISTDIR"
+cp -r "$SPARK_HOME/licenses" "$DISTDIR"
 cp "$SPARK_HOME/NOTICE" "$DISTDIR"
 
 if [ -e "$SPARK_HOME"/CHANGES.txt ]; then

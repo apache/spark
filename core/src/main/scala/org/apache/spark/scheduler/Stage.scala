@@ -61,12 +61,12 @@ private[scheduler] abstract class Stage(
     val callSite: CallSite)
   extends Logging {
 
-  val numPartitions = rdd.partitions.size
+  val numPartitions = rdd.partitions.length
 
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
 
-  var pendingTasks = new HashSet[Task[_]]
+  val pendingPartitions = new HashSet[Int]
 
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
@@ -138,6 +138,9 @@ private[scheduler] abstract class Stage(
     case stage: Stage => stage != null && stage.id == id
     case _ => false
   }
+
+  /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
+  def findMissingPartitions(): Seq[Int]
 }
 
 private[scheduler] object Stage {
