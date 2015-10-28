@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
 import java.security.{KeyStore, SecureRandom}
 import java.security.cert.X509Certificate
@@ -375,7 +376,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(SECRET_LOOKUP_KEY)
       if (secretKey == null || secretKey.length == 0) {
         val rnd = new SecureRandom()
-        val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / 8
+        val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
         val secret = new Array[Byte](length)
         rnd.nextBytes(secret)
 
