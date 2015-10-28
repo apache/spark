@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
@@ -388,6 +389,11 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    child sameResult(EliminateSubQueries(plan))
+  }
+
 }
 
 /**
