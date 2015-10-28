@@ -205,9 +205,9 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model = GaussianMixture.train(clusterdata_2, 2, convergenceTol=0.0001,
     ...                               maxIterations=150, seed=10)
     >>> labels = model.predict(clusterdata_2).collect()
-    >>> labels[0]==labels[1]==labels[2]
+    >>> labels[0]==labels[1]
     True
-    >>> labels[3]==labels[4]
+    >>> labels[2]==labels[3]==labels[4]
     True
     """
 
