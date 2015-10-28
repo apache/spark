@@ -43,9 +43,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
         joins.LeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
-      // no predicate can be evaluated by matching hash keys
-      case logical.Join(left, right, LeftSemi, condition) =>
-        joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
       case _ => Nil
     }
   }
@@ -297,11 +294,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object BroadcastNestedLoop extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(
-             CanBroadcast(left), right, joinType, condition) if joinType != LeftSemiJoin =>
+             CanBroadcast(left), right, joinType, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
       case logical.Join(
-             left, CanBroadcast(right), joinType, condition) if joinType != LeftSemiJoin =>
+             left, CanBroadcast(right), joinType, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
       case _ => Nil
@@ -311,7 +308,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // TODO CartesianProduct doesn't support the Left Semi Join
-      case logical.Join(left, right, joinType, None) if joinType != LeftSemiJoin =>
+      case logical.Join(left, right, joinType, None) if joinType != LeftSemi =>
         execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
         execution.Filter(condition,
