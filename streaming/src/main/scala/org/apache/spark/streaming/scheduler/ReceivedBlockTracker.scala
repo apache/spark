@@ -20,7 +20,6 @@ package org.apache.spark.streaming.scheduler
 import java.nio.ByteBuffer
 import java.util.concurrent.{TimeoutException, ConcurrentHashMap, LinkedBlockingQueue}
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -340,7 +339,8 @@ private[streaming] class ReceivedBlockTracker(
       val buffer = new ArrayBuffer[ReceivedBlockTrackerLogEvent]()
       try {
         buffer.append(walWriteQueue.take())
-        walWriteQueue.drainTo(buffer)
+        val numBatched = walWriteQueue.drainTo(buffer.asJava) + 1
+        logDebug(s"Received $numBatched records from queue")
       } catch {
         case _: InterruptedException =>
           logWarning("Batch Write Ahead Log Writer queue interrupted.")
