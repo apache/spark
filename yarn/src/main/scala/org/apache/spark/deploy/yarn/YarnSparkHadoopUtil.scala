@@ -175,7 +175,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     thrown match {
       case e: ClassNotFoundException =>
         logInfo(s"$service class not found $e")
-        logDebug("Hive Class not found", e)
+        logDebug("$service class not found", e)
       case t: Throwable => {
         throw t
       }
