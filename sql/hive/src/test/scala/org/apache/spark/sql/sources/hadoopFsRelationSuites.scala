@@ -17,17 +17,22 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.rdd.{EmptyRDD, RDD}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.util.SerializableConfiguration
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.mapreduce.{Job, JobContext, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{Partition, PartitionSpec, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -710,5 +715,89 @@ class AlwaysFailParquetOutputCommitter(
 
   override def commitJob(context: JobContext): Unit = {
     sys.error("Intentional job commitment failure for testing purpose.")
+  }
+}
+
+
+/**
+ * A simple example [[HadoopFsRelation]], used for testing purposes, for the hadoop conf
+ */
+class HadoopFsConfTestFakeRelation(
+    override val paths: Array[String],
+    val maybeDataSchema: Option[StructType],
+    override val userDefinedPartitionColumns: Option[StructType],
+    parameters: Map[String, String])(
+    @transient val sqlContext: SQLContext,
+    @transient val fakePartition: Option[PartitionSpec])
+  extends HadoopFsRelation(fakePartition) {
+
+  override val dataSchema: StructType = StructType(Array(StructField("dummy", IntegerType)))
+
+  override def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+    // Assume the rows.number was set as 123123 in the driver side, otherwise throws exception.
+    assert(123123 == broadcastedConf.value.value.getInt("rows.number", -1))
+    new EmptyRDD[Row](this.sqlContext.sparkContext)
+  }
+
+  override def prepareJobForWrite(job: Job): OutputWriterFactory =
+    throw new UnsupportedOperationException("prepareJobForWrite is not supported for this testing")
+}
+
+class HadoopConfTestFakeRelationProvider extends HadoopFsRelationProvider {
+  override def createRelation(
+    sqlContext: SQLContext,
+    paths: Array[String],
+    dataSchema: Option[StructType],
+    partitionColumns: Option[StructType],
+    parameters: Map[String, String]): HadoopFsRelation = {
+    val partitionSpecs = if (parameters.contains("supportPartition")) {
+      Some(PartitionSpec(
+        StructType(Seq(StructField("a", IntegerType, true))),
+        Seq(Partition(InternalRow("a"), "/path_not_exists"))))
+    } else {
+      None
+    }
+
+    new HadoopFsConfTestFakeRelation(
+      paths, dataSchema, partitionColumns, parameters)(sqlContext, partitionSpecs)
+  }
+}
+
+class HadoopConfTestForHadoopFsRelation extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import sqlContext.implicits._
+
+  test("SPARK-11364") {
+    // non partitioned
+    intercept[AssertionError] {
+      sqlContext.read
+        .format(classOf[HadoopConfTestFakeRelationProvider].getCanonicalName)
+        .load("/file_doesnot_exist").collect()
+    }
+
+    // partitioned
+    intercept[AssertionError] {
+      sqlContext.read
+        .option("supportPartition", "true")
+        .format(classOf[HadoopConfTestFakeRelationProvider].getCanonicalName)
+        .load("/file_doesnot_exist").collect()
+    }
+
+    // set the rows.number for testing
+    sqlContext.sparkContext.hadoopConfiguration.setInt("rows.number", 123123)
+
+    // non partitioned
+    sqlContext.read
+      .format(classOf[HadoopConfTestFakeRelationProvider].getCanonicalName)
+      .load("/file_doesnot_exist").collect()
+
+    // partitioned
+    sqlContext.read
+      .option("supportPartition", "true")
+      .format(classOf[HadoopConfTestFakeRelationProvider].getCanonicalName)
+      .load("/file_doesnot_exist").collect()
   }
 }

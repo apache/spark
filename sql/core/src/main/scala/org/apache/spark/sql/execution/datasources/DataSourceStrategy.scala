@@ -101,7 +101,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _)) =>
       // See buildPartitionedTableScan for the reason that we need to create a shard
       // broadcast HadoopConf.
-      val sharedHadoopConf = SparkHadoopUtil.get.conf
+      val sharedHadoopConf = t.sqlContext.sparkContext.hadoopConfiguration
       val confBroadcast =
         t.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
       pruneFilterProject(
@@ -137,7 +137,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     // Because we are creating one RDD per partition, we need to have a shared HadoopConf.
     // Otherwise, the cost of broadcasting HadoopConf in every RDD will be high.
-    val sharedHadoopConf = SparkHadoopUtil.get.conf
+    val sharedHadoopConf = relation.sqlContext.sparkContext.hadoopConfiguration
     val confBroadcast =
       relation.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
     val partitionColumnNames = partitionColumns.fieldNames.toSet
