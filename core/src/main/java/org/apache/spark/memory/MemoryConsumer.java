@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 /**
  * An memory consumer of TaskMemoryManager, which support spilling.
  */
-public class MemoryConsumer {
+public abstract class MemoryConsumer {
 
   private TaskMemoryManager memoryManager;
   private long pageSize;
@@ -58,9 +58,7 @@ public class MemoryConsumer {
    * @return the amount of released memory in bytes
    * @throws IOException
    */
-  public long spill(long size, MemoryConsumer trigger) throws IOException {
-    return 0L;
-  }
+  public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
 
   /**
    * Acquire `size` bytes memory.

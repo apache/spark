@@ -108,7 +108,7 @@ public class TaskMemoryManager {
   /**
    * The size of memory granted to each consumer.
    */
-  private HashMap<MemoryConsumer, Long> consumers;
+  private final HashMap<MemoryConsumer, Long> consumers;
 
   /**
    * Construct a new TaskMemoryManager.
@@ -127,6 +127,7 @@ public class TaskMemoryManager {
    * @return number of bytes successfully granted (<= N).
    */
   public long acquireExecutionMemory(long size, MemoryConsumer consumer) throws IOException {
+    assert(size >= 0);
     synchronized (this) {
       long got = memoryManager.acquireExecutionMemory(size, taskAttemptId);
 
@@ -164,6 +165,7 @@ public class TaskMemoryManager {
    * Release N bytes of execution memory for a MemoryConsumer.
    */
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
+    assert(size >= 0);
     if (size == 0) {
       return;
     }
@@ -179,7 +181,7 @@ public class TaskMemoryManager {
                 new SparkException("Release more memory " + size + "than acquired " + old + " for "
                   + consumer));
             } else {
-              logger.warn("Release more memory " + size + " than acquired " + old + "for "
+              logger.warn("Release more memory " + size + " than acquired " + old + " for "
                 + consumer);
             }
           }
