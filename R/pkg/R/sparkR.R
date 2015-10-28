@@ -93,7 +93,7 @@ sparkR.stop <- function() {
 #' sc <- sparkR.init("local[2]", "SparkR", "/home/spark",
 #'                  list(spark.executor.memory="1g"))
 #' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
-#'                  list(spark.executor.memory="1g"),
+#'                  list(spark.executor.memory="4g", spark.driver.memory="2g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("jarfile1.jar","jarfile2.jar"))
 #'}
@@ -130,9 +130,6 @@ sparkR.init <- function(
     backendPort <- existingPort
   } else {
     path <- tempfile(pattern = "backend_port")
-    # A few Spark config cannot be set in env:
-    # http://spark.apache.org/docs/latest/configuration.html#application-properties
-    # Add them to spark-submit commandline if not already set in SPARKR_SUBMIT_ARGS
     submitOps <- getClientModeSparkSubmitOpts(
         Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
         sparkEnvirMap)
@@ -334,6 +331,13 @@ sparkConfToSubmitOps[["spark.driver.extraJavaOptions"]] <- "--driver-java-option
 sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-path"
 
 # Utility function that returns Spark Submit arguments as a string
+#
+# A few Spark Application and Runtime environment properties cannot take effort after driver
+# JVM has started, as documented in:
+# http://spark.apache.org/docs/latest/configuration.html#application-properties
+# When starting SparkR without using spark-submit, for example, in Rstudio, add them to
+# spark-submit commandline if not already set in SPARKR_SUBMIT_ARGS so that they can be
+# effective.
 getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
   envirToOps <- lapply(ls(sparkConfToSubmitOps), function(conf) {
     opsValue <- sparkEnvirMap[[conf]]
