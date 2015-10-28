@@ -66,21 +66,7 @@ private[hive] class SparkSQLDriver(
       new CommandProcessorResponse(0)
     } catch {
         case ae: AnalysisException =>
-          // On analysis exception we will supress printing of the exception
-          // on to console. We do that by removing the console appender. If
-          // Logging is setup to log to both console and file , we will still
-          // log the error to the file.
-          val appender = LogManager.getRootLogger().getAppender("console")
-          if (appender != null) {
-            LogManager.getRootLogger().removeAppender("console")
-          }
-
-          logError(s"Failed in [$command]", ae)
-
-          // Restore the console appender.
-          if (appender != null) {
-            LogManager.getRootLogger().addAppender(appender)
-          }
+          logDebug(s"Failed in [$command]", ae)
           new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(ae), null, ae)
         case cause: Throwable =>
           logError(s"Failed in [$command]", cause)
