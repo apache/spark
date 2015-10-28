@@ -38,7 +38,7 @@ class ExtensionServiceIntegrationSuite extends SparkFunSuite
   before {
     val sparkConf = new SparkConf()
     sparkConf.set(SchedulerExtensionServices.SPARK_YARN_SERVICES,
-      "org.apache.spark.scheduler.cluster.SimpleExtensionService")
+      classOf[SimpleExtensionService].getName())
     sparkConf.setMaster("local").setAppName("ExtensionServiceIntegrationSuite")
     sparkCtx = new SparkContext(sparkConf)
   }
@@ -57,7 +57,6 @@ class ExtensionServiceIntegrationSuite extends SparkFunSuite
       sparkCtx = null
     }
   }
-
 
   test("Instantiate") {
     val services = new SchedulerExtensionServices()

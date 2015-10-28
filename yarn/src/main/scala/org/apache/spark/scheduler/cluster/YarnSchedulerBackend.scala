@@ -54,7 +54,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /** Application ID. Must be set by a subclass before starting the service */
   private var appId: ApplicationId = null
 
-  /** Attempt ID. This is unset for client-side schedulers */
+  /** Attempt ID. This is unset for client-mode schedulers */
   private var attemptId: Option[ApplicationAttemptId] = None
 
   /** Scheduler extension services */
@@ -79,8 +79,11 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   override def stop(): Unit = {
-    super.stop()
-    services.stop()
+    try {
+      super.stop()
+    } finally {
+      services.stop()
+    }
   }
 
   /**

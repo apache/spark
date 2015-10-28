@@ -21,13 +21,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 private[spark] class SimpleExtensionService extends SchedulerExtensionService {
 
+  /** started flag; set in the `start()` call, stopped in `stop()`. */
   val started = new AtomicBoolean(false)
 
-  /**
-   * Start the extension service. This should be a no-op if called more than once.
-   *
-   * @param binding binding to the spark application and YARN
-   */
   override def start(binding: SchedulerExtensionServiceBinding): Unit = {
     started.set(true)
   }

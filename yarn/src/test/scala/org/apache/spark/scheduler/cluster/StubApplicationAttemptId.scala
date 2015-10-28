@@ -19,8 +19,6 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
-
-
 /**
  * A stub application ID; can be set in constructor and/or updated later.
  * @param applicationId application ID

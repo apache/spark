@@ -26,9 +26,11 @@ import org.apache.spark.{Logging, SparkContext}
 
 /**
  * An extension service that can be loaded into a Spark YARN scheduler.
- * A Service that can be started and stopped
+ * A Service that can be started and stopped.
  *
- * The `stop()` operation MUST be idempotent, and succeed even if `start()` was
+ * 1. For implementations to be loadable by [[SchedulerExtensionServices]],
+ * they must provide an empty constructor.
+ * 2. The `stop()` operation MUST be idempotent, and succeed even if `start()` was
  * never invoked.
  */
 trait SchedulerExtensionService {
@@ -49,10 +51,15 @@ trait SchedulerExtensionService {
 }
 
 /**
- * Binding information for a [[SchedulerExtensionService]]
+ * Binding information for a [[SchedulerExtensionService]].
+ *
+ * The attempt ID will be set if the service is started within a YARN application master;
+ * there is then a different attempt ID for every time that AM is restarted.
+ * When the service binding is instantiated on a client, there's no attempt ID, as it lacks
+ * this information.
  * @param sparkContext current spark context
  * @param applicationId YARN application ID
- * @param attemptId optional AttemptID.
+ * @param attemptId YARN attemptID -if known.
  */
 case class SchedulerExtensionServiceBinding(
     sparkContext: SparkContext,
@@ -78,8 +85,8 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
 
   /**
    * Binding operation will load the named services and call bind on them too; the
-   * entire set of services are then ready for `init()` and `start()` calls
-
+   * entire set of services are then ready for `init()` and `start()` calls.
+   *
    * @param binding binding to the spark application and YARN
    */
   def start(binding: SchedulerExtensionServiceBinding): Unit = {
@@ -98,31 +105,43 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
 
     services = sparkContext.getConf.getOption(SchedulerExtensionServices.SPARK_YARN_SERVICES)
       .map { s =>
-      s.split(",").map(_.trim()).filter(!_.isEmpty)
-        .map { sClass =>
-          val instance = Utils.classForName(sClass)
-            .newInstance()
-            .asInstanceOf[SchedulerExtensionService]
-          // bind this service
-          instance.start(binding)
-          logInfo(s"Service $sClass started")
-          instance
-        }
-    }.map(_.toList).getOrElse(Nil)
+        s.split(",").map(_.trim()).filter(!_.isEmpty)
+          .map { sClass =>
+            val instance = Utils.classForName(sClass)
+              .newInstance()
+              .asInstanceOf[SchedulerExtensionService]
+            // bind this service
+            instance.start(binding)
+            logInfo(s"Service $sClass started")
+            instance
+          }.toList
+      }.getOrElse(Nil)
   }
 
   /**
-   * Get the list of services
+   * Get the list of services.
+   *
    * @return a list of services; Nil until the service is started
    */
   def getServices: List[SchedulerExtensionService] = {
     services
   }
 
+  /**
+   * Stop the services; idempotent.
+    *
+    * Any
+   */
   override def stop(): Unit = {
     if (started.getAndSet(false)) {
       logInfo(s"Stopping $this")
-      services.foreach(_.stop())
+      services.foreach { s =>
+        try {
+          s.stop()
+        } catch {
+          case e: Exception => logWarning(s"Exception when stopping service $s", e)
+        }
+      }
     }
   }
 }
