@@ -410,8 +410,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Request that the cluster manager kill the specified executors.
    * @return whether the kill request is acknowledged.
    */
-  final override def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
-    killExecutors(executorIds, replace = false)
+  final override def killExecutors(
+      executorIds: Seq[String],
+      force: Boolean): Boolean = synchronized {
+    killExecutors(executorIds, replace = false, force)
   }
 
   /**
@@ -421,15 +423,29 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @param replace whether to replace the killed executors with new ones
    * @return whether the kill request is acknowledged.
    */
-  final def killExecutors(executorIds: Seq[String], replace: Boolean): Boolean = synchronized {
+  final def killExecutors(
+      executorIds: Seq[String],
+      replace: Boolean,
+      force: Boolean): Boolean = synchronized {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
     val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
     unknownExecutors.foreach { id =>
       logWarning(s"Executor to kill $id does not exist!")
     }
 
+    // force killing all busy and idle executors
+    // otherwise, only idle executors are valid to be killed
+    val idleExecutors =
+      if (force) {
+        knownExecutors
+      } else {
+        knownExecutors.filter { id =>
+          logWarning(s"Busy executor $id is not valid to be killed!")
+          !scheduler.isExecutorBusy(id)}
+      }
+
     // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
-    val executorsToKill = knownExecutors.filter { id => !executorsPendingToRemove.contains(id) }
+    val executorsToKill = idleExecutors.filter { id => !executorsPendingToRemove.contains(id) }
     executorsPendingToRemove ++= executorsToKill
 
     // If we do not wish to replace the executors we kill, sync the target number of executors
@@ -442,6 +458,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       numPendingExecutors += knownExecutors.size
     }
 
+    // executorsToKill may be empty
     doKillExecutors(executorsToKill)
   }
 

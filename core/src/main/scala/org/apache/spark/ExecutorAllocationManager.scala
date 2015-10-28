@@ -403,6 +403,8 @@ private[spark] class ExecutorAllocationManager(
     // Send a request to the backend to kill this executor
     val removeRequestAcknowledged = testing || client.killExecutor(executorId)
     if (removeRequestAcknowledged) {
+      // even we get removeRequestAcknowledged, the executor may not be killed
+      // it can be rescued while onTaskStart event happens
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$executorIdleTimeoutS seconds (new desired total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
@@ -509,6 +511,13 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorBusy(executorId: String): Unit = synchronized {
     logDebug(s"Clearing idle timer for $executorId because it is now running a task")
     removeTimes.remove(executorId)
+
+    // Executor is added to remove by misjudgment due to async listener making it as idle).
+    // see SPARK-9552
+    if (executorsPendingToRemove.contains(executorId)) {
+      // Rescue the executor from pending to remove list
+      executorsPendingToRemove.remove(executorId)
+    }
   }
 
   /**
