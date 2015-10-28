@@ -73,9 +73,6 @@ case class SchedulerExtensionServiceBinding(
 private[spark] class SchedulerExtensionServices extends SchedulerExtensionService
     with Logging {
   private var services: List[SchedulerExtensionService] = Nil
-  private var sparkContext: SparkContext = _
-  private var appId: ApplicationId = _
-  private var attemptId: Option[ApplicationAttemptId] = _
   private val started = new AtomicBoolean(false)
   private var binding: SchedulerExtensionServiceBinding = _
 
@@ -93,24 +90,24 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
     require(binding.sparkContext != null, "Null context parameter")
     require(binding.applicationId != null, "Null appId parameter")
     this.binding = binding
-    sparkContext = binding.sparkContext
-    appId = binding.applicationId
-    attemptId = binding.attemptId
+    val sparkContext = binding.sparkContext
+    val appId = binding.applicationId
+    val attemptId = binding.attemptId
     logInfo(s"Starting Yarn extension services with app ${binding.applicationId}" +
-        s" and attemptId $attemptId")
+      s" and attemptId $attemptId")
 
     services = sparkContext.getConf.getOption(SchedulerExtensionServices.SPARK_YARN_SERVICES)
-        .map { s =>
+      .map { s =>
       s.split(",").map(_.trim()).filter(!_.isEmpty)
         .map { sClass =>
-            val instance = Utils.classForName(sClass)
-                .newInstance()
-                .asInstanceOf[SchedulerExtensionService]
-            // bind this service
-            instance.start(binding)
-            logInfo(s"Service $sClass started")
-            instance
-          }
+          val instance = Utils.classForName(sClass)
+            .newInstance()
+            .asInstanceOf[SchedulerExtensionService]
+          // bind this service
+          instance.start(binding)
+          logInfo(s"Service $sClass started")
+          instance
+        }
     }.map(_.toList).getOrElse(Nil)
   }
 
@@ -123,8 +120,10 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
   }
 
   override def stop(): Unit = {
-    logInfo(s"Stopping $this")
-    services.foreach(_.stop())
+    if (started.getAndSet(false)) {
+      logInfo(s"Stopping $this")
+      services.foreach(_.stop())
+    }
   }
 }
 

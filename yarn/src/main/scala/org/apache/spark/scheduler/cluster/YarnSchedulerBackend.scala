@@ -66,7 +66,7 @@ private[spark] abstract class YarnSchedulerBackend(
     * @param appId YARN application ID
     * @param attemptId Optional YARN attempt ID
     */
-  protected def bindToYARN(appId: ApplicationId, attemptId: Option[ApplicationAttemptId]): Unit = {
+  protected def bindToYarn(appId: ApplicationId, attemptId: Option[ApplicationAttemptId]): Unit = {
     this.appId = appId
     this.attemptId = attemptId
   }

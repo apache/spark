@@ -19,7 +19,6 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-
 private[spark] class SimpleExtensionService extends SchedulerExtensionService {
 
   val started = new AtomicBoolean(false)

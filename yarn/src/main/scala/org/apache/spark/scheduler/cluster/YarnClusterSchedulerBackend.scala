@@ -21,8 +21,7 @@ import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
-import org.apache.spark.deploy.yarn.ApplicationMaster
+import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
@@ -33,7 +32,7 @@ private[spark] class YarnClusterSchedulerBackend(
 
   override def start() {
     val attemptId = ApplicationMaster.getAttemptId
-    bindToYARN(attemptId.getApplicationId(), Some(attemptId))
+    bindToYarn(attemptId.getApplicationId(), Some(attemptId))
     super.start()
     totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sc.conf)
   }

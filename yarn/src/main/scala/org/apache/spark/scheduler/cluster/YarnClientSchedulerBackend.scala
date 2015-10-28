@@ -55,7 +55,7 @@ private[spark] class YarnClientSchedulerBackend(
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
     appId = client.submitApplication()
-    bindToYARN(appId, None)
+    bindToYarn(appId, None)
 
     // SPARK-8687: Ensure all necessary properties have already been set before
     // we initialize our driver scheduler backend, which serves these properties
