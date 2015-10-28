@@ -747,6 +747,14 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+        def test_hive_metastore_sql_sensor(self):
+            t = operators.MetastorePartitionSensor(
+                task_id='hive_partition_check',
+                table='airflow.static_babynames_partitioned',
+                partition_name='ds=2015-01-01',
+                dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
         def test_hive2samba(self):
             if 'Hive2SambaOperator' in dir(operators):
                 t = operators.Hive2SambaOperator(
