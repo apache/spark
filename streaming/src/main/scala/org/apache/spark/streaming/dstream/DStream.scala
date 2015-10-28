@@ -374,7 +374,17 @@ abstract class DStream[T: ClassTag] (
    * Wrap a body of code such that the call site and operation scope
    * information are passed to the RDDs created in this body properly.
    */
-  protected def createRDDWithLocalProperties[U](time: Time)(body: => U): U = {
+  protected[streaming] def createRDDWithLocalProperties[U](time: Time)(body: => U): U = {
+    createRDDWithLocalProperties(time, makeRDDOpsVisibleInUI = false)(body)
+  }
+
+  /**
+   * Wrap a body of code such that the call site and operation scope
+   * information are passed to the RDDs created in this body properly.
+   */
+  protected[streaming] def createRDDWithLocalProperties[U](
+      time: Time,
+      makeRDDOpsVisibleInUI: Boolean)(body: => U): U = {
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val scopeNoOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
     // Pass this DStream's operation scope and creation site information to RDDs through
@@ -393,7 +403,11 @@ abstract class DStream[T: ClassTag] (
       // TODO: merge callsites with scopes so we can just reuse the code there
       makeScope(time).foreach { s =>
         ssc.sparkContext.setLocalProperty(scopeKey, s.toJson)
-        ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, "true")
+        if (makeRDDOpsVisibleInUI) {
+          ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, null)
+        } else {
+          ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, "true")
+        }
       }
 
       body

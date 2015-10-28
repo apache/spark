@@ -51,4 +51,12 @@ class TransformedDStream[U: ClassTag] (
     }
     Some(transformedRDD)
   }
+
+  /**
+   * Wrap a body of code such that the call site and operation scope
+   * information are passed to the RDDs created in this body properly.
+   */
+  override protected[streaming] def createRDDWithLocalProperties[U](time: Time)(body: => U): U = {
+    createRDDWithLocalProperties(time, makeRDDOpsVisibleInUI = true)(body)
+  }
 }
