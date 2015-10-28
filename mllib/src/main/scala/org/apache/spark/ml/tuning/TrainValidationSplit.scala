@@ -56,6 +56,7 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
 class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[TrainValidationSplitModel]
   with TrainValidationSplitParams with Logging {
+
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("tvs"))
 
@@ -74,6 +75,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   /** @group setParam */
   @Since("1.5.0")
   def setTrainRatio(value: Double): this.type = set(trainRatio, value)
+
   @Since("1.5.0")
   override def fit(dataset: DataFrame): TrainValidationSplitModel = {
     val schema = dataset.schema
@@ -113,10 +115,12 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
   }
+
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
   }
+
   @Since("1.5.0")
   override def validateParams(): Unit = {
     super.validateParams()
@@ -125,6 +129,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
       est.copy(paramMap).validateParams()
     }
   }
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): TrainValidationSplit = {
     val copied = defaultCopy(extra).asInstanceOf[TrainValidationSplit]
@@ -146,26 +151,31 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
  * @param bestModel Estimator determined best model.
  * @param validationMetrics Evaluated validation metrics.
  */
+@Since("1.5.0")
 @Experimental
 class TrainValidationSplitModel private[ml] (
-    override val uid: String,
-    val bestModel: Model[_],
-    val validationMetrics: Array[Double])
+    @Since("1.5.0") override val uid: String,
+    @Since("1.5.0") val bestModel: Model[_],
+    @Since("1.5.0") val validationMetrics: Array[Double])
   extends Model[TrainValidationSplitModel] with TrainValidationSplitParams {
 
+  @Since("1.5.0")
   override def validateParams(): Unit = {
     bestModel.validateParams()
   }
 
+  @Since("1.5.0")
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     bestModel.transformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): TrainValidationSplitModel = {
     val copied = new TrainValidationSplitModel (
       uid,

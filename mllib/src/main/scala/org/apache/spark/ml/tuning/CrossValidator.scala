@@ -85,7 +85,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.2.0") override val uid: String)
   @Since("1.2.0")
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
-  @Since("1.2.0")
+  @Since("1.4.0")
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
