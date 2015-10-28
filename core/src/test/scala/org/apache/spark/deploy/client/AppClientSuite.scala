@@ -90,11 +90,12 @@ class AppClientSuite
     }
 
     // Send message to Master to request Executors, verify request by change in executor limit
-    assert( ci.client.requestTotalExecutors(1) )
+    val numExecutorsRequested = 1
+    assert( ci.client.requestTotalExecutors(numExecutorsRequested) )
 
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.head.getExecutorLimit === 1, s"executor total request failed")
+      assert(apps.head.getExecutorLimit === numExecutorsRequested, s"executor request failed")
     }
 
     // Send request to kill executor, verify request was made
