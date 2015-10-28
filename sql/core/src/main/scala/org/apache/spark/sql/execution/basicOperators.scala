@@ -390,3 +390,37 @@ case class MapGroups[K, T, U](
     }
   }
 }
+
+case class CoGroup[K, T, U, R](
+    func: (K, Seq[Iterator[_]]) => Iterator[R],
+    kEncoder: Encoder[K],
+    rEncoder: Encoder[R],
+    output: Seq[Attribute],
+    encoders: Seq[Encoder[_]],
+    groupings: Seq[Seq[Attribute]],
+    children: Seq[SparkPlan]) extends SparkPlan {
+
+  override def requiredChildDistribution: Seq[Distribution] = groupings.map(ClusteredDistribution)
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    groupings.map(_.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    sparkContext.zipPartitions(children.map(_.execute()), true) { inputs =>
+      val groupedIterators = inputs.zip(groupings).zip(children).map {
+        case ((input, grouping), child) => GroupedIterator(input, grouping, child.output)
+      }
+
+      val groupKeyEncoder = kEncoder.bind(groupings.head)
+
+      new CoGroupedIterator(groupedIterators, groupings.head).flatMap {
+        case (key, data) =>
+          val decodedData = data.zip(encoders).map {
+            case (rows, encoder) => rows.map(encoder.fromRow)
+          }
+          val result = func(groupKeyEncoder.fromRow(key), decodedData)
+          result.map(rEncoder.toRow)
+      }
+    }
+  }
+}

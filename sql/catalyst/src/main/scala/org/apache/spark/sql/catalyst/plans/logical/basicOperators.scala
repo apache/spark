@@ -513,3 +513,96 @@ case class MapGroups[K, T, U](
   override def missingInput: AttributeSet = AttributeSet.empty
 }
 
+/** Factory for constructing new `CoGroup` nodes. */
+object CoGroup {
+  // scalastyle:off
+  /** Code generator for cogroup factory methods of various number of Datasets. */
+  def main(args: Array[String]) {
+    (2 until 5).map { n =>
+      val types = "K : Encoder, " + (1 to n).map(t => s"W$t : Encoder").mkString(", ") + ", R : Encoder"
+      val funcType = "(K, " + (1 to n).map(t => s"Iterator[W$t]").mkString(", ") + ") => Iterator[R]"
+      val groupings = (1 to n).map(t => s"grouping$t: Seq[Attribute]").mkString(", ")
+      val children = (1 to n).map(t => s"child$t: LogicalPlan").mkString(", ")
+      val unfoldData = (1 to n).map(t => s"data(${t - 1}).asInstanceOf[Iterator[W$t]]").mkString(", ")
+      val func =
+        s"""|  val func = (key: K, data: Seq[Iterator[_]]) => {
+            |    f(key, $unfoldData)
+            |  }""".stripMargin
+      println(
+        s"""
+           |def apply[$types](f: $funcType, $groupings, $children): CoGroup[K, R] = {
+           |$func
+           |  CoGroup(
+           |    func,
+           |    implicitly[Encoder[K]],
+           |    implicitly[Encoder[R]],
+           |    implicitly[Encoder[R]].schema.toAttributes,
+           |    Seq(${(1 to n).map(t => s"implicitly[Encoder[W$t]]").mkString(", ")}),
+           |    Seq(${(1 to n).map(t => s"grouping$t").mkString(", ")}),
+           |    Seq(${(1 to n).map(t => s"child$t").mkString(", ")}))
+           |}
+         """.stripMargin)
+    }
+  }
+
+  // These methods are generated.
+  def apply[K : Encoder, W1 : Encoder, W2 : Encoder, R : Encoder](f: (K, Iterator[W1], Iterator[W2]) => Iterator[R], grouping1: Seq[Attribute], grouping2: Seq[Attribute], child1: LogicalPlan, child2: LogicalPlan): CoGroup[K, R] = {
+    val func = (key: K, data: Seq[Iterator[_]]) => {
+      f(key, data(0).asInstanceOf[Iterator[W1]], data(1).asInstanceOf[Iterator[W2]])
+    }
+    CoGroup(
+      func,
+      implicitly[Encoder[K]],
+      implicitly[Encoder[R]],
+      implicitly[Encoder[R]].schema.toAttributes,
+      Seq(implicitly[Encoder[W1]], implicitly[Encoder[W2]]),
+      Seq(grouping1, grouping2),
+      Seq(child1, child2))
+  }
+
+
+  def apply[K : Encoder, W1 : Encoder, W2 : Encoder, W3 : Encoder, R : Encoder](f: (K, Iterator[W1], Iterator[W2], Iterator[W3]) => Iterator[R], grouping1: Seq[Attribute], grouping2: Seq[Attribute], grouping3: Seq[Attribute], child1: LogicalPlan, child2: LogicalPlan, child3: LogicalPlan): CoGroup[K, R] = {
+    val func = (key: K, data: Seq[Iterator[_]]) => {
+      f(key, data(0).asInstanceOf[Iterator[W1]], data(1).asInstanceOf[Iterator[W2]], data(2).asInstanceOf[Iterator[W3]])
+    }
+    CoGroup(
+      func,
+      implicitly[Encoder[K]],
+      implicitly[Encoder[R]],
+      implicitly[Encoder[R]].schema.toAttributes,
+      Seq(implicitly[Encoder[W1]], implicitly[Encoder[W2]], implicitly[Encoder[W3]]),
+      Seq(grouping1, grouping2, grouping3),
+      Seq(child1, child2, child3))
+  }
+
+
+  def apply[K : Encoder, W1 : Encoder, W2 : Encoder, W3 : Encoder, W4 : Encoder, R : Encoder](f: (K, Iterator[W1], Iterator[W2], Iterator[W3], Iterator[W4]) => Iterator[R], grouping1: Seq[Attribute], grouping2: Seq[Attribute], grouping3: Seq[Attribute], grouping4: Seq[Attribute], child1: LogicalPlan, child2: LogicalPlan, child3: LogicalPlan, child4: LogicalPlan): CoGroup[K, R] = {
+    val func = (key: K, data: Seq[Iterator[_]]) => {
+      f(key, data(0).asInstanceOf[Iterator[W1]], data(1).asInstanceOf[Iterator[W2]], data(2).asInstanceOf[Iterator[W3]], data(3).asInstanceOf[Iterator[W4]])
+    }
+    CoGroup(
+      func,
+      implicitly[Encoder[K]],
+      implicitly[Encoder[R]],
+      implicitly[Encoder[R]].schema.toAttributes,
+      Seq(implicitly[Encoder[W1]], implicitly[Encoder[W2]], implicitly[Encoder[W3]], implicitly[Encoder[W4]]),
+      Seq(grouping1, grouping2, grouping3, grouping4),
+      Seq(child1, child2, child3, child4))
+  }
+  // scalastyle:on
+}
+
+/**
+ * For each unique group in children, applies func to that group and associated values of all
+ * children's.
+ */
+case class CoGroup[K, R](
+    func: (K, Seq[Iterator[_]]) => Iterator[R],
+    kEncoder: Encoder[K],
+    rEncoder: Encoder[R],
+    output: Seq[Attribute],
+    encoders: Seq[Encoder[_]],
+    groupings: Seq[Seq[Attribute]],
+    children: Seq[LogicalPlan]) extends LogicalPlan {
+  override def missingInput: AttributeSet = AttributeSet.empty
+}

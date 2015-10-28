@@ -202,4 +202,48 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
+
+  test("cogroup on 2 Datasets") {
+    val ds1 = Seq(1 -> "a", 1 -> "b", 2 -> "c", 3 -> "d").toDS()
+    val ds2 = Seq(1 -> 2L, 2 -> 3L, 2 -> 4L, 4 -> 5L).toDS()
+    val cogrouped = ds1.groupBy(_._1).cogroup(ds2.groupBy(_._1)) {
+      case (key, data1, data2) =>
+        Iterator(data1.map(_._2).mkString + data2.map(_._2).sum.toString)
+    }
+
+    checkAnswer(
+      cogrouped,
+      "ab2", "c7", "d0", "5")
+  }
+
+  test("cogroup on 3 Datasets") {
+    val ds1 = Seq("abc", "hello", "foo", "xy").toDS()
+    val ds2 = Seq(3, 5, 5, 1).toDS()
+    val ds3 = Seq(2 -> "a", 2 -> "aa", 3 -> "b", 5 -> "c", 1 -> "d").toDS()
+
+    val cogrouped = ds1.groupBy(_.length).cogroup(ds2.groupBy(identity), ds3.groupBy(_._1)) {
+      case (key, data1, data2, data3) =>
+        Iterator(key -> (data1.mkString + data2.sum + data3.length))
+    }
+
+    checkAnswer(
+      cogrouped,
+      1 -> "11", 2 -> "xy02", 3 -> "abcfoo31", 5 -> "hello101")
+  }
+
+  test("cogroup on 4 Datasets") {
+    val ds1 = Seq("abc", "hello", "foo", "xy").toDS()
+    val ds2 = Seq(3, 5, 5, 1).toDS()
+    val ds3 = Seq(2 -> "a", 2 -> "aa", 3 -> "b", 5 -> "c", 1 -> "d").toDS()
+    val ds4 = Seq(3 -> 1, 3 -> 2, 5 -> 3).toDS()
+    val cogrouped = ds1.groupBy(_.length).cogroup(
+      ds2.groupBy(identity), ds3.groupBy(_._1), ds4.groupBy(_._1)) {
+      case (key, data1, data2, data3, data4) =>
+        Iterator(key -> (data1.mkString + data2.sum + data3.length + data4.map(_._2).mkString))
+    }
+
+    checkAnswer(
+      cogrouped,
+      1 -> "11", 2 -> "xy02", 3 -> "abcfoo3112", 5 -> "hello1013")
+  }
 }
