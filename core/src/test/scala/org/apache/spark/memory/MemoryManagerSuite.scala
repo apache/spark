@@ -149,14 +149,20 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     assert(taskMemoryManager.acquireExecutionMemory(400L) === 400L)
     assert(taskMemoryManager.acquireExecutionMemory(400L) === 400L)
     assert(taskMemoryManager.acquireExecutionMemory(200L) === 100L)
+    assert(taskMemoryManager.getMemoryConsumptionForThisTask === 1000L)
+    assert(manager.executionMemoryUsed === 1000L)
     assert(taskMemoryManager.acquireExecutionMemory(100L) === 0L)
     assert(taskMemoryManager.acquireExecutionMemory(100L) === 0L)
 
     taskMemoryManager.releaseExecutionMemory(500L)
+    assert(taskMemoryManager.getMemoryConsumptionForThisTask === 500L)
+    assert(manager.executionMemoryUsed === 500L)
     assert(taskMemoryManager.acquireExecutionMemory(300L) === 300L)
     assert(taskMemoryManager.acquireExecutionMemory(300L) === 200L)
 
-    taskMemoryManager.cleanUpAllAllocatedMemory()
+    assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 1000L)
+    assert(taskMemoryManager.getMemoryConsumptionForThisTask === 0L)
+    assert(manager.executionMemoryUsed === 0L)
     assert(taskMemoryManager.acquireExecutionMemory(1000L) === 1000L)
     assert(taskMemoryManager.acquireExecutionMemory(100L) === 0L)
   }
