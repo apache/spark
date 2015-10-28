@@ -8,7 +8,7 @@ configuration.test_mode()
 from airflow import jobs, models, DAG, utils, operators, hooks, macros
 from airflow.bin import cli
 from airflow.configuration import conf
-from airflow.www.app import app
+from airflow.www.app import create_app
 from airflow.settings import Session
 
 NUM_EXAMPLE_DAGS = 7
@@ -273,6 +273,7 @@ class CliTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
+        app = create_app()
         app.config['TESTING'] = True
         self.parser = cli.get_parser()
         self.dagbag = models.DagBag(
@@ -330,6 +331,7 @@ class WebUiTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
+        app = create_app()
         app.config['TESTING'] = True
         self.app = app.test_client()
 
