@@ -18,7 +18,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol}
@@ -124,32 +124,39 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
  *
  * Uses [[org.apache.spark.mllib.regression.IsotonicRegression]].
  */
+@Since("1.5.0")
 @Experimental
-class IsotonicRegression(override val uid: String) extends Estimator[IsotonicRegressionModel]
-  with IsotonicRegressionBase {
-
+class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: String)
+  extends Estimator[IsotonicRegressionModel] with IsotonicRegressionBase {
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("isoReg"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setIsotonic(value: Boolean): this.type = set(isotonic, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeatureIndex(value: Int): this.type = set(featureIndex, value)
-
+  @Since("1.5.0")
   override def copy(extra: ParamMap): IsotonicRegression = defaultCopy(extra)
-
+  @Since("1.5.0")
   override def fit(dataset: DataFrame): IsotonicRegressionModel = {
     validateAndTransformSchema(dataset.schema, fitting = true)
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
@@ -162,7 +169,7 @@ class IsotonicRegression(override val uid: String) extends Estimator[IsotonicReg
 
     copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
   }
-
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true)
   }
