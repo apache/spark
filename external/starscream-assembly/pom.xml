@@ -17,7 +17,7 @@
 
   <groupId>com.shopify</groupId>
   <artifactId>starscream-assembly</artifactId>
-  <packaging>jar</packaging>
+  <packaging>pom</packaging>
   <version>0.1</version>
   <name>Starscream dependencies</name>
 
@@ -27,6 +27,7 @@
     <scala.version.prefix>2.10</scala.version.prefix>
     <spark.version>1.5.0</spark.version>
     <maven.release.plugin.version>2.4.1</maven.release.plugin.version>
+    <maven.test.skip>true</maven.test.skip>
   </properties>
 
   <dependencies>
@@ -52,16 +53,20 @@
       <artifactId>spark-datadog-relay</artifactId>
       <version>v0.3</version>
     </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-kafka_2.10</artifactId>
+      <version>${spark.version}</version>
+    </dependency>
   </dependencies>
 
   <build>
-    <outputDirectory>target/classes</outputDirectory>
-    <testOutputDirectory>target/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
+          <skipTests>true</skipTests>
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <outputFile>target/starscream-assembly-${spark.version}.jar</outputFile>
           <artifactSet>
