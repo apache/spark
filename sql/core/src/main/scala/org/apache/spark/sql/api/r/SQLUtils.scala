@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpres
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, SaveMode}
 
+import scala.util.matching.Regex
+
 private[r] object SQLUtils {
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
     new SQLContext(jsc)
@@ -35,12 +37,13 @@ private[r] object SQLUtils {
     new JavaSparkContext(sqlCtx.sparkContext)
   }
 
-  def toSeq[T](arr: Array[T]): Seq[T] = {
-    arr.toSeq
-  }
-
   def createStructType(fields : Seq[StructField]): StructType = {
     StructType(fields)
+  }
+
+  // Support using regex in string interpolation
+  private[this] implicit class RegexContext(sc: StringContext) {
+    def r: Regex = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)
   }
 
   def getSQLDataType(dataType: String): DataType = {
@@ -58,6 +61,15 @@ private[r] object SQLUtils {
       case "boolean" => org.apache.spark.sql.types.BooleanType
       case "timestamp" => org.apache.spark.sql.types.TimestampType
       case "date" => org.apache.spark.sql.types.DateType
+      case r"\Aarray<(.*)${elemType}>\Z" => {
+        org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
+      }
+      case r"\Amap<(.*)${keyType},(.*)${valueType}>\Z" => {
+        if (keyType != "string" && keyType != "character") {
+          throw new IllegalArgumentException("Key type of a map must be string or character")
+        }
+        org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
+      }
       case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
     }
   }

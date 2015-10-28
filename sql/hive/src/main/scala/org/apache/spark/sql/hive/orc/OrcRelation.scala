@@ -25,9 +25,9 @@ import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.io.orc.{OrcInputFormat, OrcOutputFormat, OrcSerde, OrcSplit}
-import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
+import org.apache.hadoop.hive.ql.io.orc.{OrcInputFormat, OrcOutputFormat, OrcSerde, OrcSplit, OrcStruct}
+import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector
+import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, StructTypeInfo}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -89,20 +89,9 @@ private[orc] class OrcOutputWriter(
       TypeInfoUtils.getTypeInfoFromTypeString(
         HiveMetastoreTypes.toMetastoreType(dataSchema))
 
-    TypeInfoUtils
-      .getStandardJavaObjectInspectorFromTypeInfo(typeInfo)
-      .asInstanceOf[StructObjectInspector]
+    OrcStruct.createObjectInspector(typeInfo.asInstanceOf[StructTypeInfo])
+      .asInstanceOf[SettableStructObjectInspector]
   }
-
-  // Used to hold temporary `Writable` fields of the next row to be written.
-  private val reusableOutputBuffer = new Array[Any](dataSchema.length)
-
-  // Used to convert Catalyst values into Hadoop `Writable`s.
-  private val wrappers = structOI.getAllStructFieldRefs.asScala
-    .zip(dataSchema.fields.map(_.dataType))
-    .map { case (ref, dt) =>
-      wrapperFor(ref.getFieldObjectInspector, dt)
-    }.toArray
 
   // `OrcRecordWriter.close()` creates an empty file if no rows are written at all.  We use this
   // flag to decide whether `OrcRecordWriter.close()` needs to be called.
@@ -127,16 +116,32 @@ private[orc] class OrcOutputWriter(
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
-  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+  private def wrapOrcStruct(
+      struct: OrcStruct,
+      oi: SettableStructObjectInspector,
+      row: InternalRow): Unit = {
+    val fieldRefs = oi.getAllStructFieldRefs
     var i = 0
-    while (i < row.numFields) {
-      reusableOutputBuffer(i) = wrappers(i)(row.get(i, dataSchema(i).dataType))
+    while (i < fieldRefs.size) {
+      oi.setStructFieldData(
+        struct,
+        fieldRefs.get(i),
+        wrap(
+          row.get(i, dataSchema(i).dataType),
+          fieldRefs.get(i).getFieldObjectInspector,
+          dataSchema(i).dataType))
       i += 1
     }
+  }
+
+  val cachedOrcStruct = structOI.create().asInstanceOf[OrcStruct]
+
+  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+    wrapOrcStruct(cachedOrcStruct, structOI, row)
 
     recordWriter.write(
       NullWritable.get(),
-      serializer.serialize(reusableOutputBuffer, structOI))
+      serializer.serialize(cachedOrcStruct, structOI))
   }
 
   override def close(): Unit = {
@@ -203,7 +208,7 @@ private[sql] class OrcRelation(
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    job.getConfiguration match {
+    SparkHadoopUtil.get.getConfigurationFromJobContext(job) match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
       case conf =>
@@ -259,7 +264,7 @@ private[orc] case class OrcTableScan(
     maybeStructOI.map { soi =>
       val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map {
         case (attr, ordinal) =>
-          soi.getStructFieldRef(attr.name.toLowerCase) -> ordinal
+          soi.getStructFieldRef(attr.name) -> ordinal
       }.unzip
       val unwrappers = fieldRefs.map(unwrapperFor)
       // Map each tuple to a row object
@@ -284,7 +289,7 @@ private[orc] case class OrcTableScan(
 
   def execute(): RDD[InternalRow] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = job.getConfiguration
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
     // Tries to push down filters if ORC filter push-down is enabled
     if (sqlContext.conf.orcFilterPushDown) {

@@ -20,10 +20,11 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{Row, QueryTest}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveDataFrameWindowSuite extends QueryTest {
+class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
+  import hiveContext.implicits._
+  import hiveContext.sql
 
   test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")

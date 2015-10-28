@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -56,9 +57,9 @@ public class JavaStringIndexerSuite {
       createStructField("id", IntegerType, false),
       createStructField("label", StringType, false)
     });
-    JavaRDD<Row> rdd = jsc.parallelize(
-      Arrays.asList(c(0, "a"), c(1, "b"), c(2, "c"), c(3, "a"), c(4, "a"), c(5, "c")));
-    DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
+    List<Row> data = Arrays.asList(
+      c(0, "a"), c(1, "b"), c(2, "c"), c(3, "a"), c(4, "a"), c(5, "c"));
+    DataFrame dataset = sqlContext.createDataFrame(data, schema);
 
     StringIndexer indexer = new StringIndexer()
       .setInputCol("label")

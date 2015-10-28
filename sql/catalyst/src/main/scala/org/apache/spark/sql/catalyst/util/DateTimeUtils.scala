@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{TimeZone, Calendar}
+import javax.xml.bind.DatatypeConverter
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -42,6 +43,7 @@ object DateTimeUtils {
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
+  final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
 
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
 
@@ -110,10 +112,11 @@ object DateTimeUtils {
   def stringToTime(s: String): java.util.Date = {
     var indexOfGMT = s.indexOf("GMT");
     if (indexOfGMT != -1) {
-      // timezone with ISO8601
+      // ISO8601 with a weird time zone specifier (2000-01-01T00:00GMT+01:00)
       val s0 = s.substring(0, indexOfGMT)
       val s1 = s.substring(indexOfGMT + 3)
-      return stringToTime(s0 + s1)
+      // Mapped to 2000-01-01T00:00+01:00
+      stringToTime(s0 + s1)
     } else if (!s.contains('T')) {
       // JDBC escape string
       if (s.contains(' ')) {
@@ -122,7 +125,7 @@ object DateTimeUtils {
         Date.valueOf(s)
       }
     } else {
-      javax.xml.bind.DatatypeConverter.parseDateTime(s).getTime()
+      DatatypeConverter.parseDateTime(s).getTime()
     }
   }
 
@@ -181,13 +184,14 @@ object DateTimeUtils {
 
   /**
    * Returns Julian day and nanoseconds in a day from the number of microseconds
+   *
+   * Note: support timestamp since 4717 BC (without negative nanoseconds, compatible with Hive).
    */
   def toJulianDay(us: SQLTimestamp): (Int, Long) = {
-    val seconds = us / MICROS_PER_SECOND
-    val day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
-    val secondsInDay = seconds % SECONDS_PER_DAY
-    val nanos = (us % MICROS_PER_SECOND) * 1000L
-    (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
+    val julian_us = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
+    val day = julian_us / MICROS_PER_DAY
+    val micros = julian_us % MICROS_PER_DAY
+    (day.toInt, micros * 1000L)
   }
 
   /**

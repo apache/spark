@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.rdd.{RandomRDD, RandomVectorRDD}
 import org.apache.spark.rdd.RDD
@@ -381,7 +382,7 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of `i.i.d.` samples produced by generator.
+   * @return RDD[T] comprised of `i.i.d.` samples produced by generator.
    */
   @DeveloperApi
   @Since("1.1.0")
@@ -392,6 +393,55 @@ object RandomRDDs {
       numPartitions: Int = 0,
       seed: Long = Utils.random.nextLong()): RDD[T] = {
     new RandomRDD[T](sc, size, numPartitionsOrDefault(sc, numPartitions), generator, seed)
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Generates an RDD comprised of `i.i.d.` samples produced by the input RandomDataGenerator.
+   *
+   * @param jsc JavaSparkContext used to create the RDD.
+   * @param generator RandomDataGenerator used to populate the RDD.
+   * @param size Size of the RDD.
+   * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
+   * @param seed Random seed (default: a random long integer).
+   * @return RDD[T] comprised of `i.i.d.` samples produced by generator.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaRDD[T](
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[T],
+      size: Long,
+      numPartitions: Int,
+      seed: Long): JavaRDD[T] = {
+    implicit val ctag: ClassTag[T] = fakeClassTag
+    val rdd = randomRDD(jsc.sc, generator, size, numPartitions, seed)
+    JavaRDD.fromRDD(rdd)
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaRDD]] with the default seed.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaRDD[T](
+    jsc: JavaSparkContext,
+    generator: RandomDataGenerator[T],
+    size: Long,
+    numPartitions: Int): JavaRDD[T] = {
+    randomJavaRDD(jsc, generator, size, numPartitions, Utils.random.nextLong())
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaRDD]] with the default seed & numPartitions
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaRDD[T](
+    jsc: JavaSparkContext,
+    generator: RandomDataGenerator[T],
+    size: Long): JavaRDD[T] = {
+    randomJavaRDD(jsc, generator, size, 0);
   }
 
   // TODO Generate RDD[Vector] from multivariate distributions.
@@ -803,6 +853,48 @@ object RandomRDDs {
       seed: Long = Utils.random.nextLong()): RDD[Vector] = {
     new RandomVectorRDD(
       sc, numRows, numCols, numPartitionsOrDefault(sc, numPartitions), generator, seed)
+  }
+
+  /**
+   * Java-friendly version of [[RandomRDDs#randomVectorRDD]].
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols, numPartitions, seed).toJavaRDD()
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaVectorRDD]] with the default seed.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols, numPartitions).toJavaRDD()
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaVectorRDD]] with the default number of partitions and the default seed.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols).toJavaRDD()
   }
 
   /**

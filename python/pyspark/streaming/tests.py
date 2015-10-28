@@ -61,9 +61,12 @@ class PySparkStreamingTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
         # Clean up in the JVM just in case there has been some issues in Python API
-        jSparkContextOption = SparkContext._jvm.SparkContext.get()
-        if jSparkContextOption.nonEmpty():
-            jSparkContextOption.get().stop()
+        try:
+            jSparkContextOption = SparkContext._jvm.SparkContext.get()
+            if jSparkContextOption.nonEmpty():
+                jSparkContextOption.get().stop()
+        except:
+            pass
 
     def setUp(self):
         self.ssc = StreamingContext(self.sc, self.duration)
@@ -72,9 +75,12 @@ class PySparkStreamingTestCase(unittest.TestCase):
         if self.ssc is not None:
             self.ssc.stop(False)
         # Clean up in the JVM just in case there has been some issues in Python API
-        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
-        if jStreamingContextOption.nonEmpty():
-            jStreamingContextOption.get().stop(False)
+        try:
+            jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+            if jStreamingContextOption.nonEmpty():
+                jStreamingContextOption.get().stop(False)
+        except:
+            pass
 
     def wait_for(self, result, n):
         start_time = time.time()
@@ -693,7 +699,7 @@ class CheckpointTests(unittest.TestCase):
 
         # Verify that getActiveOrCreate() returns active context
         self.setupCalled = False
-        self.assertEquals(StreamingContext.getActiveOrCreate(self.cpd, setup), self.ssc)
+        self.assertEqual(StreamingContext.getActiveOrCreate(self.cpd, setup), self.ssc)
         self.assertFalse(self.setupCalled)
 
         # Verify that getActiveOrCreate() uses existing SparkContext
@@ -886,6 +892,16 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.wait_for(offsetRanges, 1)
 
         self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+    def test_topic_and_partition_equality(self):
+        topic_and_partition_a = TopicAndPartition("foo", 0)
+        topic_and_partition_b = TopicAndPartition("foo", 0)
+        topic_and_partition_c = TopicAndPartition("bar", 0)
+        topic_and_partition_d = TopicAndPartition("foo", 1)
+
+        self.assertEqual(topic_and_partition_a, topic_and_partition_b)
+        self.assertNotEqual(topic_and_partition_a, topic_and_partition_c)
+        self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
 
 
 class FlumeStreamTests(PySparkStreamingTestCase):

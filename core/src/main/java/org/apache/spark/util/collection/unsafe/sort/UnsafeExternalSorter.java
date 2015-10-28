@@ -160,15 +160,14 @@ public final class UnsafeExternalSorter {
    * Allocates new sort data structures. Called when creating the sorter and after each spill.
    */
   private void initializeForWriting() throws IOException {
+    // Note: Do not track memory for the pointer array for now because of SPARK-10474.
+    // In more detail, in TungstenAggregate we only reserve a page, but when we fall back to
+    // sort-based aggregation we try to acquire a page AND a pointer array, which inevitably
+    // fails if all other memory is already occupied. It should be safe to not track the array
+    // because its memory footprint is frequently much smaller than that of a page. This is a
+    // temporary hack that we should address in 1.6.0.
+    // TODO: track the pointer array memory!
     this.writeMetrics = new ShuffleWriteMetrics();
-    final long pointerArrayMemory =
-      UnsafeInMemorySorter.getMemoryRequirementsForPointerArray(initialSize);
-    final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pointerArrayMemory);
-    if (memoryAcquired != pointerArrayMemory) {
-      shuffleMemoryManager.release(memoryAcquired);
-      throw new IOException("Could not acquire " + pointerArrayMemory + " bytes of memory");
-    }
-
     this.inMemSorter =
       new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
     this.isInMemSorterExternal = false;
@@ -265,14 +264,7 @@ public final class UnsafeExternalSorter {
       shuffleMemoryManager.release(block.size());
       memoryFreed += block.size();
     }
-    if (inMemSorter != null) {
-      if (!isInMemSorterExternal) {
-        long sorterMemoryUsage = inMemSorter.getMemoryUsage();
-        memoryFreed += sorterMemoryUsage;
-        shuffleMemoryManager.release(sorterMemoryUsage);
-      }
-      inMemSorter = null;
-    }
+    // TODO: track in-memory sorter memory usage (SPARK-10474)
     allocatedPages.clear();
     currentPage = null;
     currentPagePosition = -1;
@@ -310,17 +302,8 @@ public final class UnsafeExternalSorter {
   private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
-      logger.debug("Attempting to expand sort pointer array");
-      final long oldPointerArrayMemoryUsage = inMemSorter.getMemoryUsage();
-      final long memoryToGrowPointerArray = oldPointerArrayMemoryUsage * 2;
-      final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryToGrowPointerArray);
-      if (memoryAcquired < memoryToGrowPointerArray) {
-        shuffleMemoryManager.release(memoryAcquired);
-        spill();
-      } else {
-        inMemSorter.expandPointerArray();
-        shuffleMemoryManager.release(oldPointerArrayMemoryUsage);
-      }
+      // TODO: track the pointer array memory! (SPARK-10474)
+      inMemSorter.expandPointerArray();
     }
   }
 

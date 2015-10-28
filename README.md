@@ -23,3 +23,4 @@ To test a Shopify spark build, assemble the spark jar with `script/setup` or mav
 ## Deploying Shopify Spark
 
 The cap deploy script is only for deploying Shopify Spark to production. To deploy, execute `bundle exec cap production deploy`
+

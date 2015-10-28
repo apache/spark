@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
+from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql import since
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import *
