@@ -25,6 +25,6 @@ if [ $? != 0 ]; then
     exit 1
 fi
 
-cp ${MINIKDC_CACHE}/* ${MINIKDC_HOME}/
+cp -r ${MINIKDC_CACHE}/* ${MINIKDC_HOME}/
 
 mkdir -p ${MINIKDC_HOME}/work
