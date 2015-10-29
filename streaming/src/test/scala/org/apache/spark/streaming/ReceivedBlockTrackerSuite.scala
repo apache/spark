@@ -39,7 +39,7 @@ import org.apache.spark.streaming.util.{WriteAheadLogUtils, FileBasedWriteAheadL
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util._
 
-abstract class ReceivedBlockTrackerSuite
+class ReceivedBlockTrackerSuite
   extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
 
   val hadoopConf = new Configuration()
@@ -49,14 +49,10 @@ abstract class ReceivedBlockTrackerSuite
   var allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
   var checkpointDirectory: File = null
   var conf: SparkConf = null
-  val isBatchingEnabled: Boolean
 
   before {
     conf = new SparkConf().setMaster("local[2]").setAppName("ReceivedBlockTrackerSuite")
     checkpointDirectory = Utils.createTempDir()
-    if (isBatchingEnabled) {
-      conf.set("spark.streaming.driver.writeAheadLog.allowBatching", "true")
-    }
   }
 
   after {
@@ -244,11 +240,8 @@ abstract class ReceivedBlockTrackerSuite
     : Seq[ReceivedBlockTrackerLogEvent] = {
     logFiles.flatMap {
       file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq
-    }.flatMap { byteBuffer =>
-      Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array) match {
-        case CombinedReceivedBlockTrackerLogEvent(events) => events
-        case others: ReceivedBlockTrackerLogEvent => Seq(others)
-      }
+    }.map { byteBuffer =>
+      Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array)
     }.toList
   }
 
@@ -275,14 +268,11 @@ abstract class ReceivedBlockTrackerSuite
   implicit def timeToMillis(time: Time): Long = time.milliseconds
 }
 
-class SyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite {
-  override val isBatchingEnabled = false
-}
-
+/**
 class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with MockitoSugar {
   override val isBatchingEnabled = true
 
-  /** Class that will help us test batching. */
+
   private class TestRBT(
       clock: Clock = new SystemClock,
       cpDirOption: Option[String] = Some(checkpointDirectory.toString),
@@ -304,6 +294,7 @@ class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with Mock
       writeToLog(event)
     }
   }
+    Class that will help us test batching.
 
   private def waitUntilTrue(f: () => Int, value: Int): Boolean = {
     val timeOut = 2000
@@ -366,4 +357,6 @@ class AsyncReceivedBlockTrackerSuite extends ReceivedBlockTrackerSuite with Mock
     assert(waitUntilTrue(getNumSuccess, 4))
     assert(waitUntilTrue(rbt.getQueueLength, 0))
   }
+
 }
+  */

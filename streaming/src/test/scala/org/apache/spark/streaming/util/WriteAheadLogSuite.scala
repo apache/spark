@@ -34,7 +34,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
-class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
+abstract class CommonWriteAheadLogTests extends SparkFunSuite with BeforeAndAfter {
 
   import WriteAheadLogSuite._
 
@@ -42,7 +42,9 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
   var tempDir: File = null
   var testDir: String = null
   var testFile: String = null
-  var writeAheadLog: FileBasedWriteAheadLog = null
+  var writeAheadLog: WriteAheadLog = null
+  protected val allowBatching: Boolean
+  protected val closeFileAfterWrite: Boolean
 
   before {
     tempDir = Utils.createTempDir()
@@ -101,6 +103,114 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
       assertReceiverLogClass[MockWriteAheadLog1](receiverWALConf3)
     }
   }
+
+  test("WriteAheadLog - read rotating logs") {
+    // Write data manually for testing reading through WriteAheadLog
+    val writtenData = (1 to 10).map { i =>
+      val data = generateRandomData()
+      val file = testDir + s"/log-$i-$i"
+      writeDataManually(data, file)
+      data
+    }.flatten
+
+    val logDirectoryPath = new Path(testDir)
+    val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
+    assert(fileSystem.exists(logDirectoryPath) === true)
+
+    // Read data using manager and verify
+    val readData = readDataUsingWriteAheadLog(testDir)
+    assert(readData === writtenData)
+  }
+
+  test("WriteAheadLog - recover past logs when creating new manager") {
+    // Write data with manager, recover with new manager and verify
+    val dataToWrite = generateRandomData()
+    writeDataUsingWriteAheadLog(testDir, dataToWrite)
+    val logFiles = getLogFilesInDirectory(testDir)
+    assert(logFiles.size > 1)
+    val readData = readDataUsingWriteAheadLog(testDir)
+    assert(dataToWrite === readData)
+  }
+
+  test("WriteAheadLog - clean old logs") {
+    logCleanUpTest(waitForCompletion = false)
+  }
+
+  test("WriteAheadLog - clean old logs synchronously") {
+    logCleanUpTest(waitForCompletion = true)
+  }
+
+  private def logCleanUpTest(waitForCompletion: Boolean): Unit = {
+    // Write data with manager, recover with new manager and verify
+    val manualClock = new ManualClock
+    val dataToWrite = generateRandomData()
+    writeAheadLog = writeDataUsingWriteAheadLog(testDir, dataToWrite, manualClock, closeLog = false)
+    val logFiles = getLogFilesInDirectory(testDir)
+    assert(logFiles.size > 1)
+
+    writeAheadLog.clean(manualClock.getTimeMillis() / 2, waitForCompletion)
+
+    if (waitForCompletion) {
+      assert(getLogFilesInDirectory(testDir).size < logFiles.size)
+    } else {
+      eventually(timeout(1 second), interval(10 milliseconds)) {
+        assert(getLogFilesInDirectory(testDir).size < logFiles.size)
+      }
+    }
+  }
+
+  test("WriteAheadLog - handling file errors while reading rotating logs") {
+    // Generate a set of log files
+    val manualClock = new ManualClock
+    val dataToWrite1 = generateRandomData()
+    writeDataUsingWriteAheadLog(testDir, dataToWrite1, manualClock)
+    val logFiles1 = getLogFilesInDirectory(testDir)
+    assert(logFiles1.size > 1)
+
+
+    // Recover old files and generate a second set of log files
+    val dataToWrite2 = generateRandomData()
+    manualClock.advance(100000)
+    writeDataUsingWriteAheadLog(testDir, dataToWrite2, manualClock)
+    val logFiles2 = getLogFilesInDirectory(testDir)
+    assert(logFiles2.size > logFiles1.size)
+
+    // Read the files and verify that all the written data can be read
+    val readData1 = readDataUsingWriteAheadLog(testDir)
+    assert(readData1 === (dataToWrite1 ++ dataToWrite2))
+
+    // Corrupt the first set of files so that they are basically unreadable
+    logFiles1.foreach { f =>
+      val raf = new FileOutputStream(f, true).getChannel()
+      raf.truncate(1)
+      raf.close()
+    }
+
+    // Verify that the corrupted files do not prevent reading of the second set of data
+    val readData = readDataUsingWriteAheadLog(testDir)
+    assert(readData === dataToWrite2)
+  }
+
+  test("WriteAheadLog - do not create directories or files unless write") {
+    val nonexistentTempPath = File.createTempFile("test", "")
+    nonexistentTempPath.delete()
+    assert(!nonexistentTempPath.exists())
+
+    val writtenSegment = writeDataManually(generateRandomData(), testFile)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), tempDir.getAbsolutePath,
+      new Configuration(), 1, 1, closeFileAfterWrite = false)
+    assert(!nonexistentTempPath.exists(), "Directory created just by creating log object")
+    wal.read(writtenSegment.head)
+    assert(!nonexistentTempPath.exists(), "Directory created just by attempting to read segment")
+  }
+}
+
+class DefaultWriteAheadLogSuite extends CommonWriteAheadLogTests {
+
+  import WriteAheadLogSuite._
+
+  override protected val closeFileAfterWrite: Boolean = false
+  override protected val allowBatching: Boolean = false
 
   test("FileBasedWriteAheadLogWriter - writing data") {
     val dataToWrite = generateRandomData()
@@ -217,106 +327,22 @@ class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
     val writtenData = logFiles.flatMap { file => readDataManually(file)}
     assert(writtenData === dataToWrite)
   }
+}
 
-  test("FileBasedWriteAheadLog - read rotating logs") {
-    // Write data manually for testing reading through WriteAheadLog
-    val writtenData = (1 to 10).map { i =>
-      val data = generateRandomData()
-      val file = testDir + s"/log-$i-$i"
-      writeDataManually(data, file)
-      data
-    }.flatten
+class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests {
 
-    val logDirectoryPath = new Path(testDir)
-    val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
-    assert(fileSystem.exists(logDirectoryPath) === true)
+  override val closeFileAfterWrite: Boolean = false
+  override val allowBatching: Boolean = true
+}
 
-    // Read data using manager and verify
-    val readData = readDataUsingWriteAheadLog(testDir)
-    assert(readData === writtenData)
-  }
+class BatchedWithFileCloseWriteAheadLogSuite extends CommonWriteAheadLogTests {
+  override val closeFileAfterWrite: Boolean = true
+  override val allowBatching: Boolean = true
+}
 
-  test("FileBasedWriteAheadLog - recover past logs when creating new manager") {
-    // Write data with manager, recover with new manager and verify
-    val dataToWrite = generateRandomData()
-    writeDataUsingWriteAheadLog(testDir, dataToWrite)
-    val logFiles = getLogFilesInDirectory(testDir)
-    assert(logFiles.size > 1)
-    val readData = readDataUsingWriteAheadLog(testDir)
-    assert(dataToWrite === readData)
-  }
-
-  test("FileBasedWriteAheadLog - clean old logs") {
-    logCleanUpTest(waitForCompletion = false)
-  }
-
-  test("FileBasedWriteAheadLog - clean old logs synchronously") {
-    logCleanUpTest(waitForCompletion = true)
-  }
-
-  private def logCleanUpTest(waitForCompletion: Boolean): Unit = {
-    // Write data with manager, recover with new manager and verify
-    val manualClock = new ManualClock
-    val dataToWrite = generateRandomData()
-    writeAheadLog = writeDataUsingWriteAheadLog(testDir, dataToWrite, manualClock, closeLog = false)
-    val logFiles = getLogFilesInDirectory(testDir)
-    assert(logFiles.size > 1)
-
-    writeAheadLog.clean(manualClock.getTimeMillis() / 2, waitForCompletion)
-
-    if (waitForCompletion) {
-      assert(getLogFilesInDirectory(testDir).size < logFiles.size)
-    } else {
-      eventually(timeout(1 second), interval(10 milliseconds)) {
-        assert(getLogFilesInDirectory(testDir).size < logFiles.size)
-      }
-    }
-  }
-
-  test("FileBasedWriteAheadLog - handling file errors while reading rotating logs") {
-    // Generate a set of log files
-    val manualClock = new ManualClock
-    val dataToWrite1 = generateRandomData()
-    writeDataUsingWriteAheadLog(testDir, dataToWrite1, manualClock)
-    val logFiles1 = getLogFilesInDirectory(testDir)
-    assert(logFiles1.size > 1)
-
-
-    // Recover old files and generate a second set of log files
-    val dataToWrite2 = generateRandomData()
-    manualClock.advance(100000)
-    writeDataUsingWriteAheadLog(testDir, dataToWrite2, manualClock)
-    val logFiles2 = getLogFilesInDirectory(testDir)
-    assert(logFiles2.size > logFiles1.size)
-
-    // Read the files and verify that all the written data can be read
-    val readData1 = readDataUsingWriteAheadLog(testDir)
-    assert(readData1 === (dataToWrite1 ++ dataToWrite2))
-
-    // Corrupt the first set of files so that they are basically unreadable
-    logFiles1.foreach { f =>
-      val raf = new FileOutputStream(f, true).getChannel()
-      raf.truncate(1)
-      raf.close()
-    }
-
-    // Verify that the corrupted files do not prevent reading of the second set of data
-    val readData = readDataUsingWriteAheadLog(testDir)
-    assert(readData === dataToWrite2)
-  }
-
-  test("FileBasedWriteAheadLog - do not create directories or files unless write") {
-    val nonexistentTempPath = File.createTempFile("test", "")
-    nonexistentTempPath.delete()
-    assert(!nonexistentTempPath.exists())
-
-    val writtenSegment = writeDataManually(generateRandomData(), testFile)
-    val wal = new FileBasedWriteAheadLog(new SparkConf(), tempDir.getAbsolutePath,
-      new Configuration(), 1, 1, closeFileAfterWrite = false)
-    assert(!nonexistentTempPath.exists(), "Directory created just by creating log object")
-    wal.read(writtenSegment.head)
-    assert(!nonexistentTempPath.exists(), "Directory created just by attempting to read segment")
-  }
+class WithFileCloseWriteAheadLogSuite extends CommonWriteAheadLogTests {
+  override val closeFileAfterWrite: Boolean = true
+  override val allowBatching: Boolean = false
 }
 
 object WriteAheadLogSuite {
@@ -373,18 +399,20 @@ object WriteAheadLogSuite {
       manualClock: ManualClock = new ManualClock,
       closeLog: Boolean = true,
       clockAdvanceTime: Int = 500,
-      closeFileAfterWrite: Boolean = false): FileBasedWriteAheadLog = {
+      closeFileAfterWrite: Boolean = false,
+      allowBatching: Boolean = false): WriteAheadLog = {
     if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
     val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1,
       closeFileAfterWrite)
+    val effectiveWal = if (allowBatching) new BatchedWriteAheadLog(wal) else wal
 
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
       manualClock.advance(clockAdvanceTime)
-      wal.write(item, manualClock.getTimeMillis())
+      effectiveWal.write(item, manualClock.getTimeMillis())
     }
-    if (closeLog) wal.close()
-    wal
+    if (closeLog) effectiveWal.close()
+    effectiveWal
   }
 
   /** Read data from a segments of a log file directly and return the list of byte buffers. */
