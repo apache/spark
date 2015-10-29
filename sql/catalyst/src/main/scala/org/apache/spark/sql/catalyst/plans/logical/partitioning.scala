@@ -38,3 +38,11 @@ case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
  */
 case class RepartitionByExpression(partitionExpressions: Seq[Expression], child: LogicalPlan)
   extends RedistributeData
+
+/**
+ * This method repartitions data using [[Expression]]s into `numPartitions`. If numPartitions is
+ * less than zero, a default is used. Otherwise this behaves identically to RepartitionByExpression.
+ */
+case class PartitionByExpression(partitionExpressions: Seq[Expression],
+                                 child: LogicalPlan, numPartitions: Int = -1)
+  extends RedistributeData
