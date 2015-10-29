@@ -822,7 +822,7 @@ class SparkContext(object):
         Loads a JVM class using the MutableClass loader used by spark.
         This function exists because Py4J uses a different class loader.
         """
-        self._jvm.java.lang.Thread.currentThread().getContextClassLoader().loadClass(className)
+        self._jvm.org.apache.spark.util.Utils.getContextOrSparkClassLoader().loadClass(className)
 
     def setCheckpointDir(self, dirName):
         """
