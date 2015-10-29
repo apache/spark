@@ -17,9 +17,11 @@
 
 package org.apache.spark.memory
 
+import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.Logging
 
 /**
  * Implements policies and bookkeeping for sharing a fixed-size pool of memory between tasks.
@@ -28,28 +30,31 @@ import org.apache.spark.{Logging, SparkException}
  * to a large amount first and then causing others to spill to disk repeatedly.
  *
  * If there are N tasks, it ensures that each task can acquire at least 1 / 2N of the memory
- * before it has to spill, and at most 1 / N. Because N varies dynamically,fting tasks whenever
- * this set changes. This is all done by synchronizing access to mutable state and using wait() and
+ * before it has to spill, and at most 1 / N. Because N varies dynamically, we keep track of the
+ * set of active tasks and redo the calculations of 1 / 2N and 1 / N in waiting tasks whenever this
+ * set changes. This is all done by synchronizing access to mutable state and using wait() and
  * notifyAll() to signal changes to callers. Prior to Spark 1.6, this arbitration of memory across
  * tasks was performed by the ShuffleMemoryManager.
+ *
+ * @param memoryManager a [[MemoryManager]] instance to synchronize on
+ * @param poolName a human-readable name for this pool, for use in log messages
  */
-class ExecutionMemoryPool(poolName: String) extends MemoryPool with Logging {
-
-  // TODO(josh): document and consider thread-safety contracts
+class ExecutionMemoryPool(memoryManager: Object, poolName: String) extends MemoryPool with Logging {
 
   /**
    * Map from taskAttemptId -> memory consumption in bytes
    */
+  @GuardedBy("memoryManager")
   private val memoryForTask = new mutable.HashMap[Long, Long]()
 
-  override def memoryUsed: Long = synchronized {
+  override def memoryUsed: Long = memoryManager.synchronized {
     memoryForTask.values.sum
   }
 
   /**
    * Returns the memory consumption, in bytes, for the given task.
    */
-  def getMemoryUsageForTask(taskAttemptId: Long): Long = synchronized {
+  def getMemoryUsageForTask(taskAttemptId: Long): Long = memoryManager.synchronized {
     memoryForTask.getOrElse(taskAttemptId, 0L)
   }
 
@@ -64,7 +69,7 @@ class ExecutionMemoryPool(poolName: String) extends MemoryPool with Logging {
    *
    * @return the number of bytes granted to the task.
    */
-  def acquireMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
+  def acquireMemory(numBytes: Long, taskAttemptId: Long): Long = memoryManager.synchronized {
     assert(numBytes > 0, s"invalid number of bytes requested: $numBytes")
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
@@ -72,7 +77,7 @@ class ExecutionMemoryPool(poolName: String) extends MemoryPool with Logging {
     if (!memoryForTask.contains(taskAttemptId)) {
       memoryForTask(taskAttemptId) = 0L
       // This will later cause waiting tasks to wake up and check numTasks again
-      notifyAll()
+      memoryManager.notifyAll()
     }
 
     // Keep looping until we're either sure that we don't want to grant this request (because this
@@ -100,7 +105,7 @@ class ExecutionMemoryPool(poolName: String) extends MemoryPool with Logging {
         } else {
           logInfo(
             s"TID $taskAttemptId waiting for at least 1/2N of $poolName pool to be free")
-          wait()
+          memoryManager.wait()
         }
       } else {
         memoryForTask(taskAttemptId) += toGrant
@@ -110,27 +115,30 @@ class ExecutionMemoryPool(poolName: String) extends MemoryPool with Logging {
     0L  // Never reached
   }
 
-  def releaseMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
+  def releaseMemory(numBytes: Long, taskAttemptId: Long): Unit = memoryManager.synchronized {
     val curMem = memoryForTask.getOrElse(taskAttemptId, 0L)
-    if (curMem < numBytes) {
-      throw new SparkException(
+    var memoryToFree = if (curMem < numBytes) {
+      logWarning(
         s"Internal error: release called on $numBytes bytes but task only has $curMem bytes " +
           s"of memory from the $poolName pool")
+      curMem
+    } else {
+      numBytes
     }
     if (memoryForTask.contains(taskAttemptId)) {
-      memoryForTask(taskAttemptId) -= numBytes
+      memoryForTask(taskAttemptId) -= memoryToFree
       if (memoryForTask(taskAttemptId) <= 0) {
         memoryForTask.remove(taskAttemptId)
       }
     }
-    notifyAll() // Notify waiters in acquireMemory() that memory has been freed
+    memoryManager.notifyAll() // Notify waiters in acquireMemory() that memory has been freed
   }
 
   /**
    * Release all memory for the given task and mark it as inactive (e.g. when a task ends).
    * @return the number of bytes freed.
    */
-  def releaseAllMemoryForTask(taskAttemptId: Long): Long = synchronized {
+  def releaseAllMemoryForTask(taskAttemptId: Long): Long = memoryManager.synchronized {
     val numBytesToFree = getMemoryUsageForTask(taskAttemptId)
     releaseMemory(numBytesToFree, taskAttemptId)
     numBytesToFree

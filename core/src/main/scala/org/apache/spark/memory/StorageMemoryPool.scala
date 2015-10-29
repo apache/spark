@@ -89,7 +89,7 @@ class StorageMemoryPool extends MemoryPool with Logging {
     enoughMemory
   }
 
-  def releaseMemory(size: Long): Unit = {
+  def releaseMemory(size: Long): Unit = synchronized {
     if (size > _memoryUsed) {
       logWarning(s"Attempted to release $size bytes of storage " +
         s"memory when we only have ${_memoryUsed} bytes")
@@ -99,11 +99,11 @@ class StorageMemoryPool extends MemoryPool with Logging {
     }
   }
 
-  def releaseAllMemory(): Unit = {
+  def releaseAllMemory(): Unit = synchronized {
     _memoryUsed = 0
   }
 
-  def shrinkPoolByEvictingBlocks(spaceToEnsure: Long): Long = {
+  def shrinkPoolByEvictingBlocks(spaceToEnsure: Long): Long = synchronized {
     val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     memoryStore.ensureFreeSpace(spaceToEnsure, evictedBlocks)
     val spaceFreed = evictedBlocks.map(_._2.memSize).sum

@@ -40,11 +40,10 @@ private[spark] abstract class MemoryManager(
 
   // TODO(josh): think through and document thread-safety contracts
   protected val storageMemoryPool = new StorageMemoryPool()
-  protected val onHeapExecutionMemoryPool = new ExecutionMemoryPool("on-heap execution")
-  protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool("off-heap execution")
+  protected val onHeapExecutionMemoryPool = new ExecutionMemoryPool(this, "on-heap execution")
+  protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, "off-heap execution")
 
   offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeapSize", 0))
-
 
   /**
    * Total available memory for storage, in bytes. This amount can vary over time, depending on

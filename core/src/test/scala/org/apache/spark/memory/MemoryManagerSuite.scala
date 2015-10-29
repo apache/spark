@@ -146,6 +146,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     val taskMemoryManager = new TaskMemoryManager(manager, 0)
 
     assert(taskMemoryManager.acquireOnHeapExecutionMemory(100L) === 100L)
+    assert(taskMemoryManager.getMemoryConsumptionForThisTask === 100L)
     assert(taskMemoryManager.acquireOnHeapExecutionMemory(400L) === 400L)
     assert(taskMemoryManager.acquireOnHeapExecutionMemory(400L) === 400L)
     assert(taskMemoryManager.acquireOnHeapExecutionMemory(200L) === 100L)

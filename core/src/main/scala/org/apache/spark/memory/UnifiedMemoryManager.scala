@@ -56,10 +56,9 @@ private[spark] class UnifiedMemoryManager private[memory] (
     numCores,
     maxOnHeapExecutionMemory = maxMemory - minimumStoragePoolSize) {
 
-  onHeapExecutionMemoryPool.incrementPoolSize(maxMemory - minimumStoragePoolSize)
-  storageMemoryPool.incrementPoolSize(minimumStoragePoolSize)
+  onHeapExecutionMemoryPool.incrementPoolSize(maxMemory)
 
-  override def maxStorageMemory: Long = {
+  override def maxStorageMemory: Long = synchronized {
     maxMemory - onHeapExecutionMemoryPool.memoryUsed
   }
 
@@ -78,10 +77,22 @@ private[spark] class UnifiedMemoryManager private[memory] (
     onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
   }
 
+  override def acquireStorageMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+    if (numBytes > storageMemoryPool.memoryFree
+        && numBytes <= onHeapExecutionMemoryPool.memoryFree) {
+      onHeapExecutionMemoryPool.decrementPoolSize(numBytes)
+      storageMemoryPool.incrementPoolSize(numBytes)
+    }
+    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+  }
+
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     acquireStorageMemory(blockId, numBytes, evictedBlocks)
   }
 }
