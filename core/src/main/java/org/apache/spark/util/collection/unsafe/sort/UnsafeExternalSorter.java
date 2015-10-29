@@ -138,7 +138,7 @@ public final class UnsafeExternalSorter {
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
     // does not fully consume the sorter's output (e.g. sort followed by limit).
-    taskContext.addTaskCompletionListener(new AbstractFunction1<TaskContext,BoxedUnit>() {
+    taskContext.addTaskCompletionListener(new AbstractFunction1<TaskContext, BoxedUnit>() {
       @Override
       public BoxedUnit apply(TaskContext context) {
         cleanupResources();
