@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.encoders.Encoder
+import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
 import org.apache.spark.sql.catalyst.plans._
@@ -450,8 +450,8 @@ case object OneRowRelation extends LeafNode {
  */
 case class MapPartitions[T, U](
     func: Iterator[T] => Iterator[U],
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def missingInput: AttributeSet = AttributeSet.empty
@@ -460,8 +460,8 @@ case class MapPartitions[T, U](
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumn {
   def apply[T : Encoder, U : Encoder](func: T => U, child: LogicalPlan): AppendColumn[T, U] = {
-    val attrs = implicitly[Encoder[U]].schema.toAttributes
-    new AppendColumn[T, U](func, implicitly[Encoder[T]], implicitly[Encoder[U]], attrs, child)
+    val attrs = encoderFor[U].schema.toAttributes
+    new AppendColumn[T, U](func, encoderFor[T], encoderFor[U], attrs, child)
   }
 }
 
@@ -472,8 +472,8 @@ object AppendColumn {
  */
 case class AppendColumn[T, U](
     func: T => U,
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     newColumns: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output ++ newColumns
@@ -488,11 +488,11 @@ object MapGroups {
       child: LogicalPlan): MapGroups[K, T, U] = {
     new MapGroups(
       func,
-      implicitly[Encoder[K]],
-      implicitly[Encoder[T]],
-      implicitly[Encoder[U]],
+      encoderFor[K],
+      encoderFor[T],
+      encoderFor[U],
       groupingAttributes,
-      implicitly[Encoder[U]].schema.toAttributes,
+      encoderFor[U].schema.toAttributes,
       child)
   }
 }
@@ -504,12 +504,51 @@ object MapGroups {
  */
 case class MapGroups[K, T, U](
     func: (K, Iterator[T]) => Iterator[U],
-    kEncoder: Encoder[K],
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    kEncoder: ExpressionEncoder[K],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def missingInput: AttributeSet = AttributeSet.empty
 }
 
+/** Factory for constructing new `CoGroup` nodes. */
+object CoGroup {
+  def apply[K : Encoder, Left : Encoder, Right : Encoder, R : Encoder](
+      func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+      leftGroup: Seq[Attribute],
+      rightGroup: Seq[Attribute],
+      left: LogicalPlan,
+      right: LogicalPlan): CoGroup[K, Left, Right, R] = {
+    CoGroup(
+      func,
+      encoderFor[K],
+      encoderFor[Left],
+      encoderFor[Right],
+      encoderFor[R],
+      encoderFor[R].schema.toAttributes,
+      leftGroup,
+      rightGroup,
+      left,
+      right)
+  }
+}
+
+/**
+ * A relation produced by applying `func` to each grouping key and associated values from left and
+ * right children.
+ */
+case class CoGroup[K, Left, Right, R](
+    func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+    kEncoder: ExpressionEncoder[K],
+    leftEnc: ExpressionEncoder[Left],
+    rightEnc: ExpressionEncoder[Right],
+    rEncoder: ExpressionEncoder[R],
+    output: Seq[Attribute],
+    leftGroup: Seq[Attribute],
+    rightGroup: Seq[Attribute],
+    left: LogicalPlan,
+    right: LogicalPlan) extends BinaryNode {
+  override def missingInput: AttributeSet = AttributeSet.empty
+}
