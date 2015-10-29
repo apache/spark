@@ -298,6 +298,10 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
   override def prettyName: String = "date_format"
 }
 
+/**
+ * Converts time string with given pattern.
+ * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
+ */
 case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
@@ -308,7 +312,7 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends Unix
 }
 
 /**
- * Converts time string with given pattern
+ * Converts time string with given pattern.
  * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
  * to Unix time stamp (in seconds), returns null if fail.
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
