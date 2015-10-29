@@ -19,10 +19,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.sources.BaseRelation
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
