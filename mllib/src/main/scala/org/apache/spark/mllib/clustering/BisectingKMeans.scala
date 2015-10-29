@@ -476,13 +476,13 @@ private[clustering] object BisectingKMeans {
    *
    * @param treeMap divided clusters as a Map class
    * @param rootIndex index you want to start
-   * @param numClusters the number of clusters you want
+   * @param k the number of clusters you want
    * @return a built cluster tree
    */
   private def buildTree(
       treeMap: Map[Long, BisectingClusterNode],
       rootIndex: Long,
-      numClusters: Int): Option[BisectingClusterNode] = {
+      k: Int): Option[BisectingClusterNode] = {
 
     // if there is no index in the Map
     if (!treeMap.contains(rootIndex)) return None
@@ -491,7 +491,7 @@ private[clustering] object BisectingKMeans {
     var numLeavesClusters = 1
     val root = treeMap(rootIndex)
     var leavesQueue = Map(rootIndex -> root)
-    while (leavesQueue.nonEmpty && numLeavesClusters < numClusters) {
+    while (leavesQueue.nonEmpty && numLeavesClusters < k) {
       // pick up the largest cluster by the maximum cost of all the clusters
       val mostScattered = leavesQueue.maxBy(_._2.cost)
       val mostScatteredKey = mostScattered._1
