@@ -170,7 +170,7 @@ trait ScalaReflection {
         .getOrElse(BoundReference(ordinal, dataType, false))
 
     /** Returns the current path or throws an error. */
-    def getPath = path.getOrElse(BoundReference(0, dataTypeFor(tpe), true))
+    def getPath = path.getOrElse(BoundReference(0, schemaFor(tpe).dataType, true))
 
     tpe match {
       case t if !dataTypeFor(t).isInstanceOf[ObjectType] =>
