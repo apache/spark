@@ -156,7 +156,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           groupingExpressions,
           partialComputation,
           child) if !canBeConvertedToNewAggregation(plan) =>
-        Utils.mustNewAggregation(plan.asInstanceOf[logical.Aggregate])
         execution.Aggregate(
           partial = false,
           namedGroupingAttributes,
@@ -433,7 +432,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           Nil
         } else {
           Utils.checkInvalidAggregateFunction2(a)
-          Utils.mustNewAggregation(a)
           execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
         }
       }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.aggregate
@@ -579,8 +580,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
 
     val df3 = Seq.tabulate(0)(i => (1.0 * i, 2.0 * i)).toDF("a", "b")
-    val corr4 = df3.groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
-    assert(corr4.isNaN)
+    val corr4 = df3.groupBy().agg(corr("a", "b")).collect()(0)
+    assert(corr4 == Row(null))
 
     val df4 = Seq.tabulate(10)(i => (1 * i, 2 * i, i * -1)).toDF("a", "b", "c")
     val corr5 = df4.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
@@ -589,11 +590,12 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
     withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      val errorMessage = intercept[AnalysisException] {
+      val errorMessage = intercept[SparkException] {
         val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
         val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
       }.getMessage
-      assert(errorMessage.contains("Corr is only implemented based on the new Aggregate Function"))
+      assert(errorMessage.contains("java.lang.UnsupportedOperationException: " +
+        "Corr only supports the new AggregateExpression2"))
     }
   }
 

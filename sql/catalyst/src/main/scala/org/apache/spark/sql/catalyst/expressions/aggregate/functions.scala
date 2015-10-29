@@ -527,7 +527,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
 
 /**
  * Compute Pearson correlation between two expressions.
- * When applied on empty data (i.e., count is zero), it returns NaN.
+ * When applied on empty data (i.e., count is zero), it returns NULL.
  *
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
@@ -668,7 +668,7 @@ case class Corr(
       val MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
       Ck / math.sqrt(MkX * MkY)
     } else {
-      Double.NaN
+      null
     }
   }
 }

@@ -753,11 +753,16 @@ case class LastFunction(
  *
  */
 case class Corr(left: Expression, right: Expression)
-    extends BinaryExpression with AggregateExpression with ImplicitCastInputTypes {
+    extends BinaryExpression with AggregateExpression1 with ImplicitCastInputTypes {
   override def nullable: Boolean = false
   override def dataType: DoubleType.type = DoubleType
   override def toString: String = s"CORRELATION($left, $right)"
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException(
+      "Corr only supports the new AggregateExpression2 and can only be used " +
+        "when spark.sql.useAggregate2 = true")
+  }
 }
 
 // Compute standard deviation based on online algorithm specified here:
