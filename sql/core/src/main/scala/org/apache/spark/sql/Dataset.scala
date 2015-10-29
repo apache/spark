@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
+
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -153,11 +157,17 @@ class Dataset[T] private(
    */
   def filter(func: T => Boolean): Dataset[T] = mapPartitions(_.filter(func))
 
+  def filter(func: JFunction[T, java.lang.Boolean]): Dataset[T] =
+    filter(t => func.call(t).booleanValue())
+
   /**
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    * @since 1.6.0
    */
   def map[U : Encoder](func: T => U): Dataset[U] = mapPartitions(_.map(func))
+
+  def map[U](func: JFunction[T, U], encoder: Encoder[U]): Dataset[U] =
+    map(t => func.call(t))(encoder)
 
   /**
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
@@ -172,6 +182,15 @@ class Dataset[T] private(
         encoderFor[U],
         encoderFor[U].schema.toAttributes,
         logicalPlan))
+  }
+
+  def mapPartitions[U](
+      f: FlatMapFunction[java.util.Iterator[T], U],
+      encoder: Encoder[U]): Dataset[U] = {
+    def func: (Iterator[T]) => Iterator[U] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
+    mapPartitions(func)(encoder)
   }
 
   def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
@@ -440,6 +459,9 @@ class Dataset[T] private(
 
   /** Collects the elements to an Array. */
   def collect(): Array[T] = rdd.collect()
+
+  def jcollect(): java.util.List[T] =
+    rdd.collect().toSeq.asJava
 
   /** Returns the first `num` elements of this [[Dataset]] as an Array. */
   def take(num: Int): Array[T] = rdd.take(num)
