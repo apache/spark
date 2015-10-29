@@ -160,6 +160,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
       logInfo("Skipping insertion into a relation that already exists.")
     }
 
+    // Invalidate the cache.
+    sqlContext.cacheManager.invalidateCache(LogicalRelation(relation))
+
     Seq.empty[Row]
   }
 }
