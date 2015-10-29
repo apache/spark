@@ -72,6 +72,7 @@ public abstract class MemoryConsumer {
   protected void acquireMemory(long size) {
     long got = memoryManager.acquireExecutionMemory(size, this);
     if (got < size) {
+      memoryManager.releaseExecutionMemory(got, this);
       memoryManager.showMemoryUsage();
       throw new OutOfMemoryError("Could not acquire " + size + " bytes of memory, got " + got);
     }

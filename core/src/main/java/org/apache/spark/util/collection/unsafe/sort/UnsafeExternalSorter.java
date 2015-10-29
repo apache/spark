@@ -286,17 +286,24 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * array and grows the array if additional space is required. If the required space cannot be
    * obtained, then the in-memory data will be spilled to disk.
    */
-  private void growPointerArrayIfNecessary() {
+  private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       long used = inMemSorter.getMemoryUsage();
       long needed = inMemSorter.getMemoryToExpand();
-      acquireMemory(used + needed);  // could trigger spilling
-      if (inMemSorter.hasSpaceForAnotherRecord()) {
-        releaseMemory(used + needed);
-      } else {
-        inMemSorter.expandPointerArray();
-        releaseMemory(used);
+      try {
+        acquireMemory(used + needed);  // could trigger spilling
+        if (inMemSorter.hasSpaceForAnotherRecord()) {
+          releaseMemory(used + needed);
+        } else {
+          inMemSorter.expandPointerArray();
+          releaseMemory(used);
+        }
+      } catch (OutOfMemoryError oom) {
+        // spilling should be triggered
+        if (!inMemSorter.hasSpaceForAnotherRecord()) {
+          spill();  // Just in case that JVM had run out of memory
+        }
       }
     }
   }
@@ -323,7 +330,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   /**
    * Write a record to the sorter.
    */
-  public void insertRecord(Object recordBase, long recordOffset, int length, long prefix) {
+  public void insertRecord(Object recordBase, long recordOffset, int length, long prefix)
+    throws IOException {
 
     growPointerArrayIfNecessary();
     // Need 4 bytes to store the record length.
@@ -349,7 +357,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * record length = key length + value length + 4
    */
   public void insertKVRecord(Object keyBase, long keyOffset, int keyLen,
-      Object valueBase, long valueOffset, int valueLen, long prefix) {
+      Object valueBase, long valueOffset, int valueLen, long prefix)
+    throws IOException {
 
     growPointerArrayIfNecessary();
     final int required = keyLen + valueLen + 4 + 4;
@@ -443,10 +452,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
             }
           }
           allocatedPages.clear();
-          assert(inMemSorter != null);
-          long used = inMemSorter.getMemoryUsage();
-          inMemSorter = null;
-          releaseMemory(used);
         }
         return released;
       }
@@ -469,6 +474,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           }
           upstream = nextUpstream;
           nextUpstream = null;
+
+          assert(inMemSorter != null);
+          long used = inMemSorter.getMemoryUsage();
+          inMemSorter = null;
+          releaseMemory(used);
         }
         numRecords--;
         upstream.loadNext();

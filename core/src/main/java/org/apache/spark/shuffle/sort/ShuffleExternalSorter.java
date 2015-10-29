@@ -316,18 +316,26 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    * array and grows the array if additional space is required. If the required space cannot be
    * obtained, then the in-memory data will be spilled to disk.
    */
-  private void growPointerArrayIfNecessary() {
+  private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       logger.debug("Attempting to expand sort pointer array");
       long used = inMemSorter.getMemoryUsage();
       long needed = inMemSorter.getMemoryToExpand();
-      acquireMemory(used + needed);  // could trigger spilling
-      if (inMemSorter.hasSpaceForAnotherRecord()) {
-        releaseMemory(used + needed);
-      } else {
-        inMemSorter.expandPointerArray();
-        releaseMemory(used);
+      try {
+        acquireMemory(used + needed);  // could trigger spilling
+        if (inMemSorter.hasSpaceForAnotherRecord()) {
+          releaseMemory(used + needed);
+        } else {
+          logger.debug("Expand sort pointer array");
+          inMemSorter.expandPointerArray();
+          releaseMemory(used);
+        }
+      } catch (OutOfMemoryError oom) {
+        // spilling should be triggered
+        if (!inMemSorter.hasSpaceForAnotherRecord()) {
+          spill();  // Just in case that JVM had run out of memory
+        }
       }
     }
   }

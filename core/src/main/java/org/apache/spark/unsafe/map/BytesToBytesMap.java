@@ -123,6 +123,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
   // absolute memory addresses.
 
   /**
+   * Whether or not the longArray can grow. We will not insert more elements if it's false.
+   */
+  private boolean canGrowArray = true;
+
+  /**
    * A {@link BitSet} used to track location of the map where the key is set.
    * Size of the bitset should be half of the size of the long array.
    */
@@ -199,7 +204,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
     allocate(initialCapacity);
-    acquireMemory(longArray.memoryBlock().size());
   }
 
   public BytesToBytesMap(
@@ -649,8 +653,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert(bitset != null);
       assert(longArray != null);
 
-      if (numElements == MAX_CAPACITY) {
-        throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
+      if (numElements == MAX_CAPACITY || !canGrowArray) {
+        return false;
       }
 
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
@@ -660,16 +664,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
       final long recordLength = 8 + keyLength + valueLength;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
         if (!acquireNewPage(recordLength + 4L)) {
-          return false;
-        }
-      }
-      boolean toGrow = numElements > growthThreshold && longArray.size() < MAX_CAPACITY;
-      if (toGrow) {
-        long capacity = Math.min(MAX_CAPACITY,
-          ByteArrayMethods.nextPowerOf2(growthStrategy.nextCapacity((int) bitset.capacity())));
-        try {
-          acquireMemory(capacity * 16L);
-        } catch (OutOfMemoryError e) {
           return false;
         }
       }
@@ -698,10 +692,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
       updateAddressesAndSizes(storedKeyAddress);
       isDefined = true;
 
-      if (toGrow) {
-        long usedMemory = longArray.memoryBlock().size();
-        growAndRehash();
-        releaseMemory(usedMemory);
+      if (numElements > growthThreshold && longArray.size() < MAX_CAPACITY) {
+        try {
+          growAndRehash();
+        } catch (OutOfMemoryError oom) {
+          canGrowArray = false;
+        }
       }
       return true;
     }
@@ -742,6 +738,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
+    acquireMemory(capacity * 16);
     longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
     bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
 
@@ -758,8 +755,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       long used = longArray.memoryBlock().size();
       longArray = null;
       releaseMemory(used);
+      bitset = null;
     }
-    bitset = null;
   }
 
   /**
@@ -889,6 +886,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         }
       }
     }
+    releaseMemory(oldLongArray.memoryBlock().size());
 
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
