@@ -413,6 +413,18 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         )
       }
     }
+
+    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
+      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+      val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
+      val df = df1.join(df2, $"key" < $"key2", "leftsemi")
+      testSparkPlanMetrics(df, 3, Map(
+        0L -> ("BroadcastNestedLoopJoin", Map(
+          "number of left rows" -> 2L,
+          "number of right rows" -> 8L, // right needs to be scanned twice
+          "number of output rows" -> 2L)))
+      )
+    }
   }
 
   test("BroadcastLeftSemiJoinHash metrics") {
@@ -441,22 +453,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = df1.join(df2, $"key" === $"key2", "leftsemi")
       testSparkPlanMetrics(df, 1, Map(
         0L -> ("LeftSemiJoinHash", Map(
-          "number of left rows" -> 2L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 2L)))
-      )
-    }
-  }
-
-  test("LeftSemiJoinBNL metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
-      // Assume the execution plan is
-      // ... -> LeftSemiJoinBNL(nodeId = 0)
-      val df = df1.join(df2, $"key" < $"key2", "leftsemi")
-      testSparkPlanMetrics(df, 2, Map(
-        0L -> ("LeftSemiJoinBNL", Map(
           "number of left rows" -> 2L,
           "number of right rows" -> 4L,
           "number of output rows" -> 2L)))

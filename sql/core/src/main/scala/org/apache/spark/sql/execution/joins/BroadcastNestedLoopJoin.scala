@@ -115,9 +115,13 @@ case class BroadcastNestedLoopJoin(
           val broadcastedRow = broadcastedRelation.value(i)
           buildSide match {
             case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>
-              matchedRows += resultProj(joinedRow(streamedRow, broadcastedRow)).copy()
-              streamRowMatched = true
-              includedBroadcastTuples += i
+              // If it is LeftSemi join, we simply skip matching to other rows
+              // because we only need one copy of left row
+              if (joinType != LeftSemi || !streamRowMatched) {
+                matchedRows += resultProj(joinedRow(streamedRow, broadcastedRow)).copy()
+                streamRowMatched = true
+                includedBroadcastTuples += i
+              }
             case BuildLeft if boundCondition(joinedRow(broadcastedRow, streamedRow)) =>
               if (joinType != LeftSemi) {
                 matchedRows += resultProj(joinedRow(broadcastedRow, streamedRow)).copy()
@@ -176,7 +180,7 @@ case class BroadcastNestedLoopJoin(
           }
         case (LeftSemi, BuildLeft) =>
           while (i < rel.length) {
-            if (!allIncludedBroadcastTuples.contains(i)) {
+            if (allIncludedBroadcastTuples.contains(i)) {
               buf += rel(i).copy()
             }
             i += 1
