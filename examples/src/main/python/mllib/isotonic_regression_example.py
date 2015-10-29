@@ -17,7 +17,6 @@
 
 """
 Isotonic Regression Example.
-
 """
 from __future__ import print_function
 

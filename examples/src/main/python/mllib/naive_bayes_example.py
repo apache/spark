@@ -17,7 +17,6 @@
 
 """
 NaiveBayes Example.
-
 """
 from __future__ import print_function
 
@@ -26,14 +25,11 @@ from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
 
-
 def parseLine(line):
     parts = line.split(',')
     label = float(parts[0])
     features = Vectors.dense([float(x) for x in parts[1].split(' ')])
     return LabeledPoint(label, features)
-
-
 # $example off$
 
 if __name__ == "__main__":
