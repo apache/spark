@@ -1441,8 +1441,18 @@ private[spark] object SerDe extends Serializable {
       if (args.length != 3) {
         throw new PickleException("should be 3")
       }
-      new Rating(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
+      new Rating(ratingsIdCheckLong(args(0)), ratingsIdCheckLong(args(1)),
         args(2).asInstanceOf[Double])
+    }
+
+    private def ratingsIdCheckLong(obj: Object): Int = {
+      try {
+        obj.asInstanceOf[Int]
+      } catch {
+        case ex: ClassCastException =>
+          throw new PickleException(s"Ratings id ${obj.toString} exceeds " +
+            s"max value of ${Int.MaxValue}", ex)
+      }
     }
   }
 
