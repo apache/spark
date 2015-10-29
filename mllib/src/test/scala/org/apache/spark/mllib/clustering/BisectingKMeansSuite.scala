@@ -116,7 +116,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       2L -> new BisectingClusterStat(2, BV[Double](1.0, 1.0) * 2.0, 0.0),
       3L -> new BisectingClusterStat(2, BV[Double](2.0, 2.0) * 2.0, 0.0)
     )
-    val initNextCenters = BisectingKMeans.initNextCenters(data, stats)
+    val initNextCenters = BisectingKMeans.initNextCenters(stats, 1)
     assert(initNextCenters.size === 4)
     assert(initNextCenters.keySet === Set(4, 5, 6, 7))
   }
@@ -140,7 +140,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data = sc.parallelize(seed, 1)
     val leafClusterStats = BisectingKMeans.summarizeClusters(data)
     val dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
-    val result = BisectingKMeans.divideClusters(data, dividableLeafClusters, 20).collect()
+    val result = BisectingKMeans.divideClusters(data, dividableLeafClusters, 20, 1).collect()
 
     val expected = Seq(
       (4, Vectors.dense(0.0, 0.0)), (4, Vectors.dense(1.0, 1.0)), (4, Vectors.dense(2.0, 2.0)),
@@ -185,7 +185,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val data = sc.parallelize(local, 1)
     val stats = BisectingKMeans.summarizeClusters(data)
-    val dividedData = BisectingKMeans.divideClusters(data, stats, 20).collect()
+    val dividedData = BisectingKMeans.divideClusters(data, stats, 20, 1).collect()
 
     assert(dividedData(0) == (4L, BV[Double](0.9, 0.9)))
     assert(dividedData(1) == (4L, BV[Double](1.1, 1.1)))
