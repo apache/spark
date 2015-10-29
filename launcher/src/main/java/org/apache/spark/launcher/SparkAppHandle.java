@@ -19,7 +19,7 @@ package org.apache.spark.launcher;
 
 /**
  * A handle to a running Spark application.
- * <p/>
+ * <p>
  * Provides runtime information about the underlying Spark application, and actions to control it.
  *
  * @since 1.6.0
@@ -110,7 +110,7 @@ public interface SparkAppHandle {
      * Callback for changes in the handle's state.
      *
      * @param handle The updated handle.
-     * @see {@link SparkAppHandle#getState()}
+     * @see SparkAppHandle#getState()
      */
     void stateChanged(SparkAppHandle handle);
 
