@@ -372,56 +372,54 @@ private[clustering] object BisectingKMeans {
     val dividableData = data.filter { case (idx, point) => dividableClusterStats.contains(idx)}
 
     var newCenters = initNextCenters(dividableData, dividableClusterStats)
-    var bcNewCenters = sc.broadcast(newCenters)
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
     val bcMetric = sc.broadcast(metric)
     // pairs of cluster index and (sums, #points, sumOfSquares)
-    var stats = Map.empty[Long, (BV[Double], Double, Double)]
+    var stats = Map.empty[Long, (BV[Double], Long, Double)]
 
     var subIter = 0
-    var totalStd = Double.MaxValue
-    var oldTotalStd = Double.MaxValue
+    var totalSumOfSquares = Double.MaxValue
+    var oldTotalSumOfSquares = Double.MaxValue
     var relativeError = Double.MaxValue
+    val dimension = dividableData.first()._2.size
+    // TODO add a set method for the threshold, instead of 1e-4
     while (subIter < maxIterations && relativeError > 1e-4) {
-      // calculate summary of each cluster
-      val eachStats = dividableData.mapPartitions { iter =>
-        val map = mutable.Map.empty[Long, (BV[Double], Double, Double)]
-        iter.foreach { case (idx, point) =>
-          // calculate next index number
-          val childrenCenters = Array(2 * idx, 2 * idx + 1)
-            .filter(x => bcNewCenters.value.contains(x)).map(bcNewCenters.value(_))
-          if (childrenCenters.length == 2) {
-            val closestIndex = findClosestCenter(bcMetric.value)(childrenCenters)(point)
-            val nextIndex = 2 * idx + closestIndex
-
-            // get a map value or else get a sparse vector
-            val (sumBV, n, sumOfSquares) = map
-              .getOrElse(
-                nextIndex,
-                (BSV.zeros[Double](point.size), 0.0, 0.0)
-              )
-            map(nextIndex) = (sumBV + point, n + 1.0, sumOfSquares + math.pow(breezeSum(point), 2.0))
-          }
+      // convert each index into the closest child index
+      val bcNewCenters = sc.broadcast(newCenters)
+      val nextData = dividableData.map { case (idx, point) =>
+        // calculate next index number
+        val childIndexes = Array(2 * idx, 2 * idx + 1)
+        val childrenCenters = childIndexes
+          .filter(x => bcNewCenters.value.contains(x)).map(bcNewCenters.value(_))
+        if (childrenCenters.length != 2) {
+          new SparkException(s"A node whose index is ${idx} doesn't have two children")
         }
-        map.toIterator
-      }.reduceByKey { case ((sv1, n1, sumOfSquares1), (sv2, n2, sumOfSquares2)) =>
-        // sum the accumulation and the count in the all partition
-        (sv1 + sv2, n1 + n2, sumOfSquares1 + sumOfSquares2)
-      }.collect().toMap
+        val closestIndex = findClosestCenter(bcMetric.value)(childrenCenters)(point)
+        val nextIndex = 2 * idx + closestIndex
+        (nextIndex, point)
+      }
+
+      // summarize each cluster
+      val zeroValue = (BV.zeros[Double](dimension), 0L, 0.0)
+      val seqOp = (acc: (BV[Double], Long, Double), point: BV[Double]) => {
+        val sums = acc._1 + point
+        val n = acc._2 + 1L
+        val sumOfSquares = acc._3 + (point dot point)
+        (sums, n, sumOfSquares)
+      }
+      val comOp = (acc1: (BV[Double], Long, Double), acc2: (BV[Double], Long, Double)) =>
+        (acc1._1 + acc2._1, acc1._2 + acc2._2, acc1._3 + acc2._3)
+      val tempStats = nextData.aggregateByKey(zeroValue)(seqOp, comOp).collectAsMap()
 
       // calculate the center of each cluster
-      newCenters = eachStats.map { case (idx, (sum, n, sumOfSquares)) => (idx, sum :/ n)}
-      bcNewCenters = sc.broadcast(newCenters)
-
+      newCenters = tempStats.map {case (idx, (sums, n, sumOfSquares)) => (idx, sums :/ n.toDouble)}
       // update summary of each cluster
-      stats = eachStats.toMap
+      stats = tempStats.toMap
 
-      totalStd = stats.map { case (idx, (sums, n, sumOfSquares)) =>
-        (sumOfSquares / n) - math.pow(breezeSum(sums), 2.0)
-      }.sum
-      relativeError = math.abs(oldTotalStd - totalStd) / totalStd
-      oldTotalStd = totalStd
+      totalSumOfSquares = stats.map{case (idx, (sums, n, sumOfSquares)) => sumOfSquares}.sum
+      relativeError = math.abs(totalSumOfSquares - oldTotalSumOfSquares) / totalSumOfSquares
+      oldTotalSumOfSquares = totalSumOfSquares
       subIter += 1
     }
     stats.map { case (i, (sums, n, sumOfSquares)) =>
