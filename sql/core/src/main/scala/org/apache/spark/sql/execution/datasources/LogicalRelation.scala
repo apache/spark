@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
 
@@ -61,6 +61,7 @@ case class LogicalRelation(
     case LogicalRelation(otherRelation, _) => relation == otherRelation
     case _ => false
   }
+
   override lazy val cleanArgs: Seq[Any] = Seq(relation)
 
   @transient override lazy val statistics: Statistics = Statistics(
