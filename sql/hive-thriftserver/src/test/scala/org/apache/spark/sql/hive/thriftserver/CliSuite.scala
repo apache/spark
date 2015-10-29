@@ -58,7 +58,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
    * @param timeout maximum time for the commands to complete
    * @param extraArgs any extra arguments
    * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
-   *                       is taken as an immediate error condition. That is: if a line beginning
+   *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
    *
@@ -104,7 +104,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         }
       } else {
         errorResponses.foreach { r =>
-          if (line.startsWith(r)) {
+          if (line.contains(r)) {
             foundAllExpectedAnswers.tryFailure(
               new RuntimeException(s"Failed with error line '$line'"))
           }
@@ -217,6 +217,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         -> "OK",
       "DROP TABLE sourceTable;"
         -> "OK"
+    )
+  }
+
+  test("SPARK-11188 Analysis error reporting") {
+    runCliWithin(timeout = 2.minute,
+      errorResponses = Seq("AnalysisException"))(
+      "select * from nonexistent_table;"
+        -> "Error in query: no such table nonexistent_table;"
     )
   }
 }
