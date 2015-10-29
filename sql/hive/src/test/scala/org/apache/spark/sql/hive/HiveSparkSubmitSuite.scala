@@ -153,12 +153,14 @@ class HiveSparkSubmitSuite
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
     val testJar = s"sql/hive/src/test/resources/regression-test-SPARK-8489/test-$version.jar"
+    val testJarPath = sys.props.get("spark.project.home").map(
+      _ + '/' + testJar).getOrElse(testJar)
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
       "--class", "Main",
-      testJar)
+      testJarPath)
     runSparkSubmit(args)
   }
 

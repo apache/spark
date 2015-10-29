@@ -481,8 +481,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement(
       {
         statement =>
-          val jarFile =
-            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+          val jar = "hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+          val jarFile = sys.props.get("spark.project.home").map(
+            _ + "/sql/" + jar).getOrElse("../" + jar)
               .split("/")
               .mkString(File.separator)
 
@@ -737,8 +738,11 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")
   private val LOG_FILE_MARK = s"starting $CLASS_NAME, logging to "
 
-  protected val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
-  protected val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
+  protected val startScript = "./sbin/start-thriftserver.sh".split("/").mkString(File.separator)
+  protected val stopScript = "./sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
+
+  protected val sparkHome = sys.props.getOrElse("spark.test.home",
+    fail("spark.test.home is not set!"))
 
   private var listeningPort: Int = _
   protected def serverPort: Int = listeningPort
@@ -836,6 +840,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     logPath = {
       val lines = Utils.executeAndGetOutput(
         command = command,
+        workingDir = new File(sparkHome),
         extraEnvironment = Map(
           // Disables SPARK_TESTING to exclude log4j.properties in test directories.
           "SPARK_TESTING" -> "0",
@@ -889,6 +894,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
     Utils.executeAndGetOutput(
       command = Seq(stopScript),
+      workingDir = new File(sparkHome),
       extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
     Thread.sleep(3.seconds.toMillis)
 
