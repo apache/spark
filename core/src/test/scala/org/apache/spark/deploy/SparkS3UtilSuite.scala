@@ -42,7 +42,7 @@ class SparkS3UtilSuite extends SparkFunSuite {
 
     // Input paths copntain non-S3 files
     SparkS3Util.sparkConf.set("spark.s3.bulk.listing.enabled", "true")
-    FileInputFormat.setInputPaths(jobConf, "file://bucket/dir/file")
+    FileInputFormat.setInputPaths(jobConf, "file://dir/file")
     assert(SparkS3Util.s3BulkListingEnabled(jobConf) == false)
   }
 

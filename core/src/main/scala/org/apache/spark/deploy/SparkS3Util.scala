@@ -241,7 +241,7 @@ object SparkS3Util extends Logging {
    */
   private def getMinSplitSize(): Long = {
     val value = Option(conf.get("mapred.min.split.size"))
-      .getOrElse(conf.get("mapreduce.input.fileinputformat.split.minsize", "1"))
+      .getOrElse(conf.get("mapreduce.input.fileinputformat.split.minsize", "134217728"))
     value.toLong
   }
 
