@@ -103,11 +103,11 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       int numPartitions,
       SparkConf conf,
       ShuffleWriteMetrics writeMetrics) {
-    super(memoryManager);
+    super(memoryManager, (int) Math.min(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES,
+      memoryManager.pageSizeBytes()));
     this.taskMemoryManager = memoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;
-    this.peakMemoryUsedBytes = initialSize;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
@@ -116,6 +116,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.writeMetrics = writeMetrics;
     acquireMemory(initialSize * 8L);
     this.inMemSorter = new ShuffleInMemorySorter(initialSize);
+    this.peakMemoryUsedBytes = getMemoryUsage();
   }
 
   /**
@@ -372,6 +373,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     }
 
     growPointerArrayIfNecessary();
+    // Need 4 bytes to store the record length.
     final int required = length + 4;
     acquireNewPageIfNecessary(required);
 

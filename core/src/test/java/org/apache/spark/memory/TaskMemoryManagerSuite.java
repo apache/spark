@@ -28,28 +28,23 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 public class TaskMemoryManagerSuite {
 
   class TestMemoryConsumer extends MemoryConsumer {
-    volatile long used = 0L;
-
     TestMemoryConsumer(TaskMemoryManager memoryManager) {
       super(memoryManager);
     }
 
     @Override
     public long spill(long size, MemoryConsumer trigger) throws IOException {
+      long used = getUsed();
       releaseMemory(used);
-      long released = used;
-      used = 0;
-      return released;
+      return used;
     }
 
     void use(long size) {
       acquireMemory(size);
-      used += size;
     }
 
     void free(long size) {
       releaseMemory(size);
-      used -= size;
     }
   }
 
@@ -93,33 +88,33 @@ public class TaskMemoryManagerSuite {
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
     c1.use(100);
-    assert(c1.used == 100);
+    assert(c1.getUsed() == 100);
     c2.use(100);
-    assert(c2.used == 100);
-    assert(c1.used == 0);  // spilled
+    assert(c2.getUsed() == 100);
+    assert(c1.getUsed() == 0);  // spilled
     c1.use(100);
-    assert(c1.used == 100);
-    assert(c2.used == 0);  // spilled
+    assert(c1.getUsed() == 100);
+    assert(c2.getUsed() == 0);  // spilled
 
     c1.use(50);
-    assert(c1.used == 50);  // spilled
-    assert(c2.used == 0);
+    assert(c1.getUsed() == 50);  // spilled
+    assert(c2.getUsed() == 0);
     c2.use(50);
-    assert(c1.used == 50);
-    assert(c2.used == 50);
+    assert(c1.getUsed() == 50);
+    assert(c2.getUsed() == 50);
 
     c1.use(100);
-    assert(c1.used == 100);
-    assert(c2.used == 0);  // spilled
+    assert(c1.getUsed() == 100);
+    assert(c2.getUsed() == 0);  // spilled
 
     c1.free(20);
-    assert(c1.used == 80);
+    assert(c1.getUsed() == 80);
     c2.use(10);
-    assert(c1.used == 80);
-    assert(c2.used == 10);
+    assert(c1.getUsed() == 80);
+    assert(c2.getUsed() == 10);
     c2.use(100);
-    assert(c2.used == 100);
-    assert(c1.used == 0);  // spilled
+    assert(c2.getUsed() == 100);
+    assert(c1.getUsed() == 0);  // spilled
 
     c1.free(0);
     c2.free(100);

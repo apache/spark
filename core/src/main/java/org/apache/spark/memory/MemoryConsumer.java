@@ -28,16 +28,28 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  */
 public abstract class MemoryConsumer {
 
-  private TaskMemoryManager memoryManager;
-  private long pageSize;
+  private final TaskMemoryManager taskMemoryManager;
+  private final long pageSize;
+  private long used;
 
-  protected MemoryConsumer(TaskMemoryManager memoryManager, long pageSize) {
-    this.memoryManager = memoryManager;
+  protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize) {
+    this.taskMemoryManager = taskMemoryManager;
+    if (pageSize == 0) {
+      pageSize = taskMemoryManager.pageSizeBytes();
+    }
     this.pageSize = pageSize;
+    this.used = 0;
   }
 
-  protected MemoryConsumer(TaskMemoryManager memoryManager) {
-    this(memoryManager, memoryManager.pageSizeBytes());
+  protected MemoryConsumer(TaskMemoryManager taskMemoryManager) {
+    this(taskMemoryManager, taskMemoryManager.pageSizeBytes());
+  }
+
+  /**
+   * Returns the size of used memory in bytes.
+   */
+  long getUsed() {
+    return used;
   }
 
   /**
@@ -70,19 +82,21 @@ public abstract class MemoryConsumer {
    * If there is not enough memory, throws OutOfMemoryError.
    */
   protected void acquireMemory(long size) {
-    long got = memoryManager.acquireExecutionMemory(size, this);
+    long got = taskMemoryManager.acquireExecutionMemory(size, this);
     if (got < size) {
-      memoryManager.releaseExecutionMemory(got, this);
-      memoryManager.showMemoryUsage();
+      taskMemoryManager.releaseExecutionMemory(got, this);
+      taskMemoryManager.showMemoryUsage();
       throw new OutOfMemoryError("Could not acquire " + size + " bytes of memory, got " + got);
     }
+    used += got;
   }
 
   /**
    * Release `size` bytes memory.
    */
   protected void releaseMemory(long size) {
-    memoryManager.releaseExecutionMemory(size, this);
+    taskMemoryManager.releaseExecutionMemory(size, this);
+    used -= size;
   }
 
   /**
@@ -93,16 +107,17 @@ public abstract class MemoryConsumer {
    * @throws OutOfMemoryError
    */
   protected MemoryBlock allocatePage(long required) {
-    MemoryBlock page = memoryManager.allocatePage(Math.max(pageSize, required), this);
+    MemoryBlock page = taskMemoryManager.allocatePage(Math.max(pageSize, required), this);
     if (page == null || page.size() < required) {
       long got = 0;
       if (page != null) {
         got = page.size();
         freePage(page);
       }
-      memoryManager.showMemoryUsage();
+      taskMemoryManager.showMemoryUsage();
       throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
     }
+    used += page.size();
     return page;
   }
 
@@ -110,6 +125,7 @@ public abstract class MemoryConsumer {
    * Free a memory block.
    */
   protected void freePage(MemoryBlock page) {
-    memoryManager.freePage(page, this);
+    taskMemoryManager.freePage(page, this);
+    used -= page.size();
   }
 }

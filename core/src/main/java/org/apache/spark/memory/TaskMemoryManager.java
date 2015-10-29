@@ -20,14 +20,12 @@ package org.apache.spark.memory;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.HashMap;
+import java.util.HashSet;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.SparkException;
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
 
@@ -109,7 +107,7 @@ public class TaskMemoryManager {
   /**
    * The size of memory granted to each consumer.
    */
-  private final HashMap<MemoryConsumer, Long> consumers;
+  private final HashSet<MemoryConsumer> consumers;
 
   /**
    * Construct a new TaskMemoryManager.
@@ -118,7 +116,7 @@ public class TaskMemoryManager {
     this.inHeap = memoryManager.tungstenMemoryIsAllocatedInHeap();
     this.memoryManager = memoryManager;
     this.taskAttemptId = taskAttemptId;
-    this.consumers = new HashMap<>();
+    this.consumers = new HashSet<>();
   }
 
   /**
@@ -135,12 +133,9 @@ public class TaskMemoryManager {
       // try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
       if (got < required) {
-        // consumers could be modified by spill(), so we should have a copy here.
-        MemoryConsumer[] cs = new MemoryConsumer[consumers.size()];
-        consumers.keySet().toArray(cs);
         // Call spill() on other consumers to release memory
-        for (MemoryConsumer c: cs) {
-          if (c != null && c != consumer) {
+        for (MemoryConsumer c: consumers) {
+          if (c != null && c != consumer && c.getUsed() > 0) {
             try {
               long released = c.spill(required - got, consumer);
               if (released > 0) {
@@ -176,15 +171,7 @@ public class TaskMemoryManager {
         }
       }
 
-      // Update the accounting, even consumer is null
-      if (got > 0) {
-        long old = 0L;
-        if (consumers.containsKey(consumer)) {
-          old = consumers.get(consumer);
-        }
-        consumers.put(consumer, got + old);
-      }
-
+      consumers.add(consumer);
       logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
     }
@@ -194,57 +181,8 @@ public class TaskMemoryManager {
    * Release N bytes of execution memory for a MemoryConsumer.
    */
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
-    assert(size >= 0);
-    if (size == 0) {
-      return;
-    }
-    synchronized (this) {
-      if (consumers.containsKey(consumer)) {
-        long old = consumers.get(consumer);
-        if (old > size) {
-          consumers.put(consumer, old - size);
-        } else {
-          if (old < size) {
-            String msg = "Release " + size + " bytes memory (more than acquired " + old + ") for "
-              + consumer;
-            logger.warn(msg);
-            if (Utils.isTesting()) {
-              Platform.throwException(new SparkException(msg));
-            }
-          }
-          consumers.remove(consumer);
-        }
-      } else {
-        String msg = "Release " + size + " bytes memory for non-existent " + consumer;
-        logger.warn(msg);
-        if (Utils.isTesting()) {
-          Platform.throwException(new SparkException(msg));
-        }
-      }
-    }
-
     logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
     memoryManager.releaseExecutionMemory(size, taskAttemptId);
-  }
-
-  public void transferOwnership(long size, MemoryConsumer from, MemoryConsumer to) {
-    assert(size >= 0);
-    synchronized (this) {
-      if (consumers.containsKey(from)) {
-        long old = consumers.get(from);
-        if (old > size) {
-          consumers.put(from, old - size);
-        } else {
-          consumers.remove(from);
-        }
-        if (consumers.containsKey(to)) {
-          old = consumers.get(to);
-        } else {
-          old = 0L;
-        }
-        consumers.put(to, old + size);
-      }
-    }
   }
 
   /**
@@ -253,8 +191,10 @@ public class TaskMemoryManager {
   public void showMemoryUsage() {
     logger.info("Memory used in task " + taskAttemptId);
     synchronized (this) {
-      for (MemoryConsumer c: consumers.keySet()) {
-        logger.info("Acquired by " + c + ": " + Utils.bytesToString(consumers.get(c)));
+      for (MemoryConsumer c: consumers) {
+        if (c.getUsed() > 0) {
+          logger.info("Acquired by " + c + ": " + Utils.bytesToString(c.getUsed()));
+        }
       }
     }
   }
@@ -399,8 +339,11 @@ public class TaskMemoryManager {
   public long cleanUpAllAllocatedMemory() {
     synchronized (this) {
       Arrays.fill(pageTable, null);
-      for (MemoryConsumer c: consumers.keySet()) {
-        logger.warn("leak " + Utils.bytesToString(consumers.get(c)) + " memory from " + c);
+      for (MemoryConsumer c: consumers) {
+        if (c != null && c.getUsed() > 0) {
+          // In case of failed task, it's normal to see leaked memory
+          logger.warn("leak " + Utils.bytesToString(c.getUsed()) + " memory from " + c);
+        }
       }
       consumers.clear();
     }
