@@ -24,11 +24,11 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.HashPartitioner;
+import org.apache.spark.SparkConf;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
+import org.apache.spark.memory.GrantEverythingMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 
 public class ShuffleInMemorySorterSuite {
 
@@ -58,8 +58,9 @@ public class ShuffleInMemorySorterSuite {
       "Lychee",
       "Mango"
     };
+    final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
+      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048);
     final Object baseObject = dataPage.getBaseObject();
     final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(4);

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.catalyst.util
 
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
   require(keyArray.numElements() == valueArray.numElements())
@@ -42,7 +42,7 @@ class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) exte
     ArrayBasedMapData.toScalaMap(this).hashCode()
   }
 
-  override def toString(): String = {
+  override def toString: String = {
     s"keys: $keyArray, values: $valueArray"
   }
 }

@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.util
-
-import org.apache.spark.sql.types.{StructField, ArrayType, ArrayData}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.types.{StructField, ArrayType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -49,7 +47,17 @@ case class RepeatedData(
 
 case class SpecificCollection(l: List[Int])
 
-class ProductEncoderSuite extends SparkFunSuite {
+class ExpressionEncoderSuite extends SparkFunSuite {
+
+  encodeDecodeTest(1)
+  encodeDecodeTest(1L)
+  encodeDecodeTest(1.toDouble)
+  encodeDecodeTest(1.toFloat)
+  encodeDecodeTest(true)
+  encodeDecodeTest(false)
+  encodeDecodeTest(1.toShort)
+  encodeDecodeTest(1.toByte)
+  encodeDecodeTest("hello")
 
   encodeDecodeTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
@@ -166,43 +174,43 @@ class ProductEncoderSuite extends SparkFunSuite {
     null: Array[Byte]))
   encodeDecodeTestCustom(("Array[Byte]",
     Array[Byte](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Int] null",
     null: Array[Int]))
   encodeDecodeTestCustom(("Array[Int]",
     Array[Int](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Long] null",
     null: Array[Long]))
   encodeDecodeTestCustom(("Array[Long]",
     Array[Long](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Double] null",
     null: Array[Double]))
   encodeDecodeTestCustom(("Array[Double]",
     Array[Double](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Float] null",
     null: Array[Float]))
   encodeDecodeTestCustom(("Array[Float]",
     Array[Float](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Boolean] null",
     null: Array[Boolean]))
   encodeDecodeTestCustom(("Array[Boolean]",
     Array[Boolean](true, false)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTest(("Array[Short] null",
     null: Array[Short]))
   encodeDecodeTestCustom(("Array[Short]",
     Array[Short](1, 2, 3)))
-    { (l, r) => util.Arrays.equals(l._2, r._2) }
+    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
 
   encodeDecodeTestCustom(("java.sql.Timestamp",
     new java.sql.Timestamp(1)))
@@ -212,24 +220,24 @@ class ProductEncoderSuite extends SparkFunSuite {
     { (l, r) => l._2.toString == r._2.toString }
 
   /** Simplified encodeDecodeTestCustom, where the comparison function can be `Object.equals`. */
-  protected def encodeDecodeTest[T <: Product : TypeTag](inputData: T) =
+  protected def encodeDecodeTest[T : TypeTag](inputData: T) =
     encodeDecodeTestCustom[T](inputData)((l, r) => l == r)
 
   /**
    * Constructs a test that round-trips `t` through an encoder, checking the results to ensure it
    * matches the original.
    */
-  protected def encodeDecodeTestCustom[T <: Product : TypeTag](
+  protected def encodeDecodeTestCustom[T : TypeTag](
       inputData: T)(
       c: (T, T) => Boolean) = {
-    test(s"encode/decode: $inputData") {
-      val encoder = try ProductEncoder[T] catch {
+    test(s"encode/decode: $inputData - ${inputData.getClass.getName}") {
+      val encoder = try ExpressionEncoder[T]() catch {
         case e: Exception =>
           fail(s"Exception thrown generating encoder", e)
       }
       val convertedData = encoder.toRow(inputData)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.bind(schema)
+      val boundEncoder = encoder.resolve(schema).bind(schema)
       val convertedBack = try boundEncoder.fromRow(convertedData) catch {
         case e: Exception =>
           fail(
@@ -238,22 +246,30 @@ class ProductEncoderSuite extends SparkFunSuite {
               |Schema: ${schema.mkString(",")}
               |${encoder.schema.treeString}
               |
-              |Construct Expressions:
-              |${boundEncoder.constructExpression.treeString}
+              |Encoder:
+              |$boundEncoder
               |
             """.stripMargin, e)
       }
 
       if (!c(inputData, convertedBack)) {
-        val types =
-          convertedBack.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
+        val types = convertedBack match {
+          case c: Product =>
+            c.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
+          case other => other.getClass.getName
+        }
 
-        val encodedData = convertedData.toSeq(encoder.schema).zip(encoder.schema).map {
-          case (a: ArrayData, StructField(_, at: ArrayType, _, _)) =>
-            a.toArray[Any](at.elementType).toSeq
-          case (other, _) =>
-            other
-        }.mkString("[", ",", "]")
+
+        val encodedData = try {
+          convertedData.toSeq(encoder.schema).zip(encoder.schema).map {
+            case (a: ArrayData, StructField(_, at: ArrayType, _, _)) =>
+              a.toArray[Any](at.elementType).toSeq
+            case (other, _) =>
+              other
+          }.mkString("[", ",", "]")
+        } catch {
+          case e: Throwable => s"Failed to toSeq: $e"
+        }
 
         fail(
           s"""Encoded/Decoded data does not match input data
@@ -267,13 +283,10 @@ class ProductEncoderSuite extends SparkFunSuite {
              |${encoder.schema.treeString}
              |
              |Extract Expressions:
-             |${boundEncoder.extractExpressions.map(_.treeString).mkString("\n")}
-             |
-             |Construct Expressions:
-             |${boundEncoder.constructExpression.treeString}
-             |
-           """.stripMargin)
+             |$boundEncoder
+         """.stripMargin)
+        }
       }
-    }
+
   }
 }
