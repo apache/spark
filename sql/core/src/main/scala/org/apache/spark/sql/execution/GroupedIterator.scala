@@ -87,7 +87,13 @@ class GroupedIterator private(
   assert(keyOrdering.compare(currentGroup, currentRow) == 0)
   var currentIterator = createGroupValuesIterator()
 
-  // Return true if we already have the next iterator or fetching a new iterator is successful.
+  /**
+   * Return true if we already have the next iterator or fetching a new iterator is successful.
+   *
+   * Note that, if we get the iterator by `next`, we should consume it before call `hasNext`,
+   * because we will consume the input data to skip to next group while fetching a new iterator,
+   * thus make the previous iterator empty.
+   */
   def hasNext: Boolean = currentIterator != null || fetchNextGroupIterator
 
   def next(): (InternalRow, Iterator[InternalRow]) = {
