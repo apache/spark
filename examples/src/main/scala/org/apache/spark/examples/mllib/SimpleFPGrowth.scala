@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 // $example on$
@@ -55,4 +56,4 @@ object SimpleFPGrowth {
     // $example off$
   }
 }
-// scalastyle:off println
+// scalastyle:on println
