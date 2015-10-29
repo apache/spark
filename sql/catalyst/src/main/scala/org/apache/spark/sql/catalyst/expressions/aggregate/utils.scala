@@ -194,4 +194,30 @@ object Utils {
       }
     case other => None
   }
+
+  def mustNewAggregation(aggregate: Aggregate): Unit = {
+    val onlyForAggregateExpression2 = aggregate.aggregateExpressions.flatMap { expr =>
+      expr.collect {
+        // If an aggregate expression only extends AggregateExpression
+        // without AggregateExpression1, it indicates it only supports AggregateExpression2
+        case agg: expressions.AggregateExpression
+          if !agg.isInstanceOf[expressions.AggregateExpression1] =>
+          agg
+      }
+    }
+    if (onlyForAggregateExpression2.nonEmpty) {
+      val invalidFunctions = {
+        if (onlyForAggregateExpression2.length > 1) {
+          s"${onlyForAggregateExpression2.tail.map(_.nodeName).mkString(",")} " +
+            s"and ${onlyForAggregateExpression2.head.nodeName} are"
+        } else {
+          s"${onlyForAggregateExpression2.head.nodeName} is"
+        }
+      }
+      val errorMessage =
+        s"${invalidFunctions} only implemented based on the new Aggregate Function " +
+          s"interface and it cannot be used when spark.sql.useAggregate2 = false."
+      throw new AnalysisException(errorMessage)
+    }
+  }
 }

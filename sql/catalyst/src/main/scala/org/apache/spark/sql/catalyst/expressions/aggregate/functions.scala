@@ -548,7 +548,7 @@ case class Corr(
 
   def dataType: DataType = DoubleType
 
-  def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
   def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
@@ -562,6 +562,20 @@ case class Corr(
     AttributeReference("MkY", DoubleType)(),
     AttributeReference("count", LongType)())
 
+  // Local cache of mutableAggBufferOffset(s) that will be used in update and merge
+  private[this] val mutableAggBufferOffsetPlus1 = mutableAggBufferOffset + 1
+  private[this] val mutableAggBufferOffsetPlus2 = mutableAggBufferOffset + 2
+  private[this] val mutableAggBufferOffsetPlus3 = mutableAggBufferOffset + 3
+  private[this] val mutableAggBufferOffsetPlus4 = mutableAggBufferOffset + 4
+  private[this] val mutableAggBufferOffsetPlus5 = mutableAggBufferOffset + 5
+
+  // Local cache of inputAggBufferOffset(s) that will be used in update and merge
+  private[this] val inputAggBufferOffsetPlus1 = inputAggBufferOffset + 1
+  private[this] val inputAggBufferOffsetPlus2 = inputAggBufferOffset + 2
+  private[this] val inputAggBufferOffsetPlus3 = inputAggBufferOffset + 3
+  private[this] val inputAggBufferOffsetPlus4 = inputAggBufferOffset + 4
+  private[this] val inputAggBufferOffsetPlus5 = inputAggBufferOffset + 5
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -569,8 +583,12 @@ case class Corr(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def initialize(buffer: MutableRow): Unit = {
-    (0 until 5).map(idx => buffer.setDouble(mutableAggBufferOffset + idx, 0.0))
-    buffer.setLong(mutableAggBufferOffset + 5, 0L)
+    buffer.setDouble(mutableAggBufferOffset, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus1, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus2, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus3, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus4, 0.0)
+    buffer.setLong(mutableAggBufferOffsetPlus5, 0L)
   }
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
@@ -578,11 +596,11 @@ case class Corr(
     val y = right.eval(input).asInstanceOf[Double]
 
     var xAvg = buffer.getDouble(mutableAggBufferOffset)
-    var yAvg = buffer.getDouble(mutableAggBufferOffset + 1)
-    var Ck = buffer.getDouble(mutableAggBufferOffset + 2)
-    var MkX = buffer.getDouble(mutableAggBufferOffset + 3)
-    var MkY = buffer.getDouble(mutableAggBufferOffset + 4)
-    var count = buffer.getLong(mutableAggBufferOffset + 5)
+    var yAvg = buffer.getDouble(mutableAggBufferOffsetPlus1)
+    var Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+    var MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+    var MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
+    var count = buffer.getLong(mutableAggBufferOffsetPlus5)
 
     val deltaX = x - xAvg
     val deltaY = y - yAvg
@@ -594,31 +612,34 @@ case class Corr(
     MkY += deltaY * (y - yAvg)
 
     buffer.setDouble(mutableAggBufferOffset, xAvg)
-    buffer.setDouble(mutableAggBufferOffset + 1, yAvg)
-    buffer.setDouble(mutableAggBufferOffset + 2, Ck)
-    buffer.setDouble(mutableAggBufferOffset + 3, MkX)
-    buffer.setDouble(mutableAggBufferOffset + 4, MkY)
-    buffer.setLong(mutableAggBufferOffset + 5, count)
+    buffer.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+    buffer.setDouble(mutableAggBufferOffsetPlus2, Ck)
+    buffer.setDouble(mutableAggBufferOffsetPlus3, MkX)
+    buffer.setDouble(mutableAggBufferOffsetPlus4, MkY)
+    buffer.setLong(mutableAggBufferOffsetPlus5, count)
   }
 
   // Merge counters from other partitions. Formula can be found at:
   // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val count2 = buffer2.getLong(inputAggBufferOffset + 5)
+    val count2 = buffer2.getLong(inputAggBufferOffsetPlus5)
 
+    // We only go to merge two buffers if there is at least one record aggregated in buffer2.
+    // We don't need to check count in buffer1 because if count2 is more than zero, totalCount
+    // is more than zero too, then we won't get a divide by zero exception.
     if (count2 > 0) {
       var xAvg = buffer1.getDouble(mutableAggBufferOffset)
-      var yAvg = buffer1.getDouble(mutableAggBufferOffset + 1)
-      var Ck = buffer1.getDouble(mutableAggBufferOffset + 2)
-      var MkX = buffer1.getDouble(mutableAggBufferOffset + 3)
-      var MkY = buffer1.getDouble(mutableAggBufferOffset + 4)
-      var count = buffer1.getLong(mutableAggBufferOffset + 5)
+      var yAvg = buffer1.getDouble(mutableAggBufferOffsetPlus1)
+      var Ck = buffer1.getDouble(mutableAggBufferOffsetPlus2)
+      var MkX = buffer1.getDouble(mutableAggBufferOffsetPlus3)
+      var MkY = buffer1.getDouble(mutableAggBufferOffsetPlus4)
+      var count = buffer1.getLong(mutableAggBufferOffsetPlus5)
 
       val xAvg2 = buffer2.getDouble(inputAggBufferOffset)
-      val yAvg2 = buffer2.getDouble(inputAggBufferOffset + 1)
-      val Ck2 = buffer2.getDouble(inputAggBufferOffset + 2)
-      val MkX2 = buffer2.getDouble(inputAggBufferOffset + 3)
-      val MkY2 = buffer2.getDouble(inputAggBufferOffset + 4)
+      val yAvg2 = buffer2.getDouble(inputAggBufferOffsetPlus1)
+      val Ck2 = buffer2.getDouble(inputAggBufferOffsetPlus2)
+      val MkX2 = buffer2.getDouble(inputAggBufferOffsetPlus3)
+      val MkY2 = buffer2.getDouble(inputAggBufferOffsetPlus4)
 
       val totalCount = count + count2
       val deltaX = xAvg - xAvg2
@@ -631,20 +652,20 @@ case class Corr(
       count = totalCount
 
       buffer1.setDouble(mutableAggBufferOffset, xAvg)
-      buffer1.setDouble(mutableAggBufferOffset + 1, yAvg)
-      buffer1.setDouble(mutableAggBufferOffset + 2, Ck)
-      buffer1.setDouble(mutableAggBufferOffset + 3, MkX)
-      buffer1.setDouble(mutableAggBufferOffset + 4, MkY)
-      buffer1.setLong(mutableAggBufferOffset + 5, count)
+      buffer1.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+      buffer1.setDouble(mutableAggBufferOffsetPlus2, Ck)
+      buffer1.setDouble(mutableAggBufferOffsetPlus3, MkX)
+      buffer1.setDouble(mutableAggBufferOffsetPlus4, MkY)
+      buffer1.setLong(mutableAggBufferOffsetPlus5, count)
     }
   }
 
   override def eval(buffer: InternalRow): Any = {
-    val count = buffer.getLong(mutableAggBufferOffset + 5)
+    val count = buffer.getLong(mutableAggBufferOffsetPlus5)
     if (count > 0) {
-      val Ck = buffer.getDouble(mutableAggBufferOffset + 2)
-      val MkX = buffer.getDouble(mutableAggBufferOffset + 3)
-      val MkY = buffer.getDouble(mutableAggBufferOffset + 4)
+      val Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      val MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+      val MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
       Ck / math.sqrt(MkX * MkY)
     } else {
       Double.NaN

@@ -752,12 +752,12 @@ case class LastFunction(
  * Only support AggregateExpression2.
  *
  */
-case class Corr(
-    left: Expression,
-    right: Expression) extends BinaryExpression with AggregateExpression {
+case class Corr(left: Expression, right: Expression)
+    extends BinaryExpression with AggregateExpression with ImplicitCastInputTypes {
   override def nullable: Boolean = false
   override def dataType: DoubleType.type = DoubleType
   override def toString: String = s"CORRELATION($left, $right)"
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 }
 
 // Compute standard deviation based on online algorithm specified here:

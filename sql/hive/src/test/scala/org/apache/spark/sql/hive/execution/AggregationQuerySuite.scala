@@ -581,6 +581,20 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     val df3 = Seq.tabulate(0)(i => (1.0 * i, 2.0 * i)).toDF("a", "b")
     val corr4 = df3.groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
     assert(corr4.isNaN)
+
+    val df4 = Seq.tabulate(10)(i => (1 * i, 2 * i, i * -1)).toDF("a", "b", "c")
+    val corr5 = df4.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(corr5 - 1.0) < 1e-12)
+    val corr6 = df4.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
+    assert(math.abs(corr6 + 1.0) < 1e-12)
+
+    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+      val errorMessage = intercept[AnalysisException] {
+        val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
+        val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+      }.getMessage
+      assert(errorMessage.contains("Corr is only implemented based on the new Aggregate Function"))
+    }
   }
 
   test("test Last implemented based on AggregateExpression1") {
