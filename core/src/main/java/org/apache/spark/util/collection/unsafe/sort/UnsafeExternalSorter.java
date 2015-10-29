@@ -23,8 +23,8 @@ import java.util.LinkedList;
 
 import javax.annotation.Nullable;
 
-import scala.runtime.AbstractFunction0;
 import scala.runtime.BoxedUnit;
+import scala.runtime.AbstractFunction1;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
@@ -138,9 +138,9 @@ public final class UnsafeExternalSorter {
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
     // does not fully consume the sorter's output (e.g. sort followed by limit).
-    taskContext.addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
+    taskContext.addTaskCompletionListener(new AbstractFunction1<TaskContext,BoxedUnit>() {
       @Override
-      public BoxedUnit apply() {
+      public BoxedUnit apply(TaskContext context) {
         cleanupResources();
         return null;
       }
