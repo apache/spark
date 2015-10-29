@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
  * An extension service that can be loaded into a Spark YARN scheduler.
  * A Service that can be started and stopped.
  *
- * 1. For implementations to be loadable by [[SchedulerExtensionServices]],
+ * 1. For implementations to be loadable by `SchedulerExtensionServices`,
  * they must provide an empty constructor.
  * 2. The `stop()` operation MUST be idempotent, and succeed even if `start()` was
  * never invoked.
@@ -125,7 +125,7 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
    *
    * @return a list of services; Nil until the service is started
    */
-  def getServices: List[SchedulerExtensionService] =  services
+  def getServices: List[SchedulerExtensionService] = services
 
   /**
    * Stop the services; idempotent.
