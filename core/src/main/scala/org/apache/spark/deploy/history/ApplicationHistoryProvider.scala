@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.zip.ZipOutputStream
+import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
@@ -73,4 +73,11 @@ private[history] abstract class ApplicationHistoryProvider {
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
+  /**
+   * Read in the event logs from zip input stream provided and replayed by history provider.
+   * @param zipStream Input zip stream.
+   * @throws SparkException if there's any exception read in the zip stream.
+   */
+  @throws(classOf[SparkException])
+  def readEventLogs(zipStream: ZipInputStream): Unit
 }

@@ -53,19 +53,85 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       if (hasMultipleAttempts) {
         // Sorting is disable here as table sort on rowspan has issues.
         // ref. SPARK-10172
-        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow,
+        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow(requestedIncomplete),
           appsToShow, sortable = false)
       } else {
-        UIUtils.listingTable(appHeader, appRow, appsToShow)
+        UIUtils.listingTable(appHeader, appRow(requestedIncomplete), appsToShow)
       }
 
     val providerConfig = parent.getProviderConfig()
+
+    val css =
+      """
+        |.btn-file {
+        |    position: relative;
+        |    overflow: hidden;
+        |}
+        |.btn-file input[type=file] {
+        |    position: absolute;
+        |    top: 0;
+        |    right: 0;
+        |    min-width: 100%;
+        |    min-height: 100%;
+        |    font-size: 100px;
+        |    text-align: right;
+        |    filter: alpha(opacity=0);
+        |    opacity: 0;
+        |    outline: none;
+        |    background: white;
+        |    cursor: inherit;
+        |    display: block;
+        |}
+      """.stripMargin
+
+    val js =
+      """
+        |$(document).on('change', '.btn-file :file', function() {
+        |  var input = $(this),
+        |      label = input.val().replace(/\\/g, '/').replace(/.*\//, '');
+        |  input.trigger('fileselect', label);
+        |});
+        |
+        |$(document).ready(function() {
+        |    $('.btn-file :file').on('fileselect', function(event, label) {
+        |        var input = $(this).parents('.input-prepend').find(':text'),
+        |            log = label;
+        |            input.val(log);
+        |    });
+        |});
+      """.stripMargin
+
     val content =
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
             {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
           </ul>
+          {
+            if (!requestedIncomplete) {
+              <h4>Import zipped history log</h4>
+                <form method="POST" action="upload/" enctype="multipart/form-data">
+                  <div class="input-prepend">
+                    <span class="btn btn-file">
+                      Browser&hellip; <input type="file" name="file" id="file"/>
+                    </span>
+                    <input type="submit" value="Upload" name="upload" id="upload" class="btn"/>
+                    <input class="form-control" id="text" type="text" readonly="true"/>
+                  </div>
+                  <span class="help-block">
+                    Select one event-log zip file and upload
+                  </span>
+                  <style>
+                    {css}
+                  </style>
+                  <script type="text/javascript">
+                    {js}
+                  </script>
+                </form>
+            } else {
+              Nil
+            }
+          }
           {
             // This displays the indices of pages that are within `plusOrMinus` pages of
             // the current page. Regardless of where the current page is, this also links
@@ -160,7 +226,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       renderAttemptIdColumn: Boolean,
       info: ApplicationHistoryInfo,
       attempt: ApplicationAttemptInfo,
-      isFirst: Boolean): Seq[Node] = {
+      isFirst: Boolean,
+      requestedIncomplete: Boolean): Seq[Node] = {
     val uiAddress = HistoryServer.getAttemptURI(info.id, attempt.attemptId)
     val startTime = UIUtils.formatDate(attempt.startTime)
     val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
@@ -171,16 +238,28 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
         "-"
       }
     val lastUpdated = UIUtils.formatDate(attempt.lastUpdated)
+    val downloadLink = if (!requestedIncomplete) {
+      val link = s"/api/v1/applications/${info.id}/logs"
+      <a href={link} style="float: right" class="btn btn-info btn-mini" role="button">Download</a>
+    } else {
+      Nil
+    }
+
     <tr>
       {
         if (isFirst) {
           if (info.attempts.size > 1 || renderAttemptIdColumn) {
             <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
-              <a href={uiAddress}>{info.id}</a></td>
+              <a href={uiAddress}>{info.id}</a>
+              {downloadLink}
+            </td>
             <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
               {info.name}</td>
           } else {
-            <td><a href={uiAddress}>{info.id}</a></td>
+            <td>
+              <a href={uiAddress}>{info.id}</a>
+              {downloadLink}
+            </td>
             <td>{info.name}</td>
           }
         } else {
@@ -208,13 +287,14 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     </tr>
   }
 
-  private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(false, info, info.attempts.head, true)
+  private def appRow(requestedIncomplete: Boolean)(info: ApplicationHistoryInfo): Seq[Node] = {
+    attemptRow(false, info, info.attempts.head, true, requestedIncomplete)
   }
 
-  private def appWithAttemptRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(true, info, info.attempts.head, true) ++
-      info.attempts.drop(1).flatMap(attemptRow(true, info, _, false))
+  private def appWithAttemptRow(requestedIncomplete: Boolean)(info: ApplicationHistoryInfo)
+      : Seq[Node] = {
+    attemptRow(true, info, info.attempts.head, true, requestedIncomplete) ++
+      info.attempts.drop(1).flatMap(attemptRow(true, info, _, false, requestedIncomplete))
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
