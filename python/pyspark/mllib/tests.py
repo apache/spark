@@ -1542,6 +1542,14 @@ class MLUtilsTests(MLlibTestCase):
 
 class ALSTests(MLlibTestCase):
 
+    def test_als_ratings_serialize(self):
+        r = Rating(7, 1123, 3.14)
+        jr = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(r)))
+        nr = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jr)))
+        self.assertEqual(r.user, nr.user)
+        self.assertEqual(r.product, nr.product)
+        self.assertAlmostEqual(r.rating, nr.rating, 2)
+
     def test_als_ratings_id_long_error(self):
         r = Rating(1205640308657491975, 50233468418, 1.0)
         # rating user id exceeds max int value, should fail when pickled
