@@ -62,7 +62,7 @@ class BisectingKMeansModelSuite
     assert(predicted === localData.map(_._1))
 
     // compute WSSSE
-    assert(model.WSSSE(data) === 0.0)
+    assert(model.computeCost(data) === 0.0)
   }
 
   test("clustering sparse vectors") {
@@ -100,7 +100,7 @@ class BisectingKMeansModelSuite
     assert(predicted === localData.map(_._1))
 
     // compute WSSSE
-    assert(model.WSSSE(data) === 0.0)
+    assert(model.computeCost(data) === 0.0)
   }
 
   test("clustering should be done correctly") {

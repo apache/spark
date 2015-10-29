@@ -75,7 +75,7 @@ class BisectingKMeansModel @Since("1.6.0") (
    * Computes Within Set Sum of Squared Error(WSSSE)
    */
   @Since("1.6.0")
-  def WSSSE(data: RDD[Vector]): Double = {
+  def computeCost(data: RDD[Vector]): Double = {
     val bvCenters = this.getCenters.map(_.toBreeze)
     data.context.broadcast(bvCenters)
     val distances = data.map {point =>
@@ -90,7 +90,7 @@ class BisectingKMeansModel @Since("1.6.0") (
   }
 
   @Since("1.6.0")
-  def WSSSE(data: JavaRDD[Vector]): Double = this.WSSSE(data.rdd)
+  def computeCost(data: JavaRDD[Vector]): Double = this.computeCost(data.rdd)
 
 }
 
