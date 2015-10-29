@@ -77,7 +77,9 @@ sparkR.stop <- function() {
 
 #' Initialize a new Spark Context.
 #'
-#' This function initializes a new SparkContext.
+#' This function initializes a new SparkContext. For details on how to initialize
+#' and use SparkR, refer to SparkR programming guide at 
+#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
 #'
 #' @param master The Spark master URL.
 #' @param appName Application name to register with cluster manager
@@ -93,7 +95,7 @@ sparkR.stop <- function() {
 #' sc <- sparkR.init("local[2]", "SparkR", "/home/spark",
 #'                  list(spark.executor.memory="1g"))
 #' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
-#'                  list(spark.executor.memory="4g", spark.driver.memory="2g"),
+#'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("jarfile1.jar","jarfile2.jar"))
 #'}
