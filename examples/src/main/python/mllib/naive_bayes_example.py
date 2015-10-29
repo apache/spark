@@ -25,6 +25,7 @@ from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
 
+
 def parseLine(line):
     parts = line.split(',')
     label = float(parts[0])
