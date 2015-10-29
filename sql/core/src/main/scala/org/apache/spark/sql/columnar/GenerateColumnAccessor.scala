@@ -155,7 +155,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
           this.input = input;
-          this.mutableRow = mutableRow;
           this.columnTypes = columnTypes;
           this.columnIndexes = columnIndexes;
         }
