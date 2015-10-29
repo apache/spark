@@ -19,35 +19,48 @@ package org.apache.spark.examples.mllib;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.fpm.AssociationRules;
 import org.apache.spark.mllib.fpm.FPGrowth;
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
+import org.apache.spark.mllib.fpm.FPGrowthModel;
 // $example off$
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.function.Function;
 
-public class JavaAssociationRulesExample {
+public class JavaSimpleFPGrowth {
 
   public static void main(String[] args) {
-
-    SparkConf sparkConf = new SparkConf().setAppName("JavaAssociationRulesExample");
-    JavaSparkContext sc = new JavaSparkContext(sparkConf);
+    SparkConf conf = new SparkConf().setAppName("FP-growth Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
 
     // $example on$
-    JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Arrays.asList(
-      new FreqItemset<String>(new String[] {"a"}, 15L),
-      new FreqItemset<String>(new String[] {"b"}, 35L),
-      new FreqItemset<String>(new String[] {"a", "b"}, 12L)
-    ));
+    JavaRDD<String> data = sc.textFile("data/mllib/sample_fpgrowth.txt");
 
-    AssociationRules arules = new AssociationRules()
-      .setMinConfidence(0.8);
-    JavaRDD<AssociationRules.Rule<String>> results = arules.run(freqItemsets);
+    JavaRDD<List<String>> transactions = data.map(
+      new Function<String, List<String>>() {
+        public List<String> call(String line) {
+          String[] parts = line.split(" ");
+          return Arrays.asList(parts);
+        }
+      }
+    );
 
-    for (AssociationRules.Rule<String> rule : results.collect()) {
+    FPGrowth fpg = new FPGrowth()
+      .setMinSupport(0.2)
+      .setNumPartitions(10);
+    FPGrowthModel<String> model = fpg.run(transactions);
+
+    for (FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
+      System.out.println("[" + itemset.javaItems() + "], " + itemset.freq());
+    }
+
+    double minConfidence = 0.8;
+    for (AssociationRules.Rule<String> rule
+      : model.generateAssociationRules(minConfidence).toJavaRDD().collect()) {
       System.out.println(
         rule.javaAntecedent() + " => " + rule.javaConsequent() + ", " + rule.confidence());
     }

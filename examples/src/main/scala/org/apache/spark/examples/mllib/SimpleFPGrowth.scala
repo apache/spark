@@ -15,40 +15,44 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.mllib.fpm.AssociationRules
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
+import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.fpm.FPGrowth
 // $example off$
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkContext, SparkConf}
 
-object AssociationRulesExample {
+object SimpleFPGrowth {
 
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("AssociationRulesExample")
+
+    val conf = new SparkConf().setAppName("SimpleFPGrowth")
     val sc = new SparkContext(conf)
 
     // $example on$
-    val freqItemsets = sc.parallelize(Seq(
-      new FreqItemset(Array("a"), 15L),
-      new FreqItemset(Array("b"), 35L),
-      new FreqItemset(Array("a", "b"), 12L)
-    ))
+    val data = sc.textFile("data/mllib/sample_fpgrowth.txt")
 
-    val ar = new AssociationRules()
-      .setMinConfidence(0.8)
-    val results = ar.run(freqItemsets)
+    val transactions: RDD[Array[String]] = data.map(s => s.trim.split(' '))
 
-    results.collect().foreach { rule =>
-      println("[" + rule.antecedent.mkString(",")
-        + "=>"
-        + rule.consequent.mkString(",") + "]," + rule.confidence)
+    val fpg = new FPGrowth()
+      .setMinSupport(0.2)
+      .setNumPartitions(10)
+    val model = fpg.run(transactions)
+
+    model.freqItemsets.collect().foreach { itemset =>
+      println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
+    }
+
+    val minConfidence = 0.8
+    model.generateAssociationRules(minConfidence).collect().foreach { rule =>
+      println(
+        rule.antecedent.mkString("[", ",", "]")
+          + " => " + rule.consequent .mkString("[", ",", "]")
+          + ", " + rule.confidence)
     }
     // $example off$
   }
-
 }
-// scalastyle:on println
+// scalastyle:off println

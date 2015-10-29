@@ -52,7 +52,7 @@ details) from `transactions`.
 
 Refer to the [`FPGrowth` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/FPGrowthExample.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/SimpleFPGrowth.scala %}
 
 </div>
 
@@ -71,7 +71,7 @@ details) from `transactions`.
 
 Refer to the [`FPGrowth` Java docs](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaFPGrowthExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaSimpleFPGrowth.java %}
 
 </div>
 

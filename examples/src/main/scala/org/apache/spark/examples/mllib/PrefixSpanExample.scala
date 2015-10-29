@@ -18,8 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.mllib.fpm.PrefixSpan
+// $example off$
+
+import org.apache.spark.{SparkConf, SparkContext}
 
 object PrefixSpanExample {
 
@@ -27,6 +30,7 @@ object PrefixSpanExample {
     val conf = new SparkConf().setAppName("PrefixSpanExample")
     val sc = new SparkContext(conf)
 
+    // $example on$
     val sequences = sc.parallelize(Seq(
       Array(Array(1, 2), Array(3)),
       Array(Array(1), Array(3, 2), Array(1, 2)),
@@ -42,6 +46,7 @@ object PrefixSpanExample {
         freqSequence.sequence.map(_.mkString("[", ", ", "]")).mkString("[", ", ", "]") +
           ", " + freqSequence.freq)
     }
+    // $example off$
   }
 }
 // scalastyle:off println
