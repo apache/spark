@@ -132,17 +132,20 @@ public class TaskMemoryManager {
     synchronized (this) {
       long got = memoryManager.acquireExecutionMemory(required, taskAttemptId);
 
+      // try to release memory from other consumers first, then we can reduce the frequency of
+      // spilling, avoid to have too many spilled files.
       if (got < required) {
         // consumers could be modified by spill(), so we should have a copy here.
         MemoryConsumer[] cs = new MemoryConsumer[consumers.size()];
         consumers.keySet().toArray(cs);
         // Call spill() on other consumers to release memory
         for (MemoryConsumer c: cs) {
-          if (c != null) {
+          if (c != null && c != consumer) {
             try {
               long released = c.spill(required - got, consumer);
               if (released > 0) {
-                logger.info("released {} from {} for {}", Utils.bytesToString(released), c, consumer);
+                logger.info("Task {} released {} from {} for {}", taskAttemptId,
+                  Utils.bytesToString(released), c, consumer);
                 got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
                 if (got >= required) {
                   break;
@@ -157,6 +160,22 @@ public class TaskMemoryManager {
         }
       }
 
+      // call spill() on itself
+      if (got < required) {
+        try {
+          long released = consumer.spill(required - got, consumer);
+          if (released > 0) {
+            logger.info("Task {} released {} from itself ({})", taskAttemptId,
+              Utils.bytesToString(released), consumer);
+            got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
+          }
+        } catch (IOException e) {
+          logger.error("error while calling spill() on " + consumer, e);
+          throw new OutOfMemoryError("error while calling spill() on " + consumer + " : "
+            + e.getMessage());
+        }
+      }
+
       // Update the accounting, even consumer is null
       if (got > 0) {
         long old = 0L;
@@ -166,9 +185,7 @@ public class TaskMemoryManager {
         consumers.put(consumer, got + old);
       }
 
-      if (logger.isTraceEnabled()) {
-        logger.trace("Acquire {} for {}", Utils.bytesToString(got), consumer);
-      }
+      logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
     }
   }
@@ -206,9 +223,7 @@ public class TaskMemoryManager {
       }
     }
 
-    if (logger.isTraceEnabled()) {
-      logger.trace("Release {} from {}", Utils.bytesToString(size), consumer);
-    }
+    logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
     memoryManager.releaseExecutionMemory(size, taskAttemptId);
   }
 
@@ -239,7 +254,7 @@ public class TaskMemoryManager {
     logger.info("Memory used in task " + taskAttemptId);
     synchronized (this) {
       for (MemoryConsumer c: consumers.keySet()) {
-        logger.info("acquired by " + c + ": " + Utils.bytesToString(consumers.get(c)));
+        logger.info("Acquired by " + c + ": " + Utils.bytesToString(consumers.get(c)));
       }
     }
   }
