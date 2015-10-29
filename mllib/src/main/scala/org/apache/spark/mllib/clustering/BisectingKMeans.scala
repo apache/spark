@@ -225,28 +225,23 @@ private[clustering] object BisectingKMeans {
    * @param data pairs of point and its cluster index
    */
   def summarizeClusters(data: RDD[(Long, BV[Double])]): Map[Long, BisectingClusterStat] = {
-    val dimension = data.first()._2.size
-    // zeroValue: (#rows, sum of vectors, sum of squares)
-    val zeroValue = (0L, BV.zeros[Double](dimension), 0.0)
-    val seqOp = (acc: (Long, BV[Double], Double), point: BV[Double]) => {
-      val n = acc._1 + 1L
-      val sums = acc._2 + point
-      val sumOfSquares = acc._3 + math.pow(breezeSum(point), 2.0)
-      (n, sums, sumOfSquares)
-    }
-    val comOp =
-      (acc1: (Long, BV[Double], Double), acc2: (Long, BV[Double], Double)) =>
-        (acc1._1 + acc2._1, acc1._2 + acc2._2, acc1._3 + acc2._3)
+    // sum the number of node and points of each cluster
+    val stats = data.map {case (idx, p) =>
+      (idx, (p, 1L))
+    }.reduceByKey {case ((p1, n1), (p2, n2)) => (p1 + p2, n1 + n2) }.collectAsMap()
 
-    val stats = data.aggregateByKey(zeroValue)(seqOp, comOp)
-    stats.map { case (i, (n, sums, sumOfSquare)) =>
-      val meanPoint = calcMean(n, sums)
-      val variance = n match {
-        case n if n < 2 => 0.0
-        case _ => (sumOfSquare / n) - math.pow(breezeSum(sums) / n, 2.0)
-      }
-      (i, new BisectingClusterStat(n, meanPoint, variance))
-    }.collectAsMap()
+    // calculate within-cluster sum of squares of each cluster
+    val bcStats = data.sparkContext.broadcast(stats)
+    val sumOfSquaresMap = data.map { case (idx, point) =>
+      val meanPoint = bcStats.value.apply(idx)._1 :/ bcStats.value.apply(idx)._2.toDouble
+      (idx, (point - meanPoint) dot (point - meanPoint))
+    }.reduceByKey(_ + _).collectAsMap()
+
+    stats.map { case (idx, (sumPoint, n)) =>
+      val meanPoint = sumPoint :/ n.toDouble
+      val sumOfSquares = sumOfSquaresMap(idx)
+      (idx, new BisectingClusterStat(n, meanPoint, sumOfSquares))
+    }
   }
 
   /**
@@ -663,14 +658,14 @@ class BisectingClusterNode private (
  *
  * @param rows the number of points
  * @param mean the sum of points
- * @param variance the sum of squares of points
+ * @param sumOfSquares the sum of squares of points
  */
 private[clustering] case class BisectingClusterStat (
     rows: Long,
     mean: BV[Double],
-    variance: Double) extends Serializable {
+    sumOfSquares: Double) extends Serializable {
 
-  def isDividable: Boolean = variance > 0 && rows >= 2
+  def isDividable: Boolean = sumOfSquares > 0 && rows >= 2
 }
 
 private[clustering] object BisectingClusterStat {
