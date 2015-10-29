@@ -33,6 +33,9 @@ import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
+import org.apache.avro.Schema
+import org.apache.avro.generic.GenericRecord
+import org.apache.avro.mapred.{AvroJob, AvroWrapper, AvroInputFormat}
 import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -806,6 +809,46 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     assertNotStopped()
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
     new ParallelCollectionRDD[T](this, seq.map(_._1), seq.size, indexToPrefs)
+  }
+
+  /**
+   * Reads in a directory of Avro files from HDFS, a local file system (available on all nodes), or
+   * any Hadoop-supported file system URI. The records are read in as Generic Avro records. This
+   * also allows a user to register a schema with Kryo, if they so choose to. Users can also specify
+   * multiple schemas if they need to.
+   *
+   * You can do the following if you know the schema ahead of time:
+   * {{{
+   *   val schema = new Schema.Parser().parse(schemaString)
+   *   sc.avroFile("/input-path", schema)
+   * }}}
+   *
+   * or just:
+   * {{{
+   *   sc.avroFile("/input-path")
+   * }}}
+   */
+  def avroFile(path: String, schema: Schema): RDD[GenericRecord] = {
+    conf.registerAvroSchemas(schema)
+    hadoopFile[AvroWrapper[GenericRecord], NullWritable, AvroInputFormat[GenericRecord]](path)
+      .map(_._1.datum).setName(path)
+  }
+
+  /**
+   * Reads in a directory of Avro files from HDFS, a local file system (availavble on all nodes), or
+   * any Hadoop-supported file system URI. The second parameter determines what type of RDD is
+   * created. This is used for Specific or Reflect Avro records.
+   *
+   * {{{
+   *   sc.avroFile("/input-path", classOf[CustomSpecificRecord])
+   * }}}
+   */
+  def avroFile[T: ClassTag](path: String, schema: Class[T]): RDD[T] = {
+    val jobConf = new JobConf()
+    FileInputFormat.setInputPaths(jobConf, path)
+    AvroJob.setInputReflect(jobConf)
+    hadoopRDD(jobConf, classOf[AvroInputFormat[T]], classOf[AvroWrapper[T]], classOf[NullWritable])
+      .map(_._1.datum)
   }
 
   /**

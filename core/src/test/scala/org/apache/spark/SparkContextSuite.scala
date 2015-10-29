@@ -20,17 +20,30 @@ package org.apache.spark
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-import com.google.common.base.Charsets._
-import com.google.common.io.Files
-
-import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
-import org.apache.hadoop.mapred.TextInputFormat
-import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.apache.spark.util.Utils
+import org.apache.avro.util.Utf8
+import org.apache.spark.serializer.KryoSerializer
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.util.Random
+
+import com.google.common.base.Charsets._
+import com.google.common.io.Files
+
+import org.apache.avro.Schema
+import org.apache.avro.file.DataFileWriter
+import org.apache.avro.generic.{GenericData, GenericRecord, GenericDatumWriter}
+import org.apache.avro.reflect.{ReflectData, ReflectDatumWriter}
+import org.apache.avro.specific.SpecificDatumWriter
+import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
+
+import org.apache.spark.avro.{Income, Rating}
+import org.apache.spark.util.Utils
+
+
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -212,6 +225,114 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       assert(sc.parallelize(1 to 10).count() == 10L)
     } finally {
       sc.stop()
+    }
+  }
+
+  test("Generic Avro Records as input") {
+    withTempDir { dir =>
+      try {
+        val conf = new SparkConf()
+          .setAppName("test")
+          .setMaster("local")
+          .set("spark.serializer", classOf[KryoSerializer].getName)
+        sc = new SparkContext(conf)
+        val schemaStr = """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name" : "string",
+          |    "type" : "string",
+          |    "doc"  : "some string of characters"
+          |  }, {
+          |    "name": "int",
+          |    "type": "int",
+          |    "doc": "some random integer"
+          |  }]
+          |}
+          |
+        """.stripMargin
+        val schema = new Schema.Parser().parse(schemaStr)
+        val outputFile = new File(s"${dir.getCanonicalPath}/avro_test.avro")
+        val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+        val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+        dataFileWriter.create(schema, outputFile)
+        val builder = new StringBuilder()
+        for (i <- 1 to 10) {
+          val avroRec = new GenericData.Record(schema)
+          val newStr = Random.nextString(10)
+          builder.append(newStr)
+          avroRec.put("string", newStr)
+          avroRec.put("int", 10)
+          dataFileWriter.append(avroRec)
+        }
+        dataFileWriter.close()
+        val sum = sc.avroFile(dir.getCanonicalPath, schema).map(_.get("int")
+          .asInstanceOf[Int]).sum()
+        val str = sc.avroFile(dir.getCanonicalPath, schema)
+          .sortBy(_.get("int").asInstanceOf[Int], true, 1)
+          .map(_.get("string").asInstanceOf[Utf8].toString).collect()
+          .foldLeft(new StringBuilder())((builder, str) => builder.append(str)).toString
+        assert(str.equals(builder.toString()))
+        assert(sum == 100)
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
+  test("Reflect Avro Records as input") {
+    withTempDir { dir =>
+      try {
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        val schema = ReflectData.get().getSchema(classOf[Rating])
+        val outputFile = new File(s"${dir.getCanonicalPath}/avro_reflect_test.avro")
+        val datumWriter = new ReflectDatumWriter[Rating](classOf[Rating])
+        val dataFileWriter = new DataFileWriter[Rating](datumWriter)
+        dataFileWriter.create(schema, outputFile)
+        for (i <- 1 to 10) {
+          val rating = new Rating()
+          rating.userId = Random.nextLong()
+          rating.movieId = Random.nextLong()
+          rating.rating = 10.0
+          rating.timestamp = Random.nextLong()
+          dataFileWriter.append(rating)
+        }
+        dataFileWriter.close()
+
+        val sum = sc.avroFile(dir.getCanonicalPath, classOf[Rating]).map(_.rating.toInt).sum()
+
+        assert(sum == 100)
+
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
+  test("Specific Avro Records as input") {
+    withTempDir { dir =>
+      try {
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        val outputFile = new File(s"${dir.getCanonicalPath}/avro_specific_test.avro")
+        val datumWriter = new SpecificDatumWriter(classOf[Income])
+        val dataFileWriter = new DataFileWriter[Income](datumWriter)
+        dataFileWriter.create(Income.getClassSchema, outputFile)
+        for (i <- 1 to 10) {
+          val income = new Income()
+          income.setId1("flooding ehouse")
+          income.setId2("tri-state area drive")
+          income.setGeography("geo")
+          income.setMedianIncome(20L)
+          dataFileWriter.append(income)
+        }
+        dataFileWriter.close()
+        val sum = sc.avroFile(dir.getCanonicalPath, classOf[Income]).map(_.getMedianIncome.toInt)
+          .sum()
+        assert(sum == 200)
+      } finally {
+        sc.stop()
+      }
     }
   }
 

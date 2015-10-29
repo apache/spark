@@ -42,11 +42,6 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
 
   val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultStrVal
 
-  def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
-  }
-
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
     data.toDF().write.mode("overwrite").orc(path.getCanonicalPath)

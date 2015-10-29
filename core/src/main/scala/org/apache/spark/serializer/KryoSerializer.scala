@@ -30,6 +30,7 @@ import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 import org.apache.avro.generic.{GenericData, GenericRecord}
+import org.apache.avro.util.Utf8
 import org.roaringbitmap.{ArrayContainer, BitmapContainer, RoaringArray, RoaringBitmap}
 
 import org.apache.spark._
@@ -375,7 +376,8 @@ private[serializer] object KryoSerializer {
     classOf[Array[Short]],
     classOf[Array[Long]],
     classOf[BoundedPriorityQueue[_]],
-    classOf[SparkConf]
+    classOf[SparkConf],
+    classOf[Utf8]
   )
 }
 

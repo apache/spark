@@ -18,7 +18,12 @@
 package org.apache.spark
 
 // scalastyle:off
+
+import java.io.File
+
 import org.scalatest.{FunSuite, Outcome}
+
+import org.apache.spark.util.Utils
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
@@ -43,6 +48,28 @@ private[spark] abstract class SparkFunSuite extends FunSuite with Logging {
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
     }
+  }
+  /**
+   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
+   * a file/directory is created there by `f`, it will be delete after `f` returns.
+   *
+   * @todo Probably this method should be moved to a more general place
+   */
+  protected def withTempPath(f: File => Unit): Unit = {
+    val path = Utils.createTempDir()
+    path.delete()
+    try f(path) finally Utils.deleteRecursively(path)
+  }
+
+  /**
+   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
+   * returns.
+   *
+   * @todo Probably this method should be moved to a more general place
+   */
+  protected def withTempDir(f: File => Unit): Unit = {
+    val dir = Utils.createTempDir().getCanonicalFile
+    try f(dir) finally Utils.deleteRecursively(dir)
   }
 
 }
