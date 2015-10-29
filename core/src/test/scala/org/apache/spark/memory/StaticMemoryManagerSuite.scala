@@ -35,7 +35,10 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
       maxExecutionMem: Long,
       maxStorageMem: Long): (StaticMemoryManager, MemoryStore) = {
     val mm = new StaticMemoryManager(
-      conf, maxOnHeapExecutionMemory = maxExecutionMem, maxStorageMemory = maxStorageMem, numCores = 1)
+      conf,
+      maxOnHeapExecutionMemory = maxExecutionMem,
+      maxStorageMemory = maxStorageMem,
+      numCores = 1)
     val ms = makeMemoryStore(mm)
     (mm, ms)
   }
