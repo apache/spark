@@ -54,6 +54,7 @@ from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 from pyspark.mllib.classification import StreamingLogisticRegressionWithSGD
+from pyspark.mllib.recommendation import ALS
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
@@ -1537,6 +1538,14 @@ class MLUtilsTests(MLlibTestCase):
             self.fail()
         finally:
             shutil.rmtree(load_vectors_path)
+
+
+class ALSTests(MLlibTestCase):
+
+    def test_ratings_id_long_error(self):
+        # rating user id exceeds max int value, should fail when pickled
+        data = self.sc.parallelize([(1205640308657491975, 50233468418, 1.0)])
+        self.assertRaises(Py4JJavaError, ALS.train, data, 1, 1)
 
 
 if __name__ == "__main__":
