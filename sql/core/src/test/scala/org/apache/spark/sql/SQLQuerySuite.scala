@@ -523,8 +523,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("aggregates with nulls") {
     checkAnswer(
-      sql("SELECT MIN(a), MAX(a), AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(1, 3, 2, 1, 6, 3)
+      sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
+        "AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
+      Row(0, -1.5, 1, 3, 2, 2.0 / 3.0, 1, 6, 3)
     )
   }
 
@@ -717,14 +718,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("stddev") {
     checkAnswer(
       sql("SELECT STDDEV(a) FROM testData2"),
-      Row(math.sqrt(4/5.0))
+      Row(math.sqrt(4.0 / 5.0))
     )
   }
 
   test("stddev_pop") {
     checkAnswer(
       sql("SELECT STDDEV_POP(a) FROM testData2"),
-      Row(math.sqrt(4/6.0))
+      Row(math.sqrt(4.0 / 6.0))
     )
   }
 
@@ -735,10 +736,60 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("var_samp") {
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT VAR_SAMP(a) FROM testData2")
+    val expectedAnswer = Row(4.0 / 5.0)
+    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
+  }
+
+  test("variance") {
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT VARIANCE(a) FROM testData2")
+    val expectedAnswer = Row(4.0 / 6.0)
+    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
+  }
+
+  test("var_pop") {
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT VAR_POP(a) FROM testData2")
+    val expectedAnswer = Row(4.0 / 6.0)
+    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
+  }
+
+  test("skewness") {
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT skewness(a) FROM testData2")
+    val expectedAnswer = Row(0.0)
+    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
+  }
+
+  test("kurtosis") {
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT kurtosis(a) FROM testData2")
+    val expectedAnswer = Row(-1.5)
+    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
+  }
+
   test("stddev agg") {
     checkAnswer(
-      sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
-      (1 to 3).map(i => Row(i, math.sqrt(1/2.0), math.sqrt(1/4.0), math.sqrt(1/2.0))))
+        sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
+      (1 to 3).map(i => Row(i, math.sqrt(1.0 / 2.0), math.sqrt(1.0 / 4.0), math.sqrt(1.0 / 2.0))))
+  }
+
+  test("variance agg") {
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT a, variance(b), var_samp(b), var_pop(b)" +
+      "FROM testData2 GROUP BY a")
+    val expectedAnswer = (1 to 3).map(i => Row(i, 1.0 / 4.0, 1.0 / 2.0, 1.0 / 4.0))
+    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
+  }
+
+  test("skewness and kurtosis agg") {
+    val absTol = 1e-8
+    val sparkAnswer = sql("SELECT a, skewness(b), kurtosis(b) FROM testData2 GROUP BY a")
+    val expectedAnswer = (1 to 3).map(i => Row(i, 0.0, -2.0))
+    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
   test("inner join where, one match per row") {

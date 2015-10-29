@@ -467,7 +467,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "escape_orderby1",
     "escape_sortby1",
     "explain_rearrange",
-    "fetch_aggregation",
     "fileformat_mix",
     "fileformat_sequencefile",
     "fileformat_text",

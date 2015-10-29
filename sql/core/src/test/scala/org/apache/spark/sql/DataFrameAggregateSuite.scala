@@ -221,4 +221,77 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       emptyTableData.agg(sumDistinct('a)),
       Row(null))
   }
+
+  test("moments") {
+    val absTol = 1e-8
+
+    val sparkVariance = testData2.agg(variance('a))
+    val expectedVariance = Row(4.0 / 6.0)
+    checkAggregatesWithTol(sparkVariance, expectedVariance, absTol)
+    val sparkVariancePop = testData2.agg(var_pop('a))
+    checkAggregatesWithTol(sparkVariancePop, expectedVariance, absTol)
+
+    val sparkVarianceSamp = testData2.agg(var_samp('a))
+    val expectedVarianceSamp = Row(4.0 / 5.0)
+    checkAggregatesWithTol(sparkVarianceSamp, expectedVarianceSamp, absTol)
+
+    val sparkSkewness = testData2.agg(skewness('a))
+    val expectedSkewness = Row(0.0)
+    checkAggregatesWithTol(sparkSkewness, expectedSkewness, absTol)
+
+    val sparkKurtosis = testData2.agg(kurtosis('a))
+    val expectedKurtosis = Row(-1.5)
+    checkAggregatesWithTol(sparkKurtosis, expectedKurtosis, absTol)
+
+  }
+
+  test("zero moments") {
+    val emptyTableData = Seq((1, 2)).toDF("a", "b")
+    assert(emptyTableData.count() === 1)
+
+    checkAnswer(
+      emptyTableData.agg(variance('a)),
+      Row(0.0))
+
+    checkAnswer(
+      emptyTableData.agg(var_samp('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_pop('a)),
+      Row(0.0))
+
+    checkAnswer(
+      emptyTableData.agg(skewness('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(kurtosis('a)),
+      Row(Double.NaN))
+  }
+
+  test("null moments") {
+    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+    assert(emptyTableData.count() === 0)
+
+    checkAnswer(
+      emptyTableData.agg(variance('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_samp('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_pop('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(skewness('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(kurtosis('a)),
+      Row(Double.NaN))
+  }
 }

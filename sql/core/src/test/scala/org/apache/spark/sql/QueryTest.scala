@@ -135,6 +135,32 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
+   * Runs the plan and makes sure the answer is within absTol of the expected result.
+   * @param dataFrame the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param absTol the absolute tolerance between actual and expected answers.
+   */
+  protected def checkAggregatesWithTol(dataFrame: DataFrame,
+      expectedAnswer: Seq[Row],
+      absTol: Double): Unit = {
+    // TODO: catch exceptions in data frame execution
+    val actualAnswer = dataFrame.collect()
+    require(actualAnswer.length == expectedAnswer.length,
+      s"actual num rows ${actualAnswer.length} != expected num of rows ${expectedAnswer.length}")
+
+    actualAnswer.zip(expectedAnswer).foreach {
+      case (actualRow, expectedRow) =>
+        QueryTest.checkAggregatesWithTol(actualRow, expectedRow, absTol)
+    }
+  }
+
+  protected def checkAggregatesWithTol(dataFrame: DataFrame,
+      expectedAnswer: Row,
+      absTol: Double): Unit = {
+    checkAggregatesWithTol(dataFrame, Seq(expectedAnswer), absTol)
+  }
+
+  /**
    * Asserts that a given [[DataFrame]] will be executed using the given number of cached results.
    */
   def assertCached(query: DataFrame, numCachedTables: Int = 1): Unit = {
@@ -212,6 +238,28 @@ object QueryTest {
     }
 
     return None
+  }
+
+  /**
+   * Runs the plan and makes sure the answer is within absTol of the expected result.
+   * @param actualAnswer the actual result in a [[Row]].
+   * @param expectedAnswer the expected result in a[[Row]].
+   * @param absTol the absolute tolerance between actual and expected answers.
+   */
+  protected def checkAggregatesWithTol(actualAnswer: Row, expectedAnswer: Row, absTol: Double) = {
+    require(actualAnswer.length == expectedAnswer.length,
+      s"actual answer length ${actualAnswer.length} != " +
+        s"expected answer length ${expectedAnswer.length}")
+
+    // TODO: support other numeric types besides Double
+    // TODO: support struct types?
+    actualAnswer.toSeq.zip(expectedAnswer.toSeq).foreach {
+      case (actual: Double, expected: Double) =>
+        assert(math.abs(actual - expected) < absTol,
+          s"actual answer $actual not within $absTol of correct answer $expected")
+      case (actual, expected) =>
+        assert(actual == expected, s"$actual did not equal $expected")
+    }
   }
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): String = {
