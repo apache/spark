@@ -22,9 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
 
-import scala.runtime.AbstractFunction0;
-import scala.runtime.BoxedUnit;
-
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +33,7 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.Utils;
 
 /**
@@ -133,13 +131,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
     // does not fully consume the sorter's output (e.g. sort followed by limit).
-    taskContext.addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
-      @Override
-      public BoxedUnit apply() {
-        cleanupResources();
-        return null;
+    TaskContext.get().addTaskCompletionListener(
+      new TaskCompletionListener() {
+        @Override
+        public void onTaskCompletion(TaskContext context) {
+          cleanupResources();
+        }
       }
-    });
+    );
   }
 
   /**
@@ -244,8 +243,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
-      freePage(block);
       memoryFreed += block.size();
+      freePage(block);
     }
     allocatedPages.clear();
     currentPage = null;

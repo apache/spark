@@ -34,9 +34,6 @@ public abstract class MemoryConsumer {
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize) {
     this.taskMemoryManager = taskMemoryManager;
-    if (pageSize == 0) {
-      pageSize = taskMemoryManager.pageSizeBytes();
-    }
     this.pageSize = pageSize;
     this.used = 0;
   }
@@ -95,8 +92,8 @@ public abstract class MemoryConsumer {
    * Release `size` bytes memory.
    */
   protected void releaseMemory(long size) {
-    taskMemoryManager.releaseExecutionMemory(size, this);
     used -= size;
+    taskMemoryManager.releaseExecutionMemory(size, this);
   }
 
   /**
@@ -125,7 +122,7 @@ public abstract class MemoryConsumer {
    * Free a memory block.
    */
   protected void freePage(MemoryBlock page) {
-    taskMemoryManager.freePage(page, this);
     used -= page.size();
+    taskMemoryManager.freePage(page, this);
   }
 }

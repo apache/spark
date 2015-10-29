@@ -23,9 +23,6 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
 
-import scala.runtime.AbstractFunction0;
-import scala.runtime.BoxedUnit;
-
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +40,7 @@ import org.apache.spark.unsafe.bitset.BitSet;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryLocation;
+import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
 
@@ -349,33 +347,35 @@ public final class BytesToBytesMap extends MemoryConsumer {
           offset += 4;
           final UnsafeSorterSpillWriter writer =
             new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
-          while (numRecords-- > 0) {
+          while (numRecords > 0) {
             int length = Platform.getInt(base, offset);
             writer.write(base, offset + 4, length, 0);
             offset += 4 + length;
+            numRecords--;
           }
           writer.close();
           spillWriters.add(writer);
           if (TaskContext.get() != null) {
-            TaskContext.get().addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
-              @Override
-              public BoxedUnit apply() {
-                File file = writer.getFile();
-                if (file != null && file.exists()) {
-                  if (!file.delete()) {
-                    logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+            TaskContext.get().addTaskCompletionListener(
+              new TaskCompletionListener() {
+                @Override
+                public void onTaskCompletion(TaskContext context) {
+                  File file = writer.getFile();
+                  if (file != null && file.exists()) {
+                    if (!file.delete()) {
+                      logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+                    }
                   }
                 }
-                return null;
               }
-            });
+            );
           }
 
           dataPages.removeLast();
-          freePage(block);
           released += block.size();
+          freePage(block);
 
-          if (released > numBytes) {
+          if (released >= numBytes) {
             break;
           }
         }
@@ -545,8 +545,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
 
     /**
-     +     * This is only used for spilling
-     +     */
+     * This is only used for spilling
+     */
     private Location with(Object base, long offset, int length) {
       this.isDefined = true;
       this.memoryPage = null;

@@ -17,6 +17,7 @@
 
 package org.apache.spark.memory;
 
+import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -107,6 +108,7 @@ public class TaskMemoryManager {
   /**
    * The size of memory granted to each consumer.
    */
+  @GuardedBy("this")
   private final HashSet<MemoryConsumer> consumers;
 
   /**
