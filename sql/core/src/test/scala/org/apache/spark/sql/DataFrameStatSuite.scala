@@ -85,6 +85,35 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
   }
 
+  test("pearson correlation matrix") {
+    val df1 = Seq.tabulate(10)(i => (i, 2.0 * i, toLetter(i))).toDF("singles", "doubles", "letters")
+
+    intercept[IllegalArgumentException] {
+      df1.stat.corr() // doesn't accept non-numerical dataTypes
+    }
+
+    val df2 = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
+    val results = df2.stat.corr()
+
+    val row1 = results.where($"FieldName" === "a").collect()(0)
+    assert(row1.getString(0) == "a")
+    assert(row1.getDouble(1) == 1.0)
+    assert(row1.getDouble(2) == 1.0)
+    assert(row1.getDouble(3) == -1.0)
+
+    val row2 = results.where($"FieldName" === "b").collect()(0)
+    assert(row2.getString(0) == "b")
+    assert(row2.getDouble(1) == 1.0)
+    assert(row2.getDouble(2) == 1.0)
+    assert(row2.getDouble(3) == -1.0)
+
+    val row3 = results.where($"FieldName" === "c").collect()(0)
+    assert(row3.getString(0) == "c")
+    assert(row3.getDouble(1) == -1.0)
+    assert(row3.getDouble(2) == -1.0)
+    assert(row3.getDouble(3) == 1.0)
+  }
+
   test("covariance") {
     val df = Seq.tabulate(10)(i => (i, 2.0 * i, toLetter(i))).toDF("singles", "doubles", "letters")
 
@@ -96,6 +125,27 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val decimalData = Seq.tabulate(6)(i => (BigDecimal(i % 3), BigDecimal(i % 2))).toDF("a", "b")
     val decimalRes = decimalData.stat.cov("a", "b")
     assert(math.abs(decimalRes) < 1e-12)
+  }
+
+  test("covariance matrix") {
+    val df1 = Seq.tabulate(10)(i => (i, 2.0 * i, toLetter(i))).toDF("singles", "doubles", "letters")
+
+    intercept[IllegalArgumentException] {
+      df1.stat.cov() // doesn't accept non-numerical dataTypes
+    }
+
+    val df2 = Seq.tabulate(10)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+    val results = df2.stat.cov()
+
+    val row1 = results.where($"FieldName" === "singles").collect()(0)
+    assert(row1.getString(0) == "singles")
+    assert(row1.getDouble(1) == 9.166666666666666)
+    assert(row1.getDouble(2) == 18.333333333333332)
+
+    val row2 = results.where($"FieldName" === "doubles").collect()(0)
+    assert(row2.getString(0) == "doubles")
+    assert(row2.getDouble(1) == row1.getDouble(2))
+    assert(row2.getDouble(2) == 36.666666666666664)
   }
 
   test("crosstab") {

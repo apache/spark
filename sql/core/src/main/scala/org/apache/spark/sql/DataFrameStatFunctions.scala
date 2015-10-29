@@ -53,12 +53,38 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
+   * Calculate the sample covariance between columns of a DataFrame.
+   *
+   * @return a covariance matrix as a DataFrame
+   *
+   * {{{
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    val covmatrix = df.stat.cov()
+   *    covmatrix.show()
+   *    +---------+------------------+-------------------+-------------------+
+   *    |FieldName|                id|              rand1|              rand2|
+   *    +---------+------------------+-------------------+-------------------+
+   *    |       id| 9.166666666666666| 0.4131594565676311| 0.7012982830955725|
+   *    |    rand1|0.4131594565676311|0.11982701890603772|0.06500805072758595|
+   *    |    rand2|0.7012982830955725|0.06500805072758595|0.09383550706974164|
+   *    +---------+------------------+-------------------+-------------------+
+   * }}}
+   *
+   * @since 1.6.0
+   */
+  def cov(): DataFrame = {
+    StatFunctions.calculateCov(df)
+  }
+
+  /**
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
    * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
    * MLlib's Statistics.
    *
    * @param col1 the name of the column
    * @param col2 the name of the column to calculate the correlation against
+   * @param method the name of the correlation method
    * @return The Pearson Correlation Coefficient as a Double.
    *
    * {{{
@@ -95,6 +121,63 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   def corr(col1: String, col2: String): Double = {
     corr(col1, col2, "pearson")
   }
+
+  /**
+   * Calculates the correlation of columns in the DataFrame. Currently only supports the Pearson
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
+   * MLlib's Statistics.
+   *
+   * @param method the name of the correlation method
+   * @return The Pearson Correlation matrix as a DataFrame.
+   *
+   * {{{
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    val corrmatrix = df.stat.corr()
+   *    corrmatrix.show()
+   *    +---------+------------------+------------------+------------------+
+   *    |FieldName|                id|             rand1|             rand2|
+   *    +---------+------------------+------------------+------------------+
+   *    |       id|               1.0|   0.3942163209095|0.7561595709319909|
+   *    |    rand1|   0.3942163209095|               1.0|0.6130644931298477|
+   *    |    rand2|0.7561595709319909|0.6130644931298477|               1.0|
+   *    +---------+------------------+------------------+------------------+
+   * }}}
+   *
+   * @since 1.6.0
+   */
+ def corr(method: String): DataFrame = {
+    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
+      "coefficient is supported.")
+    StatFunctions.pearsonCorrelation(df)
+ }
+
+  /**
+   * Calculates the correlation of columns in the DataFrame. Currently only supports the Pearson
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
+   * MLlib's Statistics.
+   *
+   * @return The Pearson Correlation matrix as a DataFrame.
+   *
+   * {{{
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    val corrmatrix = df.stat.corr()
+   *    corrmatrix.show()
+   *    +---------+------------------+------------------+------------------+
+   *    |FieldName|                id|             rand1|             rand2|
+   *    +---------+------------------+------------------+------------------+
+   *    |       id|               1.0|   0.3942163209095|0.7561595709319909|
+   *    |    rand1|   0.3942163209095|               1.0|0.6130644931298477|
+   *    |    rand2|0.7561595709319909|0.6130644931298477|               1.0|
+   *    +---------+------------------+------------------+------------------+
+   * }}}
+   *
+   * @since 1.6.0
+   */
+ def corr(): DataFrame = {
+    corr("pearson")
+ }
 
   /**
    * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
