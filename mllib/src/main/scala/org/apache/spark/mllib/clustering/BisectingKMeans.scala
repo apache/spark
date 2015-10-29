@@ -214,11 +214,9 @@ private[clustering] object BisectingKMeans {
    * @param k: the number of leaf nodes
    */
   def getMinimumNumNodesInTree(k: Int): Int = {
-    val multiplier = math.ceil(math.log(k) / math.log(2.0))
     // the calculation is same as `math.pow(2, multiplier)`
-    var numNodes = 2
-    (1 to multiplier.toInt).foreach (i => numNodes = numNodes << 1)
-    numNodes
+    val multiplier = math.ceil(math.log(k) / math.log(2.0)) + 1
+    1 << multiplier.toInt
   }
 
   /**
