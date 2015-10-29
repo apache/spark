@@ -58,12 +58,13 @@ private[streaming] class FileBasedWriteAheadLogReader(path: String, conf: Config
         case e: IOException =>
           logWarning("Error while trying to read data. If the file was deleted, " +
             "this should be okay.", e)
+          close()
           if (HdfsUtils.checkFileExists(path, conf)) {
+            // if file exists, this could be a legitimate error
             throw e
           } else {
             // file was deleted. This can occur when the daemon cleanup thread takes time to
             // delete the file during recovery.
-            close()
             false
           }
 
