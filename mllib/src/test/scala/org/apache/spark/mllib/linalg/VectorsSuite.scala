@@ -303,7 +303,7 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
   test("foreach") {
     val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
-    val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+    val sv = Vectors.sparse(6, Seq((5, 1.2), (4, 3.1), (1, 6.0)))
 
     val dvArray = scala.collection.mutable.ArrayBuffer[Double]()
     dv.foreach { (value) => dvArray += value }
@@ -313,12 +313,15 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(dvArray(2) === 3.1)
     assert(dvArray(3) === 0.0)
 
-    val svMap = scala.collection.mutable.ArrayBuffer[Double]()
-    sv.foreach { (value) => svMap += value }
-    assert(svMap.size === 3)
-    assert(svMap(1) === 1.2)
-    assert(svMap(2) === 3.1)
-    assert(svMap(3) === 0.0)
+    val svArray = scala.collection.mutable.ArrayBuffer[Double]()
+    sv.foreach { (value) => svArray += value }
+    assert(svArray.size === 6)
+    assert(svArray(0) === 0.0)
+    assert(svArray(1) === 6.0)
+    assert(svArray(2) === 0.0)
+    assert(svArray(3) === 0.0)
+    assert(svArray(4) === 3.1)
+    assert(svArray(5) === 1.2)
   }
 
   test("vector p-norm") {

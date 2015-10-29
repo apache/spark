@@ -688,6 +688,8 @@ class SparseVector @Since("1.0.0") (
   require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
     s"which exceeds the specified vector size ${size}.")
 
+  @Since("1.6.0") val NonSparseVal = 0.0
+
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
 
@@ -723,7 +725,18 @@ class SparseVector @Since("1.0.0") (
   }
 
   @Since("1.6.0")
-  private[spark] def foreach(f: (Double) => Unit) = { indices.foreach { i: Int => f(values(i)) } }
+  private[spark] def foreach(f: (Double) => Unit) = {
+    var i, j = 0  // i counts 0 -> size, j counts 0 -> indices.length
+    while (i < size) {
+      if (i == indices(j)){
+        f(values(j))
+        j += 1
+      } else {
+        f(NonSparseVal)
+      }
+      i += 1
+    }
+  }
 
   override def hashCode(): Int = {
     var result: Int = 31 + size
