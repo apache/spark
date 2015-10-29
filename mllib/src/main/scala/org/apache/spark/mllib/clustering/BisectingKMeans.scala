@@ -119,46 +119,42 @@ class BisectingKMeans private (
   @Since("1.6.0")
   def run(input: RDD[Vector]): BisectingKMeansModel = {
     val sc = input.sparkContext
+    val startTime = System.currentTimeMillis()
+    var data = initData(input).cache()
+    // this is used for managing calculated cached RDDs
+    var updatedDataHistory = Array.empty[RDD[(Long, BV[Double])]]
 
     // `clusterStats` is described as binary tree structure
     // `clusterStats(1)` means the root of a binary tree
-    var clusterStats = mutable.Map.empty[Long, BisectingClusterStat]
-    var step = 1
-    var noMoreDividable = false
-    var updatedDataHistory = Array.empty[RDD[(Long, BV[Double])]]
-    // the minimum number of nodes of a binary tree by given parameter
-    val numNodeLimit = getMinimumNumNodesInTree(this.k)
+    var leafClusterStats = summarizeClusters(data)
+    var dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
+    var clusterStats = leafClusterStats
 
+    // the minimum number of nodes of a binary tree by given parameter
+    var step = 1
+    val numNodeLimit = getMinimumNumNodesInTree(this.k)
     // divide clusters until the number of clusters reachs the condition
     // or there is no dividable cluster
-    val startTime = System.currentTimeMillis()
-    var data = initData(input).cache()
-    while (clusterStats.size < numNodeLimit && noMoreDividable == false) {
+    while (clusterStats.size < numNodeLimit && dividableLeafClusters.nonEmpty) {
       logInfo(s"${sc.appName} starts step ${step}")
-      // TODO Remove non-leaf cluster stats from `leafClusterStats`
-      val leafClusterStats = summarizeClusters(data)
-      val dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
-      clusterStats = clusterStats ++ leafClusterStats
 
       // can be clustered if the number of divided clusterStats is equal to 0
-      val divided = divideClusters(data, dividableLeafClusters, maxIterations)
+      // TODO Remove non-leaf cluster stats from `leafClusterStats`
+      val dividedData = divideClusters(data, dividableLeafClusters, maxIterations).cache()
+      leafClusterStats = summarizeClusters(dividedData)
+      dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
+      clusterStats = clusterStats ++ leafClusterStats
+
       // update each index
-      val newData = updateClusterIndex(data, divided).cache()
-      updatedDataHistory = updatedDataHistory ++ Array(data)
-      data = newData
+      updatedDataHistory = updatedDataHistory ++ Array(dividedData)
+      data = dividedData
       // keep recent 2 cached RDDs in order to run more quickly
       if (updatedDataHistory.length > 1) {
         val head = updatedDataHistory.head
         updatedDataHistory = updatedDataHistory.tail
         head.unpersist()
       }
-      clusterStats = clusterStats ++ divided
       step += 1
-      logInfo(s"${sc.appName} adding ${divided.size} new clusterStats at step:${step}")
-
-      if (dividableLeafClusters.isEmpty) {
-        noMoreDividable = true
-      }
     }
     // create a map of cluster node with their costs
     val nodes = createClusterNodes(data, clusterStats)
@@ -189,8 +185,6 @@ class BisectingKMeans private (
 
 
 private[clustering] object BisectingKMeans {
-
-  import BisectingClusterStat._
 
   val ROOT_INDEX_KEY: Long = 1
 
@@ -239,7 +233,7 @@ private[clustering] object BisectingKMeans {
 
     stats.map { case (idx, (sumPoint, n)) =>
       val meanPoint = sumPoint :/ n.toDouble
-      val sumOfSquares = sumOfSquaresMap(idx)
+      val sumOfSquares = math.abs(sumOfSquaresMap(idx))
       (idx, new BisectingClusterStat(n, meanPoint, sumOfSquares))
     }
   }
@@ -309,7 +303,7 @@ private[clustering] object BisectingKMeans {
       dividedClusters: Map[Long, BisectingClusterStat]): RDD[(Long, BV[Double])] = {
 
     // If there is no divided clusters, return the original
-    if (dividedClusters.size == 0) {
+    if (dividedClusters.isEmpty) {
       return data
     }
 
@@ -352,14 +346,14 @@ private[clustering] object BisectingKMeans {
   def divideClusters(
       data: RDD[(Long, BV[Double])],
       clusterStats: Map[Long, BisectingClusterStat],
-      maxIterations: Int): Map[Long, BisectingClusterStat] = {
+      maxIterations: Int): RDD[(Long, BV[Double])] = {
     val sc = data.sparkContext
     val appName = sc.appName
 
     // get keys of dividable clusters
     val dividableClusterStats = clusterStats.filter { case (idx, cluster) => cluster.isDividable }
     if (dividableClusterStats.isEmpty) {
-      return Map.empty[Long, BisectingClusterStat]
+      return data
     }
     // extract dividable input data
     val dividableData = data.filter { case (idx, point) => dividableClusterStats.contains(idx)}
@@ -371,6 +365,7 @@ private[clustering] object BisectingKMeans {
     // pairs of cluster index and (sums, #points, sumOfSquares)
     var stats = Map.empty[Long, (BV[Double], Long, Double)]
 
+    var nextData = data
     var subIter = 0
     var totalSumOfSquares = Double.MaxValue
     var oldTotalSumOfSquares = Double.MaxValue
@@ -380,7 +375,7 @@ private[clustering] object BisectingKMeans {
     while (subIter < maxIterations && relativeError > 1e-4) {
       // convert each index into the closest child index
       val bcNewCenters = sc.broadcast(newCenters)
-      val nextData = dividableData.map { case (idx, point) =>
+      nextData = dividableData.map { case (idx, point) =>
         // calculate next index number
         val childIndexes = Array(2 * idx, 2 * idx + 1)
         val childrenCenters = childIndexes
@@ -398,28 +393,22 @@ private[clustering] object BisectingKMeans {
       val seqOp = (acc: (BV[Double], Long, Double), point: BV[Double]) => {
         val sums = acc._1 + point
         val n = acc._2 + 1L
-        val sumOfSquares = acc._3 + (point dot point)
-        (sums, n, sumOfSquares)
+        val sumOfNorm = acc._3 + (point dot point)
+        (sums, n, sumOfNorm)
       }
       val comOp = (acc1: (BV[Double], Long, Double), acc2: (BV[Double], Long, Double)) =>
-        (acc1._1 + acc2._1, acc1._2 + acc2._2, acc1._3 + acc2._3)
+        (acc1._1 + acc2._1, acc1._2 + acc2._2, acc1._3 + acc1._3)
       val tempStats = nextData.aggregateByKey(zeroValue)(seqOp, comOp).collectAsMap()
 
       // calculate the center of each cluster
-      newCenters = tempStats.map {case (idx, (sums, n, sumOfSquares)) => (idx, sums :/ n.toDouble)}
-      // update summary of each cluster
-      stats = tempStats.toMap
+      newCenters = tempStats.map {case (idx, (sums, n, sumOfNorm)) => (idx, sums :/ n.toDouble)}
 
-      totalSumOfSquares = stats.map{case (idx, (sums, n, sumOfSquares)) => sumOfSquares}.sum
+      totalSumOfSquares = stats.map{case (idx, (sums, n, sumOfNorm)) => sumOfNorm}.sum
       relativeError = math.abs(totalSumOfSquares - oldTotalSumOfSquares) / totalSumOfSquares
       oldTotalSumOfSquares = totalSumOfSquares
       subIter += 1
     }
-    stats.map { case (i, (sums, n, sumOfSquares)) =>
-      val mean = calcMean(n.toLong, sums)
-      val variance = (sumOfSquares / n) - math.pow(breezeSum(sums), 2.0)
-      i -> new BisectingClusterStat(n.toLong, mean, variance)
-    }
+    nextData
   }
 
   /**
@@ -442,27 +431,11 @@ private[clustering] object BisectingKMeans {
   private def createClusterNodesWithAverageCost(
       data: RDD[(Long, BV[Double])],
       stats: Map[Long, BisectingClusterStat]): Map[Long, BisectingClusterNode] = {
-
-    // calculate average costs of all clusters
-    val bcCenters = data.sparkContext.broadcast(stats.map { case (i, stat) => i -> stat.mean })
-    val costs = data.mapPartitions { iter =>
-      val counters = mutable.Map.empty[Long, (Long, Double)]
-      bcCenters.value.foreach {case (i, center) => counters(i) = (0L, 0.0)}
-      iter.foreach { case (i, point) =>
-        val cost = breezeNorm(bcCenters.value.apply(i) - point, 2.0)
-        counters(i) = (counters(i)._1 + 1, counters(i)._2 + cost)
-      }
-      counters.toIterator
-    }.reduceByKey { case((n1, cost1), (n2, cost2)) =>
-      (n1 + n2, cost1 + cost2)
-    }.collectAsMap()
-
-    stats.map { case (i, stat) =>
-      val avgCost = costs(i)._1 match {
-        case x if x == 0.0 => 0.0
-        case _ => costs(i)._2 / costs(i)._1
-      }
-      i -> new BisectingClusterNode(Vectors.fromBreeze(stat.mean), stat.rows, avgCost)
+    stats.map { case (idx, clusterStats) =>
+      val rows = clusterStats.rows
+      val center = clusterStats.mean
+      val cost = math.sqrt(clusterStats.sumOfSquares) / rows
+      idx -> new BisectingClusterNode(Vectors.fromBreeze(center), rows, cost)
     }
   }
 

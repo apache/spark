@@ -33,7 +33,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
     assert(model.getClusters.length == 123)
-    assert(model.node.getHeight ~== 705.6925 absTol 10E-4)
+    assert(model.node.getHeight ~== 702.8641 absTol 10E-4)
 
     // check the relations between a parent cluster and its children
     assert(model.node.getParent === None)
@@ -133,11 +133,10 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       6L -> new BisectingClusterStat(3L, BV[Double](7.0, 7.0) :* 3.0, variance),
       7L -> new BisectingClusterStat(3L, BV[Double](10.0, 10.0) :* 3.0, variance)
     )
-    val data = sc.parallelize(seed)
+    val data = sc.parallelize(seed, 1)
     val leafClusterStats = BisectingKMeans.summarizeClusters(data)
     val dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
-    val divided = BisectingKMeans.divideClusters(data, dividableLeafClusters, 20)
-    val result = BisectingKMeans.updateClusterIndex(data, divided).collect().toSeq
+    val result = BisectingKMeans.divideClusters(data, dividableLeafClusters, 20).collect()
 
     val expected = Seq(
       (4, Vectors.dense(0.0, 0.0)), (4, Vectors.dense(1.0, 1.0)), (4, Vectors.dense(2.0, 2.0)),
@@ -180,19 +179,18 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       (3L, BV[Double](99.9, 99.9)), (3L, BV[Double](100.1, 100.1)),
       (3L, BV[Double](109.9, 109.9)), (3L, BV[Double](110.1, 110.1))
     )
-    val data = sc.parallelize(local)
+    val data = sc.parallelize(local, 1)
     val stats = BisectingKMeans.summarizeClusters(data)
-    val newClusterStats = BisectingKMeans.divideClusters(data, stats, 20)
+    val dividedData = BisectingKMeans.divideClusters(data, stats, 20).collect()
 
-    assert(newClusterStats.size === 4)
-    assert(newClusterStats(4).mean === BV[Double](1.0, 1.0))
-    assert(newClusterStats(4).rows === 2)
-    assert(newClusterStats(5).mean === BV[Double](10.0, 10.0))
-    assert(newClusterStats(5).rows === 2)
-    assert(newClusterStats(6).mean === BV[Double](100.0, 100.0))
-    assert(newClusterStats(6).rows === 2)
-    assert(newClusterStats(7).mean === BV[Double](110.0, 110.0))
-    assert(newClusterStats(7).rows === 2)
+    assert(dividedData(0) == (4L, BV[Double](0.9, 0.9)))
+    assert(dividedData(1) == (4L, BV[Double](1.1, 1.1)))
+    assert(dividedData(2) == (5L, BV[Double](9.9, 9.9)))
+    assert(dividedData(3) == (5L, BV[Double](10.1, 10.1)))
+    assert(dividedData(4) == (6L, BV[Double](99.9, 99.9)))
+    assert(dividedData(5) == (6L, BV[Double](100.1, 100.1)))
+    assert(dividedData(6) == (7L, BV[Double](109.9, 109.9)))
+    assert(dividedData(7) == (7L, BV[Double](110.1, 110.1)))
   }
 
 }
