@@ -28,7 +28,8 @@ import org.apache.spark.mllib.util.TestingUtils._
 class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("run") {
-    val algo = new BisectingKMeans().setK(123).setSeed(1)
+    val k = 123
+    val algo = new BisectingKMeans().setK(k).setSeed(1)
     val localSeed: Seq[Vector] = (0 to 999).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
@@ -40,6 +41,9 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.node.getChildren.head.getParent.get === model.node)
     assert(model.node.getChildren.apply(1).getParent.get === model.node)
     assert(model.getClusters.forall(_.getParent.isDefined))
+
+    val predicted = model.predict(data)
+    assert(predicted.distinct.count() === k)
   }
 
   test("run with too many cluster size than the records") {
