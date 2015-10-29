@@ -102,7 +102,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       int initialSize,
       int numPartitions,
       SparkConf conf,
-      ShuffleWriteMetrics writeMetrics) throws IOException {
+      ShuffleWriteMetrics writeMetrics) {
     super(memoryManager);
     this.taskMemoryManager = memoryManager;
     this.blockManager = blockManager;
@@ -316,7 +316,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    * array and grows the array if additional space is required. If the required space cannot be
    * obtained, then the in-memory data will be spilled to disk.
    */
-  private void growPointerArrayIfNecessary() throws IOException {
+  private void growPointerArrayIfNecessary() {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       logger.debug("Attempting to expand sort pointer array");
@@ -341,7 +341,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    *                      that exceed the page size are handled via a different code path which uses
    *                      special overflow pages).
    */
-  private void acquireNewPageIfNecessary(int required) throws IOException {
+  private void acquireNewPageIfNecessary(int required) {
     if (currentPage == null ||
       pageCursor + required > currentPage.getBaseOffset() + currentPage.size() ) {
       // TODO: try to find space in previous pages

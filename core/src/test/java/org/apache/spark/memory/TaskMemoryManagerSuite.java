@@ -42,19 +42,19 @@ public class TaskMemoryManagerSuite {
       return released;
     }
 
-    void use(long size) throws IOException {
+    void use(long size) {
       acquireMemory(size);
       used += size;
     }
 
-    void free(long size) throws IOException {
+    void free(long size) {
       releaseMemory(size);
       used -= size;
     }
   }
 
   @Test
-  public void leakedPageMemoryIsDetected() throws IOException {
+  public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
     manager.allocatePage(4096, null);  // leak memory
@@ -62,7 +62,7 @@ public class TaskMemoryManagerSuite {
   }
 
   @Test
-  public void encodePageNumberAndOffsetOffHeap() throws IOException {
+  public void encodePageNumberAndOffsetOffHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "true")), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
@@ -75,7 +75,7 @@ public class TaskMemoryManagerSuite {
   }
 
   @Test
-  public void encodePageNumberAndOffsetOnHeap() throws IOException {
+  public void encodePageNumberAndOffsetOnHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
@@ -85,7 +85,7 @@ public class TaskMemoryManagerSuite {
   }
 
   @Test
-  public void cooperativeSpilling() throws IOException {
+  public void cooperativeSpilling() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
     final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);

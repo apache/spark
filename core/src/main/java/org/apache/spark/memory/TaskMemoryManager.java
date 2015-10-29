@@ -18,6 +18,7 @@
 package org.apache.spark.memory;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
 
@@ -126,7 +127,7 @@ public class TaskMemoryManager {
    *
    * @return number of bytes successfully granted (<= N).
    */
-  public long acquireExecutionMemory(long required, MemoryConsumer consumer) throws IOException {
+  public long acquireExecutionMemory(long required, MemoryConsumer consumer) {
     assert(required >= 0);
     synchronized (this) {
       long got = memoryManager.acquireExecutionMemory(required, taskAttemptId);
@@ -138,13 +139,19 @@ public class TaskMemoryManager {
         // Call spill() on other consumers to release memory
         for (MemoryConsumer c: cs) {
           if (c != null) {
-            long released = c.spill(required - got, consumer);
-            logger.info("released " + Utils.bytesToString(released) + " from " + consumer);
-            if (released >= 0) {
-              got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
-              if (got >= required) {
-                break;
+            try {
+              long released = c.spill(required - got, consumer);
+              if (released > 0) {
+                logger.info("released {} from {} for {}", Utils.bytesToString(released), c, consumer);
+                got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
+                if (got >= required) {
+                  break;
+                }
               }
+            } catch (IOException e) {
+              logger.error("error while calling spill() on " + c, e);
+              throw new OutOfMemoryError("error while calling spill() on " + c + " : "
+                + e.getMessage());
             }
           }
         }
@@ -205,6 +212,26 @@ public class TaskMemoryManager {
     memoryManager.releaseExecutionMemory(size, taskAttemptId);
   }
 
+  public void transferOwnership(long size, MemoryConsumer from, MemoryConsumer to) {
+    assert(size >= 0);
+    synchronized (this) {
+      if (consumers.containsKey(from)) {
+        long old = consumers.get(from);
+        if (old > size) {
+          consumers.put(from, old - size);
+        } else {
+          consumers.remove(from);
+        }
+        if (consumers.containsKey(to)) {
+          old = consumers.get(to);
+        } else {
+          old = 0L;
+        }
+        consumers.put(to, old + size);
+      }
+    }
+  }
+
   /**
    * Dump the memory usage of all consumers.
    */
@@ -230,7 +257,7 @@ public class TaskMemoryManager {
    *
    * Returns `null` if there was not enough memory to allocate the page.
    */
-  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) throws IOException {
+  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
       throw new IllegalArgumentException(
         "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
@@ -355,18 +382,14 @@ public class TaskMemoryManager {
    * value can be used to detect memory leaks.
    */
   public long cleanUpAllAllocatedMemory() {
-    long freedBytes = 0;
-    for (MemoryBlock page : pageTable) {
-      if (page != null) {
-        freedBytes += page.size();
-        freePage(page, null);
+    synchronized (this) {
+      Arrays.fill(pageTable, null);
+      for (MemoryConsumer c: consumers.keySet()) {
+        logger.warn("leak " + Utils.bytesToString(consumers.get(c)) + " memory from " + c);
       }
+      consumers.clear();
     }
-    consumers.clear();
-
-    freedBytes += memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
-
-    return freedBytes;
+    return memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
   }
 
   /**

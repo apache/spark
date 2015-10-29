@@ -332,7 +332,8 @@ public class UnsafeExternalSorterSuite {
       assert(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
       lastv = i;
     }
-    iter.spill();
+    assert(iter.spill() > 0);
+    assert(iter.spill() == 0);
     assert(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == lastv);
     for (int i = n / 3; i < n; i++) {
       iter.hasNext();
@@ -356,7 +357,8 @@ public class UnsafeExternalSorterSuite {
     assert(sorter.getNumberOfAllocatedPages() >= 2);
     UnsafeExternalSorter.SpillableIterator iter =
       (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
-    iter.spill();
+    assert(iter.spill() > 0);
+    assert(iter.spill() == 0);
     for (int i = 0; i < n; i++) {
       iter.hasNext();
       iter.loadNext();

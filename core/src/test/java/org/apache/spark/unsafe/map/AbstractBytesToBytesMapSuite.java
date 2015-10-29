@@ -492,7 +492,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToAllocateFirstPage() {
-    memoryManager.limit(0);
+    memoryManager.limit(1024);  // longArray
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, PAGE_SIZE_BYTES);
     try {
       final long[] emptyArray = new long[0];

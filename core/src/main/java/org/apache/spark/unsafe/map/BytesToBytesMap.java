@@ -199,6 +199,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
     allocate(initialCapacity);
+    acquireMemory(longArray.memoryBlock().size());
   }
 
   public BytesToBytesMap(
@@ -662,6 +663,16 @@ public final class BytesToBytesMap extends MemoryConsumer {
           return false;
         }
       }
+      boolean toGrow = numElements > growthThreshold && longArray.size() < MAX_CAPACITY;
+      if (toGrow) {
+        long capacity = Math.min(MAX_CAPACITY,
+          ByteArrayMethods.nextPowerOf2(growthStrategy.nextCapacity((int) bitset.capacity())));
+        try {
+          acquireMemory(capacity * 16L);
+        } catch (OutOfMemoryError e) {
+          return false;
+        }
+      }
 
       // --- Append the key and value data to the current data page --------------------------------
       final Object base = currentPage.getBaseObject();
@@ -686,8 +697,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
       longArray.set(pos * 2 + 1, keyHashcode);
       updateAddressesAndSizes(storedKeyAddress);
       isDefined = true;
-      if (numElements > growthThreshold && longArray.size() < MAX_CAPACITY) {
+
+      if (toGrow) {
+        long usedMemory = longArray.memoryBlock().size();
         growAndRehash();
+        releaseMemory(usedMemory);
       }
       return true;
     }
@@ -704,7 +718,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       Platform.putInt(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
       pageCursor = 4;
       return true;
-    } catch (IOException e) {
+    } catch (OutOfMemoryError e) {
       return false;
     }
   }
@@ -743,7 +757,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   public void free() {
     updatePeakMemoryUsed();
-    longArray = null;
+    if (longArray != null) {
+      releaseMemory(longArray.memoryBlock().size());
+      longArray = null;
+    }
     bitset = null;
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {

@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.annotations.VisibleForTesting
 
+import org.apache.spark.util.Utils
 import org.apache.spark.{SparkException, TaskContext, SparkConf, Logging}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -135,7 +136,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    * that control global sharing of memory between execution and storage.
    */
   private[memory]
-  def acquireExecutionMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
+  final def acquireExecutionMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
     assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
@@ -215,8 +216,12 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
   final def releaseExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
     val curMem = executionMemoryForTask.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
-      throw new SparkException(
-        s"Internal error: release called on $numBytes bytes but task only has $curMem")
+      if (Utils.isTesting) {
+        throw new SparkException(
+          s"Internal error: release called on $numBytes bytes but task only has $curMem")
+      } else {
+        logWarning(s"Internal error: release called on $numBytes bytes but task only has $curMem")
+      }
     }
     if (executionMemoryForTask.contains(taskAttemptId)) {
       executionMemoryForTask(taskAttemptId) -= numBytes

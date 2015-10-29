@@ -175,7 +175,7 @@ public final class UnsafeInMemorySorter {
     }
 
     public int numRecordsLeft() {
-      return sortBufferInsertPosition - position;
+      return (sortBufferInsertPosition - position) / 2;
     }
 
     @Override

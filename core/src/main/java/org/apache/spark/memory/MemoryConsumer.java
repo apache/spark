@@ -67,15 +67,13 @@ public abstract class MemoryConsumer {
   /**
    * Acquire `size` bytes memory.
    *
-   * If there is not enough memory, throws IOException.
-   *
-   * @throws IOException
+   * If there is not enough memory, throws OutOfMemoryError.
    */
-  protected void acquireMemory(long size) throws IOException {
+  protected void acquireMemory(long size) {
     long got = memoryManager.acquireExecutionMemory(size, this);
     if (got < size) {
       memoryManager.showMemoryUsage();
-      throw new IOException("Could not acquire " + size + " bytes of memory, got " + got);
+      throw new OutOfMemoryError("Could not acquire " + size + " bytes of memory, got " + got);
     }
   }
 
@@ -91,9 +89,9 @@ public abstract class MemoryConsumer {
    *
    * Throws IOException if there is not enough memory.
    *
-   * @throws IOException
+   * @throws OutOfMemoryError
    */
-  protected MemoryBlock allocatePage(long required) throws IOException {
+  protected MemoryBlock allocatePage(long required) {
     MemoryBlock page = memoryManager.allocatePage(Math.max(pageSize, required), this);
     if (page == null || page.size() < required) {
       long got = 0;
@@ -102,7 +100,7 @@ public abstract class MemoryConsumer {
         freePage(page);
       }
       memoryManager.showMemoryUsage();
-      throw new IOException("Unable to acquire " + required + " bytes of memory, got " + got);
+      throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
     }
     return page;
   }
