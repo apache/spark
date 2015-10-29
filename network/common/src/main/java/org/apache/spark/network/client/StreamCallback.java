@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
  * Callback for streaming data. Stream data will be offered to the {@link onData(ByteBuffer)}
  * method as it arrives. Once all the stream data is received, {@link onComplete()} will be
  * called.
- * <p/>
+ * <p>
  * The network library guarantees that a single thread will call these methods at a time, but
  * different call may be made by different threads.
  */

@@ -25,7 +25,7 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
  * Request to stream data from the remote end.
- * <p/>
+ * <p>
  * The stream ID is an arbitrary string that needs to be negotiated between the two endpoints before
  * the data can be streamed.
  */

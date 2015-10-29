@@ -25,15 +25,15 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 
 /**
  * A customized frame decoder that allows intercepting raw data.
- * <p/>
+ * <p>
  * This behaves like Netty's frame decoder (with harcoded parameters that match this library's
  * needs), except it allows an interceptor to be installed to read data directly before it's
  * framed.
- * <p/>
+ * <p>
  * Unlike Netty's frame decoder, each frame is dispatched to child handlers as soon as it's
  * decoded, instead of building as many frames as the current buffer allows and dispatching
  * all of them. This allows a child handler to install an interceptor if needed.
- * <p/>
+ * <p>
  * If an interceptor is installed, framing stops, and data is instead fed directly to the
  * interceptor. When the interceptor indicates that it doesn't need to read any more data,
  * framing resumes. Interceptors should not hold references to the data buffers provided

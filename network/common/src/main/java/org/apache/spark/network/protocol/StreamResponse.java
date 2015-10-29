@@ -25,7 +25,7 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
  * Response to {@link StreamRequest} when the stream has been successfully opened.
- * <p/>
+ * <p>
  * Note the message itself does not contain the stream data. That is written separately by the
  * sender. The receiver is expected to set a temporary channel handler that will consume the
  * number of bytes this message says the stream has.
