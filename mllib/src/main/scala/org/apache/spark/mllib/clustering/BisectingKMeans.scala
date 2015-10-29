@@ -599,19 +599,3 @@ private[clustering] case class BisectingClusterStat (
 
   def isDividable: Boolean = sumOfSquares > 0 && rows >= 2
 }
-
-private[clustering] object BisectingClusterStat {
-  // calculate a mean vector
-  def calcMean(rows: Long, sums: BV[Double]): BV[Double] = sums :/ rows.toDouble
-
-  // calculate a variance
-  def getVariance(rows: Long, sums: BV[Double], sumOfSquares: BV[Double]): Double = {
-    val variances: BV[Double] = rows match {
-      case n if n > 1 => sumOfSquares.:/(n.toDouble) - (sums :* sums).:/(n.toDouble * n.toDouble)
-      case _ => BV.zeros[Double](sums.size)
-    }
-    breezeNorm(variances, 2.0)
-  }
-}
-
-
