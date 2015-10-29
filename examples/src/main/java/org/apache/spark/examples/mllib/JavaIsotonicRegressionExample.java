@@ -16,14 +16,15 @@
  */
 package org.apache.spark.examples.mllib;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.SparkConf;
+
 // $example on$
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.IsotonicRegression;
 import org.apache.spark.mllib.regression.IsotonicRegressionModel;
 import scala.Tuple2;
