@@ -203,4 +203,14 @@ class CachedTableSuite extends QueryTest {
     sql("DROP TABLE refreshTable")
     Utils.deleteRecursively(tempPath)
   }
+
+  test("SPARK-11246 cache parquet table") {
+    sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
+
+    cacheTable("cachedTable")
+    val sparkPlan = sql("SELECT * FROM cachedTable").queryExecution.sparkPlan
+    assert(sparkPlan.collect { case e: InMemoryColumnarTableScan => e }.size === 1)
+
+    sql("DROP TABLE cachedTable")
+  }
 }
