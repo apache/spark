@@ -161,7 +161,7 @@ public class TaskMemoryManager {
       }
 
       // call spill() on itself
-      if (got < required) {
+      if (got < required && consumer != null) {
         try {
           long released = consumer.spill(required - got, consumer);
           if (released > 0) {
