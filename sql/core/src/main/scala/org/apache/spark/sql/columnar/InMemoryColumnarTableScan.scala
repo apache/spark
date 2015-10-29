@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.columnar
 
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
@@ -208,6 +210,12 @@ private[sql] case class InMemoryColumnarTableScan(
   extends LeafNode {
 
   override def output: Seq[Attribute] = attributes
+
+  // The cached version does not change the outputPartitioning of the original SparkPlan.
+  override def outputPartitioning: Partitioning = relation.child.outputPartitioning
+
+  // The cached version does not change the outputOrdering of the original SparkPlan.
+  override def outputOrdering: Seq[SortOrder] = relation.child.outputOrdering
 
   override def outputsUnsafeRows: Boolean = true
 
