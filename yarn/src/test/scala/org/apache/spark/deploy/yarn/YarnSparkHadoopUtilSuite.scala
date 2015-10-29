@@ -254,10 +254,9 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     // thrift picks up on port 0 and bails out, without trying to talk to endpoint
     hadoopConf.set("hive.metastore.uris", "http://localhost:0")
     val util = new YarnSparkHadoopUtil
-    val e = intercept[InvocationTargetException] {
+    assertNestedHiveException(intercept[InvocationTargetException] {
       util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
-    }
-    assertNestedHiveException(e)
+    })
     // expect exception trapping code to unwind this hive-side exception
     assertNestedHiveException(intercept[InvocationTargetException] {
       util.obtainTokenForHiveMetastore(hadoopConf)
@@ -273,29 +272,6 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       fail(s"Not a hive exception", inner)
     }
     inner
-  }
-
-  test("handleTokenIntrospectionFailure") {
-    val util = new YarnSparkHadoopUtil
-    // downgraded exceptions
-    util.handleTokenIntrospectionFailure("hive", new ClassNotFoundException("cnfe"))
-
-    // directly relayed
-    intercept[NoSuchMethodException] {
-      util.handleTokenIntrospectionFailure("hive", new NoSuchMethodException("no such method"))
-    }
-    intercept[IllegalArgumentException] {
-      util.handleTokenIntrospectionFailure("hive", new IllegalArgumentException("oops"))
-    }
-    // no unwinding if there's no inner exception
-    intercept[InvocationTargetException] {
-      util.handleTokenIntrospectionFailure("hive", new InvocationTargetException(null))
-    }
-
-    // wrapped
-    intercept[Throwable] {
-      util.handleTokenIntrospectionFailure("hive", new Throwable("t"))
-    }
   }
 
 }

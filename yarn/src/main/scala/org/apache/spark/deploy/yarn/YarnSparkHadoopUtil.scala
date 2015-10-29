@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -31,8 +30,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.{Master, JobConf}
+import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.token.Token
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -41,8 +41,8 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.launcher.YarnCommandBuilderUtils
-import org.apache.spark.util.Utils
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.util.Utils
 
 /**
  * Contains util methods to interact with Hadoop from spark.
@@ -157,28 +157,12 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     try {
       obtainTokenForHiveMetastoreInner(conf, UserGroupInformation.getCurrentUser().getUserName)
     } catch {
-      case e: Exception => {
-        handleTokenIntrospectionFailure("Hive", e)
-        None
-      }
-    }
-  }
-
-  /**
-   * Handle failures to obtain a token through introspection. Failures to load the class are
-   * not treated as errors: anything else is.
-   * @param service service name for error messages
-   * @param thrown exception caught
-   * @throws Exception if the `thrown` exception isn't one that is to be ignored
-   */
-  private[yarn] def handleTokenIntrospectionFailure(service: String, thrown: Throwable): Unit = {
-    thrown match {
       case e: ClassNotFoundException =>
-        logInfo(s"$service class not found $e")
-        logDebug("$service class not found", e)
-      case t: Throwable => {
+        logInfo(s"Hive class not found $e")
+        logDebug("Hive class not found", e)
+        None
+      case t: Throwable =>
         throw t
-      }
     }
   }
 
@@ -190,7 +174,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
    */
   private[yarn] def obtainTokenForHiveMetastoreInner(conf: Configuration,
       username: String): Option[Token[DelegationTokenIdentifier]] = {
-    val mirror = universe.runtimeMirror(getClass.getClassLoader)
+    val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
 
     // the hive configuration class is a subclass of Hadoop Configuration, so can be cast down
     // to a Configuration and used without reflection
@@ -220,7 +204,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         // invoke
         val hive = getHive.invoke(null, hiveConf)
         val tokenStr = getDelegationToken.invoke(hive, username, principal)
-            .asInstanceOf[java.lang.String]
+          .asInstanceOf[java.lang.String]
         val hive2Token = new Token[DelegationTokenIdentifier]()
         hive2Token.decodeFromUrlString(tokenStr)
         Some(hive2Token)
