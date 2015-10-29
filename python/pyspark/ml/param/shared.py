@@ -597,6 +597,34 @@ class HasWeightCol(Params):
         return self.getOrDefault(self.weightCol)
 
 
+class HasSolver(Params):
+    """
+    Mixin for param solver: the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.")
+
+    def __init__(self):
+        super(HasSolver, self).__init__()
+        #: param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+        self.solver = Param(self, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.")
+        self._setDefault(solver='auto')
+
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        self._paramMap[self.solver] = value
+        return self
+
+    def getSolver(self):
+        """
+        Gets the value of solver or its default value.
+        """
+        return self.getOrDefault(self.solver)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.

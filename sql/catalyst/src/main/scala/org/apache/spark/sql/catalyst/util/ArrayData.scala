@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.catalyst.util
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.types.DataType
 
 abstract class ArrayData extends SpecializedGetters with Serializable {
   def numElements(): Int

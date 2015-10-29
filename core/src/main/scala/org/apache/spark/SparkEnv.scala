@@ -38,9 +38,8 @@ import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.{OutputCommitCoordinator, LiveListenerBus}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
 
 /**
@@ -70,10 +69,7 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    // TODO: unify these *MemoryManager classes (SPARK-10984)
     val memoryManager: MemoryManager,
-    val shuffleMemoryManager: ShuffleMemoryManager,
-    val executorMemoryManager: ExecutorMemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
@@ -340,12 +336,10 @@ object SparkEnv extends Logging {
     val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
     val memoryManager: MemoryManager =
       if (useLegacyMemoryManager) {
-        new StaticMemoryManager(conf)
+        new StaticMemoryManager(conf, numUsableCores)
       } else {
-        new UnifiedMemoryManager(conf)
+        new UnifiedMemoryManager(conf, numUsableCores)
       }
-
-    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, memoryManager, numUsableCores)
 
     val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
 
@@ -405,15 +399,6 @@ object SparkEnv extends Logging {
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
 
-    val executorMemoryManager: ExecutorMemoryManager = {
-      val allocator = if (conf.getBoolean("spark.unsafe.offHeap", false)) {
-        MemoryAllocator.UNSAFE
-      } else {
-        MemoryAllocator.HEAP
-      }
-      new ExecutorMemoryManager(allocator)
-    }
-
     val envInstance = new SparkEnv(
       executorId,
       rpcEnv,
@@ -431,8 +416,6 @@ object SparkEnv extends Logging {
       sparkFilesDir,
       metricsSystem,
       memoryManager,
-      shuffleMemoryManager,
-      executorMemoryManager,
       outputCommitCoordinator,
       conf)
 
