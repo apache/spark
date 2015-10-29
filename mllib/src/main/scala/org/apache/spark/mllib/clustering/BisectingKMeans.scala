@@ -294,50 +294,6 @@ private[clustering] object BisectingKMeans {
   }
 
   /**
-   * Updates the indexes of clusters which is divided to its children indexes
-   *
-   * @param data pairs of point and its cluster index
-   * @param dividedClusters pairs of cluster index and cluster statistics
-   */
-  def updateClusterIndex(
-      data: RDD[(Long, BV[Double])],
-      dividedClusters: Map[Long, BisectingClusterStat]): RDD[(Long, BV[Double])] = {
-
-    // If there is no divided clusters, return the original
-    if (dividedClusters.isEmpty) {
-      return data
-    }
-
-    // extract the centers of the clusters
-    val sc = data.sparkContext
-    val centers = dividedClusters.map { case (idx, cluster) => (idx, cluster.mean)}
-    val bcCenters = sc.broadcast(centers)
-
-    // TODO Supports distance metrics other Euclidean distance metric
-    val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
-    val bcMetric = sc.broadcast(metric)
-
-    // update the indexes to their children indexes
-    data.map { case (idx, point) =>
-      // TODO improve how to extract child indexes
-      val childIndexes = Array(2 * idx, 2 * idx + 1)
-      val extractedChildIndexes = childIndexes.filter(c => bcCenters.value.contains(c))
-      extractedChildIndexes.length match {
-        // update the indexes
-        case s if s == 2 => {
-          val nextCenters = extractedChildIndexes.map(bcCenters.value(_))
-          val closestIndex = BisectingKMeans
-            .findClosestCenter(bcMetric.value)(nextCenters)(point)
-          val nextIndex = 2 * idx + closestIndex
-          (nextIndex, point)
-        }
-        // stay the index if a cluster which a point belongs wasn't divided
-        case _ => (idx, point)
-      }
-    }
-  }
-
-  /**
    * Divides clusters according to their statistics
    *
    * @param data pairs of point and its cluster index
