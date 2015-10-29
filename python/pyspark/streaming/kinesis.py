@@ -25,6 +25,7 @@ __all__ = ['KinesisUtils', 'InitialPositionInStream', 'utf8_decoder']
 
 
 def utf8_decoder(s):
+    s = unicode(s, errors='ignore')
     """ Decode the unicode as UTF-8 """
     if s is None:
         return None
