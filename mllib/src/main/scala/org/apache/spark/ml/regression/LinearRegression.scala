@@ -203,7 +203,7 @@ class LinearRegression(override val uid: String)
     val yMean = ySummarizer.mean(0)
     val yStd = math.sqrt(ySummarizer.variance(0))
 
-    // If the yStd is zero, then the intercept is yMean with zero weights;
+    // If the yStd is zero, then the intercept is yMean with zero coefficient;
     // as a result, training is not needed.
     if (yStd == 0.0) {
       logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
@@ -403,7 +403,7 @@ class LinearRegressionModel private[ml] (
 /**
  * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
- * training weights except for the objective trace.
+ * training coefficients except for the objective trace.
  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */

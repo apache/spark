@@ -92,9 +92,9 @@ setMethod("summary", signature(x = "PipelineModel"),
           function(x, ...) {
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                    "getModelFeatures", x@model)
-            weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelWeights", x@model)
-            coefficients <- as.matrix(unlist(weights))
+            coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelCoefficients", x@model)
+            coefficients <- as.matrix(unlist(coefficients))
             colnames(coefficients) <- c("Estimate")
             rownames(coefficients) <- unlist(features)
             return(list(coefficients = coefficients))
