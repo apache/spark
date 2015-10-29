@@ -706,11 +706,11 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Spark's internal mapPartitions method which skips closure cleaning. To be used carefully
-   * only if we are sure that the RDD elements are serializable and don't require closure
-   * cleaning
+   * [performance] Spark's internal mapPartitions method which skips closure cleaning. It is a
+   * performance API to be used carefully only if we are sure that the RDD elements are
+   * serializable and don't require closure cleaning.
    *
-   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * @param indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   private[spark] def mapPartitionsInternal[U: ClassTag](
