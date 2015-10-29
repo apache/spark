@@ -17,13 +17,10 @@
 
 package org.apache.spark.streaming
 
-import scala.Predef.assert
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.{Assertions, BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.streaming.testPackage._
 import org.apache.spark.util.ManualClock
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
@@ -224,43 +221,3 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
   }
 
 }
-
-
-/** Streaming application for testing DStream and RDD creation sites */
-package object testPackage extends Assertions {
-  def test(dstreamGenFunc: StreamingConte) {
-    val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
-    val ssc = new StreamingContext(conf , Milliseconds(100))
-    try {
-      val inputStream = new DummyDStream(ssc)
-
-      // Verify creation site of DStream
-      val creationSite = inputStream.creationSite
-      assert(creationSite.shortForm.contains("receiverStream") &&
-        creationSite.shortForm.contains("StreamingContextSuite")
-      )
-      assert(creationSite.longForm.contains("testPackage"))
-
-      // Verify creation site of generated RDDs
-      var rddGenerated = false
-      var rddCreationSiteCorrect = false
-      var foreachCallSiteCorrect = false
-
-      inputStream.foreachRDD { rdd =>
-        rddCreationSiteCorrect = rdd.creationSite == creationSite
-        foreachCallSiteCorrect =
-          rdd.sparkContext.getCallSite().shortForm.contains("StreamingContextSuite")
-        rddGenerated = true
-      }
-      ssc.start()
-
-      eventually(timeout(10000 millis), interval(10 millis)) {
-        assert(rddGenerated && rddCreationSiteCorrect, "RDD creation site was not correct")
-        assert(rddGenerated && foreachCallSiteCorrect, "Call site in foreachRDD was not correct")
-      }
-    } finally {
-      ssc.stop()
-    }
-  }
-}
-
