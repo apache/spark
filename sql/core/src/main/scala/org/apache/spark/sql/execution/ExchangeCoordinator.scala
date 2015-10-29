@@ -106,6 +106,10 @@ private[sql] class ExchangeCoordinator(
    */
   private[sql] def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
+    // At here, we have mapOutputStatistics.length <= numExchange, it is because we do not submit
+    // a stage if the number of partitions of the RDD is 0.
+    assert(mapOutputStatistics.length <= numExchanges)
+
     // Make sure we do get the same number of pre-shuffle partitions for those stages.
     val distinctNumPreShufflePartitions =
       mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).distinct
@@ -145,7 +149,7 @@ private[sql] class ExchangeCoordinator(
       // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle stages.
       // Then, we add the total size to postShuffleInputSize.
       var j = 0
-      while (j < numExchanges) {
+      while (j < mapOutputStatistics.length) {
         postShuffleInputSize += mapOutputStatistics(j).bytesByPartitionId(i)
         j += 1
       }
