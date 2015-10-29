@@ -17,9 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.collection.{Map, mutable}
-
-import breeze.linalg.{SparseVector => BSV, Vector => BV, norm => breezeNorm, sum => breezeSum}
+import breeze.linalg.{Vector => BV, norm => breezeNorm}
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Since
@@ -218,7 +216,10 @@ private[clustering] object BisectingKMeans {
    *
    * @param data pairs of point and its cluster index
    */
-  def summarizeClusters(data: RDD[(Long, BV[Double])]): Map[Long, BisectingClusterStat] = {
+  def summarizeClusters(
+      data: RDD[(Long, BV[Double])]
+    ): collection.Map[Long, BisectingClusterStat] = {
+
     // sum the number of node and points of each cluster
     val stats = data.map {case (idx, p) =>
       (idx, (p, 1L))
@@ -253,15 +254,15 @@ private[clustering] object BisectingKMeans {
    */
   def initNextCenters(
       data: RDD[(Long, BV[Double])],
-      stats: Map[Long, BisectingClusterStat]): Map[Long, BV[Double]] = {
+      stats: collection.Map[Long, BisectingClusterStat]): collection.Map[Long, BV[Double]] = {
 
     // Since the combination sampleByKey and groupByKey is more expensive,
     // this as follows would be better.
     val bcIndeces = data.sparkContext.broadcast(stats.keySet)
     val samples = data.mapPartitions { iter =>
-      val map = mutable.Map.empty[Long, mutable.ArrayBuffer[BV[Double]]]
+      val map = collection.mutable.Map.empty[Long, collection.mutable.ArrayBuffer[BV[Double]]]
 
-      bcIndeces.value.foreach {i => map(i) = mutable.ArrayBuffer.empty[BV[Double]]}
+      bcIndeces.value.foreach {i => map(i) = collection.mutable.ArrayBuffer.empty[BV[Double]]}
       val LOCAL_SAMPLE_SIZE = 100
       iter.foreach { case (i, point) =>
         map(i).append(point)
@@ -269,14 +270,14 @@ private[clustering] object BisectingKMeans {
         // the number of elements is cut off at the right time.
         if (map(i).size > LOCAL_SAMPLE_SIZE) {
           val elements = map(i).sortWith((a, b) => breezeNorm(a, 2.0) < breezeNorm(b, 2.0))
-          map(i) = mutable.ArrayBuffer(elements.head, elements.last)
+          map(i) = collection.mutable.ArrayBuffer(elements.head, elements.last)
         }
       }
 
       // in order to reduce the shuffle size, take only two elements
       map.filterNot(_._2.isEmpty).map { case (i, points) =>
         val elements = map(i).toSeq.sortWith((a, b) => breezeNorm(a, 2.0) < breezeNorm(b, 2.0))
-        i -> mutable.ArrayBuffer(elements.head, elements.last)
+        i -> collection.mutable.ArrayBuffer(elements.head, elements.last)
       }.toIterator
     }.reduceByKey { case (points1, points2) =>
       points1.union(points2)
@@ -345,7 +346,7 @@ private[clustering] object BisectingKMeans {
    */
   def divideClusters(
       data: RDD[(Long, BV[Double])],
-      clusterStats: Map[Long, BisectingClusterStat],
+      clusterStats: collection.Map[Long, BisectingClusterStat],
       maxIterations: Int): RDD[(Long, BV[Double])] = {
     val sc = data.sparkContext
     val appName = sc.appName
@@ -419,8 +420,8 @@ private[clustering] object BisectingKMeans {
    */
   def createClusterNodes(
       data: RDD[(Long, BV[Double])],
-      stats: Map[Long, BisectingClusterStat]): Map[Long, BisectingClusterNode] = {
-
+      stats: collection.Map[Long, BisectingClusterStat]
+    ): collection.Map[Long, BisectingClusterNode] = {
     // TODO: support other cost, such as entropy
     createClusterNodesWithAverageCost(data, stats)
   }
@@ -430,7 +431,9 @@ private[clustering] object BisectingKMeans {
    */
   private def createClusterNodesWithAverageCost(
       data: RDD[(Long, BV[Double])],
-      stats: Map[Long, BisectingClusterStat]): Map[Long, BisectingClusterNode] = {
+      stats: collection.Map[Long, BisectingClusterStat]
+    ): collection.Map[Long, BisectingClusterNode] = {
+
     stats.map { case (idx, clusterStats) =>
       val rows = clusterStats.rows
       val center = clusterStats.mean
@@ -448,7 +451,7 @@ private[clustering] object BisectingKMeans {
    * @return a built cluster tree
    */
   private def buildTree(
-      treeMap: Map[Long, BisectingClusterNode],
+      treeMap: collection.Map[Long, BisectingClusterNode],
       rootIndex: Long,
       k: Int): Option[BisectingClusterNode] = {
 
