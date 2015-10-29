@@ -74,6 +74,10 @@ code {
   color: #444444;
 }
 
+div .highlight pre {
+  font-size: 12px;
+}
+
 a code {
   color: #0088cc;
 }

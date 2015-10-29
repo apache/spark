@@ -139,4 +139,9 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") { f }
     }
   }
+
+  protected def readResourceParquetFile(name: String): DataFrame = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(name)
+    sqlContext.read.parquet(url.toString)
+  }
 }

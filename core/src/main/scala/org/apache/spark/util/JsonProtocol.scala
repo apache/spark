@@ -283,7 +283,8 @@ private[spark] object JsonProtocol {
     ("ID" -> accumulableInfo.id) ~
     ("Name" -> accumulableInfo.name) ~
     ("Update" -> accumulableInfo.update.map(new JString(_)).getOrElse(JNothing)) ~
-    ("Value" -> accumulableInfo.value)
+    ("Value" -> accumulableInfo.value) ~
+    ("Internal" -> accumulableInfo.internal)
   }
 
   def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
@@ -382,9 +383,9 @@ private[spark] object JsonProtocol {
         ("Job ID" -> taskCommitDenied.jobID) ~
         ("Partition ID" -> taskCommitDenied.partitionID) ~
         ("Attempt Number" -> taskCommitDenied.attemptNumber)
-      case ExecutorLostFailure(executorId, isNormalExit) =>
+      case ExecutorLostFailure(executorId, exitCausedByApp) =>
         ("Executor ID" -> executorId) ~
-        ("Normal Exit" -> isNormalExit)
+        ("Exit Caused By App" -> exitCausedByApp)
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -713,7 +714,8 @@ private[spark] object JsonProtocol {
     val name = (json \ "Name").extract[String]
     val update = Utils.jsonOption(json \ "Update").map(_.extract[String])
     val value = (json \ "Value").extract[String]
-    AccumulableInfo(id, name, update, value)
+    val internal = (json \ "Internal").extractOpt[Boolean].getOrElse(false)
+    AccumulableInfo(id, name, update, value, internal)
   }
 
   def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
@@ -843,10 +845,9 @@ private[spark] object JsonProtocol {
         val attemptNo = Utils.jsonOption(json \ "Attempt Number").map(_.extract[Int]).getOrElse(-1)
         TaskCommitDenied(jobId, partitionId, attemptNo)
       case `executorLostFailure` =>
-        val isNormalExit = Utils.jsonOption(json \ "Normal Exit").
-          map(_.extract[Boolean])
+        val exitCausedByApp = Utils.jsonOption(json \ "Exit Caused By App").map(_.extract[Boolean])
         val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
-        ExecutorLostFailure(executorId.getOrElse("Unknown"), isNormalExit.getOrElse(false))
+        ExecutorLostFailure(executorId.getOrElse("Unknown"), exitCausedByApp.getOrElse(true))
       case `unknownReason` => UnknownReason
     }
   }

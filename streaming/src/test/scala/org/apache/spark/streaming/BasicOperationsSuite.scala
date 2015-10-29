@@ -191,6 +191,20 @@ class BasicOperationsSuite extends TestSuiteBase {
     )
   }
 
+  test("union with input stream return None") {
+    val input = Seq(1 to 4, 101 to 104, 201 to 204, null)
+    val output = Seq(1 to 8, 101 to 108, 201 to 208)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (s: DStream[Int]) => s.union(s.map(_ + 4)),
+        output,
+        input.length,
+        false
+      )
+    }
+  }
+
   test("StreamingContext.union") {
     val input = Seq(1 to 4, 101 to 104, 201 to 204)
     val output = Seq(1 to 12, 101 to 112, 201 to 212)
@@ -209,6 +223,32 @@ class BasicOperationsSuite extends TestSuiteBase {
       (r: DStream[Int]) => r.transform(rdd => rdd.map(_.toString)),   // RDD.map in transform
       input.map(_.map(_.toString))
     )
+  }
+
+  test("transform with NULL") {
+    val input = Seq(1 to 4)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (r: DStream[Int]) => r.transform(rdd => null.asInstanceOf[RDD[Int]]),
+        Seq(Seq()),
+        1,
+        false
+      )
+    }
+  }
+
+  test("transform with input stream return None") {
+    val input = Seq(1 to 4, 5 to 8, null)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (r: DStream[Int]) => r.transform(rdd => rdd.map(_.toString)),
+        input.filterNot(_ == null).map(_.map(_.toString)),
+        input.length,
+        false
+      )
+    }
   }
 
   test("transformWith") {
@@ -231,6 +271,27 @@ class BasicOperationsSuite extends TestSuiteBase {
     testOperation(inputData1, inputData2, operation, outputData, true)
   }
 
+  test("transformWith with input stream return None") {
+    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), null )
+    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), null )
+    val outputData = Seq(
+      Seq("a", "b", "a", "b"),
+      Seq("a", "b", "", ""),
+      Seq("")
+    )
+
+    val operation = (s1: DStream[String], s2: DStream[String]) => {
+      s1.transformWith(           // RDD.join in transform
+        s2,
+        (rdd1: RDD[String], rdd2: RDD[String]) => rdd1.union(rdd2)
+      )
+    }
+
+    intercept[SparkException] {
+      testOperation(inputData1, inputData2, operation, outputData, inputData1.length, true)
+    }
+  }
+
   test("StreamingContext.transform") {
     val input = Seq(1 to 4, 101 to 104, 201 to 204)
     val output = Seq(1 to 12, 101 to 112, 201 to 212)
@@ -245,6 +306,24 @@ class BasicOperationsSuite extends TestSuiteBase {
     }
 
     testOperation(input, operation, output)
+  }
+
+  test("StreamingContext.transform with input stream return None") {
+    val input = Seq(1 to 4, 101 to 104, 201 to 204, null)
+    val output = Seq(1 to 12, 101 to 112, 201 to 212)
+
+    // transform over 3 DStreams by doing union of the 3 RDDs
+    val operation = (s: DStream[Int]) => {
+      s.context.transform(
+        Seq(s, s.map(_ + 4), s.map(_ + 8)),   // 3 DStreams
+        (rdds: Seq[RDD[_]], time: Time) =>
+          rdds.head.context.union(rdds.map(_.asInstanceOf[RDD[Int]]))  // union of RDDs
+      )
+    }
+
+    intercept[SparkException] {
+      testOperation(input, operation, output, input.length, false)
+    }
   }
 
   test("cogroup") {

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
@@ -48,7 +49,8 @@ case class Sort(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
     child.execute().mapPartitions( { iterator =>
       val ordering = newOrdering(sortOrder, child.output)
-      val sorter = new ExternalSorter[InternalRow, Null, InternalRow](ordering = Some(ordering))
+      val sorter = new ExternalSorter[InternalRow, Null, InternalRow](
+        TaskContext.get(), ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r.copy(), null)))
       val baseIterator = sorter.iterator.map(_._1)
       val context = TaskContext.get()
@@ -93,9 +95,16 @@ case class TungstenSort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  override private[sql] lazy val metrics = Map(
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+
   protected override def doExecute(): RDD[InternalRow] = {
     val schema = child.schema
     val childOutput = child.output
+
+    val dataSize = longMetric("dataSize")
+    val spillSize = longMetric("spillSize")
 
     /**
      * Set up the sorter in each partition before computing the parent partition.
@@ -116,7 +125,7 @@ case class TungstenSort(
         }
       }
 
-      val pageSize = SparkEnv.get.shuffleMemoryManager.pageSizeBytes
+      val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
       val sorter = new UnsafeExternalRowSorter(
         schema, ordering, prefixComparator, prefixComputer, pageSize)
       if (testSpillFrequency > 0) {
@@ -131,7 +140,15 @@ case class TungstenSort(
         partitionIndex: Int,
         sorter: UnsafeExternalRowSorter,
         parentIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+      // Remember spill data size of this task before execute this operator so that we can
+      // figure out how many bytes we spilled for this operator.
+      val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
+
       val sortedIterator = sorter.sort(parentIterator.asInstanceOf[Iterator[UnsafeRow]])
+
+      dataSize += sorter.getPeakMemoryUsage
+      spillSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore
+
       taskContext.internalMetricsToAccumulators(
         InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
       sortedIterator

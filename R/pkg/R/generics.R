@@ -63,6 +63,10 @@ setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 # @export
 setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
+# @rdname statfunctions
+# @export
+setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("freqItems") })
+
 # @rdname distinct
 # @export
 setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })
@@ -505,6 +509,10 @@ setGeneric("sample",
 setGeneric("sample_frac",
            function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
 
+#' @rdname statfunctions
+#' @export
+setGeneric("sampleBy", function(x, col, fractions, seed) { standardGeneric("sampleBy") })
+
 #' @rdname saveAsParquetFile
 #' @export
 setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
@@ -682,6 +690,10 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
+#' @rdname col
+#' @export
+setGeneric("column", function(x) { standardGeneric("column") })
+
 #' @rdname concat
 #' @export
 setGeneric("concat", function(x, ...) { standardGeneric("concat") })
@@ -701,6 +713,10 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @rdname crc32
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
+
+#' @rdname cumeDist
+#' @export
+setGeneric("cumeDist", function(x) { standardGeneric("cumeDist") })
 
 #' @rdname datediff
 #' @export
@@ -778,6 +794,10 @@ setGeneric("instr", function(y, x) { standardGeneric("instr") })
 #' @export
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
+#' @rdname lag
+#' @export
+setGeneric("lag", function(x, offset, defaultValue = NULL) { standardGeneric("lag") })
+
 #' @rdname last
 #' @export
 setGeneric("last", function(x) { standardGeneric("last") })
@@ -785,6 +805,10 @@ setGeneric("last", function(x) { standardGeneric("last") })
 #' @rdname last_day
 #' @export
 setGeneric("last_day", function(x) { standardGeneric("last_day") })
+
+#' @rdname lead
+#' @export
+setGeneric("lead", function(x, offset, defaultValue = NULL) { standardGeneric("lead") })
 
 #' @rdname least
 #' @export
@@ -845,6 +869,10 @@ setGeneric("negate", function(x) { standardGeneric("negate") })
 #' @rdname next_day
 #' @export
 setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
+
+#' @rdname ntile
+#' @export
+setGeneric("ntile", function(x) { standardGeneric("ntile") })
 
 #' @rdname countDistinct
 #' @export
@@ -995,3 +1023,7 @@ setGeneric("rbind", signature = "...")
 #' @rdname as.data.frame
 #' @export
 setGeneric("as.data.frame")
+
+#' @rdname attach
+#' @export
+setGeneric("attach")

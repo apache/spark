@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
@@ -257,6 +258,16 @@ class DataFrame private[sql](
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
   def toDF(): DataFrame = this
+
+  /**
+   * :: Experimental ::
+   * Converts this [[DataFrame]] to a strongly-typed [[Dataset]] containing objects of the
+   * specified type, `U`.
+   * @group basic
+   * @since 1.6.0
+   */
+  @Experimental
+  def as[U : Encoder]: Dataset[U] = new Dataset[U](sqlContext, logicalPlan)
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
@@ -686,6 +697,20 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def as(alias: Symbol): DataFrame = as(alias.name)
+
+  /**
+   * Returns a new [[DataFrame]] with an alias set. Same as `as`.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def alias(alias: String): DataFrame = as(alias)
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] with an alias set. Same as `as`.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def alias(alias: Symbol): DataFrame = as(alias)
 
   /**
    * Selects a set of column based expressions.
@@ -1237,9 +1262,14 @@ class DataFrame private[sql](
    * @since 1.4.1
    */
   def drop(col: Column): DataFrame = {
+    val expression = col match {
+      case Column(u: UnresolvedAttribute) =>
+        queryExecution.analyzed.resolveQuoted(u.name, sqlContext.analyzer.resolver).getOrElse(u)
+      case Column(expr: Expression) => expr
+    }
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      attr != col.expr
+      attr != expression
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }
@@ -1344,7 +1374,9 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def head(n: Int): Array[Row] = limit(n).collect()
+  def head(n: Int): Array[Row] = withCallback("head", limit(n)) { df =>
+    df.collect(needCallback = false)
+  }
 
   /**
    * Returns the first row.
@@ -1414,8 +1446,18 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collect(): Array[Row] = withNewExecutionId {
-    queryExecution.executedPlan.executeCollectPublic()
+  def collect(): Array[Row] = collect(needCallback = true)
+
+  private def collect(needCallback: Boolean): Array[Row] = {
+    def execute(): Array[Row] = withNewExecutionId {
+      queryExecution.executedPlan.executeCollectPublic()
+    }
+
+    if (needCallback) {
+      withCallback("collect", this)(_ => execute())
+    } else {
+      execute()
+    }
   }
 
   /**
@@ -1423,8 +1465,10 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collectAsList(): java.util.List[Row] = withNewExecutionId {
-    java.util.Arrays.asList(rdd.collect() : _*)
+  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
+    withNewExecutionId {
+      java.util.Arrays.asList(rdd.collect() : _*)
+    }
   }
 
   /**
@@ -1432,7 +1476,9 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def count(): Long = groupBy().count().collect().head.getLong(0)
+  def count(): Long = withCallback("count", groupBy().count()) { df =>
+    df.collect(needCallback = false).head.getLong(0)
+  }
 
   /**
    * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
@@ -1658,7 +1704,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.jdbc()", "1.4.0")
   def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
-    val w = if (overwrite) write.mode(SaveMode.Overwrite) else write
+    val w = if (overwrite) write.mode(SaveMode.Overwrite) else write.mode(SaveMode.Append)
     w.jdbc(url, table, new Properties)
   }
 
@@ -1934,6 +1980,27 @@ class DataFrame private[sql](
    */
   private[sql] def withNewExecutionId[T](body: => T): T = {
     SQLExecution.withNewExecutionId(sqlContext, queryExecution)(body)
+  }
+
+  /**
+   * Wrap a DataFrame action to track the QueryExecution and time cost, then report to the
+   * user-registered callback functions.
+   */
+  private def withCallback[T](name: String, df: DataFrame)(action: DataFrame => T) = {
+    try {
+      df.queryExecution.executedPlan.foreach { plan =>
+        plan.metrics.valuesIterator.foreach(_.reset())
+      }
+      val start = System.nanoTime()
+      val result = action(df)
+      val end = System.nanoTime()
+      sqlContext.listenerManager.onSuccess(name, df.queryExecution, end - start)
+      result
+    } catch {
+      case e: Exception =>
+        sqlContext.listenerManager.onFailure(name, df.queryExecution, e)
+        throw e
+    }
   }
 
   ////////////////////////////////////////////////////////////////////////////
