@@ -28,7 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
+import org.apache.spark.streaming.util.{BatchedWriteAheadLog, WriteAheadLog, WriteAheadLogUtils}
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.{Logging, SparkConf}
 
@@ -222,7 +222,7 @@ private[streaming] class ReceivedBlockTracker(
     def resolveEvent(event: ReceivedBlockTrackerLogEvent): Unit = {
       event match {
         case CombinedReceivedBlockTrackerLogEvent(events) =>
-          events.foreach(r => resolveEvent(Utils.deserialize[ReceivedBlockTrackerLogEvent](r)))
+          BatchedWriteAheadLog.deaggregate(events).foreach(resolveEvent)
         case BlockAdditionEvent(receivedBlockInfo) =>
           insertAddedBlock(receivedBlockInfo)
         case BatchAllocationEvent(time, allocatedBlocks) =>

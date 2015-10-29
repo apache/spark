@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
@@ -11,7 +28,7 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
-import org.apache.spark.streaming.scheduler.CombinedReceivedBlockTrackerLogEvent
+import org.apache.spark.streaming.scheduler.{ReceivedBlockTrackerLogEvent, CombinedReceivedBlockTrackerLogEvent}
 import org.apache.spark.util.{Utils, ThreadUtils}
 
 /**
@@ -148,8 +165,7 @@ private[streaming] class BatchedWriteAheadLog(parent: WriteAheadLog)
           // we take the latest record for the time to ensure that we don't clean up files earlier
           // than the expiration date of the records
           val time = buffer.last.time
-          segment = parent.write(ByteBuffer.wrap(Utils.serialize(
-            CombinedReceivedBlockTrackerLogEvent(buffer.map(_.record.array()).toArray))), time)
+          segment = parent.write(BatchedWriteAheadLog.aggregateRecords(buffer), time)
         }
         buffer.foreach(_.promise.success(segment))
       } catch {
@@ -159,5 +175,17 @@ private[streaming] class BatchedWriteAheadLog(parent: WriteAheadLog)
       }
       buffer.clear()
     }
+  }
+}
+
+private[streaming] object BatchedWriteAheadLog {
+  private[streaming] def aggregateRecords(records: Seq[RecordBuffer]): ByteBuffer = {
+    ByteBuffer.wrap(Utils.serialize(
+      CombinedReceivedBlockTrackerLogEvent(records.map(_.record.array()).toArray)))
+  }
+
+  private[streaming] def deaggregate(
+      batchedEvents: Array[Array[Byte]]): Array[ReceivedBlockTrackerLogEvent] = {
+    batchedEvents.map(Utils.deserialize[ReceivedBlockTrackerLogEvent])
   }
 }
