@@ -53,7 +53,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("setNumClusters") {
     val algo = new BisectingKMeans()
-    assert(algo.getK == 20)
+    assert(algo.getK == 2)
     algo.setK(1000)
     assert(algo.getK == 1000)
   }
