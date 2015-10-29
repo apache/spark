@@ -1451,7 +1451,7 @@ private[spark] object SerDe extends Serializable {
       } catch {
         case ex: ClassCastException =>
           throw new PickleException(s"Ratings id ${obj.toString} exceeds " +
-            s"max value of ${Int.MaxValue}", ex)
+            s"max integer value of ${Int.MaxValue}", ex)
       }
     }
   }
