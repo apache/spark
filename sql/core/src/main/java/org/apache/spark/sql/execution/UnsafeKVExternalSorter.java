@@ -83,11 +83,7 @@ public final class UnsafeKVExternalSorter {
         /* initialSize */ 4096,
         pageSizeBytes);
     } else {
-      // Insert the records into the in-memory sorter.
-      // We will use the number of elements in the map as the initialSize of the
-      // UnsafeInMemorySorter. Because UnsafeInMemorySorter does not accept 0 as the initialSize,
-      // we will use 1 as its initial size if the map is empty.
-      // TODO: track pointer array memory used by this in-memory sorter! (SPARK-10474)
+      // The memory have been preserved in BytesToBytesMap
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
@@ -127,6 +123,7 @@ public final class UnsafeKVExternalSorter {
 
       sorter.spill();
       map.free();
+      taskContext.taskMemoryManager().acquireExecutionMemory(inMemSorter.getMemoryUsage(), sorter);
     }
   }
 

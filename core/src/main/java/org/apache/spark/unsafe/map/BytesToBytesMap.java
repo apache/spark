@@ -199,7 +199,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
     allocate(initialCapacity);
-    acquireMemory(longArray.memoryBlock().size());
+    // preserve the same amount of memory for UnsafeInMemorySorter
+    acquireMemory(longArray.memoryBlock().size() * 2);
   }
 
   public BytesToBytesMap(
@@ -668,7 +669,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
         long capacity = Math.min(MAX_CAPACITY,
           ByteArrayMethods.nextPowerOf2(growthStrategy.nextCapacity((int) bitset.capacity())));
         try {
-          acquireMemory(capacity * 16L);
+          // preserve the same amount of memory for UnsafeInMemorySorter
+          acquireMemory(capacity * 16L * 2);
         } catch (OutOfMemoryError e) {
           return false;
         }
@@ -701,7 +703,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       if (toGrow) {
         long usedMemory = longArray.memoryBlock().size();
         growAndRehash();
-        releaseMemory(usedMemory);
+        releaseMemory(usedMemory * 2);
       }
       return true;
     }
@@ -758,7 +760,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public void free() {
     updatePeakMemoryUsed();
     if (longArray != null) {
-      releaseMemory(longArray.memoryBlock().size());
+      releaseMemory(longArray.memoryBlock().size() * 2);
       longArray = null;
     }
     bitset = null;

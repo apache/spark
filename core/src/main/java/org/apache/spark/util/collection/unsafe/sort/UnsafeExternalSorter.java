@@ -123,10 +123,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     if (existingInMemorySorter == null) {
       this.inMemSorter =
         new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
+      acquireMemory(inMemSorter.getMemoryUsage());
     } else {
       this.inMemSorter = existingInMemorySorter;
+      // will acquire after free the map
     }
-    acquireMemory(inMemSorter.getMemoryUsage());
 
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
