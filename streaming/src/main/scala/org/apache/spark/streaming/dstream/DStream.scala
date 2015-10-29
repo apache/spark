@@ -391,12 +391,25 @@ abstract class DStream[T: ClassTag] (
     // thread-local properties in our SparkContext. Since this method may be called from another
     // DStream, we need to temporarily store any old scope and creation site information to
     // restore them later after setting our own.
-    val prevCallSite = ssc.sparkContext.getCallSite()
+    val prevCallSite = CallSite(
+      ssc.sparkContext.getLocalProperty(CallSite.SHORT_FORM),
+      ssc.sparkContext.getLocalProperty(CallSite.LONG_FORM)
+    )
     val prevScope = ssc.sparkContext.getLocalProperty(scopeKey)
     val prevScopeNoOverride = ssc.sparkContext.getLocalProperty(scopeNoOverrideKey)
 
     try {
-      ssc.sparkContext.setCallSite(creationSite)
+      if (makeRDDOpsVisibleInUI) {
+        // Unset the short form call site, so that generated RDDs get their own short form callsite
+        ssc.sparkContext.setLocalProperty(CallSite.SHORT_FORM, null)
+      } else {
+        ssc.sparkContext.setLocalProperty(CallSite.SHORT_FORM, creationSite.shortForm)
+      }
+
+      // Set the long form call site so that the stack trace shows location of DStream operation
+      // rather than the internals of Spark Streaming where RDD was generated
+      ssc.sparkContext.setLocalProperty(CallSite.LONG_FORM, creationSite.longForm)
+
       // Use the DStream's base scope for this RDD so we can (1) preserve the higher level
       // DStream operation name, and (2) share this scope with other DStreams created in the
       // same operation. Disallow nesting so that low-level Spark primitives do not show up.
@@ -642,7 +655,7 @@ abstract class DStream[T: ClassTag] (
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
     val cleanedF = context.sparkContext.clean(foreachFunc, false)
-    this.foreachRDD((r: RDD[T], t: Time) => cleanedF(r))
+    this.foreachRDD((r: RDD[T], t: Time) => cleanedF(r), makeRDDOpsVisible = true)
   }
 
   /**
@@ -653,7 +666,20 @@ abstract class DStream[T: ClassTag] (
     // because the DStream is reachable from the outer object here, and because
     // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
-    new ForEachDStream(this, context.sparkContext.clean(foreachFunc, false)).register()
+    foreachRDD(foreachFunc, makeRDDOpsVisible = true)
+  }
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   * Setting `makeRDDOpsVisible` will allow the callsites and scopes of the RDDs generated
+   * in the `foreachFunc` to be visible in the UI.
+   */
+  private[streaming] def foreachRDD(
+      cleanedForeachFunc: (RDD[T], Time) => Unit,
+      makeRDDOpsVisible: Boolean): Unit = {
+    new ForEachDStream(this,
+      context.sparkContext.clean(cleanedForeachFunc, false), makeRDDOpsVisible).register()
   }
 
   /**
@@ -744,7 +770,7 @@ abstract class DStream[T: ClassTag] (
         // scalastyle:on println
       }
     }
-    new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
+    foreachRDD(context.sparkContext.clean(foreachFunc), makeRDDOpsVisible = false)
   }
 
   /**
@@ -914,7 +940,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsObjectFile(file)
     }
-    this.foreachRDD(saveFunc)
+    this.foreachRDD(saveFunc, makeRDDOpsVisible = false)
   }
 
   /**
@@ -927,7 +953,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsTextFile(file)
     }
-    this.foreachRDD(saveFunc)
+    this.foreachRDD(saveFunc, makeRDDOpsVisible = false)
   }
 
   /**
