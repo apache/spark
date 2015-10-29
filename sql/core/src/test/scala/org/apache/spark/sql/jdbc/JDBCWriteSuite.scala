@@ -20,9 +20,11 @@ package org.apache.spark.sql.jdbc
 import java.sql.DriverManager
 import java.util.Properties
 
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -150,5 +152,56 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
     assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
     assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+  }
+
+  test("Test write with user specified database types.") {
+
+    val valueArray = Array[Row](
+      Row.apply("dave", 1, "UsA", "expert in electric cars", BigDecimal(42.33456)),
+      Row.apply("mary", 2, "USA", "Building planes", BigDecimal(42.33456)),
+      Row.apply("kathy", 3, "France", null, BigDecimal(42.33456)),
+      Row.apply("Mike", 4, null, "video games", BigDecimal(42.33456))
+    )
+
+    val (varcharIgnoreMd: Metadata, clobMd: Metadata, decimalMd: Metadata) = {
+      List("varchar_ignorecase(20)", "clob(20k)", "DECIMAL(31,2)").map(dbcoltype => {
+        val metadataBuilder = new MetadataBuilder()
+        metadataBuilder.putString("db.column.type", dbcoltype)
+        metadataBuilder.build()
+      }) match {
+        case List(a, b, c) => (a, b, c)
+      }
+    }
+
+    val schema = StructType(
+      StructField("name", StringType) ::
+        StructField("id", IntegerType) ::
+        StructField("country", StringType, true, varcharIgnoreMd) ::
+        StructField("description", StringType, true, clobMd) ::
+        StructField("expense", DecimalType(38, 18)) ::
+        Nil)
+
+    val properties = new Properties()
+    val df = sqlContext.createDataFrame(sparkContext.parallelize(valueArray), schema)
+    assert(JdbcUtils.schemaString(df, url) ==
+      s"""name TEXT , id INTEGER , country varchar_ignorecase(20) ,
+         | description clob(20k) , expense DECIMAL(38,18) """.stripMargin.replaceAll("\n", ""))
+    df.write.jdbc(url, "TEST.USERDBTYPETEST", new Properties)
+    assert(2 == sqlContext.read.jdbc(url,
+      "(select * from TEST.USERDBTYPETEST where country='usa' )", properties).count)
+    assert(1 == sqlContext.read.jdbc(url,
+      "(select * from TEST.USERDBTYPETEST where description is null)", properties).count)
+    assert(1 == sqlContext.read.jdbc(url,
+      "(select * from TEST.USERDBTYPETEST where country is null)", properties).count)
+
+    // test specifying a different decimal type for existing data frame.
+    val newDF = df.withColumn("expense", col("expense").as("expense", decimalMd))
+    assert(JdbcUtils.schemaString(newDF, url) ==
+      s"""name TEXT , id INTEGER , country varchar_ignorecase(20) ,
+         | description clob(20k) , expense DECIMAL(31,2) """.stripMargin.replaceAll("\n", ""))
+    newDF.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.USERDBTYPETEST", properties)
+    assert(4 == sqlContext.read.jdbc(url, "TEST.USERDBTYPETEST", properties).count)
+    assert(BigDecimal(sqlContext.read.jdbc(url, "TEST.USERDBTYPETEST",
+      new Properties).collect()(0).get(4).asInstanceOf[java.math.BigDecimal]) == BigDecimal(42.33))
   }
 }
