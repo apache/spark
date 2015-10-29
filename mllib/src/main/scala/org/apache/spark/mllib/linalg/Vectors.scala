@@ -126,6 +126,13 @@ sealed trait Vector extends Serializable {
   private[spark] def foreachActive(f: (Int, Double) => Unit)
 
   /**
+   * Applies a function 'f' to all elements of the vector.
+   *
+   * @param f the function that is applied for its side-effect to every element
+   */
+  private[spark] def foreach(f: (Double) => Unit)
+
+  /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
    * regardless of its value.  Note that inactive entries have value 0.
    */
@@ -581,6 +588,9 @@ class DenseVector @Since("1.0.0") (
     }
   }
 
+  @Since("1.6.0")
+  private[spark] override def foreach(f: (Double) => Unit) = { values.foreach(f) }
+
   override def hashCode(): Int = {
     var result: Int = 31 + size
     var i = 0
@@ -711,6 +721,9 @@ class SparseVector @Since("1.0.0") (
       i += 1
     }
   }
+
+  @Since("1.6.0")
+  private[spark] def foreach(f: (Double) => Unit) = { indices.foreach { i: Int => f(values(i)) } }
 
   override def hashCode(): Int = {
     var result: Int = 31 + size

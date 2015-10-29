@@ -301,6 +301,26 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(svMap.get(3) === Some(0.0))
   }
 
+  test("foreach") {
+    val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+
+    val dvArray = scala.collection.mutable.ArrayBuffer[Double]()
+    dv.foreach { (value) => dvArray += value }
+    assert(dvArray.size === 4)
+    assert(dvArray(0) === 0.0)
+    assert(dvArray(1) === 1.2)
+    assert(dvArray(2) === 3.1)
+    assert(dvArray(3) === 0.0)
+
+    val svMap = scala.collection.mutable.ArrayBuffer[Double]()
+    sv.foreach { (value) => svMap += value }
+    assert(svMap.size === 3)
+    assert(svMap(1) === 1.2)
+    assert(svMap(2) === 3.1)
+    assert(svMap(3) === 0.0)
+  }
+
   test("vector p-norm") {
     val dv = Vectors.dense(0.0, -1.2, 3.1, 0.0, -4.5, 1.9)
     val sv = Vectors.sparse(6, Seq((1, -1.2), (2, 3.1), (3, 0.0), (4, -4.5), (5, 1.9)))
