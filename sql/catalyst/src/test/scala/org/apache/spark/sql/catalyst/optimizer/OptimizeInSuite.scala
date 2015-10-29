@@ -35,7 +35,7 @@ class OptimizeInSuite extends PlanTest {
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubQueries) ::
-      Batch("ConstantFolding", Once,
+      Batch("ConstantFolding", FixedPoint(10),
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,

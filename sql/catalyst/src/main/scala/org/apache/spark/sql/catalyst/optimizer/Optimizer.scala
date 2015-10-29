@@ -420,10 +420,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 
       // If the value expression is NULL then transform the In expression to
       // Literal(null)
-      case e @ In(v, list) => v match {
-        case Cast(Literal(null, _), _) => Literal.create(null, BooleanType)
-        case _ => e
-      }
+      case In(Literal(null, _), list) => Literal.create(null, BooleanType)
 
     }
   }
