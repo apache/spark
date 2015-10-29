@@ -710,8 +710,9 @@ abstract class RDD[T: ClassTag](
    * performance API to be used carefully only if we are sure that the RDD elements are
    * serializable and don't require closure cleaning.
    *
-   * @param indicates whether the input function preserves the partitioner, which
-   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
+   * @param preservesPartitioning indicates whether the input function preserves the partitioner,
+   * which should be `false` unless this is a pair RDD and the input function doesn't modify
+   * the keys.
    */
   private[spark] def mapPartitionsInternal[U: ClassTag](
       f: Iterator[T] => Iterator[U],
