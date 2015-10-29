@@ -39,9 +39,38 @@ public class TransportFrameDecoderSuite {
 
     List<ByteBuf> buffers = new ArrayList<>();
     for (int i = 0; i < 100; i++) {
-      byte[] data = new byte[rnd.nextInt(32 * 1024)];
-      buffers.add(Unpooled.copyLong(data.length + 8));
-      buffers.add(Unpooled.wrappedBuffer(data));
+      // Create two buffers; the first one will be large enough to contain the first full
+      // frame and maybe a few bytes of the second frame.
+      byte[] data1 = new byte[1024 * (rnd.nextInt(31) + 1)];
+      byte[] data2 = new byte[1024 * (rnd.nextInt(31) + 1)];
+      int totalSize = 2 * 8 + data1.length + data2.length;
+      int size1 = 8 + data1.length + 8 * (rnd.nextInt(data2.length / 2) / 8);
+      int size2 = totalSize - size1;
+
+      assertTrue(size1 >= data1.length + 8);
+      assertTrue(size2 > 8);
+
+      ByteBuf buf1 = Unpooled.buffer(size1);
+      ByteBuf buf2 = Unpooled.buffer(size2);
+
+      buf1.writeLong(data1.length + 8);
+      buf1.writeBytes(data1);
+
+      int remaining = size1 - data1.length - 8;
+      assertTrue(remaining % 8 == 0);
+      if (remaining >= 8) {
+        buf1.writeLong(data2.length + 8);
+        remaining -= 8;
+      } else {
+        buf2.writeLong(data2.length + 8);
+      }
+
+      if (remaining > 0) {
+        buf1.writeBytes(data2, 0, remaining);
+      }
+      buf2.writeBytes(data2, remaining, data2.length - remaining);
+      buffers.add(buf1);
+      buffers.add(buf2);
     }
 
     try {
@@ -49,7 +78,7 @@ public class TransportFrameDecoderSuite {
         decoder.channelRead(ctx, buf);
       }
 
-      verify(ctx, times(buffers.size() / 2)).fireChannelRead(any(ByteBuf.class));
+      verify(ctx, times(buffers.size())).fireChannelRead(any(ByteBuf.class));
     } finally {
       for (ByteBuf buf : buffers) {
         buf.release();
