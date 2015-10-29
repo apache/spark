@@ -126,11 +126,11 @@ private[streaming] class FileBasedWriteAheadLog(
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
 
-    logFilesToRead.iterator.map { file =>
+    logFilesToRead.par.map { file =>
       logDebug(s"Creating log reader with $file")
       val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
       CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
-    }.flatten.asJava
+    }.flatten.toIterator.asJava
   }
 
   /**

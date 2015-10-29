@@ -71,4 +71,9 @@ private[streaming] object HdfsUtils {
       case _ => fs
     }
   }
+
+  def checkFileExists(path: Path, conf: Configuration): Boolean = {
+    val fs = getFileSystemForPath(path, conf)
+    fs.isFile(path)
+  }
 }

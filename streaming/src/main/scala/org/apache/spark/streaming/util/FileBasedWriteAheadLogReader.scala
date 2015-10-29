@@ -16,7 +16,7 @@
  */
 package org.apache.spark.streaming.util
 
-import java.io.{Closeable, EOFException}
+import java.io.{IOException, Closeable, EOFException}
 import java.nio.ByteBuffer
 
 import org.apache.hadoop.conf.Configuration
@@ -55,6 +55,18 @@ private[streaming] class FileBasedWriteAheadLogReader(path: String, conf: Config
           logDebug("Error reading next item, EOF reached", e)
           close()
           false
+        case e: IOException =>
+          logWarning("Error while trying to read data. If the file was deleted, " +
+            "this should be okay.", e)
+          if (HdfsUtils.checkFileExists(path, conf)) {
+            throw e
+          } else {
+            // file was deleted. This can occur when the daemon cleanup thread takes time to
+            // delete the file during recovery.
+            close()
+            false
+          }
+
         case e: Exception =>
           logWarning("Error while trying to read data from HDFS.", e)
           close()
