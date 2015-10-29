@@ -83,7 +83,9 @@ public final class UnsafeKVExternalSorter {
         /* initialSize */ 4096,
         pageSizeBytes);
     } else {
-      // The memory have been preserved in BytesToBytesMap
+      // The memory needed for UnsafeInMemorySorter should be less than longArray in map.
+      map.freeArray();
+      // The memory used by UnsafeInMemorySorter will be counted later (end of this block)
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
@@ -112,7 +114,7 @@ public final class UnsafeKVExternalSorter {
       }
 
       sorter = UnsafeExternalSorter.createWithExistingInMemorySorter(
-        taskContext.taskMemoryManager(),
+        taskMemoryManager,
         blockManager,
         taskContext,
         new KVComparator(ordering, keySchema.length()),
@@ -123,7 +125,8 @@ public final class UnsafeKVExternalSorter {
 
       sorter.spill();
       map.free();
-      taskContext.taskMemoryManager().acquireExecutionMemory(inMemSorter.getMemoryUsage(), sorter);
+      // counting the memory used UnsafeInMemorySorter
+      taskMemoryManager.acquireExecutionMemory(inMemSorter.getMemoryUsage(), sorter);
     }
   }
 

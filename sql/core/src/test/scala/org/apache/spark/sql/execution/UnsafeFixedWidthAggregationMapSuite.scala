@@ -193,10 +193,6 @@ class UnsafeFixedWidthAggregationMapSuite
     // Convert the map into a sorter
     val sorter = map.destructAndCreateExternalSorter()
 
-    withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      assert(taskMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
-    }
-
     // Add more keys to the sorter and make sure the results come out sorted.
     val additionalKeys = randomStrings(1024)
     val keyConverter = UnsafeProjection.create(groupKeySchema)
@@ -293,10 +289,6 @@ class UnsafeFixedWidthAggregationMapSuite
 
     // Convert the map into a sorter. Right now, it contains one record.
     val sorter = map.destructAndCreateExternalSorter()
-
-    withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      assert(taskMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
-    }
 
     // Add more keys to the sorter and make sure the results come out sorted.
     (1 to 4096).foreach { i =>

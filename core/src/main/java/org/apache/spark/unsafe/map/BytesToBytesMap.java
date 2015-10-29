@@ -199,8 +199,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
     allocate(initialCapacity);
-    // preserve the same amount of memory for UnsafeInMemorySorter
-    acquireMemory(longArray.memoryBlock().size() * 2);
+    acquireMemory(longArray.memoryBlock().size());
   }
 
   public BytesToBytesMap(
@@ -669,8 +668,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         long capacity = Math.min(MAX_CAPACITY,
           ByteArrayMethods.nextPowerOf2(growthStrategy.nextCapacity((int) bitset.capacity())));
         try {
-          // preserve the same amount of memory for UnsafeInMemorySorter
-          acquireMemory(capacity * 16L * 2);
+          acquireMemory(capacity * 16L);
         } catch (OutOfMemoryError e) {
           return false;
         }
@@ -703,7 +701,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       if (toGrow) {
         long usedMemory = longArray.memoryBlock().size();
         growAndRehash();
-        releaseMemory(usedMemory * 2);
+        releaseMemory(usedMemory);
       }
       return true;
     }
@@ -752,18 +750,26 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
+   * Free the memory used by longArray.
+   */
+  public void freeArray() {
+    updatePeakMemoryUsed();
+    if (longArray != null) {
+      long used = longArray.memoryBlock().size();
+      longArray = null;
+      releaseMemory(used);
+    }
+    bitset = null;
+  }
+
+  /**
    * Free all allocated memory associated with this map, including the storage for keys and values
    * as well as the hash map array itself.
    *
    * This method is idempotent and can be called multiple times.
    */
   public void free() {
-    updatePeakMemoryUsed();
-    if (longArray != null) {
-      releaseMemory(longArray.memoryBlock().size() * 2);
-      longArray = null;
-    }
-    bitset = null;
+    freeArray();
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
       MemoryBlock dataPage = dataPagesIterator.next();
