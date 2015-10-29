@@ -254,7 +254,7 @@ class StreamingContext(object):
         waiting time elapsed before returning from the method.
         @param timeout: time to wait in seconds
         """
-        self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
+        return self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
     def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
