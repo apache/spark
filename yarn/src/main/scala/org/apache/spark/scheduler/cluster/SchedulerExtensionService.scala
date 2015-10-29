@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.util.Utils
 
 /**
  * An extension service that can be loaded into a Spark YARN scheduler.
@@ -79,6 +79,7 @@ case class SchedulerExtensionServiceBinding(
  */
 private[spark] class SchedulerExtensionServices extends SchedulerExtensionService
     with Logging {
+  private var serviceOption: Option[String] = None
   private var services: List[SchedulerExtensionService] = Nil
   private val started = new AtomicBoolean(false)
   private var binding: SchedulerExtensionServiceBinding = _
@@ -103,7 +104,8 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
     logInfo(s"Starting Yarn extension services with app ${binding.applicationId}" +
       s" and attemptId $attemptId")
 
-    services = sparkContext.getConf.getOption(SchedulerExtensionServices.SPARK_YARN_SERVICES)
+    serviceOption = sparkContext.getConf.getOption(SchedulerExtensionServices.SPARK_YARN_SERVICES)
+    services = serviceOption
       .map { s =>
         s.split(",").map(_.trim()).filter(!_.isEmpty)
           .map { sClass =>
@@ -123,9 +125,7 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
    *
    * @return a list of services; Nil until the service is started
    */
-  def getServices: List[SchedulerExtensionService] = {
-    services
-  }
+  def getServices: List[SchedulerExtensionService] =  services
 
   /**
    * Stop the services; idempotent.
@@ -144,6 +144,11 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
       }
     }
   }
+
+  override def toString(): String = s"""SchedulerExtensionServices
+    |(serviceOption=$serviceOption,
+    | services=$services,
+    | started=$started)""".stripMargin
 }
 
 private[spark] object SchedulerExtensionServices {
