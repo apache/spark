@@ -63,16 +63,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _))
         if t.partitionSpec.partitionColumns.nonEmpty =>
       // We divide the filter expressions into 3 parts
-      val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
+      val partitionColumns = AttributeSet(
+        t.partitionColumns.map(c => l.output.find(_.name == c.name).get))
 
-      // TODO this is case-sensitive
-      // Only prunning the partition keys
-      val partitionFilters =
-        filters.filter(_.references.map(_.name).toSet.subsetOf(partitionColumnNames))
+      // Only pruning the partition keys
+      val partitionFilters = filters.filter(_.references.subsetOf(partitionColumns))
 
       // Only pushes down predicates that do not reference partition keys.
-      val pushedFilters =
-        filters.filter(_.references.map(_.name).toSet.intersect(partitionColumnNames).isEmpty)
+      val pushedFilters = filters.filter(_.references.intersect(partitionColumns).isEmpty)
 
       // Predicates with both partition keys and attributes
       val combineFilters = filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
