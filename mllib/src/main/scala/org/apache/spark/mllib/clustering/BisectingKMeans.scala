@@ -377,7 +377,7 @@ private[clustering] object BisectingKMeans {
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
     val bcMetric = sc.broadcast(metric)
     // pairs of cluster index and (sums, #points, sumOfSquares)
-    var stats = Map.empty[Long, (BV[Double], Double, BV[Double])]
+    var stats = Map.empty[Long, (BV[Double], Double, Double)]
 
     var subIter = 0
     var totalStd = Double.MaxValue
@@ -386,7 +386,7 @@ private[clustering] object BisectingKMeans {
     while (subIter < maxIterations && relativeError > 1e-4) {
       // calculate summary of each cluster
       val eachStats = dividableData.mapPartitions { iter =>
-        val map = mutable.Map.empty[Long, (BV[Double], Double, BV[Double])]
+        val map = mutable.Map.empty[Long, (BV[Double], Double, Double)]
         iter.foreach { case (idx, point) =>
           // calculate next index number
           val childrenCenters = Array(2 * idx, 2 * idx + 1)
@@ -399,9 +399,9 @@ private[clustering] object BisectingKMeans {
             val (sumBV, n, sumOfSquares) = map
               .getOrElse(
                 nextIndex,
-                (BSV.zeros[Double](point.size), 0.0, BSV.zeros[Double](point.size))
+                (BSV.zeros[Double](point.size), 0.0, 0.0)
               )
-            map(nextIndex) = (sumBV + point, n + 1.0, sumOfSquares + (point :* point))
+            map(nextIndex) = (sumBV + point, n + 1.0, sumOfSquares + math.pow(breezeSum(point), 2.0))
           }
         }
         map.toIterator
@@ -417,17 +417,17 @@ private[clustering] object BisectingKMeans {
       // update summary of each cluster
       stats = eachStats.toMap
 
-      totalStd = stats.map { case (idx, (sum, n, sumOfSquares)) =>
-        breezeSum((sumOfSquares :/ n) :- breezeNorm(sum :/ n, 2.0))
+      totalStd = stats.map { case (idx, (sums, n, sumOfSquares)) =>
+        (sumOfSquares / n) - math.pow(breezeSum(sums), 2.0)
       }.sum
       relativeError = math.abs(oldTotalStd - totalStd) / totalStd
       oldTotalStd = totalStd
       subIter += 1
     }
-    stats.map { case (i, (sums, rows, sumOfSquares)) =>
-      val mean = calcMean(rows.toLong, sums)
-      val variance = getVariance(rows.toLong, sums, sumOfSquares)
-      i -> new BisectingClusterStat(rows.toLong, mean, variance)
+    stats.map { case (i, (sums, n, sumOfSquares)) =>
+      val mean = calcMean(n.toLong, sums)
+      val variance = (sumOfSquares / n) - math.pow(breezeSum(sums), 2.0)
+      i -> new BisectingClusterStat(n.toLong, mean, variance)
     }
   }
 
