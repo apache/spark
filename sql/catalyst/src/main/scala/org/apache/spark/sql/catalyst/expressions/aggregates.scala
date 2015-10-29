@@ -993,7 +993,12 @@ case class StddevFunction(
 }
 
 // placeholder
-case class Kurtosis(child: Expression) extends UnaryExpression with AggregateExpression {
+case class Kurtosis(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
 
   override def nullable: Boolean = false
 
@@ -1007,7 +1012,12 @@ case class Kurtosis(child: Expression) extends UnaryExpression with AggregateExp
 }
 
 // placeholder
-case class Skewness(child: Expression) extends UnaryExpression with AggregateExpression {
+case class Skewness(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
 
   override def nullable: Boolean = false
 
@@ -1021,7 +1031,12 @@ case class Skewness(child: Expression) extends UnaryExpression with AggregateExp
 }
 
 // placeholder
-case class Variance(child: Expression) extends UnaryExpression with AggregateExpression {
+case class Variance(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
 
   override def nullable: Boolean = false
 
@@ -1035,7 +1050,12 @@ case class Variance(child: Expression) extends UnaryExpression with AggregateExp
 }
 
 // placeholder
-case class VariancePop(child: Expression) extends UnaryExpression with AggregateExpression {
+case class VariancePop(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
 
   override def nullable: Boolean = false
 
@@ -1049,7 +1069,12 @@ case class VariancePop(child: Expression) extends UnaryExpression with Aggregate
 }
 
 // placeholder
-case class VarianceSamp(child: Expression) extends UnaryExpression with AggregateExpression {
+case class VarianceSamp(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
 
   override def nullable: Boolean = false
 
