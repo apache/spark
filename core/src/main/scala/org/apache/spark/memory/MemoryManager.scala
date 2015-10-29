@@ -17,14 +17,9 @@
 
 package org.apache.spark.memory
 
-import javax.annotation.concurrent.GuardedBy
-
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.annotations.VisibleForTesting
-
-import org.apache.spark.{Logging, SparkConf, TaskContext}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
@@ -36,50 +31,35 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
  * sorts and aggregations, while storage memory refers to that used for caching and propagating
  * internal data across the cluster. There exists one MemoryManager per JVM.
  */
-private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) extends Logging {
+private[spark] abstract class MemoryManager(
+    conf: SparkConf,
+    numCores: Int,
+    maxOnHeapExecutionMemory: Long) extends Logging {
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
-  // The memory store used to evict cached blocks
-  private var _memoryStore: MemoryStore = _
-  protected def memoryStore: MemoryStore = {
-    if (_memoryStore == null) {
-      throw new IllegalArgumentException("memory store not initialized yet")
-    }
-    _memoryStore
-  }
+  // TODO(josh): think through and document thread-safety contracts
+  protected val storageMemoryPool = new StorageMemoryPool()
+  protected val onHeapExecutionMemoryPool = new ExecutionMemoryPool("on-heap execution")
+  protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool("off-heap execution")
 
-  // Amount of execution/storage memory in use, accesses must be synchronized on `this`
-  @GuardedBy("this") protected var _onHeapExecutionMemoryUsed: Long = 0
-  @GuardedBy("this") protected var _offHeapExecutionMemoryUsed: Long = 0
-  @GuardedBy("this") protected var _storageMemoryUsed: Long = 0
-  @GuardedBy("this") private[this] val onHeapExecutionMemoryArbitrator: CrossTaskMemoryArbitrator =
-    new CrossTaskMemoryArbitrator(this, maxOnHeapExecutionMemory _, "on-heap execution")
-  @GuardedBy("this") private[this] val offHeapExecutionMemoryArbitrator: CrossTaskMemoryArbitrator =
-    new CrossTaskMemoryArbitrator(this, maxOffHeapExecutionMemory _, "off-heap execution")
+  offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeapSize", 0))
+
+
+  /**
+   * Total available memory for storage, in bytes. This amount can vary over time, depending on
+   * the MemoryManager implementation.
+   * In this model, this is equivalent to the amount of memory not occupied by execution.
+   */
+  def maxStorageMemory: Long
 
   /**
    * Set the [[MemoryStore]] used by this manager to evict cached blocks.
    * This must be set after construction due to initialization ordering constraints.
    */
   final def setMemoryStore(store: MemoryStore): Unit = {
-    _memoryStore = store
+    storageMemoryPool.setMemoryStore(store)
   }
-
-  /**
-   * Total on-heap memory available for execution, in bytes.
-   */
-  def maxOnHeapExecutionMemory: Long
-
-  /**
-   * Total off-heap memory available for execution, in bytes.
-   */
-  final def maxOffHeapExecutionMemory: Long = conf.getSizeAsBytes("spark.memory.offHeapSize", 0)
-
-  /**
-   * Total available memory for storage, in bytes.
-   */
-  def maxStorageMemory: Long
 
   // TODO: avoid passing evicted blocks around to simplify method signatures (SPARK-10985)
 
@@ -91,7 +71,9 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
   def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+  }
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
@@ -106,19 +88,7 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
   def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    acquireStorageMemory(blockId, numBytes, evictedBlocks)
-  }
-
-  /**
-   * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return number of bytes successfully granted (<= N).
-   */
-  @VisibleForTesting
-  private[memory] def doAcquireExecutionMemory(
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
 
   /**
    * Try to acquire up to `numBytes` of on-heap execution memory for the current task and return the
@@ -128,29 +98,9 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    * task has a chance to ramp up to at least 1 / 2N of the total memory pool (where N is the # of
    * active tasks) before it is forced to spill. This can happen if the number of tasks increase
    * but an older task had a lot of memory already.
-   *
-   * Subclasses should override `doAcquireExecutionMemory` in order to customize the policies
-   * that control global sharing of memory between execution and storage.
    */
   private[memory]
-  final def acquireOnHeapExecutionMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
-    val memoryGranted = onHeapExecutionMemoryArbitrator.acquireMemory(numBytes, taskAttemptId)
-    if (memoryGranted > 0L) {
-      val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-      val acquired = doAcquireExecutionMemory(memoryGranted, evictedBlocks)
-      assert(acquired <= memoryGranted)
-      onHeapExecutionMemoryArbitrator.releaseMemory(memoryGranted - acquired, taskAttemptId)
-      // Register evicted blocks, if any, with the active task metrics
-      Option(TaskContext.get()).foreach { tc =>
-        val metrics = tc.taskMetrics()
-        val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
-        metrics.updatedBlocks = Some(lastUpdatedBlocks ++ evictedBlocks.toSeq)
-      }
-      acquired
-    } else {
-      0L
-    }
-  }
+  def acquireOnHeapExecutionMemory(numBytes: Long, taskAttemptId: Long): Long
 
   /**
    * Try to acquire up to `numBytes` of off-heap execution memory for the current task and return
@@ -165,51 +115,25 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
   def acquireOffHeapExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long): Long = synchronized {
-    val memoryGranted = offHeapExecutionMemoryArbitrator.acquireMemory(numBytes, taskAttemptId)
-    _offHeapExecutionMemoryUsed += memoryGranted
-    memoryGranted
-  }
-
-  @VisibleForTesting
-  private[memory] def releaseOnHeapExecutionMemory(numBytes: Long): Unit = synchronized {
-    if (numBytes > _onHeapExecutionMemoryUsed) {
-      logWarning(s"Attempted to release $numBytes bytes of on-heap execution " +
-        s"memory when we only have ${_onHeapExecutionMemoryUsed} bytes")
-      _onHeapExecutionMemoryUsed = 0
-    } else {
-      _onHeapExecutionMemoryUsed -= numBytes
-    }
-  }
-
-  @VisibleForTesting
-  private[memory] def releaseOffHeapExecutionMemory(numBytes: Long): Unit = synchronized {
-    if (numBytes > _offHeapExecutionMemoryUsed) {
-      logWarning(s"Attempted to release $numBytes bytes of off-heap execution " +
-        s"memory when we only have ${_offHeapExecutionMemoryUsed} bytes")
-      _offHeapExecutionMemoryUsed = 0
-    } else {
-      _offHeapExecutionMemoryUsed -= numBytes
-    }
+    offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
   }
 
   /**
    * Release numBytes of on-heap execution memory belonging to the given task.
    */
   private[memory]
-  final def releaseOnHeapExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
-    onHeapExecutionMemoryArbitrator.releaseMemory(numBytes, taskAttemptId)
-    releaseOnHeapExecutionMemory(numBytes)
+  def releaseOnHeapExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
+    onHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
   }
 
   /**
    * Release numBytes of off-heap execution memory belonging to the given task.
    */
   private[memory]
-  final def releaseOffHeapExecutionMemory(
+  def releaseOffHeapExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long): Unit = synchronized {
-    offHeapExecutionMemoryArbitrator.releaseMemory(numBytes, taskAttemptId)
-    releaseOffHeapExecutionMemory(numBytes)
+    offHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
   }
 
   /**
@@ -217,37 +141,28 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    * @return the number of bytes freed.
    */
   private[memory] def releaseAllExecutionMemoryForTask(taskAttemptId: Long): Long = synchronized {
-    val freedOnHeap = onHeapExecutionMemoryArbitrator.releaseAllMemoryForTask(taskAttemptId)
-    releaseOnHeapExecutionMemory(freedOnHeap)
-    val freedOffHeap = offHeapExecutionMemoryArbitrator.releaseAllMemoryForTask(taskAttemptId)
-    releaseOffHeapExecutionMemory(freedOffHeap)
-    freedOnHeap + freedOffHeap
+    onHeapExecutionMemoryPool.releaseAllMemoryForTask(taskAttemptId) +
+      offHeapExecutionMemoryPool.releaseAllMemoryForTask(taskAttemptId)
   }
 
   /**
    * Release N bytes of storage memory.
    */
   def releaseStorageMemory(numBytes: Long): Unit = synchronized {
-    if (numBytes > _storageMemoryUsed) {
-      logWarning(s"Attempted to release $numBytes bytes of storage " +
-        s"memory when we only have ${_storageMemoryUsed} bytes")
-      _storageMemoryUsed = 0
-    } else {
-      _storageMemoryUsed -= numBytes
-    }
+    storageMemoryPool.releaseMemory(numBytes)
   }
 
   /**
    * Release all storage memory acquired.
    */
-  def releaseAllStorageMemory(): Unit = synchronized {
-    _storageMemoryUsed = 0
+  final def releaseAllStorageMemory(): Unit = synchronized {
+    storageMemoryPool.releaseAllMemory()
   }
 
   /**
    * Release N bytes of unroll memory.
    */
-  def releaseUnrollMemory(numBytes: Long): Unit = synchronized {
+  final def releaseUnrollMemory(numBytes: Long): Unit = synchronized {
     releaseStorageMemory(numBytes)
   }
 
@@ -255,21 +170,22 @@ private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) exte
    * Execution memory currently in use, in bytes.
    */
   final def executionMemoryUsed: Long = synchronized {
-    _onHeapExecutionMemoryUsed
+    onHeapExecutionMemoryPool.memoryUsed + offHeapExecutionMemoryPool.memoryUsed
   }
 
   /**
    * Storage memory currently in use, in bytes.
    */
   final def storageMemoryUsed: Long = synchronized {
-    _storageMemoryUsed
+    storageMemoryPool.memoryUsed
   }
 
   /**
    * Returns the execution memory consumption, in bytes, for the given task.
    */
   private[memory] def getExecutionMemoryUsageForTask(taskAttemptId: Long): Long = synchronized {
-    onHeapExecutionMemoryArbitrator.getMemoryUsageForTask(taskAttemptId)
+    onHeapExecutionMemoryPool.getMemoryUsageForTask(taskAttemptId) +
+      offHeapExecutionMemoryPool.getMemoryUsageForTask(taskAttemptId)
   }
 
   // -- Fields related to Tungsten managed memory -------------------------------------------------

@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
-
 /**
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
  * either side can borrow memory from the other.
@@ -41,98 +40,63 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * The implication is that attempts to cache blocks may fail if execution has already eaten
  * up most of the storage space, in which case the new blocks will be evicted immediately
  * according to their respective storage levels.
+ *
+ * @param minimumStoragePoolSize Size of the storage region, in bytes.
+ *                               This region is not statically reserved; execution can borrow from
+ *                               it if necessary. Cached blocks can be evicted only if actual
+ *                               storage memory usage exceeds this region.
  */
-private[spark] class UnifiedMemoryManager(
+private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
     maxMemory: Long,
+    private val minimumStoragePoolSize: Long,
     numCores: Int)
-  extends MemoryManager(conf, numCores) {
+  extends MemoryManager(
+    conf,
+    numCores,
+    maxOnHeapExecutionMemory = maxMemory - minimumStoragePoolSize) {
 
-  def this(conf: SparkConf, numCores: Int) {
-    this(conf, UnifiedMemoryManager.getMaxMemory(conf), numCores)
+  onHeapExecutionMemoryPool.incrementPoolSize(maxMemory - minimumStoragePoolSize)
+  storageMemoryPool.incrementPoolSize(minimumStoragePoolSize)
+
+  override def maxStorageMemory: Long = {
+    maxMemory - onHeapExecutionMemoryPool.memoryUsed
   }
 
-  /**
-   * Size of the storage region, in bytes.
-   *
-   * This region is not statically reserved; execution can borrow from it if necessary.
-   * Cached blocks can be evicted only if actual storage memory usage exceeds this region.
-   */
-  private val storageRegionSize: Long = {
-    (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong
-  }
-
-  /**
-   * Total amount of memory, in bytes, not currently occupied by either execution or storage.
-   */
-  private def totalFreeMemory: Long = synchronized {
-    assert(_onHeapExecutionMemoryUsed <= maxMemory)
-    assert(_storageMemoryUsed <= maxMemory)
-    assert(_onHeapExecutionMemoryUsed + _storageMemoryUsed <= maxMemory)
-    maxMemory - _onHeapExecutionMemoryUsed - _storageMemoryUsed
-  }
-
-  /**
-   * Total available memory for execution, in bytes.
-   * In this model, this is equivalent to the amount of memory not occupied by storage.
-   */
-  override def maxOnHeapExecutionMemory: Long = synchronized {
-    maxMemory - _storageMemoryUsed
-  }
-
-  /**
-   * Total available memory for storage, in bytes.
-   * In this model, this is equivalent to the amount of memory not occupied by execution.
-   */
-  override def maxStorageMemory: Long = synchronized {
-    maxMemory - _onHeapExecutionMemoryUsed
-  }
-
-  /**
-   * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
-   *
-   * This method evicts blocks only up to the amount of memory borrowed by storage.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return number of bytes successfully granted (<= N).
-   */
-  private[memory] override def doAcquireExecutionMemory(
+  private[memory] def acquireOnHeapExecutionMemory(
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
+      taskAttemptId: Long): Long = synchronized {
     assert(numBytes >= 0)
-    val memoryBorrowedByStorage = math.max(0, _storageMemoryUsed - storageRegionSize)
+    val memoryBorrowedByStorage = math.max(0, storageMemoryPool.memoryUsed - minimumStoragePoolSize)
     // If there is not enough free memory AND storage has borrowed some execution memory,
     // then evict as much memory borrowed by storage as needed to grant this request
-    val shouldEvictStorage = totalFreeMemory < numBytes && memoryBorrowedByStorage > 0
-    if (shouldEvictStorage) {
-      val spaceToEnsure = math.min(numBytes, memoryBorrowedByStorage)
-      memoryStore.ensureFreeSpace(spaceToEnsure, evictedBlocks)
+    if (numBytes > onHeapExecutionMemoryPool.memoryFree && memoryBorrowedByStorage > 0) {
+      val spaceReclaimed =
+        storageMemoryPool.shrinkPoolByEvictingBlocks(math.min(numBytes, memoryBorrowedByStorage))
+      onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
     }
-    val bytesToGrant = math.min(numBytes, totalFreeMemory)
-    _onHeapExecutionMemoryUsed += bytesToGrant
-    bytesToGrant
+    onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
   }
 
-  /**
-   * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return whether all N bytes were successfully granted.
-   */
-  override def acquireStorageMemory(
+  override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    assert(numBytes >= 0)
-    memoryStore.ensureFreeSpace(blockId, numBytes, evictedBlocks)
-    val enoughMemory = totalFreeMemory >= numBytes
-    if (enoughMemory) {
-      _storageMemoryUsed += numBytes
-    }
-    enoughMemory
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    acquireStorageMemory(blockId, numBytes, evictedBlocks)
   }
-
 }
 
-private object UnifiedMemoryManager {
+object UnifiedMemoryManager {
+
+  def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
+    val maxMemory = getMaxMemory(conf)
+    new UnifiedMemoryManager(
+      conf,
+      maxMemory = maxMemory,
+      minimumStoragePoolSize =
+        (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong,
+      numCores = numCores)
+  }
 
   /**
    * Return the total amount of memory shared between execution and storage, in bytes.

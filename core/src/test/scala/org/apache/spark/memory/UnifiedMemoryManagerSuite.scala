@@ -34,13 +34,15 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
    * Make a [[UnifiedMemoryManager]] and a [[MemoryStore]] with limited class dependencies.
    */
   private def makeThings(maxMemory: Long): (UnifiedMemoryManager, MemoryStore) = {
-    val mm = new UnifiedMemoryManager(conf, maxMemory, numCores = 1)
+    val mm = new
+        UnifiedMemoryManager(conf, maxMemory,  minimumStoragePoolSize = maxMemory /2, numCores = 1)
     val ms = makeMemoryStore(mm)
     (mm, ms)
   }
 
   override protected def createMemoryManager(maxMemory: Long): MemoryManager = {
-    new UnifiedMemoryManager(conf, maxMemory, numCores = 1)
+    new UnifiedMemoryManager(
+      conf, maxMemory, minimumStoragePoolSize = maxMemory /2 , numCores = 1)
   }
 
   private def getStorageRegionSize(mm: UnifiedMemoryManager): Long = {
@@ -58,23 +60,24 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   test("basic execution memory") {
     val maxMemory = 1000L
+    val taskAttemptId = 0L
     val (mm, _) = makeThings(maxMemory)
     assert(mm.executionMemoryUsed === 0L)
-    assert(mm.doAcquireExecutionMemory(10L, evictedBlocks) === 10L)
+    assert(mm.acquireOnHeapExecutionMemory(10L, taskAttemptId) === 10L)
     assert(mm.executionMemoryUsed === 10L)
-    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.acquireOnHeapExecutionMemory(100L, taskAttemptId) === 100L)
     // Acquire up to the max
-    assert(mm.doAcquireExecutionMemory(1000L, evictedBlocks) === 890L)
+    assert(mm.acquireOnHeapExecutionMemory(1000L, taskAttemptId) === 890L)
     assert(mm.executionMemoryUsed === maxMemory)
-    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 0L)
+    assert(mm.acquireOnHeapExecutionMemory(1L, taskAttemptId) === 0L)
     assert(mm.executionMemoryUsed === maxMemory)
-    mm.releaseOnHeapExecutionMemory(800L)
+    mm.releaseOnHeapExecutionMemory(800L, taskAttemptId)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
-    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 1L)
+    assert(mm.acquireOnHeapExecutionMemory(1L, taskAttemptId) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
-    mm.releaseOnHeapExecutionMemory(maxMemory)
+    mm.releaseOnHeapExecutionMemory(maxMemory, taskAttemptId)
     assert(mm.executionMemoryUsed === 0L)
   }
 
@@ -118,6 +121,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   test("execution evicts storage") {
     val maxMemory = 1000L
+    val taskAttemptId = 0L
     val (mm, ms) = makeThings(maxMemory)
     // First, ensure the test classes are set up as expected
     val expectedStorageRegionSize = 500L
@@ -136,12 +140,12 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     require(mm.storageMemoryUsed > storageRegionSize,
       s"bad test: storage memory used should exceed the storage region")
     // Execution needs to request 250 bytes to evict storage memory
-    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.acquireOnHeapExecutionMemory(100L, taskAttemptId) === 100L)
     assert(mm.executionMemoryUsed === 100L)
     assert(mm.storageMemoryUsed === 750L)
     assertEnsureFreeSpaceNotCalled(ms)
     // Execution wants 200 bytes but only 150 are free, so storage is evicted
-    assert(mm.doAcquireExecutionMemory(200L, evictedBlocks) === 200L)
+    assert(mm.acquireOnHeapExecutionMemory(200L, taskAttemptId) === 200L)
     assertEnsureFreeSpaceCalled(ms, 200L)
     assert(mm.executionMemoryUsed === 300L)
     mm.releaseAllStorageMemory()
@@ -155,7 +159,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       s"bad test: storage memory used should be within the storage region")
     // Execution cannot evict storage because the latter is within the storage fraction,
     // so grant only what's remaining without evicting anything, i.e. 1000 - 300 - 400 = 300
-    assert(mm.doAcquireExecutionMemory(400L, evictedBlocks) === 300L)
+    assert(mm.acquireOnHeapExecutionMemory(400L, taskAttemptId) === 300L)
     assert(mm.executionMemoryUsed === 600L)
     assert(mm.storageMemoryUsed === 400L)
     assertEnsureFreeSpaceNotCalled(ms)
@@ -163,6 +167,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   test("storage does not evict execution") {
     val maxMemory = 1000L
+    val taskAttemptId = 0L
     val (mm, ms) = makeThings(maxMemory)
     // First, ensure the test classes are set up as expected
     val expectedStorageRegionSize = 500L
@@ -174,7 +179,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     require(executionRegionSize === expectedExecutionRegionSize,
       "bad test: storage region size is unexpected")
     // Acquire enough execution memory to exceed the execution region
-    assert(mm.doAcquireExecutionMemory(800L, evictedBlocks) === 800L)
+    assert(mm.acquireOnHeapExecutionMemory(800L, taskAttemptId) === 800L)
     assert(mm.executionMemoryUsed === 800L)
     assert(mm.storageMemoryUsed === 0L)
     assertEnsureFreeSpaceNotCalled(ms)
@@ -189,10 +194,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.executionMemoryUsed === 800L)
     assert(mm.storageMemoryUsed === 100L)
     assertEnsureFreeSpaceCalled(ms, 250L)
-    mm.releaseOnHeapExecutionMemory(maxMemory)
+    mm.releaseOnHeapExecutionMemory(maxMemory, taskAttemptId)
     mm.releaseStorageMemory(maxMemory)
     // Acquire some execution memory again, but this time keep it within the execution region
-    assert(mm.doAcquireExecutionMemory(200L, evictedBlocks) === 200L)
+    assert(mm.acquireOnHeapExecutionMemory(200L, taskAttemptId) === 200L)
     assert(mm.executionMemoryUsed === 200L)
     assert(mm.storageMemoryUsed === 0L)
     assertEnsureFreeSpaceNotCalled(ms)

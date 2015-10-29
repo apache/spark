@@ -24,7 +24,6 @@ import org.mockito.Mockito.when
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, TestBlockId}
 
-
 class StaticMemoryManagerSuite extends MemoryManagerSuite {
   private val conf = new SparkConf().set("spark.storage.unrollFraction", "0.4")
   private val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
@@ -51,23 +50,24 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
 
   test("basic execution memory") {
     val maxExecutionMem = 1000L
+    val taskAttemptId = 0L
     val (mm, _) = makeThings(maxExecutionMem, Long.MaxValue)
     assert(mm.executionMemoryUsed === 0L)
-    assert(mm.doAcquireExecutionMemory(10L, evictedBlocks) === 10L)
+    assert(mm.acquireOnHeapExecutionMemory(10L, taskAttemptId) === 10L)
     assert(mm.executionMemoryUsed === 10L)
-    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.acquireOnHeapExecutionMemory(100L, taskAttemptId) === 100L)
     // Acquire up to the max
-    assert(mm.doAcquireExecutionMemory(1000L, evictedBlocks) === 890L)
+    assert(mm.acquireOnHeapExecutionMemory(1000L, taskAttemptId) === 890L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 0L)
+    assert(mm.acquireOnHeapExecutionMemory(1L, taskAttemptId) === 0L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    mm.releaseOnHeapExecutionMemory(800L)
+    mm.releaseOnHeapExecutionMemory(800L, taskAttemptId)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
-    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 1L)
+    assert(mm.acquireOnHeapExecutionMemory(1L, taskAttemptId) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
-    mm.releaseOnHeapExecutionMemory(maxExecutionMem)
+    mm.releaseOnHeapExecutionMemory(maxExecutionMem, taskAttemptId)
     assert(mm.executionMemoryUsed === 0L)
   }
 
@@ -113,13 +113,14 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
   test("execution and storage isolation") {
     val maxExecutionMem = 200L
     val maxStorageMem = 1000L
+    val taskAttemptId = 0L
     val dummyBlock = TestBlockId("ain't nobody love like you do")
     val (mm, ms) = makeThings(maxExecutionMem, maxStorageMem)
     // Only execution memory should increase
-    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.acquireOnHeapExecutionMemory(100L, taskAttemptId) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 100L)
-    assert(mm.doAcquireExecutionMemory(1000L, evictedBlocks) === 100L)
+    assert(mm.acquireOnHeapExecutionMemory(1000L, taskAttemptId) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 200L)
     // Only storage memory should increase
@@ -128,7 +129,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 200L)
     // Only execution memory should be released
-    mm.releaseOnHeapExecutionMemory(133L)
+    mm.releaseOnHeapExecutionMemory(133L, taskAttemptId)
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 67L)
     // Only storage memory should be released

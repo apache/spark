@@ -17,8 +17,6 @@
 
 package org.apache.spark.memory
 
-import javax.annotation.concurrent.{GuardedBy, ThreadSafe}
-
 import scala.collection.mutable
 
 import org.apache.spark.{Logging, SparkException}
@@ -30,28 +28,28 @@ import org.apache.spark.{Logging, SparkException}
  * to a large amount first and then causing others to spill to disk repeatedly.
  *
  * If there are N tasks, it ensures that each task can acquire at least 1 / 2N of the memory
- * before it has to spill, and at most 1 / N. Because N varies dynamically, we keep track of the
- * set of active tasks and redo the calculations of 1 / 2N and 1 / N in waiting tasks whenever
+ * before it has to spill, and at most 1 / N. Because N varies dynamically,fting tasks whenever
  * this set changes. This is all done by synchronizing access to mutable state and using wait() and
  * notifyAll() to signal changes to callers. Prior to Spark 1.6, this arbitration of memory across
  * tasks was performed by the ShuffleMemoryManager.
  */
-@ThreadSafe
-private[memory] class CrossTaskMemoryArbitrator(
-    memoryManager: MemoryManager,
-    maxMemory: () => Long,
-    poolName: String) extends Logging {
+class ExecutionMemoryPool(poolName: String) extends MemoryPool with Logging {
+
+  // TODO(josh): document and consider thread-safety contracts
 
   /**
    * Map from taskAttemptId -> memory consumption in bytes
    */
-  @GuardedBy("memoryManager")
   private val memoryForTask = new mutable.HashMap[Long, Long]()
+
+  override def memoryUsed: Long = synchronized {
+    memoryForTask.values.sum
+  }
 
   /**
    * Returns the memory consumption, in bytes, for the given task.
    */
-  def getMemoryUsageForTask(taskAttemptId: Long): Long = memoryManager.synchronized {
+  def getMemoryUsageForTask(taskAttemptId: Long): Long = synchronized {
     memoryForTask.getOrElse(taskAttemptId, 0L)
   }
 
@@ -66,7 +64,7 @@ private[memory] class CrossTaskMemoryArbitrator(
    *
    * @return the number of bytes granted to the task.
    */
-  def acquireMemory(numBytes: Long, taskAttemptId: Long): Long = memoryManager.synchronized {
+  def acquireMemory(numBytes: Long, taskAttemptId: Long): Long = synchronized {
     assert(numBytes > 0, s"invalid number of bytes requested: $numBytes")
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
@@ -74,7 +72,7 @@ private[memory] class CrossTaskMemoryArbitrator(
     if (!memoryForTask.contains(taskAttemptId)) {
       memoryForTask(taskAttemptId) = 0L
       // This will later cause waiting tasks to wake up and check numTasks again
-      memoryManager.notifyAll()
+      notifyAll()
     }
 
     // Keep looping until we're either sure that we don't want to grant this request (because this
@@ -84,26 +82,25 @@ private[memory] class CrossTaskMemoryArbitrator(
     while (true) {
       val numActiveTasks = memoryForTask.keys.size
       val curMem = memoryForTask(taskAttemptId)
-      val freeMemory = maxMemory() - memoryForTask.values.sum
 
       // How much we can grant this task; don't let it grow to more than 1 / numActiveTasks;
       // don't let it be negative
       val maxToGrant =
-        math.min(numBytes, math.max(0, (maxMemory() / numActiveTasks) - curMem))
+        math.min(numBytes, math.max(0, (poolSize / numActiveTasks) - curMem))
       // Only give it as much memory as is free, which might be none if it reached 1 / numTasks
-      val toGrant = math.min(maxToGrant, freeMemory)
+      val toGrant = math.min(maxToGrant, memoryFree)
 
-      if (curMem < maxMemory() / (2 * numActiveTasks)) {
+      if (curMem < poolSize / (2 * numActiveTasks)) {
         // We want to let each task get at least 1 / (2 * numActiveTasks) before blocking;
         // if we can't give it this much now, wait for other tasks to free up memory
         // (this happens if older tasks allocated lots of memory before N grew)
-        if (freeMemory >= math.min(maxToGrant, maxMemory() / (2 * numActiveTasks) - curMem)) {
+        if (memoryFree >= math.min(maxToGrant, poolSize / (2 * numActiveTasks) - curMem)) {
           memoryForTask(taskAttemptId) += toGrant
           return toGrant
         } else {
           logInfo(
             s"TID $taskAttemptId waiting for at least 1/2N of $poolName pool to be free")
-          memoryManager.wait()
+          wait()
         }
       } else {
         memoryForTask(taskAttemptId) += toGrant
@@ -113,7 +110,7 @@ private[memory] class CrossTaskMemoryArbitrator(
     0L  // Never reached
   }
 
-  def releaseMemory(numBytes: Long, taskAttemptId: Long): Unit = memoryManager.synchronized {
+  def releaseMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
     val curMem = memoryForTask.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
       throw new SparkException(
@@ -126,16 +123,17 @@ private[memory] class CrossTaskMemoryArbitrator(
         memoryForTask.remove(taskAttemptId)
       }
     }
-    memoryManager.notifyAll() // Notify waiters in acquireMemory() that memory has been freed
+    notifyAll() // Notify waiters in acquireMemory() that memory has been freed
   }
 
   /**
    * Release all memory for the given task and mark it as inactive (e.g. when a task ends).
    * @return the number of bytes freed.
    */
-  def releaseAllMemoryForTask(taskAttemptId: Long): Long = memoryManager.synchronized {
+  def releaseAllMemoryForTask(taskAttemptId: Long): Long = synchronized {
     val numBytesToFree = getMemoryUsageForTask(taskAttemptId)
     releaseMemory(numBytesToFree, taskAttemptId)
     numBytesToFree
   }
+
 }

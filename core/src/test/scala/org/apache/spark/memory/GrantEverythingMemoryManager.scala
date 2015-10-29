@@ -22,27 +22,22 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
-class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 1) {
-  private[memory] override def doAcquireExecutionMemory(
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
+class GrantEverythingMemoryManager(conf: SparkConf)
+    extends MemoryManager(conf, numCores = 1, Long.MaxValue) {
+  override private[memory] def acquireOnHeapExecutionMemory(
+    numBytes: Long,
+    taskAttemptId: Long): Long = {
     if (oom) {
       oom = false
       0
     } else {
-      _onHeapExecutionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
       numBytes
     }
   }
-  // TODO(josh): this code is becoming very confusing; refactoring needed
-  override def acquireOffHeapExecutionMemory(numBytes: Long, taskId: Long): Long = synchronized {
-    if (oom) {
-      oom = false
-      0
-    } else {
-      _offHeapExecutionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
-      numBytes
-    }
+  override private[memory] def acquireOffHeapExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long): Long = {
+    acquireOnHeapExecutionMemory(numBytes, taskAttemptId)
   }
   override def acquireStorageMemory(
       blockId: BlockId,
@@ -53,11 +48,11 @@ class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, 
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
   override def releaseStorageMemory(numBytes: Long): Unit = { }
-  override def maxOnHeapExecutionMemory: Long = Long.MaxValue
+  override private[memory] def releaseOnHeapExecutionMemory(numBytes: Long, tid: Long): Unit = {}
+  override private[memory] def releaseOffHeapExecutionMemory(numBytes: Long, tid: Long): Unit = {}
   override def maxStorageMemory: Long = Long.MaxValue
 
   private var oom = false
-
   def markExecutionAsOutOfMemory(): Unit = {
     oom = true
   }
