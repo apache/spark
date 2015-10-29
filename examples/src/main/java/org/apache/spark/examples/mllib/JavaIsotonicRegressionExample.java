@@ -16,12 +16,12 @@
  */
 package org.apache.spark.examples.mllib;
 
-// $example on$
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.IsotonicRegression;
@@ -32,59 +32,60 @@ import scala.Tuple3;
 
 public class JavaIsotonicRegressionExample {
 
-    public static void main(String[] args) {
+  public static void main(String[] args) {
+    SparkConf sparkConf = new SparkConf().setAppName("JavaIsotonicRegressionExample");
+    JavaSparkContext sc = new JavaSparkContext(sparkConf);
+    JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 
-        SparkConf sparkConf = new SparkConf().setAppName("JavaIsotonicRegressionExample");
-        JavaSparkContext sc = new JavaSparkContext(sparkConf);
-        JavaSparkContext jsc = new JavaSparkContext(sparkConf);
+    // $example on$
+    JavaRDD<String> data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt");
 
-        // $example on$
-        JavaRDD<String> data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt");
+    // Create label, feature, weight tuples from input data with weight set to default value 1.0.
+    JavaRDD<Tuple3<Double, Double, Double>> parsedData = data.map(
+      new Function<String, Tuple3<Double, Double, Double>>() {
+        public Tuple3<Double, Double, Double> call(String line) {
+          String[] parts = line.split(",");
+          return new Tuple3<>(new Double(parts[0]), new Double(parts[1]), 1.0);
+        }
+      }
+    );
 
-        // Create label, feature, weight tuples from input data with weight set to default value 1.0.
-        JavaRDD<Tuple3<Double, Double, Double>> parsedData = data.map(
-                new Function<String, Tuple3<Double, Double, Double>>() {
-                    public Tuple3<Double, Double, Double> call(String line) {
-                        String[] parts = line.split(",");
-                        return new Tuple3<>(new Double(parts[0]), new Double(parts[1]), 1.0);
-                    }
-                }
-        );
+    // Split data into training (60%) and test (40%) sets.
+    JavaRDD<Tuple3<Double, Double, Double>>[] splits = parsedData.randomSplit(new double[]{0.6, 0.4}, 11L);
+    JavaRDD<Tuple3<Double, Double, Double>> training = splits[0];
+    JavaRDD<Tuple3<Double, Double, Double>> test = splits[1];
 
-        // Split data into training (60%) and test (40%) sets.
-        JavaRDD<Tuple3<Double, Double, Double>>[] splits = parsedData.randomSplit(new double[] {0.6, 0.4}, 11L);
-        JavaRDD<Tuple3<Double, Double, Double>> training = splits[0];
-        JavaRDD<Tuple3<Double, Double, Double>> test = splits[1];
+    // Create isotonic regression model from training data.
+    // Isotonic parameter defaults to true so it is only shown for demonstration
+    final IsotonicRegressionModel model = new IsotonicRegression().setIsotonic(true).run(training);
 
-        // Create isotonic regression model from training data.
-        // Isotonic parameter defaults to true so it is only shown for demonstration
-        final IsotonicRegressionModel model = new IsotonicRegression().setIsotonic(true).run(training);
+    // Create tuples of predicted and real labels.
+    JavaPairRDD<Double, Double> predictionAndLabel = test.mapToPair(
+      new PairFunction<Tuple3<Double, Double, Double>, Double, Double>() {
+        @Override
+        public Tuple2<Double, Double> call(Tuple3<Double, Double, Double> point) {
+          Double predictedLabel = model.predict(point._2());
+          return new Tuple2<Double, Double>(predictedLabel, point._1());
+        }
+      }
+    );
 
-        // Create tuples of predicted and real labels.
-        JavaPairRDD<Double, Double> predictionAndLabel = test.mapToPair(
-                new PairFunction<Tuple3<Double, Double, Double>, Double, Double>() {
-                    @Override public Tuple2<Double, Double> call(Tuple3<Double, Double, Double> point) {
-                        Double predictedLabel = model.predict(point._2());
-                        return new Tuple2<Double, Double>(predictedLabel, point._1());
-                    }
-                }
-        );
+    // Calculate mean squared error between predicted and real labels.
+    Double meanSquaredError = new JavaDoubleRDD(predictionAndLabel.map(
+      new Function<Tuple2<Double, Double>, Object>() {
+        @Override
+        public Object call(Tuple2<Double, Double> pl) {
+          return Math.pow(pl._1() - pl._2(), 2);
+        }
+      }
+    ).rdd()).mean();
 
-        // Calculate mean squared error between predicted and real labels.
-        Double meanSquaredError = new JavaDoubleRDD(predictionAndLabel.map(
-                new Function<Tuple2<Double, Double>, Object>() {
-                    @Override public Object call(Tuple2<Double, Double> pl) {
-                        return Math.pow(pl._1() - pl._2(), 2);
-                    }
-                }
-        ).rdd()).mean();
+    System.out.println("Mean Squared Error = " + meanSquaredError);
 
-        System.out.println("Mean Squared Error = " + meanSquaredError);
+    // Save and load model
+    model.save(sc.sc(), "myModelPath");
+    IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(sc.sc(), "myModelPath");
+    // $example off$
 
-        // Save and load model
-        model.save(sc.sc(), "myModelPath");
-        IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(sc.sc(), "myModelPath");
-        // $example off$
-
-    }
+  }
 }

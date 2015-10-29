@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 
 // $example on$
 import org.apache.spark.mllib.regression.{IsotonicRegression, IsotonicRegressionModel}
@@ -56,7 +56,7 @@ object IsotonicRegressionExample {
     }
 
     // Calculate mean squared error between predicted and real labels.
-    val meanSquaredError = predictionAndLabel.map{case(p, l) => math.pow((p - l), 2)}.mean()
+    val meanSquaredError = predictionAndLabel.map { case (p, l) => math.pow((p - l), 2) }.mean()
     println("Mean Squared Error = " + meanSquaredError)
 
     // Save and load model

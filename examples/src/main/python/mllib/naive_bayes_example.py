@@ -52,7 +52,7 @@ if __name__ == "__main__":
     # Make prediction and test accuracy.
     predictionAndLabel = test.map(lambda p: (model.predict(p.features), p.label))
     accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
-    
+
     # Save and load model
     model.save(sc, "myModelPath")
     sameModel = NaiveBayesModel.load(sc, "myModelPath")
