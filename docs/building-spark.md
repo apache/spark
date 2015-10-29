@@ -38,7 +38,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `make-distribution.sh` in the project root directory. It can be configured 
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./make-distribution.sh --name custom-spark --tgz -Phadoop-2.4 -Pyarn
+    ./make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
     
 For more information on usage, run `./make-distribution.sh --help`
 
