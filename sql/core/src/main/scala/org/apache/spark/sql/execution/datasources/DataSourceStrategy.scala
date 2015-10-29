@@ -208,13 +208,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       }
 
       val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[InternalRow]) => {
+        // Note that we can't use an `UnsafeRowJoiner` to replace the following `JoinedRow` and
+        // `UnsafeProjection`.  Because the projection may also adjust column order.
         val mutableJoinedRow = new JoinedRow()
         val unsafePartitionValues = UnsafeProjection.create(partitionColumnSchema)(partitionValues)
         val unsafeProjection =
           UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
 
-        iterator.map { dataRow =>
-          val unsafeDataRow = dataRow.asInstanceOf[UnsafeRow]
+        iterator.asInstanceOf[Iterator[UnsafeRow]].map { unsafeDataRow =>
           unsafeProjection(mutableJoinedRow(unsafeDataRow, unsafePartitionValues))
         }
       }
