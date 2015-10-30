@@ -445,40 +445,41 @@ private[yarn] class YarnAllocator(
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit.
         val exitStatus = completedContainer.getExitStatus
-        val (isNormalExit, containerExitReason) = exitStatus match {
+        val (exitCausedByApp, containerExitReason) = exitStatus match {
           case ContainerExitStatus.SUCCESS =>
-            (true, s"Executor for container $containerId exited normally.")
+            (false, s"Executor for container $containerId exited because of a YARN event (e.g., " +
+              "pre-emption) and not because of an error in the running job.")
           case ContainerExitStatus.PREEMPTED =>
-            // Preemption should count as a normal exit, since YARN preempts containers merely
-            // to do resource sharing, and tasks that fail due to preempted executors could
+            // Preemption is not the fault of the running tasks, since YARN preempts containers
+            // merely to do resource sharing, and tasks that fail due to preempted executors could
             // just as easily finish on any other executor. See SPARK-8167.
-            (true, s"Container ${containerId}${onHostStr} was preempted.")
+            (false, s"Container ${containerId}${onHostStr} was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
           case VMEM_EXCEEDED_EXIT_CODE =>
-            (false, memLimitExceededLogMessage(
+            (true, memLimitExceededLogMessage(
               completedContainer.getDiagnostics,
               VMEM_EXCEEDED_PATTERN))
           case PMEM_EXCEEDED_EXIT_CODE =>
-            (false, memLimitExceededLogMessage(
+            (true, memLimitExceededLogMessage(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
           case unknown =>
             numExecutorsFailed += 1
-            (false, "Container marked as failed: " + containerId + onHostStr +
+            (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
               ". Diagnostics: " + completedContainer.getDiagnostics)
 
         }
-        if (isNormalExit) {
-          logInfo(containerExitReason)
-        } else {
+        if (exitCausedByApp) {
           logWarning(containerExitReason)
+        } else {
+          logInfo(containerExitReason)
         }
-        ExecutorExited(0, isNormalExit, containerExitReason)
+        ExecutorExited(0, exitCausedByApp, containerExitReason)
       } else {
         // If we have already released this container, then it must mean
         // that the driver has explicitly requested it to be killed
-        ExecutorExited(completedContainer.getExitStatus, isNormalExit = true,
+        ExecutorExited(completedContainer.getExitStatus, exitCausedByApp = false,
           s"Container $containerId exited from explicit termination request.")
       }
 

@@ -22,19 +22,23 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * A factory for constructing encoders that convert external row to/from the Spark SQL
+ * internal binary representation.
+ */
 object RowEncoder {
-
-  def apply(schema: StructType): ClassEncoder[Row] = {
+  def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val extractExpressions = extractorsFor(inputObject, schema)
     val constructExpression = constructorFor(schema)
-    new ClassEncoder[Row](
+    new ExpressionEncoder[Row](
       schema,
+      flat = false,
       extractExpressions.asInstanceOf[CreateStruct].children,
       constructExpression,
       ClassTag(cls))
@@ -136,7 +140,7 @@ object RowEncoder {
         constructorFor(BoundReference(i, f.dataType, f.nullable), f.dataType)
       )
     }
-    CreateRow(fields)
+    CreateExternalRow(fields)
   }
 
   private def constructorFor(input: Expression, dataType: DataType): Expression = dataType match {
@@ -195,7 +199,7 @@ object RowEncoder {
           Literal.create(null, externalDataTypeFor(f.dataType)),
           constructorFor(getField(input, i, f.dataType), f.dataType))
       }
-      CreateRow(convertedFields)
+      CreateExternalRow(convertedFields)
   }
 
   private def getField(
