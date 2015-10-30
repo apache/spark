@@ -21,6 +21,8 @@ import scala.collection.JavaConversions._
 
 import java.io._
 import java.util.{ArrayList => JArrayList}
+import org.apache.spark.sql.AnalysisException
+
 
 import jline.{ConsoleReader, History}
 
@@ -276,19 +278,23 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           driver.init()
           val out = sessionState.out
+          val err = sessionState.err
           val start: Long = System.currentTimeMillis()
           if (sessionState.getIsVerbose) {
             out.println(cmd)
           }
-          val rc = driver.run(cmd)
+          val rcWrapper = driver.runWrapper(cmd)
           val end = System.currentTimeMillis()
           val timeTaken: Double = (end - start) / 1000.0
 
-          ret = rc.getResponseCode
+          ret = rcWrapper.rc.getResponseCode
           if (ret != 0) {
-            console.printError(rc.getErrorMessage())
-            driver.close()
-            return ret
+            // For analysis exception, only the error is printed out to the console.
+            rcWrapper.cause match {
+              case e : AnalysisException =>
+                err.println(s"""Error in query: ${e.getMessage}""")
+              case _ => err.println(rcWrapper.rc.getErrorMessage())
+            }
           }
 
           val res = new JArrayList[String]()
