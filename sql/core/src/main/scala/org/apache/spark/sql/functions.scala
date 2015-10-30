@@ -327,7 +327,7 @@ object functions {
   def skewness(columnName: String): Column = skewness(Column(columnName))
 
   /**
-   * Aggregate function: returns the unbiased sample standard deviation of
+   * Aggregate function: returns the population standard deviation of
    * the expression in a group.
    *
    * @group agg_funcs
@@ -336,7 +336,7 @@ object functions {
   def stddev(e: Column): Column = Stddev(e.expr)
 
   /**
-   * Aggregate function: returns the unbiased sample standard deviation of
+   * Aggregate function: returns the population standard deviation of
    * the expression in a group.
    *
    * @group agg_funcs

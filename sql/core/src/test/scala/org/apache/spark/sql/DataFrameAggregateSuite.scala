@@ -176,7 +176,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("stddev") {
-    val testData2ADev = math.sqrt(4/5.0)
+    val testData2ADev = math.sqrt(4 / 6.0)
 
     checkAnswer(
       testData2.agg(stddev('a)),
@@ -184,11 +184,11 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       testData2.agg(stddev_pop('a)),
-      Row(math.sqrt(4/6.0)))
+      Row(testData2ADev))
 
     checkAnswer(
       testData2.agg(stddev_samp('a)),
-      Row(testData2ADev))
+      Row(math.sqrt(4 / 5.0))
   }
 
   test("zero stddev") {

@@ -316,7 +316,7 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Compute the sample standard deviation for each numeric columns for each group.
+   * Compute the population standard deviation for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the stddev for them.
    *
@@ -364,7 +364,7 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Compute the sample variance for each numeric columns for each group.
+   * Compute the population variance for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the variance for them.
    *
