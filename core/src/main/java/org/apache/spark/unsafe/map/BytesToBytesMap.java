@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkEnv;
-import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -40,7 +39,6 @@ import org.apache.spark.unsafe.bitset.BitSet;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryLocation;
-import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
 
@@ -175,6 +173,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private final BlockManager blockManager;
   private volatile MapIterator destructiveIterator = null;
+  private LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
@@ -243,7 +242,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
     // If this iterator destructive or not. When it is true, it frees each page as it moves onto
     // next one.
     private boolean destructive = false;
-    private LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
     private UnsafeSorterSpillReader reader = null;
 
     private MapIterator(int numRecords, Location loc, boolean destructive) {
@@ -293,6 +291,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     @Override
     public boolean hasNext() {
+      if (numRecords == 0) {
+        if (reader != null) {
+          // remove the spill file from disk
+          File file = spillWriters.removeFirst().getFile();
+          if (file != null && file.exists()) {
+            if (!file.delete()) {
+              logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+            }
+          }
+        }
+      }
       return numRecords > 0;
     }
 
@@ -355,21 +364,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
           }
           writer.close();
           spillWriters.add(writer);
-          if (TaskContext.get() != null) {
-            TaskContext.get().addTaskCompletionListener(
-              new TaskCompletionListener() {
-                @Override
-                public void onTaskCompletion(TaskContext context) {
-                  File file = writer.getFile();
-                  if (file != null && file.exists()) {
-                    if (!file.delete()) {
-                      logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
-                    }
-                  }
-                }
-              }
-            );
-          }
 
           dataPages.removeLast();
           released += block.size();
@@ -774,6 +768,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
       freePage(dataPage);
     }
     assert(dataPages.isEmpty());
+
+    while (!spillWriters.isEmpty()) {
+      File file = spillWriters.removeFirst().getFile();
+      if (file != null && file.exists()) {
+        if (!file.delete()) {
+          logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+        }
+      }
+    }
   }
 
   public TaskMemoryManager getTaskMemoryManager() {

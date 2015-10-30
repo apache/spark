@@ -556,7 +556,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       for (i = 0; i < 100; i++) {
         iter2.next();
       }
-      Assert.assertTrue(iter2.spill(1024) > 1024);
+      Assert.assertTrue(iter2.spill(1024) >= 1024);
       for (i = 100; i < 1024; i++) {
         iter2.next();
       }
