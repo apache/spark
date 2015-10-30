@@ -37,7 +37,6 @@ public class JavaIsotonicRegressionExample {
     SparkConf sparkConf = new SparkConf().setAppName("JavaIsotonicRegressionExample");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
     JavaSparkContext jsc = new JavaSparkContext(sparkConf);
-
     // $example on$
     JavaRDD<String> data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt");
 
@@ -80,13 +79,11 @@ public class JavaIsotonicRegressionExample {
         }
       }
     ).rdd()).mean();
-
     System.out.println("Mean Squared Error = " + meanSquaredError);
 
     // Save and load model
     model.save(sc.sc(), "myModelPath");
     IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(sc.sc(), "myModelPath");
     // $example off$
-
   }
 }

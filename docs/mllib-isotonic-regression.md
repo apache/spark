@@ -63,7 +63,6 @@ Refer to the [`IsotonicRegression` Scala docs](api/scala/index.html#org.apache.s
 
 {% include_example scala/org/apache/spark/examples/mllib/IsotonicRegressionExample.scala %}
 </div>
-
 <div data-lang="java" markdown="1">
 Data are read from a file where each line has a format label,feature
 i.e. 4710.28,500.00. The data are split to training and testing set.
@@ -74,7 +73,6 @@ Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/mllib/re
 
 {% include_example java/org/apache/spark/examples/mllib/JavaIsotonicRegressionExample.java %}
 </div>
-
 <div data-lang="python" markdown="1">
 Data are read from a file where each line has a format label,feature
 i.e. 4710.28,500.00. The data are split to training and testing set.
@@ -84,6 +82,5 @@ labels and real labels in the test set.
 Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.IsotonicRegression) and [`IsotonicRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.IsotonicRegressionModel) for more details on the API.
 
 {% include_example python/mllib/isotonic_regression_example.py %}
-
 </div>
 </div>

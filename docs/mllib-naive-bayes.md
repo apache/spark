@@ -42,7 +42,6 @@ Refer to the [`NaiveBayes` Scala docs](api/scala/index.html#org.apache.spark.mll
 
 {% include_example scala/org/apache/spark/examples/mllib/NaiveBayesExample.scala %}
 </div>
-
 <div data-lang="java" markdown="1">
 
 [NaiveBayes](api/java/org/apache/spark/mllib/classification/NaiveBayes.html) implements
@@ -56,7 +55,6 @@ Refer to the [`NaiveBayes` Java docs](api/java/org/apache/spark/mllib/classifica
 
 {% include_example java/org/apache/spark/examples/mllib/JavaNaiveBayesExample.java %}
 </div>
-
 <div data-lang="python" markdown="1">
 
 [NaiveBayes](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayes) implements multinomial
@@ -71,6 +69,5 @@ Note that the Python API does not yet support model save/load but will in the fu
 Refer to the [`NaiveBayes` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayes) and [`NaiveBayesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayesModel) for more details on the API.
 
 {% include_example python/mllib/naive_bayes_example.py %}
-
 </div>
 </div>

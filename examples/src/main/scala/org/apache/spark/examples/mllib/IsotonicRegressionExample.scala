@@ -29,7 +29,6 @@ object IsotonicRegressionExample {
 
     val conf = new SparkConf().setAppName("IsotonicRegressionExample")
     val sc = new SparkContext(conf)
-
     // $example on$
     val data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt")
 
@@ -61,9 +60,7 @@ object IsotonicRegressionExample {
     // Save and load model
     model.save(sc, "myModelPath")
     val sameModel = IsotonicRegressionModel.load(sc, "myModelPath")
-
     // $example off$
-
   }
 }
 // scalastyle:on println
