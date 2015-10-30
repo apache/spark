@@ -131,12 +131,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          as.numeric.data.V3. 7.199082
        */
       val interceptR = 6.298698
-      val weightsR = Vectors.dense(4.700706, 7.199082)
+      val coefficientsR = Vectors.dense(4.700706, 7.199082)
 
       assert(model1.intercept ~== interceptR relTol 1E-3)
-      assert(model1.coefficients ~= weightsR relTol 1E-3)
+      assert(model1.coefficients ~= coefficientsR relTol 1E-3)
       assert(model2.intercept ~== interceptR relTol 1E-3)
-      assert(model2.coefficients ~= weightsR relTol 1E-3)
+      assert(model2.coefficients ~= coefficientsR relTol 1E-3)
 
       model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
@@ -169,28 +169,28 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          as.numeric.data.V2. 6.995908
          as.numeric.data.V3. 5.275131
        */
-      val weightsR = Vectors.dense(6.995908, 5.275131)
+      val coefficientsR = Vectors.dense(6.995908, 5.275131)
 
       assert(model1.intercept ~== 0 absTol 1E-3)
-      assert(model1.coefficients ~= weightsR relTol 1E-3)
+      assert(model1.coefficients ~= coefficientsR relTol 1E-3)
       assert(model2.intercept ~== 0 absTol 1E-3)
-      assert(model2.coefficients ~= weightsR relTol 1E-3)
+      assert(model2.coefficients ~= coefficientsR relTol 1E-3)
 
       /*
          Then again with the data with no intercept:
-         > weightsWithoutIntercept
+         > coefficientsWithourIntercept
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
          (Intercept)           .
          as.numeric.data3.V2. 4.70011
          as.numeric.data3.V3. 7.19943
        */
-      val weightsWithoutInterceptR = Vectors.dense(4.70011, 7.19943)
+      val coefficientsWithourInterceptR = Vectors.dense(4.70011, 7.19943)
 
       assert(modelWithoutIntercept1.intercept ~== 0 absTol 1E-3)
-      assert(modelWithoutIntercept1.coefficients ~= weightsWithoutInterceptR relTol 1E-3)
+      assert(modelWithoutIntercept1.coefficients ~= coefficientsWithourInterceptR relTol 1E-3)
       assert(modelWithoutIntercept2.intercept ~== 0 absTol 1E-3)
-      assert(modelWithoutIntercept2.coefficients ~= weightsWithoutInterceptR relTol 1E-3)
+      assert(modelWithoutIntercept2.coefficients ~= coefficientsWithourInterceptR relTol 1E-3)
     }
   }
 
@@ -222,9 +222,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            as.numeric.data.V3. 6.679841
          */
         val interceptR1 = 6.24300
-        val weightsR1 = Vectors.dense(4.024821, 6.679841)
+        val coefficientsR1 = Vectors.dense(4.024821, 6.679841)
         assert(model1.intercept ~== interceptR1 relTol 1E-3)
-        assert(model1.coefficients ~= weightsR1 relTol 1E-3)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 1.0,
@@ -237,10 +237,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            as.numeric.data.V3. 6.724286
          */
         val interceptR2 = 6.416948
-        val weightsR2 = Vectors.dense(3.893869, 6.724286)
+        val coefficientsR2 = Vectors.dense(3.893869, 6.724286)
 
         assert(model2.intercept ~== interceptR2 relTol 1E-3)
-        assert(model2.coefficients ~= weightsR2 relTol 1E-3)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -282,10 +282,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            as.numeric.data.V3. 4.772913
          */
         val interceptR1 = 0.0
-        val weightsR1 = Vectors.dense(6.299752, 4.772913)
+        val coefficientsR1 = Vectors.dense(6.299752, 4.772913)
 
         assert(model1.intercept ~== interceptR1 absTol 1E-3)
-        assert(model1.coefficients ~= weightsR1 relTol 1E-3)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 1.0,
@@ -298,10 +298,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            as.numeric.data.V3. 4.764229
          */
         val interceptR2 = 0.0
-        val weightsR2 = Vectors.dense(6.232193, 4.764229)
+        val coefficientsR2 = Vectors.dense(6.232193, 4.764229)
 
         assert(model2.intercept ~== interceptR2 absTol 1E-3)
-        assert(model2.coefficients ~= weightsR2 relTol 1E-3)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -334,10 +334,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          as.numeric.data.V3. 5.712356)
        */
       val interceptR1 = 5.269376
-      val weightsR1 = Vectors.dense(3.736216, 5.712356)
+      val coefficientsR1 = Vectors.dense(3.736216, 5.712356)
 
       assert(model1.intercept ~== interceptR1 relTol 1E-3)
-      assert(model1.coefficients ~= weightsR1 relTol 1E-3)
+      assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
       /*
          coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
@@ -350,10 +350,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          as.numeric.data.V3. 5.910406
        */
       val interceptR2 = 5.791109
-      val weightsR2 = Vectors.dense(3.435466, 5.910406)
+      val coefficientsR2 = Vectors.dense(3.435466, 5.910406)
 
       assert(model2.intercept ~== interceptR2 relTol 1E-3)
-      assert(model2.coefficients ~= weightsR2 relTol 1E-3)
+      assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
 
       model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
@@ -385,10 +385,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          as.numeric.data.V3. 4.214502
        */
       val interceptR1 = 0.0
-      val weightsR1 = Vectors.dense(5.522875, 4.214502)
+      val coefficientsR1 = Vectors.dense(5.522875, 4.214502)
 
       assert(model1.intercept ~== interceptR1 absTol 1E-3)
-      assert(model1.coefficients ~= weightsR1 relTol 1E-3)
+      assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
       /*
          coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
@@ -401,10 +401,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          as.numeric.data.V3. 4.187419
        */
       val interceptR2 = 0.0
-      val weightsR2 = Vectors.dense(5.263704, 4.187419)
+      val coefficientsR2 = Vectors.dense(5.263704, 4.187419)
 
       assert(model2.intercept ~== interceptR2 absTol 1E-3)
-      assert(model2.coefficients ~= weightsR2 relTol 1E-3)
+      assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
 
       model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
@@ -444,10 +444,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            as.numeric.data.V3. 5.200403
          */
         val interceptR1 = 5.696056
-        val weightsR1 = Vectors.dense(3.670489, 6.001122)
+        val coefficientsR1 = Vectors.dense(3.670489, 6.001122)
 
         assert(model1.intercept ~== interceptR1 relTol 1E-3)
-        assert(model1.coefficients ~= weightsR1 relTol 1E-3)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
@@ -460,10 +460,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            as.numeric.data.V3. 6.146531
          */
         val interceptR2 = 6.114723
-        val weightsR2 = Vectors.dense(3.409937, 6.146531)
+        val coefficientsR2 = Vectors.dense(3.409937, 6.146531)
 
         assert(model2.intercept ~== interceptR2 relTol 1E-3)
-        assert(model2.coefficients ~= weightsR2 relTol 1E-3)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -505,10 +505,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            as.numeric.dataM.V3. 4.322251
          */
         val interceptR1 = 0.0
-        val weightsR1 = Vectors.dense(5.673348, 4.322251)
+        val coefficientsR1 = Vectors.dense(5.673348, 4.322251)
 
         assert(model1.intercept ~== interceptR1 absTol 1E-3)
-        assert(model1.coefficients ~= weightsR1 relTol 1E-3)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.3,
@@ -521,10 +521,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            as.numeric.data.V3. 4.297622
          */
         val interceptR2 = 0.0
-        val weightsR2 = Vectors.dense(5.477988, 4.297622)
+        val coefficientsR2 = Vectors.dense(5.477988, 4.297622)
 
         assert(model2.intercept ~== interceptR2 absTol 1E-3)
-        assert(model2.coefficients ~= weightsR2 relTol 1E-3)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {

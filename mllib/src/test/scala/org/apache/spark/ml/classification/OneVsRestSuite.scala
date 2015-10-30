@@ -43,7 +43,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val nPoints = 1000
 
-    // The following coefficients and xMean/xVariance are computed from iris dataset with lambda=0.2.
+    // The following coefficients and xMean/xVariance are computed from iris dataset with lambda=0.2
     // As a result, we are drawing samples from probability distribution of an actual model.
     val coefficients = Array(
       -0.57997, 0.912083, -0.371077, -0.819866, 2.688191,

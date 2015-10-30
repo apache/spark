@@ -205,10 +205,10 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
        the second element: Double, intercept of the beta parameter
        the third to the end elements: Doubles, regression coefficients vector of the beta parameter
      */
-    val initialWeights = Vectors.zeros(numFeatures + 2)
+    val initialCoefficients = Vectors.zeros(numFeatures + 2)
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialWeights.toBreeze.toDenseVector)
+      initialCoefficients.toBreeze.toDenseVector)
 
     val coefficients = {
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
