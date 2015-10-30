@@ -135,11 +135,12 @@ object LinearDataGenerator {
     val x = Array.fill[Array[Double]](nPoints)(
       Array.fill[Double](weights.length)(rnd.nextDouble()))
 
+    val sparseRnd = new Random(seed)
     x.foreach { v =>
       var i = 0
       val len = v.length
       while (i < len) {
-        if (rnd.nextDouble() <= sparsity) {
+        if (sparseRnd.nextDouble() < sparsity) {
           v(i) = 0.0
         } else {
           v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
@@ -150,14 +151,6 @@ object LinearDataGenerator {
 
     val y = x.map { xi =>
       blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
-    }
-
-    val sparseX = x.map { (v: Array[Double]) =>
-      v.zipWithIndex.filter {
-        case (d: Double, i: Int) => d != 0.0
-      }.map {
-        case (d: Double, i: Int) => (i, d)
-      }
     }
 
     y.zip(x).map { p =>
