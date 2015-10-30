@@ -205,14 +205,11 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
     : Array[((Int, Int), Long)] = {
     val vertexDegrees = edgeDirection match {
       case EdgeDirection.Either =>
-        graph.vertices.leftJoin(degrees)(
-          (id, data, degree) => degree.getOrElse(0))
+        graph.vertices.leftJoin(degrees)((id, data, degree) => degree.getOrElse(0))
       case EdgeDirection.In =>
-        graph.vertices.leftJoin(inDegrees)(
-          (id, data, degree) => degree.getOrElse(0))
+        graph.vertices.leftJoin(inDegrees)((id, data, degree) => degree.getOrElse(0))
       case EdgeDirection.Out =>
-        graph.vertices.leftJoin(outDegrees)(
-          (id, data, degree) => degree.getOrElse(0))
+        graph.vertices.leftJoin(outDegrees)((id, data, degree) => degree.getOrElse(0))
       case _ =>
         throw new SparkException("collectDegreeDist does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
