@@ -937,4 +937,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expected(except)
     )
   }
+
+  test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("year").parquet(path.getAbsolutePath)
+        val df = sqlContext.read.parquet(path.getAbsolutePath)
+        checkAnswer(df.filter($"yEAr" > 2000).select($"val"), Row("a"))
+      }
+    }
+  }
 }
