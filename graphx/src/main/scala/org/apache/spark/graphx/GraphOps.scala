@@ -24,6 +24,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.graphx.lib._
 import org.apache.spark.rdd.RDD
 
+import breeze.linalg.SparseVector
+
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
  * efficient GraphX API. This class is implicitly constructed for each Graph object.
@@ -390,6 +392,16 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
     resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.runUntilConvergenceWithOptions(graph, tol, resetProb, Some(src))
   }
+
+  /**
+   * Run parallel personalized PageRank for a given array of source vertices, such
+   * that all random walks are started relative to the source vertices
+   */
+  def staticParallelPersonalizedPageRank(sources : Array[VertexId], numIter: Int,
+    resetProb: Double = 0.15) : Graph[SparseVector[Double], Double] = {
+    PageRank.runParallelPersonalizedPageRank(graph, numIter, resetProb, sources)
+  }
+
 
   /**
    * Run Personalized PageRank for a fixed number of iterations with
