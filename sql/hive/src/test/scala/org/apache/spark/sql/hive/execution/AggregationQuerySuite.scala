@@ -589,6 +589,13 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     val corr6 = df4.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
+    val df5 = Seq[(Integer, Integer)](
+      (1, null),
+      (null, -60)).toDF("a", "b")
+
+    val corr7 = df5.groupBy().agg(corr("a", "b")).collect()(0)
+    assert(corr7 == Row(null))
+
     withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
       val errorMessage = intercept[SparkException] {
         val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")

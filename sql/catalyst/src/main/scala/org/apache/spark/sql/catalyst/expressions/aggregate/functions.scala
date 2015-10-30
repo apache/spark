@@ -592,31 +592,36 @@ case class Corr(
   }
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val x = left.eval(input).asInstanceOf[Double]
-    val y = right.eval(input).asInstanceOf[Double]
+    val leftEval = left.eval(input)
+    val rightEval = right.eval(input)
 
-    var xAvg = buffer.getDouble(mutableAggBufferOffset)
-    var yAvg = buffer.getDouble(mutableAggBufferOffsetPlus1)
-    var Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
-    var MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
-    var MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
-    var count = buffer.getLong(mutableAggBufferOffsetPlus5)
+    if (leftEval != null && rightEval != null) {
+      val x = leftEval.asInstanceOf[Double]
+      val y = rightEval.asInstanceOf[Double]
 
-    val deltaX = x - xAvg
-    val deltaY = y - yAvg
-    count += 1
-    xAvg += deltaX / count
-    yAvg += deltaY / count
-    Ck += deltaX * (y - yAvg)
-    MkX += deltaX * (x - xAvg)
-    MkY += deltaY * (y - yAvg)
+      var xAvg = buffer.getDouble(mutableAggBufferOffset)
+      var yAvg = buffer.getDouble(mutableAggBufferOffsetPlus1)
+      var Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      var MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+      var MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
+      var count = buffer.getLong(mutableAggBufferOffsetPlus5)
 
-    buffer.setDouble(mutableAggBufferOffset, xAvg)
-    buffer.setDouble(mutableAggBufferOffsetPlus1, yAvg)
-    buffer.setDouble(mutableAggBufferOffsetPlus2, Ck)
-    buffer.setDouble(mutableAggBufferOffsetPlus3, MkX)
-    buffer.setDouble(mutableAggBufferOffsetPlus4, MkY)
-    buffer.setLong(mutableAggBufferOffsetPlus5, count)
+      val deltaX = x - xAvg
+      val deltaY = y - yAvg
+      count += 1
+      xAvg += deltaX / count
+      yAvg += deltaY / count
+      Ck += deltaX * (y - yAvg)
+      MkX += deltaX * (x - xAvg)
+      MkY += deltaY * (y - yAvg)
+
+      buffer.setDouble(mutableAggBufferOffset, xAvg)
+      buffer.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+      buffer.setDouble(mutableAggBufferOffsetPlus2, Ck)
+      buffer.setDouble(mutableAggBufferOffsetPlus3, MkX)
+      buffer.setDouble(mutableAggBufferOffsetPlus4, MkY)
+      buffer.setLong(mutableAggBufferOffsetPlus5, count)
+    }
   }
 
   // Merge counters from other partitions. Formula can be found at:
