@@ -178,8 +178,19 @@ private[sql] class SqlNewHadoopRDD[K, V](
       }
 
       private def close() {
-        try {
-          reader.close()
+        if (reader != null) {
+          // Close the reader and release it. Note: it's very important that we don't close the
+          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
+          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
+          // corruption issues when reading compressed input.
+          try {
+          } catch {
+            case e: Exception =>
+              if (!ShutdownHookManager.inShutdown()) {
+                logWarning("Exception in RecordReader.close()", e)
+              }
+          } finally {
+          }
           if (bytesReadCallback.isDefined) {
             inputMetrics.updateBytesRead()
           } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
@@ -191,12 +202,6 @@ private[sql] class SqlNewHadoopRDD[K, V](
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)
-            }
-          }
-        } catch {
-          case e: Exception => {
-            if (!ShutdownHookManager.inShutdown()) {
-              logWarning("Exception in RecordReader.close()", e)
             }
           }
         }
