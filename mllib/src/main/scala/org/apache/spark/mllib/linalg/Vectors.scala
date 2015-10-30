@@ -123,6 +123,7 @@ sealed trait Vector extends Serializable {
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
    */
+  @Since("1.6.0")
   def foreachActive(f: (Int, Double) => Unit): Unit
 
   /**
