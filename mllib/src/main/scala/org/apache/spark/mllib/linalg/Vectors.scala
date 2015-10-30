@@ -677,9 +677,7 @@ class SparseVector @Since("1.0.0") (
     s" ${values.length} values.")
   require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
     s"which exceeds the specified vector size ${size}.")
-
-  @Since("1.6.0") val NonSparseVal = 0.0
-
+  
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
 
