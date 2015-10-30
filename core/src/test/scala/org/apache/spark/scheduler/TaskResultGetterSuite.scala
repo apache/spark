@@ -125,8 +125,6 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
   }
 
   /**
-   * SPARK-11195
-
    * Make sure we are using the context classloader when deserializing failed TaskResults instead
    * of the Spark classloader.
 
@@ -137,7 +135,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
    * Before this fix, enqueueFailedTask would throw a ClassNotFoundException when deserializing
    * the exception, resulting in an UnknownReason for the TaskEndResult.
    */
-  test("failed task deserialized with the correct classloader") {
+  test("failed task deserialized with the correct classloader (SPARK-11195)") {
     // compile a small jar containing an exception that will be thrown on an executor.
     val tempDir = Utils.createTempDir()
     val srcDir = new File(tempDir, "repro/")
@@ -164,10 +162,10 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       // NOTE: we must run the cluster with "local" so that the executor can load the compiled
       // jar.
       sc = new SparkContext("local", "test", conf)
-      val rdd = sc.parallelize(Seq(1), 1).map(x => {
+      val rdd = sc.parallelize(Seq(1), 1).map { _ =>
         val exc = excClass.newInstance().asInstanceOf[Exception]
         throw exc
-      })
+      }
 
       // the driver should not have any problems resolving the exception class and determining
       // why the task failed.
