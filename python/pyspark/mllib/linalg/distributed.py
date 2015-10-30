@@ -29,6 +29,7 @@ from py4j.java_gateway import JavaObject
 from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector, Matrix
+from pyspark.storagelevel import StorageLevel
 
 
 __all__ = ['DistributedMatrix', 'RowMatrix', 'IndexedRow',
@@ -789,6 +790,30 @@ class BlockMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
+    def cache(self):
+        """
+        Caches the underlying RDD.
+        """
+        self._java_matrix_wrapper.call("cache")
+        return self
+
+    def persist(self, storageLevel):
+        """
+        Persists the underlying RDD with the specified storage level.
+        """
+        if not isinstance(storageLevel, StorageLevel):
+            raise TypeError("`storageLevel` should be a StorageLevel, got %s" % type(storageLevel))
+        javaStorageLevel = self._java_matrix_wrapper._sc._getJavaStorageLevel(storageLevel)
+        self._java_matrix_wrapper.call("persist", javaStorageLevel)
+        return self
+
+    def validate(self):
+        """
+        Validates the block matrix info against the matrix data (`blocks`)
+        and throws an exception if any error is found.
+        """
+        self._java_matrix_wrapper.call("validate")
+
     def add(self, other):
         """
         Adds two block matrices together. The matrices must have the
@@ -856,6 +881,22 @@ class BlockMatrix(DistributedMatrix):
         other_java_block_matrix = other._java_matrix_wrapper._java_model
         java_block_matrix = self._java_matrix_wrapper.call("multiply", other_java_block_matrix)
         return BlockMatrix(java_block_matrix, self.rowsPerBlock, self.colsPerBlock)
+
+    def transpose(self):
+        """
+        Transpose this BlockMatrix. Returns a new BlockMatrix
+        instance sharing the same underlying data. Is a lazy operation.
+
+        >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
+        ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
+        >>> mat = BlockMatrix(blocks, 3, 2)
+
+        >>> mat_transposed = mat.transpose()
+        >>> mat_transposed.toLocalMatrix()
+        DenseMatrix(2, 6, [1.0, 4.0, 2.0, 5.0, 3.0, 6.0, 7.0, 10.0, 8.0, 11.0, 9.0, 12.0], 0)
+        """
+        java_transposed_matrix = self._java_matrix_wrapper.call("transpose")
+        return BlockMatrix(java_transposed_matrix, self.colsPerBlock, self.rowsPerBlock)
 
     def toLocalMatrix(self):
         """
