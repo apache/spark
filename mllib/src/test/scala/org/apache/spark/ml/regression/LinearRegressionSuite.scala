@@ -240,11 +240,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model2.intercept ~== interceptR2 relTol 1E-3)
         assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-        model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
-          case Row(features: DenseVector, prediction1: Double) =>
-            val prediction2 =
-              features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
-            assert(prediction1 ~== prediction2 relTol 1E-5)
+        model1.transform(datasetWithDenseFeature).select("features", "prediction")
+          .collect().foreach {
+            case Row(features: DenseVector, prediction1: Double) =>
+              val prediction2 = features(0) * model1.weights(0) + features(1) * model1.weights(1) +
+                model1.intercept
+              assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
     }
@@ -299,11 +300,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model2.intercept ~== interceptR2 absTol 1E-3)
         assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-        model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
-          case Row(features: DenseVector, prediction1: Double) =>
-            val prediction2 =
-              features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
-            assert(prediction1 ~== prediction2 relTol 1E-5)
+        model1.transform(datasetWithDenseFeature).select("features", "prediction")
+          .collect().foreach {
+            case Row(features: DenseVector, prediction1: Double) =>
+              val prediction2 = features(0) * model1.weights(0) + features(1) * model1.weights(1) +
+                model1.intercept
+              assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
     }
@@ -456,10 +458,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model2.intercept ~== interceptR2 relTol 1E-3)
         assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-        model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
+        model1.transform(datasetWithDenseFeature).select("features", "prediction")
+          .collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
-            val prediction2 =
-              features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
+            val prediction2 = features(0) * model1.weights(0) + features(1) * model1.weights(1) +
+              model1.intercept
             assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
@@ -515,10 +518,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model2.intercept ~== interceptR2 absTol 1E-3)
         assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-        model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
+        model1.transform(datasetWithDenseFeature).select("features", "prediction")
+          .collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
-            val prediction2 =
-              features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
+            val prediction2 = features(0) * model1.weights(0) + features(1) * model1.weights(1) +
+              model1.intercept
             assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
