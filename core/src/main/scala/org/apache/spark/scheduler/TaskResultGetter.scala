@@ -103,16 +103,16 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     try {
       getTaskResultExecutor.execute(new Runnable {
         override def run(): Unit = Utils.logUncaughtExceptions {
+          val loader = Utils.getContextOrSparkClassLoader
           try {
             if (serializedData != null && serializedData.limit() > 0) {
               reason = serializer.get().deserialize[TaskEndReason](
-                serializedData, Utils.getSparkClassLoader)
+                serializedData, loader)
             }
           } catch {
             case cnd: ClassNotFoundException =>
               // Log an error but keep going here -- the task failed, so not catastrophic
               // if we can't deserialize the reason.
-              val loader = Utils.getContextOrSparkClassLoader
               logError(
                 "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
             case ex: Exception => {}
