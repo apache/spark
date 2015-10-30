@@ -175,6 +175,29 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Update the current threads class loader.
+   * Requires the current class loader is a MutableURLClassLoader, otherwise skips updating with a
+   * warning. Intended for use by addJar(), although constructing an instance of the class will
+   * still require:
+   * sc._jvm.java.lang.Thread.currentThread().getContextClassLoader().loadClass("class name")
+   * as described in SPARK-5185.
+   */
+  def updatePrimaryClassLoader(sc: SparkContext) {
+    val jars = sc.addedJars.keys
+    val currentCL = Utils.getContextOrSparkClassLoader
+    currentCL match {
+      case cl: MutableURLClassLoader => {
+        val existingJars = cl.getURLs().map(_.toString).toSet
+        val newJars = (jars.toSet -- existingJars)
+        logDebug(s"Adding jars ${newJars} to ${existingJars}")
+        val newJarURLs = newJars.map(new URI(_).toURL())
+        newJarURLs.foreach(cl.addURL(_))
+      }
+      case _ => logWarning(s"Unsupported cl $currentCL will not update jars for current thread")
+    }
+  }
+
+  /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
   def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {

@@ -416,7 +416,7 @@ class AddFileTests(PySparkTestCase):
                           lambda: sc._loadClass("sparkR.test.hello"))
         # Load the new jar
         path = os.path.join(SPARK_HOME, "./R/pkg/inst/test_support/sparktestjar_2.10-1.0.jar")
-        self.sc.addJar(path)
+        self.sc.addJar(path, True)
         self.assertTrue(self.sc._jsc.sc().addedJars().toString().find("sparktestjar") != -1)
         # Try and load a different one of the classes
         cls = self.sc._loadClass("sparkR.test.basicFunction")

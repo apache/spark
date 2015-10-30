@@ -1673,6 +1673,20 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
+   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   * If addToCurrentThread is true, attempt to add the new class to the current threads class
+   * loader.
+   */
+  def addJar(path: String, addCurrent: Boolean) {
+    addJar(path)
+    if (addCurrent) {
+      Utils.updatePrimaryClassLoader(this)
+    }
+  }
+
+  /**
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
