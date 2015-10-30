@@ -63,13 +63,20 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("SPARK-6785: java date conversion before and after epoch") {
+    val of = new SimpleDateFormat("yyyy-MM-dd" )
+    of.setTimeZone(TimeZone.getTimeZone(("UTC")))
+
     def checkFromToJavaDate(d1: Date): Unit = {
       val d2 = toJavaDate(fromJavaDate(d1))
-      assert(d2.toString === d1.toString)
+      val d3 = toJavaDate(fromJavaDate(d2))
+      assert(of.format(d1) == of.format(d2))
+      assert(d3.getTime == d2.getTime)
     }
 
     val df1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     val df2 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z")
+
+    checkFromToJavaDate(new Date(0))
 
     checkFromToJavaDate(new Date(100))
 
@@ -377,10 +384,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("date add months") {
-    val c1 = Calendar.getInstance()
+    val c1 = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c1.set(1997, 1, 28, 10, 30, 0)
     val days1 = millisToDays(c1.getTimeInMillis)
-    val c2 = Calendar.getInstance()
+    val c2 = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c2.set(2000, 1, 29)
     assert(dateAddMonths(days1, 36) === millisToDays(c2.getTimeInMillis))
     c2.set(1996, 0, 31)
