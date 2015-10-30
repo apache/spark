@@ -41,9 +41,6 @@ private[streaming] case class BatchAllocationEvent(time: Time, allocatedBlocks: 
   extends ReceivedBlockTrackerLogEvent
 private[streaming] case class BatchCleanupEvent(times: Seq[Time])
   extends ReceivedBlockTrackerLogEvent
-// Each event is in serialized format inside the array
-private[streaming] case class CombinedReceivedBlockTrackerLogEvent(
-    events: Array[Array[Byte]]) extends ReceivedBlockTrackerLogEvent
 
 /** Class representing the blocks of all the streams allocated to a batch */
 private[streaming]
@@ -89,7 +86,9 @@ private[streaming] class ReceivedBlockTracker(
     try {
       val writeResult = writeToLog(BlockAdditionEvent(receivedBlockInfo))
       if (writeResult) {
-        afterBlockAddAcknowledged(receivedBlockInfo)
+        synchronized {
+          getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
+        }
         logDebug(s"Stream ${receivedBlockInfo.streamId} received " +
           s"block ${receivedBlockInfo.blockStoreResult.blockId}")
       } else {
@@ -104,23 +103,19 @@ private[streaming] class ReceivedBlockTracker(
     }
   }
 
-  /** Update in-memory state after block add event has been logged to WAL. */
-  private def afterBlockAddAcknowledged(receivedBlockInfo: ReceivedBlockInfo): Unit = synchronized {
-    getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
-  }
-
   /**
    * Allocate all unallocated blocks to the given batch.
    * This event will get written to the write ahead log (if enabled).
    */
-  def allocateBlocksToBatch(batchTime: Time): Unit = {
+  def allocateBlocksToBatch(batchTime: Time): Unit = synchronized {
     if (lastAllocatedBatchTime == null || batchTime > lastAllocatedBatchTime) {
       val streamIdToBlocks = streamIds.map { streamId =>
           (streamId, getReceivedBlockQueue(streamId).dequeueAll(x => true))
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {
-        afterBatchAllocationAcknowledged(batchTime, allocatedBlocks)
+        timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
+        lastAllocatedBatchTime = batchTime
       } else {
         logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
       }
@@ -134,14 +129,6 @@ private[streaming] class ReceivedBlockTracker(
       // This situation will only occurs in recovery time.
       logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
     }
-  }
-
-  /** Update in-memory state after batch allocation event has been logged to WAL. */
-  private def afterBatchAllocationAcknowledged(
-      batchTime: Time,
-      allocatedBlocks: AllocatedBlocks): Unit = synchronized {
-    timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
-    lastAllocatedBatchTime = batchTime
   }
 
   /** Get the blocks allocated to the given batch. */
@@ -201,7 +188,7 @@ private[streaming] class ReceivedBlockTracker(
     def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")
       receivedBlockInfo.setBlockIdInvalid()
-      afterBlockAddAcknowledged(receivedBlockInfo)
+      getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
     }
 
     // Insert the recovered block-to-batch allocations and clear the queue of received blocks
@@ -210,7 +197,8 @@ private[streaming] class ReceivedBlockTracker(
       logTrace(s"Recovery: Inserting allocated batch for time $batchTime to " +
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
       streamIdToUnallocatedBlockQueues.values.foreach { _.clear() }
-      afterBatchAllocationAcknowledged(batchTime, allocatedBlocks)
+      timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
+      lastAllocatedBatchTime = batchTime
     }
 
     // Cleanup the batch allocations
@@ -219,35 +207,31 @@ private[streaming] class ReceivedBlockTracker(
       timeToAllocatedBlocks --= batchTimes
     }
 
-    def resolveEvent(event: ReceivedBlockTrackerLogEvent): Unit = {
-      event match {
-        case CombinedReceivedBlockTrackerLogEvent(events) =>
-          BatchedWriteAheadLog.deaggregate(events).foreach(resolveEvent)
-        case BlockAdditionEvent(receivedBlockInfo) =>
-          insertAddedBlock(receivedBlockInfo)
-        case BatchAllocationEvent(time, allocatedBlocks) =>
-          insertAllocatedBatch(time, allocatedBlocks)
-        case BatchCleanupEvent(batchTimes) =>
-          cleanupBatches(batchTimes)
-      }
-    }
-
     writeAheadLogOption.foreach { writeAheadLog =>
       logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
       writeAheadLog.readAll().asScala.foreach { byteBuffer =>
         logTrace("Recovering record " + byteBuffer)
-        resolveEvent(Utils.deserialize[ReceivedBlockTrackerLogEvent](
-          byteBuffer.array, Thread.currentThread().getContextClassLoader))
+        Utils.deserialize[ReceivedBlockTrackerLogEvent](
+          byteBuffer.array, Thread.currentThread().getContextClassLoader) match {
+          case BlockAdditionEvent(receivedBlockInfo) =>
+            insertAddedBlock(receivedBlockInfo)
+          case BatchAllocationEvent(time, allocatedBlocks) =>
+            insertAllocatedBatch(time, allocatedBlocks)
+          case BatchCleanupEvent(batchTimes) =>
+            cleanupBatches(batchTimes)
+        }
       }
     }
   }
 
   /** Write an update to the tracker to the write ahead log */
   private[streaming] def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
-    if (!isWriteAheadLogEnabled) return true
-    writeAheadLogOption.exists { logManager =>
+    if (isWriteAheadLogEnabled) {
       logTrace(s"Writing record: $record")
-      logManager.write(ByteBuffer.wrap(Utils.serialize(record)), clock.getTimeMillis()) != null
+      writeAheadLogOption.get.write(ByteBuffer.wrap(Utils.serialize(record)), 
+        clock.getTimeMillis()) != null
+    } else {
+      true
     }
   }
 

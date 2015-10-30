@@ -491,7 +491,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           registerReceiver(streamId, typ, host, executorId, receiverEndpoint, context.senderAddress)
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
-        if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf)) {
+        if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf, isDriver = true)) {
           val f = Future(addBlock(receivedBlockInfo))(walBatchingThreadPool)
           f.onComplete(result => context.reply(result.get))(walBatchingThreadPool)
         } else {

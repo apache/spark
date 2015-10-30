@@ -65,8 +65,8 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     }
   }
 
-  def isBatchingEnabled(conf: SparkConf): Boolean = {
-    conf.getBoolean(DRIVER_WAL_BATCHING_CONF_KEY, defaultValue = false)
+  def isBatchingEnabled(conf: SparkConf, isDriver: Boolean): Boolean = {
+    isDriver && conf.getBoolean(DRIVER_WAL_BATCHING_CONF_KEY, defaultValue = false)
   }
 
   def shouldCloseFileAfterWrite(conf: SparkConf, isDriver: Boolean): Boolean = {
@@ -133,7 +133,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
         getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver),
         shouldCloseFileAfterWrite(sparkConf, isDriver))
     }
-    if (isDriver && isBatchingEnabled(sparkConf)) {
+    if (isBatchingEnabled(sparkConf, isDriver)) {
       new BatchedWriteAheadLog(wal)
     } else {
       wal
