@@ -36,7 +36,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("as tuple") {
     val data = Seq(("a", 1), ("b", 2)).toDF("a", "b")
-
     checkAnswer(
       data.as[(String, Int)],
       ("a", 1), ("b", 2))
