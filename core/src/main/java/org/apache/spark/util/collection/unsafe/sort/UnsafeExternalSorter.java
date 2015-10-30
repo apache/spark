@@ -386,6 +386,17 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   }
 
   /**
+   * Merger two UnsafeExternalSorters together, the second will be emptied.
+   *
+   * @throws IOException
+   */
+  public void merge(UnsafeExternalSorter other) throws IOException {
+    other.spill();
+    spillWriters.addAll(other.spillWriters);
+    other.spillWriters.clear();
+  }
+
+  /**
    * Returns a sorted iterator. It is the caller's responsibility to call `cleanupResources()`
    * after consuming this iterator.
    */

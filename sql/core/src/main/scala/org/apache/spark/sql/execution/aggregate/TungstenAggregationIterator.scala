@@ -473,18 +473,22 @@ class TungstenAggregationIterator(
   // Part 3: Methods and fields used by hash-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
 
+  private def createHashMap():UnsafeFixedWidthAggregationMap = {
+    new UnsafeFixedWidthAggregationMap(
+      initialAggregationBuffer,
+      StructType.fromAttributes(allAggregateFunctions.flatMap(_.aggBufferAttributes)),
+      StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
+      TaskContext.get().taskMemoryManager(),
+      1024 * 16, // initial capacity
+      TaskContext.get().taskMemoryManager().pageSizeBytes,
+      false // disable tracking of performance metrics
+    )
+  }
+
   // This is the hash map used for hash-based aggregation. It is backed by an
   // UnsafeFixedWidthAggregationMap and it is used to store
   // all groups and their corresponding aggregation buffers for hash-based aggregation.
-  private[this] val hashMap = new UnsafeFixedWidthAggregationMap(
-    initialAggregationBuffer,
-    StructType.fromAttributes(allAggregateFunctions.flatMap(_.aggBufferAttributes)),
-    StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
-    TaskContext.get().taskMemoryManager(),
-    1024 * 16, // initial capacity
-    TaskContext.get().taskMemoryManager().pageSizeBytes,
-    false // disable tracking of performance metrics
-  )
+  private[this] var hashMap = createHashMap()
 
   // The function used to read and process input rows. When processing input rows,
   // it first uses hash-based aggregation by putting groups and their buffers in
@@ -502,18 +506,26 @@ class TungstenAggregationIterator(
         processRow(buffer, newInput)
       }
     } else {
-      while (!sortBased && inputIter.hasNext) {
+      while (inputIter.hasNext) {
         val newInput = inputIter.next()
         numInputRows += 1
         val groupingKey = groupProjection.apply(newInput)
         val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
         if (buffer == null) {
-          // buffer == null means that we could not allocate more memory.
-          // Now, we need to spill the map and switch to sort-based aggregation.
-          switchToSortBasedAggregation(groupingKey, newInput)
-        } else {
-          processRow(buffer, newInput)
+          val sorter = hashMap.destructAndCreateExternalSorter()
+          if (externalSorter == null) {
+            externalSorter = sorter
+          } else {
+            externalSorter.merge(sorter)
+            sorter.cleanupResources()
+          }
+          hashMap = createHashMap()
         }
+        processRow(buffer, newInput)
+      }
+
+      if (externalSorter != null) {
+        switchToSortBasedAggregation()
       }
     }
   }
@@ -523,7 +535,7 @@ class TungstenAggregationIterator(
   // been processed.
   private def processInputsWithControlledFallback(fallbackStartsAt: Int): Unit = {
     var i = 0
-    while (!sortBased && inputIter.hasNext) {
+    while (inputIter.hasNext) {
       val newInput = inputIter.next()
       numInputRows += 1
       val groupingKey = groupProjection.apply(newInput)
@@ -533,13 +545,20 @@ class TungstenAggregationIterator(
         null
       }
       if (buffer == null) {
-        // buffer == null means that we could not allocate more memory.
-        // Now, we need to spill the map and switch to sort-based aggregation.
-        switchToSortBasedAggregation(groupingKey, newInput)
-      } else {
-        processRow(buffer, newInput)
+        val sorter = hashMap.destructAndCreateExternalSorter()
+        if (externalSorter == null) {
+          externalSorter = sorter
+        } else {
+          externalSorter.merge(sorter)
+          sorter.cleanupResources()
+        }
+        hashMap = createHashMap()
       }
+      processRow(buffer, newInput)
       i += 1
+    }
+    if (externalSorter != null) {
+      switchToSortBasedAggregation()
     }
   }
 
@@ -561,88 +580,8 @@ class TungstenAggregationIterator(
   /**
    * Switch to sort-based aggregation when the hash-based approach is unable to acquire memory.
    */
-  private def switchToSortBasedAggregation(firstKey: UnsafeRow, firstInput: InternalRow): Unit = {
+  private def switchToSortBasedAggregation(): Unit = {
     logInfo("falling back to sort based aggregation.")
-    // Step 1: Get the ExternalSorter containing sorted entries of the map.
-    externalSorter = hashMap.destructAndCreateExternalSorter()
-
-    // Step 2: If we have aggregate function with mode Partial or Complete,
-    // we need to process input rows to get aggregation buffer.
-    // So, later in the sort-based aggregation iterator, we can do merge.
-    // If aggregate functions are with mode Final and PartialMerge,
-    // we just need to project the aggregation buffer from an input row.
-    val needsProcess = aggregationMode match {
-      case (Some(Partial), None) => true
-      case (None, Some(Complete)) => true
-      case (Some(Final), Some(Complete)) => true
-      case _ => false
-    }
-
-    // Note: Since we spill the sorter's contents immediately after creating it, we must insert
-    // something into the sorter here to ensure that we acquire at least a page of memory.
-    // This is done through `externalSorter.insertKV`, which will trigger the page allocation.
-    // Otherwise, children operators may steal the window of opportunity and starve our sorter.
-
-    if (needsProcess) {
-      // First, we create a buffer.
-      val buffer = createNewAggregationBuffer()
-
-      // Process firstKey and firstInput.
-      // Initialize buffer.
-      buffer.copyFrom(initialAggregationBuffer)
-      processRow(buffer, firstInput)
-      externalSorter.insertKV(firstKey, buffer)
-
-      // Process the rest of input rows.
-      while (inputIter.hasNext) {
-        val newInput = inputIter.next()
-        numInputRows += 1
-        val groupingKey = groupProjection.apply(newInput)
-        buffer.copyFrom(initialAggregationBuffer)
-        processRow(buffer, newInput)
-        externalSorter.insertKV(groupingKey, buffer)
-      }
-    } else {
-      // When needsProcess is false, the format of input rows is groupingKey + aggregation buffer.
-      // We need to project the aggregation buffer part from an input row.
-      val buffer = createNewAggregationBuffer()
-      // In principle, we could use `allAggregateFunctions.flatMap(_.inputAggBufferAttributes)` to
-      // extract the aggregation buffer. In practice, however, we extract it positionally by relying
-      // on it being present at the end of the row. The reason for this relates to how the different
-      // aggregates handle input binding.
-      //
-      // ImperativeAggregate uses field numbers and field number offsets to manipulate its buffers,
-      // so its correctness does not rely on attribute bindings. When we fall back to sort-based
-      // aggregation, these field number offsets (mutableAggBufferOffset and inputAggBufferOffset)
-      // need to be updated and any internal state in the aggregate functions themselves must be
-      // reset, so we call withNewMutableAggBufferOffset and withNewInputAggBufferOffset to reset
-      // this state and update the offsets.
-      //
-      // The updated ImperativeAggregate will have different attribute ids for its
-      // aggBufferAttributes and inputAggBufferAttributes. This isn't a problem for the actual
-      // ImperativeAggregate evaluation, but it means that
-      // `allAggregateFunctions.flatMap(_.inputAggBufferAttributes)` will no longer match the
-      // attributes in `originalInputAttributes`, which is why we can't use those attributes here.
-      //
-      // For more details, see the discussion on PR #9038.
-      val bufferExtractor = newMutableProjection(
-        originalInputAttributes.drop(initialInputBufferOffset),
-        originalInputAttributes)()
-      bufferExtractor.target(buffer)
-
-      // Insert firstKey and its buffer.
-      bufferExtractor(firstInput)
-      externalSorter.insertKV(firstKey, buffer)
-
-      // Insert the rest of input rows.
-      while (inputIter.hasNext) {
-        val newInput = inputIter.next()
-        numInputRows += 1
-        val groupingKey = groupProjection.apply(newInput)
-        bufferExtractor(newInput)
-        externalSorter.insertKV(groupingKey, buffer)
-      }
-    }
 
     // Set aggregationMode, processRow, and generateOutput for sort-based aggregation.
     val newAggregationMode = aggregationMode match {
