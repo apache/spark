@@ -40,7 +40,7 @@ import org.apache.hadoop.fs.s3.S3Credentials
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapred.{FileInputFormat, FileSplit, InputSplit, JobConf}
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
@@ -50,7 +50,7 @@ import org.apache.spark.util.Utils
  */
 @DeveloperApi
 object SparkS3Util extends Logging {
-  val sparkConf = new SparkConf()
+  val sparkConf = SparkEnv.get.conf
   val conf: Configuration = SparkHadoopUtil.get.newConfiguration(sparkConf)
 
   private val s3ClientCache: Cache[String, AmazonS3Client] = CacheBuilder
@@ -256,7 +256,7 @@ object SparkS3Util extends Logging {
    * Return whether S3 bulk listing can be enabled or not.
    */
   def s3BulkListingEnabled(jobConf: JobConf): Boolean = {
-    val enabledByUser = sparkConf.getBoolean(S3_BULK_LISTING_ENABLED, true)
+    val enabledByUser = sparkConf.getBoolean(S3_BULK_LISTING_ENABLED, false)
     val inputPaths = FileInputFormat.getInputPaths(jobConf)
     val noWildcard = inputPaths.forall(path => !new GlobPattern(path.toString).hasWildcard)
     val s3Paths = inputPaths.forall(SparkS3Util.isS3Path(_))
