@@ -123,14 +123,7 @@ sealed trait Vector extends Serializable {
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
    */
-  private[spark] def foreachActive(f: (Int, Double) => Unit)
-
-  /**
-   * Applies a function 'f' to all elements of the vector.
-   *
-   * @param f the function that is applied for its side-effect to every element
-   */
-  private[spark] def foreach(f: (Double) => Unit)
+  def foreachActive(f: (Int, Double) => Unit)
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
@@ -577,7 +570,7 @@ class DenseVector @Since("1.0.0") (
     new DenseVector(values.clone())
   }
 
-  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+  override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0
     val localValuesSize = values.length
     val localValues = values
@@ -587,9 +580,6 @@ class DenseVector @Since("1.0.0") (
       i += 1
     }
   }
-
-  @Since("1.6.0")
-  private[spark] override def foreach(f: (Double) => Unit) = { values.foreach(f) }
 
   override def hashCode(): Int = {
     var result: Int = 31 + size
@@ -712,7 +702,7 @@ class SparseVector @Since("1.0.0") (
 
   private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
-  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+  override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0
     val localValuesSize = values.length
     val localIndices = indices
@@ -720,20 +710,6 @@ class SparseVector @Since("1.0.0") (
 
     while (i < localValuesSize) {
       f(localIndices(i), localValues(i))
-      i += 1
-    }
-  }
-
-  @Since("1.6.0")
-  private[spark] def foreach(f: (Double) => Unit) = {
-    var i, j = 0  // i counts 0 -> size, j counts 0 -> indices.length
-    while (i < size) {
-      if (i == indices(j)){
-        f(values(j))
-        j += 1
-      } else {
-        f(NonSparseVal)
-      }
       i += 1
     }
   }
