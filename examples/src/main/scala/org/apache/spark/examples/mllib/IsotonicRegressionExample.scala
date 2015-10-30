@@ -25,7 +25,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object IsotonicRegressionExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]) : Unit = {
 
     val conf = new SparkConf().setAppName("IsotonicRegressionExample")
     val sc = new SparkContext(conf)
@@ -58,8 +58,8 @@ object IsotonicRegressionExample {
     println("Mean Squared Error = " + meanSquaredError)
 
     // Save and load model
-    model.save(sc, "myModelPath")
-    val sameModel = IsotonicRegressionModel.load(sc, "myModelPath")
+    model.save(sc, "target/tmp/myIsotonicRegressionModel")
+    val sameModel = IsotonicRegressionModel.load(sc, "target/tmp/myIsotonicRegressionModel")
     // $example off$
   }
 }

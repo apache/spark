@@ -27,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object NaiveBayesExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]) : Unit = {
     val conf = new SparkConf().setAppName("NaiveBayesExample")
     val sc = new SparkContext(conf)
     // $example on$
@@ -48,8 +48,8 @@ object NaiveBayesExample {
     val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
 
     // Save and load model
-    model.save(sc, "myModelPath")
-    val sameModel = NaiveBayesModel.load(sc, "myModelPath")
+    model.save(sc, "target/tmp/myNaiveBayesModel")
+    val sameModel = NaiveBayesModel.load(sc, "target/tmp/myNaiveBayesModel")
     // $example off$
   }
 }

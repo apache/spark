@@ -51,6 +51,6 @@ if __name__ == "__main__":
     print("Mean Squared Error = " + str(meanSquaredError))
 
     # Save and load model
-    model.save(sc, "myModelPath")
-    sameModel = IsotonicRegressionModel.load(sc, "myModelPath")
+    model.save(sc, "target/tmp/myIsotonicRegressionModel")
+    sameModel = IsotonicRegressionModel.load(sc, "target/tmp/myIsotonicRegressionModel")
     # $example off$

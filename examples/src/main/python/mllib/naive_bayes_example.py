@@ -51,6 +51,6 @@ if __name__ == "__main__":
     accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
 
     # Save and load model
-    model.save(sc, "myModelPath")
-    sameModel = NaiveBayesModel.load(sc, "myModelPath")
+    model.save(sc, "target/tmp/myNaiveBayesModel")
+    sameModel = NaiveBayesModel.load(sc, "target/tmp/myNaiveBayesModel")
     # $example off$

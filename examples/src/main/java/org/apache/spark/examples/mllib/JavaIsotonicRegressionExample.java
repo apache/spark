@@ -23,9 +23,7 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
-// $example off$
 import org.apache.spark.api.java.JavaSparkContext;
-// $example on$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.regression.IsotonicRegression;
 import org.apache.spark.mllib.regression.IsotonicRegressionModel;
@@ -35,10 +33,9 @@ import org.apache.spark.SparkConf;
 public class JavaIsotonicRegressionExample {
   public static void main(String[] args) {
     SparkConf sparkConf = new SparkConf().setAppName("JavaIsotonicRegressionExample");
-    JavaSparkContext sc = new JavaSparkContext(sparkConf);
     JavaSparkContext jsc = new JavaSparkContext(sparkConf);
     // $example on$
-    JavaRDD<String> data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt");
+    JavaRDD<String> data = jsc.textFile("data/mllib/sample_isotonic_regression_data.txt");
 
     // Create label, feature, weight tuples from input data with weight set to default value 1.0.
     JavaRDD<Tuple3<Double, Double, Double>> parsedData = data.map(
@@ -82,8 +79,8 @@ public class JavaIsotonicRegressionExample {
     System.out.println("Mean Squared Error = " + meanSquaredError);
 
     // Save and load model
-    model.save(sc.sc(), "myModelPath");
-    IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(sc.sc(), "myModelPath");
+    model.save(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
+    IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
     // $example off$
   }
 }
