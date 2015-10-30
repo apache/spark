@@ -588,8 +588,9 @@ class HiveContext private[hive](
       LeftSemiJoin,
       EquiJoinSelection,
       BasicOperators,
+      BroadcastNestedLoop,
       CartesianProduct,
-      BroadcastNestedLoopJoin
+      DefaultJoin
     )
   }
 

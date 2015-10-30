@@ -145,20 +145,20 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     val manager = createMemoryManager(1000L)
     val taskMemoryManager = new TaskMemoryManager(manager, 0)
 
-    assert(taskMemoryManager.acquireExecutionMemory(100L) === 100L)
-    assert(taskMemoryManager.acquireExecutionMemory(400L) === 400L)
-    assert(taskMemoryManager.acquireExecutionMemory(400L) === 400L)
-    assert(taskMemoryManager.acquireExecutionMemory(200L) === 100L)
-    assert(taskMemoryManager.acquireExecutionMemory(100L) === 0L)
-    assert(taskMemoryManager.acquireExecutionMemory(100L) === 0L)
+    assert(taskMemoryManager.acquireExecutionMemory(100L, null) === 100L)
+    assert(taskMemoryManager.acquireExecutionMemory(400L, null) === 400L)
+    assert(taskMemoryManager.acquireExecutionMemory(400L, null) === 400L)
+    assert(taskMemoryManager.acquireExecutionMemory(200L, null) === 100L)
+    assert(taskMemoryManager.acquireExecutionMemory(100L, null) === 0L)
+    assert(taskMemoryManager.acquireExecutionMemory(100L, null) === 0L)
 
-    taskMemoryManager.releaseExecutionMemory(500L)
-    assert(taskMemoryManager.acquireExecutionMemory(300L) === 300L)
-    assert(taskMemoryManager.acquireExecutionMemory(300L) === 200L)
+    taskMemoryManager.releaseExecutionMemory(500L, null)
+    assert(taskMemoryManager.acquireExecutionMemory(300L, null) === 300L)
+    assert(taskMemoryManager.acquireExecutionMemory(300L, null) === 200L)
 
     taskMemoryManager.cleanUpAllAllocatedMemory()
-    assert(taskMemoryManager.acquireExecutionMemory(1000L) === 1000L)
-    assert(taskMemoryManager.acquireExecutionMemory(100L) === 0L)
+    assert(taskMemoryManager.acquireExecutionMemory(1000L, null) === 1000L)
+    assert(taskMemoryManager.acquireExecutionMemory(100L, null) === 0L)
   }
 
   test("two tasks requesting full execution memory") {
@@ -168,15 +168,15 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     val futureTimeout: Duration = 20.seconds
 
     // Have both tasks request 500 bytes, then wait until both requests have been granted:
-    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(500L) }
-    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(500L) }
+    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(500L, null) }
+    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(500L, null) }
     assert(Await.result(t1Result1, futureTimeout) === 500L)
     assert(Await.result(t2Result1, futureTimeout) === 500L)
 
     // Have both tasks each request 500 bytes more; both should immediately return 0 as they are
     // both now at 1 / N
-    val t1Result2 = Future { t1MemManager.acquireExecutionMemory(500L) }
-    val t2Result2 = Future { t2MemManager.acquireExecutionMemory(500L) }
+    val t1Result2 = Future { t1MemManager.acquireExecutionMemory(500L, null) }
+    val t2Result2 = Future { t2MemManager.acquireExecutionMemory(500L, null) }
     assert(Await.result(t1Result2, 200.millis) === 0L)
     assert(Await.result(t2Result2, 200.millis) === 0L)
   }
@@ -188,15 +188,15 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     val futureTimeout: Duration = 20.seconds
 
     // Have both tasks request 250 bytes, then wait until both requests have been granted:
-    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(250L) }
-    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(250L) }
+    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(250L, null) }
+    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(250L, null) }
     assert(Await.result(t1Result1, futureTimeout) === 250L)
     assert(Await.result(t2Result1, futureTimeout) === 250L)
 
     // Have both tasks each request 500 bytes more.
     // We should only grant 250 bytes to each of them on this second request
-    val t1Result2 = Future { t1MemManager.acquireExecutionMemory(500L) }
-    val t2Result2 = Future { t2MemManager.acquireExecutionMemory(500L) }
+    val t1Result2 = Future { t1MemManager.acquireExecutionMemory(500L, null) }
+    val t2Result2 = Future { t2MemManager.acquireExecutionMemory(500L, null) }
     assert(Await.result(t1Result2, futureTimeout) === 250L)
     assert(Await.result(t2Result2, futureTimeout) === 250L)
   }
@@ -208,17 +208,17 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     val futureTimeout: Duration = 20.seconds
 
     // t1 grabs 1000 bytes and then waits until t2 is ready to make a request.
-    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(1000L) }
+    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(1000L, null) }
     assert(Await.result(t1Result1, futureTimeout) === 1000L)
-    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(250L) }
+    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(250L, null) }
     // Make sure that t2 didn't grab the memory right away. This is hacky but it would be difficult
     // to make sure the other thread blocks for some time otherwise.
     Thread.sleep(300)
-    t1MemManager.releaseExecutionMemory(250L)
+    t1MemManager.releaseExecutionMemory(250L, null)
     // The memory freed from t1 should now be granted to t2.
     assert(Await.result(t2Result1, futureTimeout) === 250L)
     // Further requests by t2 should be denied immediately because it now has 1 / 2N of the memory.
-    val t2Result2 = Future { t2MemManager.acquireExecutionMemory(100L) }
+    val t2Result2 = Future { t2MemManager.acquireExecutionMemory(100L, null) }
     assert(Await.result(t2Result2, 200.millis) === 0L)
   }
 
@@ -229,18 +229,18 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     val futureTimeout: Duration = 20.seconds
 
     // t1 grabs 1000 bytes and then waits until t2 is ready to make a request.
-    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(1000L) }
+    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(1000L, null) }
     assert(Await.result(t1Result1, futureTimeout) === 1000L)
-    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(500L) }
+    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(500L, null) }
     // Make sure that t2 didn't grab the memory right away. This is hacky but it would be difficult
     // to make sure the other thread blocks for some time otherwise.
     Thread.sleep(300)
     // t1 releases all of its memory, so t2 should be able to grab all of the memory
     t1MemManager.cleanUpAllAllocatedMemory()
     assert(Await.result(t2Result1, futureTimeout) === 500L)
-    val t2Result2 = Future { t2MemManager.acquireExecutionMemory(500L) }
+    val t2Result2 = Future { t2MemManager.acquireExecutionMemory(500L, null) }
     assert(Await.result(t2Result2, futureTimeout) === 500L)
-    val t2Result3 = Future { t2MemManager.acquireExecutionMemory(500L) }
+    val t2Result3 = Future { t2MemManager.acquireExecutionMemory(500L, null) }
     assert(Await.result(t2Result3, 200.millis) === 0L)
   }
 
@@ -251,13 +251,13 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     val t2MemManager = new TaskMemoryManager(memoryManager, 2)
     val futureTimeout: Duration = 20.seconds
 
-    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(700L) }
+    val t1Result1 = Future { t1MemManager.acquireExecutionMemory(700L, null) }
     assert(Await.result(t1Result1, futureTimeout) === 700L)
 
-    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(300L) }
+    val t2Result1 = Future { t2MemManager.acquireExecutionMemory(300L, null) }
     assert(Await.result(t2Result1, futureTimeout) === 300L)
 
-    val t1Result2 = Future { t1MemManager.acquireExecutionMemory(300L) }
+    val t1Result2 = Future { t1MemManager.acquireExecutionMemory(300L, null) }
     assert(Await.result(t1Result2, 200.millis) === 0L)
   }
 }

@@ -991,3 +991,98 @@ case class StddevFunction(
     }
   }
 }
+
+// placeholder
+case class Kurtosis(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "kurtosis"
+
+  override def toString: String = s"KURTOSIS($child)"
+}
+
+// placeholder
+case class Skewness(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "skewness"
+
+  override def toString: String = s"SKEWNESS($child)"
+}
+
+// placeholder
+case class Variance(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "variance"
+
+  override def toString: String = s"VARIANCE($child)"
+}
+
+// placeholder
+case class VariancePop(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "variance_pop"
+
+  override def toString: String = s"VAR_POP($child)"
+}
+
+// placeholder
+case class VarianceSamp(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "variance_samp"
+
+  override def toString: String = s"VAR_SAMP($child)"
+}
