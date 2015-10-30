@@ -292,8 +292,8 @@ private[sql] class ParquetRelation(
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
 
-    // When using merged schema and the column of the given filter does not exist, Parquet emits
-    // an error which is an issue of Parquet (PARQUET-389).
+    // When merging schemas is enabled and the column of the given filter does not exist,
+    // Parquet emits an exception which is an issue of Parquet (PARQUET-389).
     val safeParquetFilterPushDown = !shouldMergeSchemas && parquetFilterPushDown
 
     // Parquet row group size. We will use this value as the value for
