@@ -60,8 +60,7 @@ final class ShuffleInMemorySorter {
 
   private int newLength() {
     // Guard against overflow:
-    return array.length <= Integer.MAX_VALUE / 2 ?
-      (array.length * 2) : Integer.MAX_VALUE;
+    return array.length <= Integer.MAX_VALUE / 2 ? (array.length * 2) : Integer.MAX_VALUE;
   }
 
   /**

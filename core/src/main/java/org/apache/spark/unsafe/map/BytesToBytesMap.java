@@ -710,13 +710,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private boolean acquireNewPage(long required) {
     try {
       currentPage = allocatePage(required);
-      dataPages.add(currentPage);
-      Platform.putInt(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
-      pageCursor = 4;
-      return true;
     } catch (OutOfMemoryError e) {
       return false;
     }
+    dataPages.add(currentPage);
+    Platform.putInt(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
+    pageCursor = 4;
+    return true;
   }
 
   @Override
@@ -862,7 +862,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
     final int oldCapacity = (int) oldBitSet.capacity();
 
     // Allocate the new data structures
-    allocate(Math.min(growthStrategy.nextCapacity(oldCapacity), MAX_CAPACITY));
+    try {
+      allocate(Math.min(growthStrategy.nextCapacity(oldCapacity), MAX_CAPACITY));
+    } catch (OutOfMemoryError oom) {
+      longArray = oldLongArray;
+      bitset = oldBitSet;
+      throw oom;
+    }
 
     // Re-mask (we don't recompute the hashcode because we stored all 32 bits of it)
     for (int pos = oldBitSet.nextSetBit(0); pos >= 0; pos = oldBitSet.nextSetBit(pos + 1)) {

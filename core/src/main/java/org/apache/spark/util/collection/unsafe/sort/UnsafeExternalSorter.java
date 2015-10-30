@@ -290,19 +290,25 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       long used = inMemSorter.getMemoryUsage();
-      long needed = inMemSorter.getMemoryToExpand();
+      long needed = used + inMemSorter.getMemoryToExpand();
       try {
-        acquireMemory(used + needed);  // could trigger spilling
-        if (inMemSorter.hasSpaceForAnotherRecord()) {
-          releaseMemory(used + needed);
-        } else {
+        acquireMemory(needed);  // could trigger spilling
+      } catch (OutOfMemoryError e) {
+        // should have trigger spilling
+        assert(inMemSorter.hasSpaceForAnotherRecord());
+        return;
+      }
+      // check if spilling is triggered or not
+      if (inMemSorter.hasSpaceForAnotherRecord()) {
+        releaseMemory(needed);
+      } else {
+        try {
           inMemSorter.expandPointerArray();
           releaseMemory(used);
-        }
-      } catch (OutOfMemoryError oom) {
-        // spilling should be triggered
-        if (!inMemSorter.hasSpaceForAnotherRecord()) {
-          spill();  // Just in case that JVM had run out of memory
+        } catch (OutOfMemoryError oom) {
+          // Just in case that JVM had run out of memory
+          releaseMemory(needed);
+          spill();
         }
       }
     }
