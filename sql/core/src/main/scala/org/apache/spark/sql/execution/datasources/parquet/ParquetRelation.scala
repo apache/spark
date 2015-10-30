@@ -285,6 +285,10 @@ private[sql] class ParquetRelation(
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
     val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
 
+    // When merging schemas is enabled and the column of the given filter does not exist,
+    // Parquet emits an exception which is an issue of Parquet (PARQUET-389).
+    val safeParquetFilterPushDown = !shouldMergeSchemas && parquetFilterPushDown
+
     // Parquet row group size. We will use this value as the value for
     // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
     // of these flags are smaller than the parquet row group size.
@@ -298,7 +302,7 @@ private[sql] class ParquetRelation(
         dataSchema,
         parquetBlockSize,
         useMetadataCache,
-        parquetFilterPushDown,
+        safeParquetFilterPushDown,
         assumeBinaryIsString,
         assumeInt96IsTimestamp,
         followParquetFormatSpec) _
