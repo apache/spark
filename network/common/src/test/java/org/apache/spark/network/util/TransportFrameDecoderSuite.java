@@ -37,40 +37,36 @@ public class TransportFrameDecoderSuite {
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
 
+    final int frameCount = 200;
     List<ByteBuf> buffers = new ArrayList<>();
-    for (int i = 0; i < 100; i++) {
-      // Create two buffers; the first one will be large enough to contain the first full
-      // frame and maybe a few bytes of the second frame.
+    for (int i = 0; i < frameCount / 2; i++) {
       byte[] data1 = new byte[1024 * (rnd.nextInt(31) + 1)];
       byte[] data2 = new byte[1024 * (rnd.nextInt(31) + 1)];
       int totalSize = 2 * 8 + data1.length + data2.length;
-      int size1 = 8 + data1.length + 8 * (rnd.nextInt(data2.length / 2) / 8);
-      int size2 = totalSize - size1;
 
-      assertTrue(size1 >= data1.length + 8);
-      assertTrue(size2 > 8);
+      ByteBuf allData = Unpooled.buffer(totalSize);
+      allData.writeLong(data1.length + 8);
+      allData.writeBytes(data1);
+      allData.writeLong(data2.length + 8);
+      allData.writeBytes(data2);
 
-      ByteBuf buf1 = Unpooled.buffer(size1);
-      ByteBuf buf2 = Unpooled.buffer(size2);
-
-      buf1.writeLong(data1.length + 8);
-      buf1.writeBytes(data1);
-
-      int remaining = size1 - data1.length - 8;
-      assertTrue(remaining % 8 == 0);
-      if (remaining >= 8) {
-        buf1.writeLong(data2.length + 8);
-        remaining -= 8;
-      } else {
-        buf2.writeLong(data2.length + 8);
+      // Break the large buffer into a few smaller buffers, so that each individual frame
+      // is spread across several "reads".
+      int readCount = 3 + rnd.nextInt(5);
+      int readSize = totalSize / readCount;
+      for (int j = 0; j < readCount; j++) {
+        int offset = j * readSize;
+        int len;
+        if (j == readCount - 1) {
+          len = totalSize - offset;
+        } else {
+          len = readSize;
+        }
+        ByteBuf slice = allData.slice(offset, len).retain();
+        buffers.add(slice);
       }
 
-      if (remaining > 0) {
-        buf1.writeBytes(data2, 0, remaining);
-      }
-      buf2.writeBytes(data2, remaining, data2.length - remaining);
-      buffers.add(buf1);
-      buffers.add(buf2);
+      allData.release();
     }
 
     try {
@@ -78,7 +74,7 @@ public class TransportFrameDecoderSuite {
         decoder.channelRead(ctx, buf);
       }
 
-      verify(ctx, times(buffers.size())).fireChannelRead(any(ByteBuf.class));
+      verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
     } finally {
       for (ByteBuf buf : buffers) {
         buf.release();
