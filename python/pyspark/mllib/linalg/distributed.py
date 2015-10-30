@@ -515,6 +515,25 @@ class CoordinateMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
+    def transpose(self):
+        """
+        Transpose this CoordinateMatrix.
+
+        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
+        ...                           MatrixEntry(1, 0, 2),
+        ...                           MatrixEntry(2, 1, 3.7)])
+        >>> mat = CoordinateMatrix(entries)
+        >>> mat_transposed = mat.transpose()
+
+        >>> print(mat_transposed.numRows())
+        2
+
+        >>> print(mat_transposed.numCols())
+        3
+        """
+        java_transposed_matrix = self._java_matrix_wrapper.call("transpose")
+        return CoordinateMatrix(java_transposed_matrix)
+
     def toRowMatrix(self):
         """
         Convert this matrix to a RowMatrix.
