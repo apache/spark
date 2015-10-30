@@ -831,6 +831,11 @@ test_that("column functions", {
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
   c12 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
   c13 <- cumeDist() + ntile(1)
+  c14 <- denseRank() + percentRank() + rank() + rowNumber()
+
+  # Test if base::rank() is exposed
+  expect_equal(class(rank())[[1]], "Column")
+  expect_equal(rank(1:3), as.numeric(c(1:3)))
 
   df <- jsonFile(sqlContext, jsonPath)
   df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
