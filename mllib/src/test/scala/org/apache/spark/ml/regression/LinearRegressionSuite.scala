@@ -53,7 +53,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     datasetWithDenseFeature = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed = seed, eps = 0.1), 2))
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
     /*
        datasetWithoutIntercept is not needed for correctness testing but is useful for illustrating
        training model without intercept
@@ -61,7 +61,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     datasetWithDenseFeatureWithoutIntercept = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         intercept = 0.0, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed = seed, eps = 0.1), 2))
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
 
     val r = new Random(seed)
     // When feature size is larger than 4096, normal optimizer is choosed
@@ -72,7 +72,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble).toArray,
         xMean = Seq.fill(featureSize)(r.nextDouble).toArray,
         xVariance = Seq.fill(featureSize)(r.nextDouble).toArray, nPoints = 200,
-        seed = seed, eps = 0.1, sparsity = 0.7), 2))
+        seed, eps = 0.1, sparsity = 0.7), 2))
   }
 
   test("params") {
