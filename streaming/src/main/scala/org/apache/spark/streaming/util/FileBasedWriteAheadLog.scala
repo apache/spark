@@ -17,6 +17,7 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentSkipListSet
 import java.util.{Iterator => JIterator}
 
 import scala.collection.JavaConverters._
@@ -149,27 +150,26 @@ private[streaming] class FileBasedWriteAheadLog(
     val oldLogFiles = synchronized { pastLogs.filter { _.endTime < threshTime } }
     logInfo(s"Attempting to clear ${oldLogFiles.size} old log files in $logDirectory " +
       s"older than $threshTime: ${oldLogFiles.map { _.path }.mkString("\n")}")
-
-    def deleteFiles() {
-      oldLogFiles.foreach { logInfo =>
-        try {
-          val path = new Path(logInfo.path)
-          val fs = HdfsUtils.getFileSystemForPath(path, hadoopConf)
-          fs.delete(path, true)
-          synchronized { pastLogs -= logInfo }
-          logDebug(s"Cleared log file $logInfo")
-        } catch {
-          case ex: Exception =>
-            logWarning(s"Error clearing write ahead log file $logInfo", ex)
-        }
+    synchronized { pastLogs --= oldLogFiles }
+    def deleteFile(walInfo: LogInfo): Unit = {
+      try {
+        val path = new Path(walInfo.path)
+        val fs = HdfsUtils.getFileSystemForPath(path, hadoopConf)
+        fs.delete(path, true)
+        logDebug(s"Cleared log file $walInfo")
+      } catch {
+        case ex: Exception =>
+          logWarning(s"Error clearing write ahead log file $walInfo", ex)
       }
       logInfo(s"Cleared log files in $logDirectory older than $threshTime")
     }
-    if (!executionContext.isShutdown) {
-      val f = Future { deleteFiles() }
-      if (waitForCompletion) {
-        import scala.concurrent.duration._
-        Await.ready(f, 1 second)
+    oldLogFiles.foreach { logInfo =>
+      if (!executionContext.isShutdown) {
+        val f = Future { deleteFile(logInfo) }
+        if (waitForCompletion) {
+          import scala.concurrent.duration._
+          Await.ready(f, 1 second)
+        }
       }
     }
   }
@@ -225,7 +225,11 @@ private[streaming] class FileBasedWriteAheadLog(
 
 private[streaming] object FileBasedWriteAheadLog {
 
-  case class LogInfo(startTime: Long, endTime: Long, path: String)
+  case class LogInfo(startTime: Long, endTime: Long, path: String) extends Comparable[LogInfo] {
+    override def compareTo(o: LogInfo): Int = {
+      endTime.compareTo(o.endTime)
+    }
+  }
 
   val logFileRegex = """log-(\d+)-(\d+)""".r
 

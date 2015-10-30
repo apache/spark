@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.streaming.scheduler.ReceivedBlockTrackerLogEvent
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
@@ -361,6 +362,21 @@ object WriteAheadLogSuite {
     val writer = new FileBasedWriteAheadLogWriter(filePath, hadoopConf)
     val segments = data.map {
       item => writer.write(item)
+    }
+    writer.close()
+    segments
+  }
+
+  /**
+   * Write received block tracker events to a file using the writer class and return an array of 
+   * the file segments written.
+   */
+  def writeEventsUsingWriter(
+      filePath: String,
+      events: Seq[ReceivedBlockTrackerLogEvent]): Seq[FileBasedWriteAheadLogSegment] = {
+    val writer = new FileBasedWriteAheadLogWriter(filePath, hadoopConf)
+    val segments = events.map {
+      item => writer.write(ByteBuffer.wrap(Utils.serialize(item)))
     }
     writer.close()
     segments

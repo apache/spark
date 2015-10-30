@@ -32,7 +32,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.util.{WriteAheadLogUtils, FileBasedWriteAheadLogReader}
+import org.apache.spark.streaming.util.{WriteAheadLogSuite, WriteAheadLogUtils, FileBasedWriteAheadLogReader}
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
@@ -207,6 +207,87 @@ class ReceivedBlockTrackerSuite
     tracker1.isWriteAheadLogEnabled should be (false)
   }
 
+  test("parallel file deletion in FileBasedWriteAheadLog is robust to deletion error") {
+    val manualClock = new ManualClock
+    conf.set("spark.streaming.driver.writeAheadLog.rollingIntervalSecs", "1")
+    require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = true) === 1)
+    val tracker = createTracker(clock = manualClock)
+
+    val addBlocks = generateBlockInfos()
+    val batch1 = addBlocks.slice(0, 1)
+    val batch2 = addBlocks.slice(1, 3)
+    val batch3 = addBlocks.slice(3, 6)
+
+    def advanceTime(): Unit = manualClock.advance(1000)
+
+    assert(getWriteAheadLogFiles().length === 0)
+
+    val start = manualClock.getTimeMillis()
+    manualClock.advance(500)
+    tracker.cleanupOldBatches(start, waitForCompletion = false)
+    assert(getWriteAheadLogFiles().length === 1)
+    advanceTime()
+    batch1.foreach(tracker.addBlock)
+    assert(getWriteAheadLogFiles().length === 1)
+    advanceTime()
+
+    val batch1Time = manualClock.getTimeMillis()
+    tracker.allocateBlocksToBatch(batch1Time)
+    advanceTime()
+
+    batch2.foreach { block =>
+      tracker.addBlock(block)
+      advanceTime()
+    }
+    assert(getWriteAheadLogFiles().length === 3)
+
+    advanceTime()
+
+    val batch2Time = manualClock.getTimeMillis()
+    tracker.allocateBlocksToBatch(batch2Time)
+
+    advanceTime()
+
+    assert(getWriteAheadLogFiles().length === 4)
+    tracker.cleanupOldBatches(batch1Time, waitForCompletion = true)
+    assert(getWriteAheadLogFiles().length === 3)
+
+    batch3.foreach { block =>
+      tracker.addBlock(block)
+      advanceTime()
+    }
+    val batch3Time = manualClock.getTimeMillis()
+    tracker.allocateBlocksToBatch(batch3Time)
+
+    advanceTime()
+    assert(getWriteAheadLogFiles().length === 4)
+    advanceTime()
+    tracker.cleanupOldBatches(batch2Time, waitForCompletion = true)
+    assert(getWriteAheadLogFiles().length === 3)
+
+    def compareTrackers(base: ReceivedBlockTracker, subject: ReceivedBlockTracker): Unit = {
+      subject.getBlocksOfBatchAndStream(batch3Time, streamId) should be(
+        base.getBlocksOfBatchAndStream(batch3Time, streamId))
+      subject.getBlocksOfBatchAndStream(batch2Time, streamId) should be(
+        base.getBlocksOfBatchAndStream(batch2Time, streamId))
+      subject.getBlocksOfBatchAndStream(batch1Time, streamId) should be(Nil)
+    }
+
+    val tracker2 = createTracker(recoverFromWriteAheadLog = true, clock = manualClock)
+    compareTrackers(tracker, tracker2)
+
+    WriteAheadLogSuite.writeEventsUsingWriter(getLogFileName(start), Seq(createBatchCleanup(start)))
+
+    assert(getWriteAheadLogFiles().length === 4)
+    val tracker3 = createTracker(recoverFromWriteAheadLog = true, clock = manualClock)
+    compareTrackers(tracker, tracker3)
+    WriteAheadLogSuite.writeEventsUsingWriter(getLogFileName(batch1Time),
+      Seq(createBatchAllocation(batch1Time, batch1)))
+    assert(getWriteAheadLogFiles().length === 5)
+    val tracker4 = createTracker(recoverFromWriteAheadLog = true, clock = manualClock)
+    compareTrackers(tracker, tracker4)
+  }
+
   /**
    * Create tracker object with the optional provided clock. Use fake clock if you
    * want to control time by manually incrementing it to test log clean.
@@ -231,6 +312,12 @@ class ReceivedBlockTrackerSuite
   /** Get all the data written in the given write ahead log file. */
   def getWrittenLogData(logFile: String): Seq[ReceivedBlockTrackerLogEvent] = {
     getWrittenLogData(Seq(logFile))
+  }
+
+  /** Get the log file name for the given log start time. */
+  def getLogFileName(time: Long, rollingIntervalSecs: Int = 1): String = {
+    checkpointDirectory.toString + File.separator + "receivedBlockMetadata" +
+      File.separator + s"log-$time-${time + rollingIntervalSecs * 1000}"
   }
 
   /**
