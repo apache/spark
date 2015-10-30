@@ -210,18 +210,7 @@ private[spark] class AppClient(
 
       case r: RequestExecutors =>
         master match {
-          case Some(m) =>
-            receiveAndReplyThreadPool.execute(new Runnable {
-              override def run(): Unit = {
-                try {
-                  context.reply(m.askWithRetry[Boolean](r))
-                } catch {
-                  case ie: InterruptedException => // Cancelled
-                  case NonFatal(t) =>
-                    context.sendFailure(t)
-                }
-              }
-            })
+          case Some(m) => receiveAndReplyAsync(m, context, r)
           case None =>
             logWarning("Attempted to request executors before registering with Master.")
             context.reply(false)
@@ -229,22 +218,26 @@ private[spark] class AppClient(
 
       case k: KillExecutors =>
         master match {
-          case Some(m) =>
-            receiveAndReplyThreadPool.execute(new Runnable {
-              override def run(): Unit = {
-                try {
-                  context.reply(m.askWithRetry[Boolean](k))
-                } catch {
-                  case ie: InterruptedException => // Cancelled
-                  case NonFatal(t) =>
-                    context.sendFailure(t)
-                }
-              }
-            })
+          case Some(m) => receiveAndReplyAsync(m, context, k)
           case None =>
             logWarning("Attempted to kill executors before registering with Master.")
             context.reply(false)
         }
+    }
+
+    private def receiveAndReplyAsync[T](masterRef: RpcEndpointRef, context: RpcCallContext,
+                                     msg: T): Unit = {
+      receiveAndReplyThreadPool.execute(new Runnable {
+        override def run(): Unit = {
+          try {
+            context.reply(masterRef.askWithRetry[Boolean](msg))
+          } catch {
+            case ie: InterruptedException => // Cancelled
+            case NonFatal(t) =>
+              context.sendFailure(t)
+          }
+        }
+      })
     }
 
     override def onDisconnected(address: RpcAddress): Unit = {
