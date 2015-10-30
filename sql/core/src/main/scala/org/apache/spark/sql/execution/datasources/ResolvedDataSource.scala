@@ -28,7 +28,7 @@ import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{DataFrame, SaveMode, AnalysisException, SQLContext}
+import org.apache.spark.sql.{DataFrame, SaveMode, AnalysisException, SQLConf, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
@@ -96,7 +96,7 @@ object ResolvedDataSource extends Logging {
           }
           dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
         case dataSource: HadoopFsRelationProvider =>
-          val maybePartitionsSchema = if (partitionColumns.isEmpty) {
+          var maybePartitionsSchema = if (partitionColumns.isEmpty) {
             None
           } else {
             Some(partitionColumnsSchema(schema, partitionColumns))
@@ -119,8 +119,12 @@ object ResolvedDataSource extends Logging {
               }
           }
 
-          val dataSchema =
-            StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
+          var dataSchema = StructType(schema.filterNot(f => partitionColumns.contains(f.name)))
+
+          if (sqlContext.conf.getConf(SQLConf.DATASOURCE_SCHEMA_AS_NULLABLE)) {
+            dataSchema = dataSchema.asNullable
+            maybePartitionsSchema = maybePartitionsSchema.map(_.asNullable)
+          }
 
           dataSource.createRelation(
             sqlContext,
@@ -177,7 +181,7 @@ object ResolvedDataSource extends Logging {
       schema.find(_.name == col).getOrElse {
         throw new RuntimeException(s"Partition column $col not found in schema $schema")
       }
-    }).asNullable
+    })
   }
 
   /** Create a [[ResolvedDataSource]] for saving the content of the given DataFrame. */
@@ -209,12 +213,19 @@ object ResolvedDataSource extends Logging {
 
         PartitioningUtils.validatePartitionColumnDataTypes(data.schema, partitionColumns)
 
-        val dataSchema = StructType(data.schema.filterNot(f => partitionColumns.contains(f.name)))
+        var dataSchema = StructType(data.schema.filterNot(f => partitionColumns.contains(f.name)))
+        var partitionSchema = partitionColumnsSchema(data.schema, partitionColumns)
+
+        if (sqlContext.conf.getConf(SQLConf.DATASOURCE_SCHEMA_AS_NULLABLE)) {
+          dataSchema = dataSchema.asNullable
+          partitionSchema = partitionSchema.asNullable
+        }
+
         val r = dataSource.createRelation(
           sqlContext,
           Array(outputPath.toString),
-          Some(dataSchema.asNullable),
-          Some(partitionColumnsSchema(data.schema, partitionColumns)),
+          Some(dataSchema),
+          Some(partitionSchema),
           caseInsensitiveOptions)
 
         // For partitioned relation r, r.schema's column ordering can be different from the column
