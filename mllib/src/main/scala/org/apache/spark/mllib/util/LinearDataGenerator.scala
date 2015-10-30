@@ -77,10 +77,9 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double = 0.1): Seq[LabeledPoint] = {
-    generateLinearInput(intercept, weights,
-      Array.fill[Double](weights.length)(0.0),
-      Array.fill[Double](weights.length)(1.0 / 3.0),
-      nPoints, seed, eps)}
+    generateLinearInput(intercept, weights, Array.fill[Double](weights.length)(0.0),
+      Array.fill[Double](weights.length)(1.0 / 3.0), nPoints, seed, eps)
+  }
 
   /**
    * @param intercept Data intercept
@@ -103,7 +102,7 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double): Seq[LabeledPoint] = {
-    generateLinearInputInternal(intercept, weights, xMean, xVariance, nPoints, seed, eps, 0.0)
+    generateLinearInput(intercept, weights, xMean, xVariance, nPoints, seed, eps, 0.0)
   }
 
 
@@ -117,12 +116,12 @@ object LinearDataGenerator {
    * @param nPoints Number of points in sample.
    * @param seed Random seed
    * @param eps Epsilon scaling factor.
-   * @param sparcity The ratio of zero elements. If it is 0.0, LabeledPoints with
+   * @param sparsity The ratio of zero elements. If it is 0.0, LabeledPoints with
    *                 DenseVector is returned.
    * @return Seq of input.
    */
   @Since("1.6.0")
-  def generateLinearInputInternal(
+  def generateLinearInput(
       intercept: Double,
       weights: Array[Double],
       xMean: Array[Double],
@@ -130,8 +129,8 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double,
-      sparcity: Double): Seq[LabeledPoint] = {
-    require(sparcity <= 1.0)
+      sparsity: Double): Seq[LabeledPoint] = {
+    require(0.0 <= sparsity && sparsity <= 1.0)
     val rnd = new Random(seed)
     val x = Array.fill[Array[Double]](nPoints)(
       Array.fill[Double](weights.length)(rnd.nextDouble()))
@@ -140,7 +139,7 @@ object LinearDataGenerator {
       var i = 0
       val len = v.length
       while (i < len) {
-        if (rnd.nextDouble() <= sparcity) {
+        if (rnd.nextDouble() <= sparsity) {
           v(i) = 0.0
         } else {
           v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
@@ -160,12 +159,15 @@ object LinearDataGenerator {
         case (d: Double, i: Int) => (i, d)
       }
     }
-    if (sparcity == 0.0) {
-      // Return LabeledPoints with DenseVector
-      y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
-    } else {
-      // Return LabeledPoints with SparseVector
-      y.zip(sparseX).map(p => LabeledPoint(p._1, Vectors.sparse(weights.length, p._2)))
+
+    y.zip(x).map { p =>
+      if (sparsity == 0.0) {
+        // Return LabeledPoints with DenseVector
+        LabeledPoint(p._1, Vectors.dense(p._2))
+      } else {
+        // Return LabeledPoints with SparseVector
+        LabeledPoint(p._1, Vectors.dense(p._2).toSparse)
+      }
     }
   }
 
