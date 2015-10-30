@@ -171,6 +171,9 @@ public class TransportClient implements Closeable {
     final long startTime = System.currentTimeMillis();
     logger.debug("Sending stream request for {} to {}", streamId, serverAddr);
 
+    // Need to synchronize here so that the callback is added to the queue and the RPC is
+    // written to the socket atomically, so that callbacks are called in the right order
+    // when responses arrive.
     synchronized (this) {
       handler.addStreamCallback(callback);
       channel.writeAndFlush(new StreamRequest(streamId)).addListener(
