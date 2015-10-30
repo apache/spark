@@ -269,7 +269,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(conf, isLocal, listenerBus)
+    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master))
   }
 
   private[spark] def env: SparkEnv = _env
@@ -2561,24 +2561,28 @@ object SparkContext extends Logging {
   }
 
   /**
+   * The number of driver cores to use for execution in local mode, 0 otherwise.
+   */
+  private[spark] def numDriverCores(master: String): Int = {
+    def convertToInt(threads: String): Int = {
+      if (threads == "*") Runtime.getRuntime.availableProcessors() else threads.toInt
+    }
+    master match {
+      case "local" => 1
+      case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
+      case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
+      case _ => 0 // driver is not used for execution
+    }
+  }
+
+  /**
    * Create a task scheduler based on a given master URL.
    * Return a 2-tuple of the scheduler backend and the task scheduler.
    */
   private def createTaskScheduler(
       sc: SparkContext,
       master: String): (SchedulerBackend, TaskScheduler) = {
-    // Regular expression used for local[N] and local[*] master formats
-    val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
-    // Regular expression for local[N, maxRetries], used in tests with failing tasks
-    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r
-    // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
-    val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
-    // Regular expression for connecting to Spark deploy clusters
-    val SPARK_REGEX = """spark://(.*)""".r
-    // Regular expression for connection to Mesos cluster by mesos:// or zk:// url
-    val MESOS_REGEX = """(mesos|zk)://.*""".r
-    // Regular expression for connection to Simr cluster
-    val SIMR_REGEX = """simr://(.*)""".r
+    import SparkMasterRegex._
 
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
@@ -2717,6 +2721,24 @@ object SparkContext extends Logging {
         throw new SparkException("Could not parse Master URL: '" + master + "'")
     }
   }
+}
+
+/**
+ * A collection of regexes for extracting information from the master string.
+ */
+private object SparkMasterRegex {
+  // Regular expression used for local[N] and local[*] master formats
+  val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
+  // Regular expression for local[N, maxRetries], used in tests with failing tasks
+  val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r
+  // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
+  val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
+  // Regular expression for connecting to Spark deploy clusters
+  val SPARK_REGEX = """spark://(.*)""".r
+  // Regular expression for connection to Mesos cluster by mesos:// or zk:// url
+  val MESOS_REGEX = """(mesos|zk)://.*""".r
+  // Regular expression for connection to Simr cluster
+  val SIMR_REGEX = """simr://(.*)""".r
 }
 
 /**

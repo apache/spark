@@ -344,8 +344,7 @@ private[sql] class DynamicPartitionWriterContainer(
               StructType.fromAttributes(partitionColumns),
               StructType.fromAttributes(dataColumns),
               SparkEnv.get.blockManager,
-              SparkEnv.get.shuffleMemoryManager,
-              SparkEnv.get.shuffleMemoryManager.pageSizeBytes)
+              TaskContext.get().taskMemoryManager().pageSizeBytes)
             sorter.insertKV(currentKey, getOutputRow(inputRow))
           }
         } else {
