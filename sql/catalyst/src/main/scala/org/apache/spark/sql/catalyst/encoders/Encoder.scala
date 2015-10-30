@@ -53,7 +53,7 @@ object Encoder {
   private def getTypeTag[T](c: Class[T]): TypeTag[T] = {
     import scala.reflect.api
 
-    //val mirror = runtimeMirror(c.getClassLoader)
+    // val mirror = runtimeMirror(c.getClassLoader)
     val mirror = rootMirror
     val sym = mirror.staticClass(c.getName)
     val tpe = sym.selfType

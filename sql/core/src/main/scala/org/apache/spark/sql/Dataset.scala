@@ -187,14 +187,17 @@ class Dataset[T] private(
   def mapPartitions[U](
       f: FlatMapFunction[java.util.Iterator[T], U],
       encoder: Encoder[U]): Dataset[U] = {
-    def func: (Iterator[T]) => Iterator[U] = {
-      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
-    }
+    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).iterator().asScala
     mapPartitions(func)(encoder)
   }
 
   def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
     mapPartitions(_.flatMap(func))
+
+  def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    val func: (T) => Iterable[U] = x => f.call(x).asScala
+    flatMap(func)(encoder)
+  }
 
   /* ************** *
    *  Side effects  *
@@ -206,11 +209,16 @@ class Dataset[T] private(
    */
   def foreach(func: T => Unit): Unit = rdd.foreach(func)
 
+  def foreach(func: VoidFunction[T]): Unit = foreach(func.call(_))
+
   /**
    * Runs `func` on each partition of this Dataset.
    * @since 1.6.0
    */
   def foreachPartition(func: Iterator[T] => Unit): Unit = rdd.foreachPartition(func)
+
+  def foreachPartition(func: VoidFunction[java.util.Iterator[T]]): Unit =
+    foreachPartition(it => func.call(it.asJava))
 
   /* ************* *
    *  Aggregation  *
@@ -222,6 +230,8 @@ class Dataset[T] private(
    * @since 1.6.0
    */
   def reduce(func: (T, T) => T): T = rdd.reduce(func)
+
+  def reduce(func: JFunction2[T, T, T]): T = reduce(func.call(_, _))
 
   /**
    * Aggregates the elements of each partition, and then the results for all the partitions, using a
@@ -235,6 +245,8 @@ class Dataset[T] private(
    * @since 1.6.0
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = rdd.fold(zeroValue)(op)
+
+  def fold(zeroValue: T, func: JFunction2[T, T, T]): T = fold(zeroValue)(func.call(_, _))
 
   /**
    * Returns a [[GroupedDataset]] where the data is grouped by the given key function.
@@ -274,6 +286,9 @@ class Dataset[T] private(
       keyAttributes)
   }
 
+  def groupBy[K](f: JFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
+    groupBy(f.call(_))(encoder)
+
   /* ****************** *
    *  Typed Relational  *
    * ****************** */
@@ -295,7 +310,7 @@ class Dataset[T] private(
    *
    * {{{
    *   val ds = Seq(1, 2, 3).toDS()
-   *   val newDS = ds.select(e[Int]("value + 1"))
+   *   val newDS = ds.select(expr("value + 1").as[Int])
    * }}}
    * @since 1.6.0
    */
