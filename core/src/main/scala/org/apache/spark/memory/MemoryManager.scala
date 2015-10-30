@@ -19,7 +19,10 @@ package org.apache.spark.memory
 
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, SparkConf}
+import com.google.common.annotations.VisibleForTesting
+
+import org.apache.spark.util.Utils
+import org.apache.spark.{SparkException, TaskContext, SparkConf, Logging}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
@@ -129,10 +132,24 @@ private[spark] abstract class MemoryManager(
    * Release numBytes of off-heap execution memory belonging to the given task.
    */
   private[memory]
-  def releaseOffHeapExecutionMemory(
-      numBytes: Long,
-      taskAttemptId: Long): Unit = synchronized {
-    offHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
+  final def releaseExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
+    val curMem = executionMemoryForTask.getOrElse(taskAttemptId, 0L)
+    if (curMem < numBytes) {
+      if (Utils.isTesting) {
+        throw new SparkException(
+          s"Internal error: release called on $numBytes bytes but task only has $curMem")
+      } else {
+        logWarning(s"Internal error: release called on $numBytes bytes but task only has $curMem")
+      }
+    }
+    if (executionMemoryForTask.contains(taskAttemptId)) {
+      executionMemoryForTask(taskAttemptId) -= numBytes
+      if (executionMemoryForTask(taskAttemptId) <= 0) {
+        executionMemoryForTask.remove(taskAttemptId)
+      }
+      releaseExecutionMemory(numBytes)
+    }
+    notifyAll() // Notify waiters in acquireExecutionMemory() that memory has been freed
   }
 
   /**

@@ -22,16 +22,21 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
-class GrantEverythingMemoryManager(conf: SparkConf)
-    extends MemoryManager(conf, numCores = 1, Long.MaxValue) {
-  override private[memory] def acquireOnHeapExecutionMemory(
-    numBytes: Long,
-    taskAttemptId: Long): Long = {
-    if (oom) {
-      oom = false
+class TestMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 1) {
+  private[memory] override def doAcquireExecutionMemory(
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
+    if (oomOnce) {
+      oomOnce = false
       0
-    } else {
+    } else if (available >= numBytes) {
+      available -= numBytes
       numBytes
+    } else {
+      _executionMemoryUsed += available
+      val grant = available
+      available = 0
+      grant
     }
   }
   override private[memory] def acquireOffHeapExecutionMemory(
@@ -47,13 +52,24 @@ class GrantEverythingMemoryManager(conf: SparkConf)
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def releaseStorageMemory(numBytes: Long): Unit = { }
+  override def releaseExecutionMemory(numBytes: Long): Unit = {
+    available += numBytes
+    _executionMemoryUsed -= numBytes
+  }
+  override def releaseStorageMemory(numBytes: Long): Unit = {}
   override private[memory] def releaseOnHeapExecutionMemory(numBytes: Long, tid: Long): Unit = {}
   override private[memory] def releaseOffHeapExecutionMemory(numBytes: Long, tid: Long): Unit = {}
   override def maxStorageMemory: Long = Long.MaxValue
 
-  private var oom = false
-  def markExecutionAsOutOfMemory(): Unit = {
-    oom = true
+  private var oomOnce = false
+  private var available = Long.MaxValue
+
+  def markExecutionAsOutOfMemoryOnce(): Unit = {
+    oomOnce = true
   }
+
+  def limit(avail: Long): Unit = {
+    available = avail
+  }
+
 }
