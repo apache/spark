@@ -119,8 +119,8 @@ class OptimizeInSuite extends PlanTest {
     "list expression contains attribute - select)") {
     val originalQuery =
       testRelation
-        .select(In(Literal.create(null, StringType), Seq(Literal(1), UnresolvedAttribute("b"))).as("a"))
-        .analyze
+        .select(In(Literal.create(null, StringType),
+        Seq(Literal(1), UnresolvedAttribute("b"))).as("a")).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
