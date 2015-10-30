@@ -27,6 +27,8 @@ from pyspark.mllib.common import inherit_doc
 class Estimator(Params):
     """
     Abstract class for estimators that fit models to data.
+
+    .. versionadded:: 1.3.0
     """
 
     __metaclass__ = ABCMeta
@@ -75,6 +77,8 @@ class Transformer(Params):
     """
     Abstract class for transformers that transform one dataset into
     another.
+
+    .. versionadded:: 1.3.0
     """
 
     __metaclass__ = ABCMeta
@@ -116,6 +120,8 @@ class Transformer(Params):
 class Model(Transformer):
     """
     Abstract class for models that are fitted by estimators.
+
+    .. versionadded:: 1.4.0
     """
 
     __metaclass__ = ABCMeta
@@ -139,6 +145,8 @@ class Pipeline(Estimator):
     consists of fitted models and transformers, corresponding to the
     pipeline stages. If there are no stages, the pipeline acts as an
     identity transformer.
+
+    .. versionadded:: 1.3.0
     """
 
     @keyword_only
@@ -212,6 +220,12 @@ class Pipeline(Estimator):
 
     @since("1.4.0")
     def copy(self, extra=None):
+        """
+        Creates a copy of this instance.
+
+        :param extra: extra parameters
+        :returns: new instance
+        """
         if extra is None:
             extra = dict()
         that = Params.copy(self, extra)
@@ -223,6 +237,8 @@ class Pipeline(Estimator):
 class PipelineModel(Model):
     """
     Represents a compiled pipeline with transformers and fitted models.
+
+    .. versionadded:: 1.3.0
     """
 
     def __init__(self, stages):
@@ -236,6 +252,12 @@ class PipelineModel(Model):
 
     @since("1.4.0")
     def copy(self, extra=None):
+        """
+        Creates a copy of this instance.
+
+        :param extra: extra parameters
+        :returns: new instance
+        """
         if extra is None:
             extra = dict()
         stages = [stage.copy(extra) for stage in self.stages]

@@ -32,6 +32,8 @@ __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
 class Evaluator(Params):
     """
     Base class for evaluators that compute metrics from predictions.
+
+    .. versionadded:: 1.4.0
     """
 
     __metaclass__ = ABCMeta
@@ -117,6 +119,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     0.70...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
     0.83...
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -186,6 +190,8 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     0.993...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "mae"})
     2.649...
+
+    .. versionadded:: 1.4.0
     """
     # Because we will maximize evaluation value (ref: `CrossValidator`),
     # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
@@ -255,6 +261,8 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     0.66...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "recall"})
     0.66...
+
+    .. versionadded:: 1.5.0
     """
     # a placeholder to make it appear in the generated doc
     metricName = Param(Params._dummy(), "metricName",

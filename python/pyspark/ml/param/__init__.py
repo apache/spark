@@ -28,6 +28,8 @@ __all__ = ['Param', 'Params']
 class Param(object):
     """
     A param with self-contained documentation.
+
+    .. versionadded:: 1.3.0
     """
 
     def __init__(self, parent, name, doc):
@@ -57,6 +59,8 @@ class Params(Identifiable):
     """
     Components that take parameters. This also provides an internal
     param map to store parameter values attached to the instance.
+
+    .. versionadded:: 1.3.0
     """
 
     __metaclass__ = ABCMeta

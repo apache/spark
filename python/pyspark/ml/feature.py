@@ -52,6 +52,8 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> params = {binarizer.threshold: -0.5, binarizer.outputCol: "vector"}
     >>> binarizer.transform(df, params).head().vector
     1.0
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -118,6 +120,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
     2.0
     >>> bucketizer.setParams(outputCol="b").transform(df).head().b
     0.0
+
+    .. versionadded:: 1.3.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -201,6 +205,8 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
     ...
     >>> sorted(map(str, model.vocabulary))
     ['a', 'b', 'c']
+
+    .. versionadded:: 1.6.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -312,6 +318,8 @@ class CountVectorizerModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by CountVectorizer.
+
+    .. versionadded:: 1.6.0
     """
 
     @property
@@ -346,6 +354,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
     >>> df3 = DCT(inverse=True, inputCol="resultVec", outputCol="origVec").transform(df2)
     >>> df3.head().origVec
     DenseVector([5.0, 8.0, 6.0])
+
+    .. versionadded:: 1.6.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -408,6 +418,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     DenseVector([2.0, 2.0, 9.0])
     >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0])).transform(df).head().eprod
     DenseVector([4.0, 3.0, 15.0])
+
+    .. versionadded:: 1.5.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -470,6 +482,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
     >>> hashingTF.transform(df, params).head().vector
     SparseVector(5, {2: 1.0, 3: 1.0, 4: 1.0})
+
+    .. versionadded:: 1.3.0
     """
 
     @keyword_only
@@ -512,6 +526,8 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     >>> params = {idf.minDocFreq: 1, idf.outputCol: "vector"}
     >>> idf.fit(df, params).transform(df).head().vector
     DenseVector([0.2877, 0.0])
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -565,6 +581,8 @@ class IDFModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by IDF.
+
+    .. versionadded:: 1.4.0
     """
 
 
@@ -596,6 +614,8 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
     |[2.0]| [1.0]|
     +-----+------+
     ...
+
+    .. versionadded:: 1.6.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -664,6 +684,8 @@ class MinMaxScalerModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by :py:class:`MinMaxScaler`.
+
+    .. versionadded:: 1.6.0
     """
 
 
@@ -698,6 +720,8 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+
+    .. versionadded:: 1.5.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -759,6 +783,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> params = {normalizer.p: 1.0, normalizer.inputCol: "dense", normalizer.outputCol: "vector"}
     >>> normalizer.transform(df, params).head().vector
     DenseVector([0.4286, -0.5714])
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -836,6 +862,8 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
     >>> params = {encoder.dropLast: False, encoder.outputCol: "test"}
     >>> encoder.transform(td, params).head().test
     SparseVector(3, {0: 1.0})
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -897,6 +925,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
     >>> px.setParams(outputCol="test").transform(df).head().test
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -971,6 +1001,8 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -1062,6 +1094,8 @@ class SQLTransformer(JavaTransformer):
     ...     statement="SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
     >>> sqlTrans.transform(df).head()
     Row(id=0, v1=1.0, v2=3.0, v3=4.0, v4=3.0)
+
+    .. versionadded:: 1.6.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -1122,6 +1156,8 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
     DenseVector([1.4142])
     >>> model.transform(df).collect()[1].scaled
     DenseVector([1.4142])
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -1190,6 +1226,8 @@ class StandardScalerModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by StandardScaler.
+
+    .. versionadded:: 1.4.0
     """
 
     @property
@@ -1230,6 +1268,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
+
+    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -1262,6 +1302,8 @@ class StringIndexerModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by StringIndexer.
+
+    .. versionadded:: 1.4.0
     """
     @property
     @since("1.5.0")
@@ -1282,6 +1324,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     The index-string mapping is either from the ML attributes of the input column,
     or from user-supplied labels (which take precedence over ML attributes).
     See L{StringIndexer} for converting strings into indices.
+
+    .. versionadded:: 1.6.0
     """
 
     # a placeholder to make the labels show up in generated doc
@@ -1335,6 +1379,8 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
 
     A feature transformer that filters out stop words from input.
     Note: null values from input array are preserved unless adding null to stopWords explicitly.
+
+    .. versionadded:: 1.6.0
     """
     # a placeholder to make the stopwords show up in generated doc
     stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out")
@@ -1429,6 +1475,8 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+
+    .. versionadded:: 1.3.0
     """
 
     @keyword_only
@@ -1468,6 +1516,8 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
     >>> params = {vecAssembler.inputCols: ["b", "a"], vecAssembler.outputCol: "vector"}
     >>> vecAssembler.transform(df, params).head().vector
     DenseVector([0.0, 1.0])
+
+    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -1548,6 +1598,8 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> model2 = indexer.fit(df, params)
     >>> model2.transform(df).head().vector
     DenseVector([1.0, 0.0])
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -1605,6 +1657,8 @@ class VectorIndexerModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by VectorIndexer.
+
+    .. versionadded:: 1.4.0
     """
 
     @property
@@ -1649,6 +1703,8 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> vs = VectorSlicer(inputCol="features", outputCol="sliced", indices=[1, 4])
     >>> vs.transform(df).head().sliced
     DenseVector([2.3, 1.0])
+
+    .. versionadded:: 1.6.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -1747,6 +1803,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     ...
     >>> model.transform(doc).head().model
     DenseVector([-0.0422, -0.5138, -0.2546, 0.6885, 0.276])
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -1845,6 +1903,8 @@ class Word2VecModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by Word2Vec.
+
+    .. versionadded:: 1.4.0
     """
 
     @since("1.5.0")
@@ -1884,6 +1944,8 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
     >>> model = pca.fit(df)
     >>> model.transform(df).collect()[0].pca_features
     DenseVector([1.648..., -4.013...])
+
+    .. versionadded:: 1.5.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -1934,6 +1996,8 @@ class PCAModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by PCA.
+
+    .. versionadded:: 1.5.0
     """
 
 
@@ -1972,6 +2036,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
     |0.0|0.0|  a|   [0.0]|  0.0|
     +---+---+---+--------+-----+
     ...
+
+    .. versionadded:: 1.5.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -2022,6 +2088,8 @@ class RFormulaModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by :py:class:`RFormula`.
+
+    .. versionadded:: 1.5.0
     """
 
 
