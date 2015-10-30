@@ -671,7 +671,12 @@ case class Corr(
       val Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
       val MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
       val MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
-      Ck / math.sqrt(MkX * MkY)
+      val corr = Ck / math.sqrt(MkX * MkY)
+      if (corr.isNaN) {
+        null
+      } else {
+        corr
+      }
     } else {
       null
     }
