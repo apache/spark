@@ -19,6 +19,11 @@ package org.apache.spark.sql
 
 import java.io.File
 
+import scala.language.postfixOps
+import scala.util.Random
+
+import org.scalatest.Matchers._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.execution.Exchange
@@ -27,10 +32,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.types._
-import org.scalatest.Matchers._
-
-import scala.language.postfixOps
-import scala.util.Random
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._

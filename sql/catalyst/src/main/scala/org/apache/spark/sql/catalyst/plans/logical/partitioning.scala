@@ -35,7 +35,14 @@ case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
  * information about the number of partitions during execution. Used when a specific ordering or
  * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
  * `coalesce` and `repartition`.
- * If `numPartitions` is not specified, the partition in `child` is preserved.
+ * If `numPartitions` is not specified, the partitioning of `child` is preserved.
  */
-case class RepartitionByExpression(partitionExpressions: Seq[Expression],
-    child: LogicalPlan, numPartitions: Option[Int] = None) extends RedistributeData
+case class RepartitionByExpression(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan,
+    numPartitions: Option[Int] = None) extends RedistributeData {
+  numPartitions match {
+    case Some(n) => require(n > 0, "numPartitions must be greater than 0.")
+    case None => // Ok
+  }
+}
