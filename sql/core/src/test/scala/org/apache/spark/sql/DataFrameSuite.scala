@@ -20,19 +20,17 @@ package org.apache.spark.sql
 import java.io.File
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData.TestData2
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.types._
+import org.scalatest.Matchers._
 
 import scala.language.postfixOps
 import scala.util.Random
-
-import org.scalatest.Matchers._
-
-import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SharedSQLContext}
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -1037,7 +1035,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("distributeBy") {
+  test("distributeBy and localSort") {
     val original = testData.repartition(1)
     assert(original.rdd.partitions.length == 1)
     val df = original.distributeBy(Column("key") :: Nil, 5)
@@ -1064,53 +1062,54 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     // Distribute and order by.
     val df4 = data.distributeBy(Column("a") :: Nil).localSort($"b".desc)
-    // Walk each partition and verify that it is sorted descending and not globally sorted.
+    // Walk each partition and verify that it is sorted descending and does not contain all
+    // the values.
     df4.rdd.foreachPartition(p => {
       var previousValue: Int = -1
-      var globallyOrdered: Boolean = true
+      var allSequential: Boolean = true
       p.foreach(r => {
         val v: Int = r.getInt(1)
         if (previousValue != -1) {
           if (previousValue < v) throw new SparkException("Partition is not ordered.")
-          if (v + 1 != previousValue) globallyOrdered = false
+          if (v + 1 != previousValue) allSequential = false
         }
         previousValue = v
       })
-      if (globallyOrdered) throw new SparkException("Partition should not be globally ordered")
+      if (allSequential) throw new SparkException("Partition should not be globally ordered")
     })
 
     // Distribute and order by with multiple order bys
     val df5 = data.distributeBy(Column("a") :: Nil, 2).localSort($"b".asc, $"a".asc)
-    // Walk each partition and verify that it is sorted descending and not globally sorted.
+    // Walk each partition and verify that it is sorted ascending
     df5.rdd.foreachPartition(p => {
       var previousValue: Int = -1
-      var globallyOrdered: Boolean = true
+      var allSequential: Boolean = true
       p.foreach(r => {
         val v: Int = r.getInt(1)
         if (previousValue != -1) {
           if (previousValue > v) throw new SparkException("Partition is not ordered.")
-          if (v - 1 != previousValue) globallyOrdered = false
+          if (v - 1 != previousValue) allSequential = false
         }
         previousValue = v
       })
-      if (globallyOrdered) throw new SparkException("Partition should not be globally ordered")
+      if (allSequential) throw new SparkException("Partition should not be all sequential")
     })
 
-    // Distribute into one partition and order by. This *should* be globally sorted.
+    // Distribute into one partition and order by. This partition should contain all the values.
     val df6 = data.distributeBy(Column("a") :: Nil, 1).localSort($"b".asc)
     // Walk each partition and verify that it is sorted descending and not globally sorted.
     df6.rdd.foreachPartition(p => {
       var previousValue: Int = -1
-      var globallyOrdered: Boolean = true
+      var allSequential: Boolean = true
       p.foreach(r => {
         val v: Int = r.getInt(1)
         if (previousValue != -1) {
           if (previousValue > v) throw new SparkException("Partition is not ordered.")
-          if (v - 1 != previousValue) globallyOrdered = false
+          if (v - 1 != previousValue) allSequential = false
         }
         previousValue = v
       })
-      if (!globallyOrdered) throw new SparkException("Partition should be globally ordered")
+      if (!allSequential) throw new SparkException("Partition should contain all sequential values")
     })
   }
 }

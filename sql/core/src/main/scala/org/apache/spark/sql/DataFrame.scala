@@ -668,13 +668,22 @@ class DataFrame private[sql](
 
   /**
    * Returns a new [[DataFrame]] partitioned by the given partitioning expressions into
-   * `numPartitions`
-   * `numPartitions` can be < 0 to preserve the current number of partitions.
+   * `numPartitions`. The resulting DataFrame is hash partitioned.
    * @group dfops
    * @since 1.6.0
    */
-  def distributeBy(partitionExprs: Seq[Column], numPartitions: Int = -1): DataFrame = {
-    PartitionByExpression(partitionExprs.map { _.expr }, logicalPlan, numPartitions)
+  def distributeBy(partitionExprs: Seq[Column], numPartitions: Int): DataFrame = {
+    RepartitionByExpression(partitionExprs.map { _.expr }, logicalPlan, Some(numPartitions))
+  }
+
+  /**
+   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions preserving
+   * the existing number of partitions. The resulting DataFrame is hash partitioned.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def distributeBy(partitionExprs: Seq[Column]): DataFrame = {
+    RepartitionByExpression(partitionExprs.map { _.expr }, logicalPlan, None)
   }
 
   /**

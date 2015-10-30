@@ -31,18 +31,11 @@ case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
   extends RedistributeData
 
 /**
- * This method repartitions data using [[Expression]]s, and receives information about the
- * number of partitions during execution. Used when a specific ordering or distribution is
- * expected by the consumer of the query result. Use [[Repartition]] for RDD-like
+ * This method repartitions data using [[Expression]]s into `numPartitions`, and receives
+ * information about the number of partitions during execution. Used when a specific ordering or
+ * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
  * `coalesce` and `repartition`.
+ * If `numPartitions` is not specified, the partition in `child` is preserved.
  */
-case class RepartitionByExpression(partitionExpressions: Seq[Expression], child: LogicalPlan)
-  extends RedistributeData
-
-/**
- * This method repartitions data using [[Expression]]s into `numPartitions`. If numPartitions is
- * less than zero, a default is used. Otherwise this behaves identically to RepartitionByExpression.
- */
-case class PartitionByExpression(partitionExpressions: Seq[Expression],
-                                 child: LogicalPlan, numPartitions: Int = -1)
-  extends RedistributeData
+case class RepartitionByExpression(partitionExpressions: Seq[Expression],
+    child: LogicalPlan, numPartitions: Option[Int] = None) extends RedistributeData
