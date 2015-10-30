@@ -114,4 +114,21 @@ class OptimizeInSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("OptimizedIn test: Inset optimization disabled as " +
+    "list expression contains attribute - select)") {
+    val originalQuery =
+      testRelation
+        .select(In(Literal.create(null, StringType), Seq(Literal(1), UnresolvedAttribute("b"))).as("a"))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select(Literal.create(null, BooleanType).as("a"))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
 }
