@@ -357,7 +357,7 @@ setMethod("cache",
 #'
 #' Persist this DataFrame with the specified storage level. For details of the
 #' supported storage levels, refer to
-#' http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence.
+#' \url{http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence}.
 #'
 #' @param x The DataFrame to persist
 #' @rdname persist
@@ -1572,7 +1572,7 @@ setMethod("merge",
             joinRes
           })
 
-#' 
+#'
 #' Creates a list of columns by replacing the intersected ones with aliases.
 #' The name of the alias column is formed by concatanating the original column name and a suffix.
 #'
