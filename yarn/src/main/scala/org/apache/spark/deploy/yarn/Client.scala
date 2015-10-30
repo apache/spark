@@ -1337,8 +1337,7 @@ object Client extends Logging {
       conf: Configuration,
       credentials: Credentials) {
     if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
-      val util = new YarnSparkHadoopUtil()
-      util.obtainTokenForHiveMetastore(conf).foreach {
+      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
         credentials.addToken(new Text("hive.server2.delegation.token"), _)
       }
     }

@@ -269,7 +269,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       fail("No inner cause", e)
     }
     if (!inner.isInstanceOf[HiveException]) {
-      fail(s"Not a hive exception", inner)
+      fail("Not a hive exception", inner)
     }
     inner
   }

@@ -161,8 +161,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         logInfo(s"Hive class not found $e")
         logDebug("Hive class not found", e)
         None
-      case t: Throwable =>
-        throw t
     }
   }
 
@@ -203,16 +201,13 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
         // invoke
         val hive = getHive.invoke(null, hiveConf)
-        val tokenStr = getDelegationToken.invoke(hive, username, principal)
-          .asInstanceOf[java.lang.String]
+        val tokenStr = getDelegationToken.invoke(hive, username, principal).asInstanceOf[String]
         val hive2Token = new Token[DelegationTokenIdentifier]()
         hive2Token.decodeFromUrlString(tokenStr)
         Some(hive2Token)
       } finally {
-        try {
+        Utils.tryLogNonFatalError {
           closeCurrent.invoke(null)
-        } catch {
-          case e: Exception => logWarning("In Hive.closeCurrent()", e)
         }
       }
     } else {
