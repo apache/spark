@@ -992,7 +992,9 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
       moments(4) = buffer.getDouble(fourthMomentOffset)
     }
 
-    getStatistic(n, mean, moments)
+    if (n == 0.0) null
+    else if (n == 1.0) 0.0
+    else getStatistic(n, mean, moments)
   }
 }
 
@@ -1059,7 +1061,7 @@ case class StddevSamp(child: Expression,
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
 
-    if (n == 0.0) Double.NaN else math.sqrt(moments(2) / (n - 1.0))
+    if (n == 0.0 || n == 1.0) Double.NaN else math.sqrt(moments(2) / (n - 1.0))
   }
 }
 

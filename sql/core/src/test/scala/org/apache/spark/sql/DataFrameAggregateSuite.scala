@@ -188,7 +188,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       testData2.agg(stddev_samp('a)),
-      Row(math.sqrt(4 / 5.0))
+      Row(math.sqrt(4 / 5.0)))
   }
 
   test("zero stddev") {
@@ -255,7 +255,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(var_samp('a)),
-      Row(Double.NaN))
+      Row(0.0))
 
     checkAnswer(
       emptyTableData.agg(var_pop('a)),
@@ -263,11 +263,11 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(skewness('a)),
-      Row(Double.NaN))
+      Row(0.0))
 
     checkAnswer(
       emptyTableData.agg(kurtosis('a)),
-      Row(Double.NaN))
+      Row(0.0))
   }
 
   test("null moments") {
@@ -276,22 +276,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(variance('a)),
-      Row(Double.NaN))
+      Row(null))
 
     checkAnswer(
       emptyTableData.agg(var_samp('a)),
-      Row(Double.NaN))
+      Row(null))
 
     checkAnswer(
       emptyTableData.agg(var_pop('a)),
-      Row(Double.NaN))
+      Row(null))
 
     checkAnswer(
       emptyTableData.agg(skewness('a)),
-      Row(Double.NaN))
+      Row(null))
 
     checkAnswer(
       emptyTableData.agg(kurtosis('a)),
-      Row(Double.NaN))
+      Row(null))
   }
 }
