@@ -99,8 +99,8 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: NULL(StringType) IN (expr1, .., exprN) " +
-    "gets transformed to Filter(null)") {
+  test("OptimizedIn test: Inset optimization disabled as " +
+    "list expression contains attribute)") {
     val originalQuery =
       testRelation
         .where(In(Literal.create(null, StringType), Seq(Literal(1), UnresolvedAttribute("b"))))
