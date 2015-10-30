@@ -89,3 +89,10 @@ def create_app(config=None):
             settings.Session.remove()
 
         return app
+
+app = None
+def cached_app(config=None):
+    global app
+    if not app:
+        app = create_app(config)
+    return app
