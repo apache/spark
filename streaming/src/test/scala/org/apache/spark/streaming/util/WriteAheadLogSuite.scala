@@ -368,7 +368,7 @@ object WriteAheadLogSuite {
   }
 
   /**
-   * Write received block tracker events to a file using the writer class and return an array of 
+   * Write received block tracker events to a file using the writer class and return an array of
    * the file segments written.
    */
   def writeEventsUsingWriter(
