@@ -67,6 +67,7 @@ abstract class JdbcDialect {
    * @param sqlType The sql type (see java.sql.Types)
    * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
    * @param size The size of the type.
+   * @param scale The scale of the type.  Generally used for decimal types.
    * @param md Result metadata associated with this type.
    * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
    *         or null if the default type mapping should be used.
