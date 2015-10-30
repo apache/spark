@@ -127,12 +127,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     open();
   }
 
-  @VisibleForTesting
-  public int maxRecordSizeBytes() {
-    assert(sorter != null);
-    return sorter.maxRecordSizeBytes;
-  }
-
   private void updatePeakMemoryUsed() {
     // sorter can be null if this writer is closed
     if (sorter != null) {

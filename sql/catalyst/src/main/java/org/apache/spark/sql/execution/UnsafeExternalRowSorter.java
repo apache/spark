@@ -96,13 +96,8 @@ final class UnsafeExternalRowSorter {
     );
     numRowsInserted++;
     if (testSpillFrequency > 0 && (numRowsInserted % testSpillFrequency) == 0) {
-      spill();
+      sorter.spill();
     }
-  }
-
-  @VisibleForTesting
-  void spill() throws IOException {
-    sorter.spill();
   }
 
   /**
