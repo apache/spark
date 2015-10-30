@@ -18,8 +18,6 @@
 package org.apache.spark.network.util;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
 import io.netty.buffer.ByteBuf;
@@ -37,48 +35,23 @@ public class TransportFrameDecoderSuite {
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
 
-    final int frameCount = 200;
-    List<ByteBuf> buffers = new ArrayList<>();
-    for (int i = 0; i < frameCount / 2; i++) {
-      byte[] data1 = new byte[1024 * (rnd.nextInt(31) + 1)];
-      byte[] data2 = new byte[1024 * (rnd.nextInt(31) + 1)];
-      int totalSize = 2 * 8 + data1.length + data2.length;
-
-      ByteBuf allData = Unpooled.buffer(totalSize);
-      allData.writeLong(data1.length + 8);
-      allData.writeBytes(data1);
-      allData.writeLong(data2.length + 8);
-      allData.writeBytes(data2);
-
-      // Break the large buffer into a few smaller buffers, so that each individual frame
-      // is spread across several "reads".
-      int readCount = 3 + rnd.nextInt(5);
-      int readSize = totalSize / readCount;
-      for (int j = 0; j < readCount; j++) {
-        int offset = j * readSize;
-        int len;
-        if (j == readCount - 1) {
-          len = totalSize - offset;
-        } else {
-          len = readSize;
-        }
-        ByteBuf slice = allData.slice(offset, len).retain();
-        buffers.add(slice);
+    final int frameCount = 100;
+    ByteBuf data = Unpooled.buffer();
+    try {
+      for (int i = 0; i < frameCount; i++) {
+        byte[] frame = new byte[1024 * (rnd.nextInt(31) + 1)];
+        data.writeLong(frame.length + 8);
+        data.writeBytes(frame);
       }
 
-      allData.release();
-    }
-
-    try {
-      for (ByteBuf buf : buffers) {
-        decoder.channelRead(ctx, buf);
+      while (data.isReadable()) {
+        int size = rnd.nextInt(16 * 1024) + 256;
+        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)));
       }
 
       verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
     } finally {
-      for (ByteBuf buf : buffers) {
-        buf.release();
-      }
+      data.release();
     }
   }
 
