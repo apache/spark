@@ -165,7 +165,7 @@ public final class UnsafeFixedWidthAggregationMap {
   public KVIterator<UnsafeRow, UnsafeRow> iterator() {
     return new KVIterator<UnsafeRow, UnsafeRow>() {
 
-      private final BytesToBytesMap.BytesToBytesMapIterator mapLocationIterator =
+      private final BytesToBytesMap.MapIterator mapLocationIterator =
         map.destructiveIterator();
       private final UnsafeRow key = new UnsafeRow();
       private final UnsafeRow value = new UnsafeRow();
