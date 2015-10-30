@@ -99,6 +99,16 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
+  test("millisToDays returns the correct days from epoch ") {
+
+    assert(millisToDays(86400000L) == 1)
+    assert(millisToDays(172800000L) == 2)
+
+    assert(daysToMillis(1) == 86400000L)
+    assert(daysToMillis(10) == 864000000L)
+
+  }
+
   test("string to date") {
 
     var c = Calendar.getInstance()
