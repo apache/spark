@@ -32,8 +32,9 @@ import org.apache.spark.sql.{DataFrame, Row}
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   private val seed: Int = 42
-  @transient var dataset: DataFrame = _
-  @transient var datasetWithoutIntercept: DataFrame = _
+  @transient var datasetWithDenseFeature: DataFrame = _
+  @transient var datasetWithDenseFeatureWithoutIntercept: DataFrame = _
+  @transient var datasetWithSparseFeature: DataFrame = _
 
   /*
      In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
@@ -49,16 +50,29 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = sqlContext.createDataFrame(
+    datasetWithDenseFeature = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, seed, 0.1), 2))
+        intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
     /*
        datasetWithoutIntercept is not needed for correctness testing but is useful for illustrating
        training model without intercept
      */
-    datasetWithoutIntercept = sqlContext.createDataFrame(
+    datasetWithDenseFeatureWithoutIntercept = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        0.0, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, seed, 0.1), 2))
+        intercept = 0.0, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
+
+    val r = new Random(seed)
+    // When feature size is larger than 4096, normal optimizer is choosed
+    // as the solver of linear regression in the case of "auto" mode.
+    val featureSize = 4100
+    datasetWithSparseFeature = sqlContext.createDataFrame(
+      sc.parallelize(LinearDataGenerator.generateLinearInput(
+        intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble).toArray,
+        xMean = Seq.fill(featureSize)(r.nextDouble).toArray,
+        xVariance = Seq.fill(featureSize)(r.nextDouble).toArray, nPoints = 200,
+        seed, eps = 0.1, sparsity = 0.7), 2))
   }
 
   test("params") {
@@ -77,19 +91,19 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lir.getFitIntercept)
     assert(lir.getStandardization)
     assert(lir.getSolver == "auto")
-    val model = lir.fit(dataset)
+    val model = lir.fit(datasetWithDenseFeature)
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
 
-    model.transform(dataset)
+    model.transform(datasetWithDenseFeature)
       .select("label", "prediction")
       .collect()
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
-    val numFeatures = dataset.select("features").first().getAs[Vector](0).size
+    val numFeatures = datasetWithDenseFeature.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
   }
 
@@ -98,8 +112,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer1 = new LinearRegression().setSolver(solver)
       // The result should be the same regardless of standardization without regularization
       val trainer2 = (new LinearRegression).setStandardization(false).setSolver(solver)
-      val model1 = trainer1.fit(dataset)
-      val model2 = trainer2.fit(dataset)
+      val model1 = trainer1.fit(datasetWithDenseFeature)
+      val model2 = trainer2.fit(datasetWithDenseFeature)
 
       /*
          Using the following R code to load the data and train the model using glmnet package.
@@ -124,7 +138,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(model2.intercept ~== interceptR relTol 1E-3)
       assert(model2.weights ~= weightsR relTol 1E-3)
 
-      model1.transform(dataset).select("features", "prediction").collect().foreach {
+      model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
@@ -139,10 +153,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       // Without regularization the results should be the same
       val trainer2 = (new LinearRegression).setFitIntercept(false).setStandardization(false)
         .setSolver(solver)
-      val model1 = trainer1.fit(dataset)
-      val modelWithoutIntercept1 = trainer1.fit(datasetWithoutIntercept)
-      val model2 = trainer2.fit(dataset)
-      val modelWithoutIntercept2 = trainer2.fit(datasetWithoutIntercept)
+      val model1 = trainer1.fit(datasetWithDenseFeature)
+      val modelWithoutIntercept1 = trainer1.fit(datasetWithDenseFeatureWithoutIntercept)
+      val model2 = trainer2.fit(datasetWithDenseFeature)
+      val modelWithoutIntercept2 = trainer2.fit(datasetWithDenseFeatureWithoutIntercept)
 
       /*
          weights <- coef(glmnet(features, label, family="gaussian", alpha = 0, lambda = 0,
@@ -186,19 +200,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
         .setSolver(solver).setStandardization(false)
 
-      var model1: LinearRegressionModel = null
-      var model2: LinearRegressionModel = null
-
       // Normal optimizer is not supported with only L1 regularization case.
       if (solver == "normal") {
         intercept[IllegalArgumentException] {
-            trainer1.fit(dataset)
-            trainer2.fit(dataset)
+            trainer1.fit(datasetWithDenseFeature)
+            trainer2.fit(datasetWithDenseFeature)
           }
       } else {
-        model1 = trainer1.fit(dataset)
-        model2 = trainer2.fit(dataset)
-
+        val model1 = trainer1.fit(datasetWithDenseFeature)
+        val model2 = trainer2.fit(datasetWithDenseFeature)
 
         /*
            weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57))
@@ -230,11 +240,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model2.intercept ~== interceptR2 relTol 1E-3)
         assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-        model1.transform(dataset).select("features", "prediction").collect().foreach {
-          case Row(features: DenseVector, prediction1: Double) =>
-            val prediction2 =
-              features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
-            assert(prediction1 ~== prediction2 relTol 1E-5)
+        model1.transform(datasetWithDenseFeature).select("features", "prediction")
+          .collect().foreach {
+            case Row(features: DenseVector, prediction1: Double) =>
+              val prediction2 = features(0) * model1.weights(0) + features(1) * model1.weights(1) +
+                model1.intercept
+              assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
     }
@@ -247,18 +258,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
         .setFitIntercept(false).setStandardization(false).setSolver(solver)
 
-      var model1: LinearRegressionModel = null
-      var model2: LinearRegressionModel = null
-
       // Normal optimizer is not supported with only L1 regularization case.
       if (solver == "normal") {
         intercept[IllegalArgumentException] {
-            trainer1.fit(dataset)
-            trainer2.fit(dataset)
+            trainer1.fit(datasetWithDenseFeature)
+            trainer2.fit(datasetWithDenseFeature)
           }
       } else {
-        model1 = trainer1.fit(dataset)
-        model2 = trainer2.fit(dataset)
+        val model1 = trainer1.fit(datasetWithDenseFeature)
+        val model2 = trainer2.fit(datasetWithDenseFeature)
 
         /*
            weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
@@ -292,11 +300,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model2.intercept ~== interceptR2 absTol 1E-3)
         assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-        model1.transform(dataset).select("features", "prediction").collect().foreach {
-          case Row(features: DenseVector, prediction1: Double) =>
-            val prediction2 =
-              features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
-            assert(prediction1 ~== prediction2 relTol 1E-5)
+        model1.transform(datasetWithDenseFeature).select("features", "prediction")
+          .collect().foreach {
+            case Row(features: DenseVector, prediction1: Double) =>
+              val prediction2 = features(0) * model1.weights(0) + features(1) * model1.weights(1) +
+                model1.intercept
+              assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
     }
@@ -308,8 +317,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         .setSolver(solver)
       val trainer2 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
         .setStandardization(false).setSolver(solver)
-      val model1 = trainer1.fit(dataset)
-      val model2 = trainer2.fit(dataset)
+      val model1 = trainer1.fit(datasetWithDenseFeature)
+      val model2 = trainer2.fit(datasetWithDenseFeature)
 
       /*
          weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3))
@@ -342,7 +351,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(model2.intercept ~== interceptR2 relTol 1E-3)
       assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-      model1.transform(dataset).select("features", "prediction").collect().foreach {
+      model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
@@ -357,8 +366,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         .setFitIntercept(false).setSolver(solver)
       val trainer2 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
         .setFitIntercept(false).setStandardization(false).setSolver(solver)
-      val model1 = trainer1.fit(dataset)
-      val model2 = trainer2.fit(dataset)
+      val model1 = trainer1.fit(datasetWithDenseFeature)
+      val model2 = trainer2.fit(datasetWithDenseFeature)
 
       /*
          weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
@@ -392,7 +401,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(model2.intercept ~== interceptR2 absTol 1E-3)
       assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-      model1.transform(dataset).select("features", "prediction").collect().foreach {
+      model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
@@ -408,18 +417,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
         .setStandardization(false).setSolver(solver)
 
-      var model1: LinearRegressionModel = null
-      var model2: LinearRegressionModel = null
-
       // Normal optimizer is not supported with non-zero elasticnet parameter.
       if (solver == "normal") {
         intercept[IllegalArgumentException] {
-            trainer1.fit(dataset)
-            trainer2.fit(dataset)
+            trainer1.fit(datasetWithDenseFeature)
+            trainer2.fit(datasetWithDenseFeature)
           }
       } else {
-        model1 = trainer1.fit(dataset)
-        model2 = trainer2.fit(dataset)
+        val model1 = trainer1.fit(datasetWithDenseFeature)
+        val model2 = trainer2.fit(datasetWithDenseFeature)
 
         /*
            weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6))
@@ -452,10 +458,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model2.intercept ~== interceptR2 relTol 1E-3)
         assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-        model1.transform(dataset).select("features", "prediction").collect().foreach {
+        model1.transform(datasetWithDenseFeature).select("features", "prediction")
+          .collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
-            val prediction2 =
-              features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
+            val prediction2 = features(0) * model1.weights(0) + features(1) * model1.weights(1) +
+              model1.intercept
             assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
@@ -469,18 +476,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
         .setFitIntercept(false).setStandardization(false).setSolver(solver)
 
-      var model1: LinearRegressionModel = null
-      var model2: LinearRegressionModel = null
-
       // Normal optimizer is not supported with non-zero elasticnet parameter.
       if (solver == "normal") {
         intercept[IllegalArgumentException] {
-            trainer1.fit(dataset)
-            trainer2.fit(dataset)
+            trainer1.fit(datasetWithDenseFeature)
+            trainer2.fit(datasetWithDenseFeature)
           }
       } else {
-        model1 = trainer1.fit(dataset)
-        model2 = trainer2.fit(dataset)
+        val model1 = trainer1.fit(datasetWithDenseFeature)
+        val model2 = trainer2.fit(datasetWithDenseFeature)
 
         /*
            weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
@@ -514,10 +518,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model2.intercept ~== interceptR2 absTol 1E-3)
         assert(model2.weights ~= weightsR2 relTol 1E-3)
 
-        model1.transform(dataset).select("features", "prediction").collect().foreach {
+        model1.transform(datasetWithDenseFeature).select("features", "prediction")
+          .collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
-            val prediction2 =
-              features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
+            val prediction2 = features(0) * model1.weights(0) + features(1) * model1.weights(1) +
+              model1.intercept
             assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
@@ -527,27 +532,26 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("linear regression model training summary") {
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer = new LinearRegression().setSolver(solver)
-      val model = trainer.fit(dataset)
+      val model = trainer.fit(datasetWithDenseFeature)
       val trainerNoPredictionCol = trainer.setPredictionCol("")
-      val modelNoPredictionCol = trainerNoPredictionCol.fit(dataset)
-
+      val modelNoPredictionCol = trainerNoPredictionCol.fit(datasetWithDenseFeature)
 
       // Training results for the model should be available
       assert(model.hasSummary)
       assert(modelNoPredictionCol.hasSummary)
 
       // Schema should be a superset of the input dataset
-      assert((dataset.schema.fieldNames.toSet + "prediction").subsetOf(
+      assert((datasetWithDenseFeature.schema.fieldNames.toSet + "prediction").subsetOf(
         model.summary.predictions.schema.fieldNames.toSet))
       // Validate that we re-insert a prediction column for evaluation
       val modelNoPredictionColFieldNames
       = modelNoPredictionCol.summary.predictions.schema.fieldNames
-      assert((dataset.schema.fieldNames.toSet).subsetOf(
+      assert((datasetWithDenseFeature.schema.fieldNames.toSet).subsetOf(
         modelNoPredictionColFieldNames.toSet))
       assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
 
       // Residuals in [[LinearRegressionResults]] should equal those manually computed
-      val expectedResiduals = dataset.select("features", "label")
+      val expectedResiduals = datasetWithDenseFeature.select("features", "label")
         .map { case Row(features: DenseVector, label: Double) =>
         val prediction =
           features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
@@ -585,6 +589,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             .objectiveHistory
             .sliding(2)
             .forall(x => x(0) >= x(1)))
+      } else {
+        // To clalify that the normal solver is used here.
+        assert(model.summary.objectiveHistory.length == 1)
+        assert(model.summary.objectiveHistory(0) == 0.0)
       }
     }
   }
@@ -592,10 +600,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("linear regression model testset evaluation summary") {
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer = new LinearRegression().setSolver(solver)
-      val model = trainer.fit(dataset)
+      val model = trainer.fit(datasetWithDenseFeature)
 
       // Evaluating on training dataset should yield results summary equal to training summary
-      val testSummary = model.evaluate(dataset)
+      val testSummary = model.evaluate(datasetWithDenseFeature)
       assert(model.summary.meanSquaredError ~== testSummary.meanSquaredError relTol 1E-5)
       assert(model.summary.r2 ~== testSummary.r2 relTol 1E-5)
       model.summary.residuals.select("residuals").collect()
@@ -692,5 +700,19 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
       assert(model4a0.weights ~== model4b.weights absTol 1E-3)
     }
+  }
+
+  test("linear regression model with l-bfgs with big feature datasets") {
+    val trainer = new LinearRegression().setSolver("auto")
+    val model = trainer.fit(datasetWithSparseFeature)
+
+    // Training results for the model should be available
+    assert(model.hasSummary)
+    // When LBFGS is used as optimizer, objective history can be restored.
+    assert(
+      model.summary
+        .objectiveHistory
+        .sliding(2)
+        .forall(x => x(0) >= x(1)))
   }
 }
