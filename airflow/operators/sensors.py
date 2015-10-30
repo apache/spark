@@ -213,6 +213,9 @@ class HivePartitionSensor(BaseSensorOperator):
         and apparently supports SQL like notation as in `ds='2015-01-01'
         AND type='value'` and > < sings as in "ds>=2015-01-01"
     :type partition: string
+    :param metastore_conn_id: reference to the metastore thrift service
+        connection id
+    :type metastore_conn_id: str
     """
     template_fields = ('schema', 'table', 'partition',)
 
