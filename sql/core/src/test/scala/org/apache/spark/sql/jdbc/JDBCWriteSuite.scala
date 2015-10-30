@@ -163,13 +163,16 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       Row.apply("Mike", 4, null, "video games", BigDecimal(42.33456))
     )
 
-    val (varcharIgnoreMd: Metadata, clobMd: Metadata, decimalMd: Metadata) = {
-      List("varchar_ignorecase(20)", "clob(20k)", "DECIMAL(31,2)").map(dbcoltype => {
+    val invalidType = s""" clob(20k)) as select * from foo; drop table foo;
+                         |  (select * from foo where 1=1""".stripMargin
+
+    val (varcharIgnoreMd: Metadata, clobMd: Metadata, decimalMd: Metadata, invalidMd: Metadata) = {
+      List("varchar_ignorecase(20)", "clob(20k)", "DECIMAL(31,2)", invalidType).map(dbcoltype => {
         val metadataBuilder = new MetadataBuilder()
         metadataBuilder.putString("db.column.type", dbcoltype)
         metadataBuilder.build()
       }) match {
-        case List(a, b, c) => (a, b, c)
+        case List(a, b, c, d) => (a, b, c, d)
       }
     }
 
@@ -203,5 +206,15 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(4 == sqlContext.read.jdbc(url, "TEST.USERDBTYPETEST", properties).count)
     assert(BigDecimal(sqlContext.read.jdbc(url, "TEST.USERDBTYPETEST",
       new Properties).collect()(0).get(4).asInstanceOf[java.math.BigDecimal]) == BigDecimal(42.33))
+
+    // test invalid character in the user specified type
+    val invalidDf = df.withColumn("expense", col("expense").as("expense", invalidMd))
+    assert(JdbcUtils.schemaString(invalidDf, url) ==
+      s"""name TEXT , id INTEGER , country varchar_ignorecase(20) , description clob(20k) ,
+         | expense clob(20k))asselect*fromfoo;droptablefoo;
+         |(select*fromfoowhere1=1 """.stripMargin.replaceAll("\n", ""))
+    intercept[org.h2.jdbc.JdbcSQLException] {
+      invalidDf.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.USERDBTYPETEST", properties)
+    }
   }
 }

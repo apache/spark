@@ -172,7 +172,14 @@ object JdbcUtils extends Logging {
       val dbcolumntype = {
         // check if user specified target database column type for the field.
         if (field.metadata.contains("db.column.type")) {
-          Option(field.metadata.getString("db.column.type"))
+          val coltype: String = field.metadata.getString("db.column.type")
+            if (coltype != null) {
+              // remove spaces to avoid any invalid sql statements in the input.
+              // spaces are not required in the database type names.
+              Some(coltype.replaceAll("\\s", ""))
+            } else {
+              None
+            }
         } else {
           None
         }
