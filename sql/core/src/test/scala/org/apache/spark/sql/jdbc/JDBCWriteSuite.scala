@@ -76,15 +76,19 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     conn1.close()
   }
 
-  def runWithoutErrorLogging(function: () => Unit) {
+  def runWithoutErrorLogging(command: => Unit) {
     // capture current (root) log level
     val logLevel = Logger.getRootLogger().getLevel
-    // temporarily suppress logging of WARN and ERROR
+    // temporarily suppress logging of ERROR, WARN, INFO, DEBUG messages
     Utils.setLogLevel(Level.FATAL)
-    // run the given function
-    function()
-    // restore original log level
-    Utils.setLogLevel(logLevel)
+    // try running the given command, don't catch any exceptions here
+    try {
+      command
+    }
+    // restore original log level even if an exception was thrown
+    finally {
+      Utils.setLogLevel(logLevel)
+    }
   }
 
   private lazy val arr2x2 = Array[Row](Row.apply("dave", 42), Row.apply("mary", 222))
@@ -147,9 +151,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
     intercept[org.apache.spark.SparkException] {
-      runWithoutErrorLogging(() =>
+      runWithoutErrorLogging {
         df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
-      )
+      }
     }
   }
 
