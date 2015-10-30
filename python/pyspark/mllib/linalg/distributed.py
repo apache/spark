@@ -312,6 +312,20 @@ class IndexedRowMatrix(DistributedMatrix):
         java_coordinate_matrix = self._java_matrix_wrapper.call("columnSimilarities")
         return CoordinateMatrix(java_coordinate_matrix)
 
+    def computeGramianMatrix(self):
+        """
+        Computes the Gramian matrix `A^T A`. Note that this cannot be
+        computed on matrices with more than 65535 columns.
+
+        >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
+        ...                        IndexedRow(1, [4, 5, 6])])
+        >>> mat = IndexedRowMatrix(rows)
+
+        >>> mat.computeGramianMatrix()
+        DenseMatrix(3, 3, [17.0, 22.0, 27.0, 22.0, 29.0, 36.0, 27.0, 36.0, 45.0], 0)
+        """
+        return self._java_matrix_wrapper.call("computeGramianMatrix")
+
     def toRowMatrix(self):
         """
         Convert this matrix to a RowMatrix.
