@@ -142,6 +142,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.submissionTime should be ('defined)
     stageInfo.completionTime should be ('defined)
     taskInfoMetrics.length should be {4}
+    sc.stop()
   }
 
   test("basic creation of StageInfo with shuffle") {
@@ -180,6 +181,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo3.rddInfos.size should be {1} // ShuffledRDD
     stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
+    sc.stop()
   }
 
   test("StageInfo with fewer tasks than partitions") {
@@ -197,6 +199,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.numTasks should be {2}
     stageInfo.rddInfos.size should be {2}
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
+    sc.stop()
   }
 
   test("local metrics") {
@@ -265,6 +268,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
         }
       }
     }
+    sc.stop()
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
@@ -286,6 +290,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
     assert(listener.endedTasks.contains(TASK_INDEX))
+    sc.stop()
   }
 
   test("onTaskGettingResult() not called when result sent directly") {
@@ -302,6 +307,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.isEmpty)
     assert(listener.endedTasks.contains(TASK_INDEX))
+    sc.stop()
   }
 
   test("onTaskEnd() should be called for all started tasks, even after job has been killed") {
@@ -336,6 +342,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       }
       assert(listener.endedTasks.size === listener.startedTasks.size)
     }
+    sc.stop()
   }
 
   test("SparkListener moves on if a listener throws an exception") {
@@ -368,6 +375,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
     sc.listenerBus.listeners.asScala
       .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
+    sc.stop()
   }
 
   /**
