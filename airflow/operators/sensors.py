@@ -177,17 +177,17 @@ class ExternalTaskSensor(BaseSensorOperator):
         self.external_task_id = external_task_id
 
     def poke(self, context):
-        logging.info(
-            'Poking for '
-            '{self.external_dag_id}.'
-            '{self.external_task_id} on '
-            '{context[execution_date]} ... '.format(**locals()))
-        TI = TaskInstance
-
         if self.execution_delta:
             dttm = context['execution_date'] - self.execution_delta
         else:
             dttm = context['execution_date']
+
+        logging.info(
+            'Poking for '
+            '{self.external_dag_id}.'
+            '{self.external_task_id} on '
+            '{dttm} ... '.format(**locals()))
+        TI = TaskInstance
 
         session = settings.Session()
         count = session.query(TI).filter(
