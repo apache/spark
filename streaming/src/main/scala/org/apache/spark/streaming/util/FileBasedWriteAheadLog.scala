@@ -225,11 +225,7 @@ private[streaming] class FileBasedWriteAheadLog(
 
 private[streaming] object FileBasedWriteAheadLog {
 
-  case class LogInfo(startTime: Long, endTime: Long, path: String) extends Comparable[LogInfo] {
-    override def compareTo(o: LogInfo): Int = {
-      endTime.compareTo(o.endTime)
-    }
-  }
+  case class LogInfo(startTime: Long, endTime: Long, path: String)
 
   val logFileRegex = """log-(\d+)-(\d+)""".r
 
