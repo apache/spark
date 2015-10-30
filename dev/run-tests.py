@@ -486,7 +486,7 @@ def main():
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = "hadoop2.3"
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.3")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
