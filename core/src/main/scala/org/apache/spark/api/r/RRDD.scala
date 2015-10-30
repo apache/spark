@@ -392,7 +392,12 @@ private[r] object RRDD {
   }
 
   private def createRProcess(port: Int, script: String): BufferedStreamThread = {
-    val rCommand = SparkEnv.get.conf.get("spark.sparkr.r.command", "Rscript")
+    // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
+    // but kept here for backward compatibility.
+    val sparkConf = SparkEnv.get.conf
+    var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
+    rCommand = sparkConf.get("spark.r.command", rCommand)
+
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir + "/SparkR/worker/" + script
