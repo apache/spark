@@ -66,10 +66,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val partitionColumns = AttributeSet(
         t.partitionColumns.map(c => l.output.find(_.name == c.name).get))
 
-      // TODO this is case-sensitive
       // Only pruning the partition keys
-      val partitionFilters =
-        filters.filter(_.references.map(_.name).toSet.subsetOf(partitionColumnNames))
+      val partitionFilters = filters.filter(_.references.subsetOf(partitionColumns))
 
       // Only pushes down predicates that do not reference partition keys.
       val pushedFilters = filters.filter(_.references.intersect(partitionColumns).isEmpty)
@@ -215,7 +213,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         val unsafeProjection =
           UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
 
-        iterator.asInstanceOf[Iterator[UnsafeRow]].map { unsafeDataRow =>
+        iterator.map { unsafeDataRow =>
           unsafeProjection(mutableJoinedRow(unsafeDataRow, unsafePartitionValues))
         }
       }

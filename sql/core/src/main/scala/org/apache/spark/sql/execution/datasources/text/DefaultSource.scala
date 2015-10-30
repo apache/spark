@@ -104,17 +104,11 @@ private[sql] class TextRelation(
         val unsafeRowWriter = new UnsafeRowWriter
         val unsafeRow = new UnsafeRow
 
-        var buffer = new Array[Byte](1024)
         iter.map { case (_, line) =>
-          if (line.getLength > buffer.length) {
-            buffer = new Array[Byte](line.getLength)
-          }
-          System.arraycopy(line.getBytes, 0, buffer, 0, line.getLength)
-
           // Writes to an UnsafeRow directly
           bufferHolder.reset()
           unsafeRowWriter.initialize(bufferHolder, 1)
-          unsafeRowWriter.write(0, UTF8String.fromBytes(buffer, 0, line.getLength))
+          unsafeRowWriter.write(0, line.getBytes)
           unsafeRow.pointTo(bufferHolder.buffer, 1, bufferHolder.totalSize())
           unsafeRow
         }

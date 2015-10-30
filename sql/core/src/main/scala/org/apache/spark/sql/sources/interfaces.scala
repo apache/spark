@@ -760,8 +760,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    *        selected partition.
    * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
    *        overhead of broadcasting the Configuration for every Hadoop RDD.
-   *
-   * @since 1.6.0
    */
   private[sql] def buildInternalScan(
       requiredColumns: Array[String],
