@@ -589,18 +589,66 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     val corr6 = df4.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
-    val df5 = Seq[(Integer, Integer)](
-      (1, null),
-      (null, -60)).toDF("a", "b")
+    // Test for udaf_corr in HiveCompatibilitySuite
+    // udaf_corr has been blacklisted due to numerical errors
+    // We test it here:
+    // SELECT corr(b, c) FROM covar_tab WHERE a < 1; => NULL
+    // SELECT corr(b, c) FROM covar_tab WHERE a < 3; => NULL
+    // SELECT corr(b, c) FROM covar_tab WHERE a = 3; => NULL
+    // SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a; =>
+    // 1       NULL
+    // 2       NULL
+    // 3       NULL
+    // 4       NULL
+    // 5       NULL
+    // 6       NULL
+    // SELECT corr(b, c) FROM covar_tab; => 0.6633880657639323
 
-    val corr7 = df5.groupBy().agg(corr("a", "b")).collect()(0)
-    assert(corr7 == Row(null))
+    val covar_tab = Seq[(Integer, Integer, Integer)](
+      (1, null, 15),
+      (2, 3, null),
+      (3, 7, 12),
+      (4, 4, 14),
+      (5, 8, 17),
+      (6, 2, 11)).toDF("a", "b", "c")
 
-    val df6 = Seq[(Integer, Integer)](
-      (7, 12)).toDF("a", "b")
+    covar_tab.registerTempTable("covar_tab")
 
-    val corr8 = df6.groupBy().agg(corr("a", "b")).collect()(0)
-    assert(corr8 == Row(null))
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT corr(b, c) FROM covar_tab WHERE a < 1
+        """.stripMargin),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT corr(b, c) FROM covar_tab WHERE a < 3
+        """.stripMargin),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT corr(b, c) FROM covar_tab WHERE a = 3
+        """.stripMargin),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
+        """.stripMargin),
+      Row(1, null) ::
+      Row(2, null) ::
+      Row(3, null) ::
+      Row(4, null) ::
+      Row(5, null) ::
+      Row(6, null) :: Nil)
+
+    val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
+    assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
 
     withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
       val errorMessage = intercept[SparkException] {
