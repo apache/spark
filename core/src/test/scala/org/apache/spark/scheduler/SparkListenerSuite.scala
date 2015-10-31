@@ -184,7 +184,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     sc.stop()
   }
 
-  test("StageInfo with fewer tasks than partitions") {
+  test("StageInfo with fewer tasks than number of partitions") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
