@@ -2038,6 +2038,28 @@ setMethod("cumeDist",
             column(jc)
           })
 
+#' denseRank
+#' 
+#' Window function: returns the rank of rows within a window partition, without any gaps.
+#' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+#' sequence when there are ties. That is, if you were ranking a competition using denseRank
+#' and had three people tie for second place, you would say that all three were in second
+#' place and that the next person came in third.
+#' 
+#' This is equivalent to the DENSE_RANK function in SQL.
+#'
+#' @rdname denseRank
+#' @name denseRank
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{denseRank()}
+setMethod("denseRank",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "denseRank")
+            column(jc)
+          })
+
 #' lag
 #'
 #' Window function: returns the value that is `offset` rows before the current row, and
@@ -2109,5 +2131,75 @@ setMethod("ntile",
           signature(x = "numeric"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ntile", as.integer(x))
+            column(jc)
+          })
+
+#' percentRank
+#'
+#' Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+#' 
+#' This is computed by:
+#' 
+#'   (rank of row in its partition - 1) / (number of rows in the partition - 1)
+#'
+#' This is equivalent to the PERCENT_RANK function in SQL.
+#'
+#' @rdname percentRank
+#' @name percentRank
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{percentRank()}
+setMethod("percentRank",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "percentRank")
+            column(jc)
+          })
+
+#' rank
+#'
+#' Window function: returns the rank of rows within a window partition.
+#' 
+#' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+#' sequence when there are ties. That is, if you were ranking a competition using denseRank
+#' and had three people tie for second place, you would say that all three were in second
+#' place and that the next person came in third.
+#' 
+#' This is equivalent to the RANK function in SQL.
+#'
+#' @rdname rank
+#' @name rank
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{rank()}
+setMethod("rank",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "rank")
+            column(jc)
+          })
+
+# Expose rank() in the R base package
+setMethod("rank",
+          signature(x = "ANY"),
+          function(x, ...) {
+            base::rank(x, ...)
+          })
+
+#' rowNumber
+#'
+#' Window function: returns a sequential number starting at 1 within a window partition.
+#' 
+#' This is equivalent to the ROW_NUMBER function in SQL.
+#'
+#' @rdname rowNumber
+#' @name rowNumber
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{rowNumber()}
+setMethod("rowNumber",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "rowNumber")
             column(jc)
           })
