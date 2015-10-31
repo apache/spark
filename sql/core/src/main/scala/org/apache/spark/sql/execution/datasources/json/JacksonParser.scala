@@ -245,29 +245,33 @@ private[sql] object JacksonParser {
       val factory = new JsonFactory()
 
       iter.flatMap { record =>
-        try {
-          Utils.tryWithResource(factory.createParser(record)) { parser =>
-            parser.nextToken()
+        if (record.trim.isEmpty) {
+          Nil
+        } else {
+          try {
+            Utils.tryWithResource(factory.createParser(record)) { parser =>
+              parser.nextToken()
 
-            convertField(factory, parser, schema) match {
-              case null => failedRecord(record)
-              case row: InternalRow => row :: Nil
-              case array: ArrayData =>
-                if (array.numElements() == 0) {
-                  Nil
-                } else {
-                  array.toArray[InternalRow](schema)
-                }
-              case _ =>
-                sys.error(
-                  s"Failed to parse record $record. Please make sure that each line of the file " +
-                    "(or each string in the RDD) is a valid JSON object or " +
-                    "an array of JSON objects.")
+              convertField(factory, parser, schema) match {
+                case null => failedRecord(record)
+                case row: InternalRow => row :: Nil
+                case array: ArrayData =>
+                  if (array.numElements() == 0) {
+                    Nil
+                  } else {
+                    array.toArray[InternalRow](schema)
+                  }
+                case _ =>
+                  sys.error(
+                    s"Failed to parse record $record. Please make sure that each line of " +
+                      "the file (or each string in the RDD) is a valid JSON object or " +
+                      "an array of JSON objects.")
+              }
             }
+          } catch {
+            case _: JsonProcessingException =>
+              failedRecord(record)
           }
-        } catch {
-          case _: JsonProcessingException =>
-            failedRecord(record)
         }
       }
     }

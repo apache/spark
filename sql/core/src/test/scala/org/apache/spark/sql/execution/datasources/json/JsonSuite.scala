@@ -959,7 +959,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       withTempTable("jsonTable") {
         val jsonDF = sqlContext.read.json(corruptRecords)
         jsonDF.registerTempTable("jsonTable")
-
         val schema = StructType(
           StructField("_unparsed", StringType, true) ::
           StructField("a", StringType, true) ::
@@ -976,7 +975,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
               |FROM jsonTable
             """.stripMargin),
           Row(null, null, null, "{") ::
-            Row(null, null, null, "") ::
             Row(null, null, null, """{"a":1, b:2}""") ::
             Row(null, null, null, """{"a":{, b:3}""") ::
             Row("str_a_4", "str_b_4", "str_c_4", null) ::
@@ -1001,7 +999,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
               |WHERE _unparsed IS NOT NULL
             """.stripMargin),
           Row("{") ::
-            Row("") ::
             Row("""{"a":1, b:2}""") ::
             Row("""{"a":{, b:3}""") ::
             Row("]") :: Nil
