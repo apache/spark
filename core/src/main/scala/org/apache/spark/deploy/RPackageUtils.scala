@@ -100,12 +100,14 @@ private[deploy] object RPackageUtils extends Logging {
    * Runs the standard R package installation code to build the R package from source.
    * Multiple runs don't cause problems.
    */
-  private def rPackageBuilder(dir: File, printStream: PrintStream, verbose: Boolean): Boolean = {
+  private def rPackageBuilder(
+      dir: File,
+      printStream: PrintStream,
+      verbose: Boolean,
+      libDir: String): Boolean = {
     // this code should be always running on the driver.
-    val pathToSparkR = RUtils.localSparkRPackagePath.getOrElse(
-      throw new SparkException("SPARK_HOME not set. Can't locate SparkR package."))
     val pathToPkg = Seq(dir, "R", "pkg").mkString(File.separator)
-    val installCmd = baseInstallCmd ++ Seq(pathToSparkR, pathToPkg)
+    val installCmd = baseInstallCmd ++ Seq(libDir, pathToPkg)
     if (verbose) {
       print(s"Building R package with the command: $installCmd", printStream)
     }
@@ -170,8 +172,11 @@ private[deploy] object RPackageUtils extends Logging {
         if (checkManifestForR(jar)) {
           print(s"$file contains R source code. Now installing package.", printStream, Level.INFO)
           val rSource = extractRFolder(jar, printStream, verbose)
+          if (RUtils.rPackages.isEmpty) {
+            RUtils.rPackages = Some(Utils.createTempDir().getAbsolutePath)
+          }
           try {
-            if (!rPackageBuilder(rSource, printStream, verbose)) {
+            if (!rPackageBuilder(rSource, printStream, verbose, RUtils.rPackages.get)) {
               print(s"ERROR: Failed to build R package in $file.", printStream)
               print(RJarDoc, printStream)
             }
@@ -206,7 +211,7 @@ private[deploy] object RPackageUtils extends Logging {
     }
   }
 
-  /** Zips all the libraries found with SparkR in the R/lib directory for distribution with Yarn. */
+  /** Zips all the R libraries built for distribution to the cluster. */
   private[deploy] def zipRLibraries(dir: File, name: String): File = {
     val filesToBundle = listFilesRecursively(dir, Seq(".zip"))
     // create a zip file from scratch, do not append to existing file.
