@@ -108,7 +108,7 @@ private[sql] class TextRelation(
           // Writes to an UnsafeRow directly
           bufferHolder.reset()
           unsafeRowWriter.initialize(bufferHolder, 1)
-          unsafeRowWriter.write(0, line.getBytes)
+          unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
           unsafeRow.pointTo(bufferHolder.buffer, 1, bufferHolder.totalSize())
           unsafeRow
         }
