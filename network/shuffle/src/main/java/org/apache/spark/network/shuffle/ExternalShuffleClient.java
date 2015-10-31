@@ -144,6 +144,8 @@ public class ExternalShuffleClient extends ShuffleClient {
 
   @Override
   public void close() {
-    clientFactory.close();
+    if (clientFactory != null) {
+      clientFactory.close();
+    }
   }
 }

@@ -19,6 +19,8 @@ package org.apache.spark.network.util;
 
 import com.google.common.primitives.Ints;
 
+import java.io.File;
+
 /**
  * A central location that tracks all the settings we expose to users.
  */
@@ -29,15 +31,23 @@ public class TransportConf {
     this.conf = conf;
   }
 
-  /** IO mode: nio or epoll */
-  public String ioMode() { return conf.get("spark.shuffle.io.mode", "NIO").toUpperCase(); }
+  /**
+   * IO mode: nio or epoll
+   */
+  public String ioMode() {
+    return conf.get("spark.shuffle.io.mode", "NIO").toUpperCase();
+  }
 
-  /** If true, we will prefer allocating off-heap byte buffers within Netty. */
+  /**
+   * If true, we will prefer allocating off-heap byte buffers within Netty.
+   */
   public boolean preferDirectBufs() {
     return conf.getBoolean("spark.shuffle.io.preferDirectBufs", true);
   }
 
-  /** Connect timeout in milliseconds. Default 120 secs. */
+  /**
+   * Connect timeout in milliseconds. Default 120 secs.
+   */
   public int connectionTimeoutMs() {
     long defaultNetworkTimeoutS = JavaUtils.timeStringAsSec(
       conf.get("spark.network.timeout", "120s"));
@@ -46,33 +56,55 @@ public class TransportConf {
     return (int) defaultTimeoutMs;
   }
 
-  /** Number of concurrent connections between two nodes for fetching data. */
+  /**
+   * Number of concurrent connections between two nodes for fetching data.
+   */
   public int numConnectionsPerPeer() {
     return conf.getInt("spark.shuffle.io.numConnectionsPerPeer", 1);
   }
 
-  /** Requested maximum length of the queue of incoming connections. Default -1 for no backlog. */
-  public int backLog() { return conf.getInt("spark.shuffle.io.backLog", -1); }
+  /**
+   * Requested maximum length of the queue of incoming connections. Default -1 for no backlog.
+   */
+  public int backLog() {
+    return conf.getInt("spark.shuffle.io.backLog", -1);
+  }
 
-  /** Number of threads used in the server thread pool. Default to 0, which is 2x#cores. */
-  public int serverThreads() { return conf.getInt("spark.shuffle.io.serverThreads", 0); }
+  /**
+   * Number of threads used in the server thread pool. Default to 0, which is 2x#cores.
+   */
+  public int serverThreads() {
+    return conf.getInt("spark.shuffle.io.serverThreads", 0);
+  }
 
-  /** Number of threads used in the client thread pool. Default to 0, which is 2x#cores. */
-  public int clientThreads() { return conf.getInt("spark.shuffle.io.clientThreads", 0); }
+  /**
+   * Number of threads used in the client thread pool. Default to 0, which is 2x#cores.
+   */
+  public int clientThreads() {
+    return conf.getInt("spark.shuffle.io.clientThreads", 0);
+  }
 
   /**
    * Receive buffer size (SO_RCVBUF).
    * Note: the optimal size for receive buffer and send buffer should be
-   *  latency * network_bandwidth.
+   * latency * network_bandwidth.
    * Assuming latency = 1ms, network_bandwidth = 10Gbps
-   *  buffer size should be ~ 1.25MB
+   * buffer size should be ~ 1.25MB
    */
-  public int receiveBuf() { return conf.getInt("spark.shuffle.io.receiveBuffer", -1); }
+  public int receiveBuf() {
+    return conf.getInt("spark.shuffle.io.receiveBuffer", -1);
+  }
 
-  /** Send buffer size (SO_SNDBUF). */
-  public int sendBuf() { return conf.getInt("spark.shuffle.io.sendBuffer", -1); }
+  /**
+   * Send buffer size (SO_SNDBUF).
+   */
+  public int sendBuf() {
+    return conf.getInt("spark.shuffle.io.sendBuffer", -1);
+  }
 
-  /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
+  /**
+   * Timeout for a single round trip of SASL token exchange, in milliseconds.
+   */
   public int saslRTTimeoutMs() {
     return (int) JavaUtils.timeStringAsSec(conf.get("spark.shuffle.sasl.timeout", "30s")) * 1000;
   }
@@ -81,7 +113,9 @@ public class TransportConf {
    * Max number of times we will try IO exceptions (such as connection timeouts) per request.
    * If set to 0, we will not do any retries.
    */
-  public int maxIORetries() { return conf.getInt("spark.shuffle.io.maxRetries", 3); }
+  public int maxIORetries() {
+    return conf.getInt("spark.shuffle.io.maxRetries", 3);
+  }
 
   /**
    * Time (in milliseconds) that we will wait in order to perform a retry after an IOException.
@@ -106,6 +140,151 @@ public class TransportConf {
    */
   public boolean lazyFileDescriptor() {
     return conf.getBoolean("spark.shuffle.io.lazyFD", true);
+  }
+
+  /**
+   * When Secure (SSL/TLS) Shuffle is enabled, the Chunk size to use for shuffling files.
+   *
+   * @return
+   */
+  public int sslShuffleChunkSize() {
+    return conf.getInt("spark.shuffle.io.ssl.chunkSize", 60 * 1024);
+  }
+
+  /**
+   * Whether Secure (SSL/TLS) Shuffle (Block Transfer Service) is enabled
+   *
+   * @return
+   */
+  public boolean sslShuffleEnabled() {
+    return conf.getBoolean("spark.ssl.bts.enabled", false);
+  }
+
+  /**
+   * SSL protocol (remember that SSLv3 was compromised) supported by Java
+   *
+   * @return
+   */
+  public String sslShuffleProtocol() {
+    return conf.get("spark.ssl.bts.protocol", null);
+  }
+
+  /**
+   * A comma separated list of ciphers
+   *
+   * @return
+   */
+  public String[] sslShuffleRequestedCiphers() {
+    String ciphers = conf.get("spark.ssl.bts.enabledAlgorithms", null);
+    return (ciphers != null ? ciphers.split(",") : null);
+  }
+
+  /**
+   * The key-store file; can be relative to the current directory
+   *
+   * @return
+   */
+  public File sslShuffleKeyStore() {
+    String keyStore = conf.get("spark.ssl.bts.keyStore", null);
+    if (keyStore != null)
+      return new File(keyStore);
+    else
+      return null;
+  }
+
+  /**
+   * The password to the key-store file
+   *
+   * @return
+   */
+  public String sslShuffleKeyStorePassword() {
+    return conf.get("spark.ssl.bts.keyStorePassword", null);
+  }
+
+  /**
+   * A PKCS#8 private key file in PEM format; can be relative to the current directory
+   *
+   * @return
+   */
+  public File sslShufflePrivateKey() {
+    String privateKey = conf.get("spark.ssl.bts.privateKey", null);
+    if (privateKey != null)
+      return new File(privateKey);
+    else
+      return null;
+  }
+
+  /**
+   * The password to the private key
+   *
+   * @return
+   */
+  public String sslShuffleKeyPassword() {
+    return conf.get("spark.ssl.bts.keyPassword", null);
+  }
+
+  /**
+   * A X.509 certificate chain file in PEM format; can be relative to the current directory
+   *
+   * @return
+   */
+  public File sslShuffleCertChain() {
+    String certChain = conf.get("spark.ssl.bts.certChain", null);
+    if (certChain != null)
+      return new File(certChain);
+    else
+      return null;
+  }
+
+  /**
+   * The trust-store file; can be relative to the current directory
+   *
+   * @return
+   */
+  public File sslShuffleTrustStore() {
+    String trustStore = conf.get("spark.ssl.bts.trustStore", null);
+    if (trustStore != null)
+      return new File(trustStore);
+    else
+      return null;
+  }
+
+  /**
+   * The password to the trust-store file
+   *
+   * @return
+   */
+  public String sslShuffleTrustStorePassword() {
+    return conf.get("spark.ssl.bts.trustStorePassword", null);
+  }
+
+  /**
+   * If using a trust-store that that reloads its configuration is enabled.
+   * If true, when the trust-store file on disk changes, it will be reloaded
+   *
+   * @return
+   */
+  public boolean sslShuffleTrustStoreReloadingEnabled() {
+    return conf.getBoolean("spark.ssl.bts.trustStoreReloadingEnabled", false);
+  }
+
+  /**
+   * The interval, in milliseconds, the trust-store will reload its configuration
+   *
+   * @return
+   */
+  public int sslShuffleTrustStoreReloadInterval() {
+    return conf.getInt("spark.ssl.bts.trustStoreReloadInterval", 10000);
+  }
+
+  /**
+   * If the OpenSSL implementation is enabled,
+   * (if available on host system), requires certChain and keyFile arguments
+   *
+   * @return
+   */
+  public boolean sslShuffleOpenSslEnabled() {
+    return conf.getBoolean("spark.ssl.bts.openSslEnabled", false);
   }
 
   /**

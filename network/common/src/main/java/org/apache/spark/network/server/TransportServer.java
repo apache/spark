@@ -35,6 +35,7 @@ import org.apache.spark.network.util.JavaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.util.ssl.SslEncryptionHandler;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
@@ -51,6 +52,7 @@ public class TransportServer implements Closeable {
   private final RpcHandler appRpcHandler;
   private final List<TransportServerBootstrap> bootstraps;
 
+  private SslEncryptionHandler sslEncryptionHandler;
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port = -1;
@@ -65,6 +67,7 @@ public class TransportServer implements Closeable {
     this.conf = context.getConf();
     this.appRpcHandler = appRpcHandler;
     this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
+    this.sslEncryptionHandler = context.getSslEncryptionHandler();
 
     try {
       init(portToBind);
@@ -109,6 +112,17 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_SNDBUF, conf.sendBuf());
     }
 
+    initHandler();
+    bindRightPort(portToBind);
+
+    port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
+    logger.debug("Shuffle server started on port :" + port);
+  }
+
+  /**
+   * Initialize and add the appropriate Netty ChannelHandler
+   */
+  private void initHandler() {
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) throws Exception {
@@ -117,14 +131,9 @@ public class TransportServer implements Closeable {
           rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
         }
         context.initializePipeline(ch, rpcHandler);
+        sslEncryptionHandler.addToPipeline(ch.pipeline(), false);
       }
     });
-
-    channelFuture = bootstrap.bind(new InetSocketAddress(portToBind));
-    channelFuture.syncUninterruptibly();
-
-    port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
-    logger.debug("Shuffle server started on port :" + port);
   }
 
   @Override
@@ -141,5 +150,43 @@ public class TransportServer implements Closeable {
       bootstrap.childGroup().shutdownGracefully();
     }
     bootstrap = null;
+    if (sslEncryptionHandler != null) {
+      sslEncryptionHandler.close();
+      sslEncryptionHandler = null;
+    }
+  }
+
+  /**
+   * Attempt to bind to the specified port up to a fixed number of retries.
+   * If all attempts fail after the max number of retries, exit.
+   */
+  private void bindRightPort(int portToBind) {
+    int maxPortRetries = conf.portMaxRetries();
+
+    for (int i = 0; i <= maxPortRetries; i++) {
+      int tryPort = -1;
+      if (0 == portToBind) {
+        // Do not increment port if tryPort is 0, which is treated as a special port
+        tryPort = 0;
+      } else {
+        // If the new port wraps around, do not try a privilege port
+        tryPort = ((portToBind + i - 1024) % (65536 - 1024)) + 1024;
+      }
+      try {
+        channelFuture = bootstrap.bind(new InetSocketAddress(tryPort));
+        channelFuture.syncUninterruptibly();
+        return;
+      } catch (Exception e) {
+        logger.warn("Netty service could not bind on port " + tryPort +
+          ". Attempting the next port.");
+        if (i >= maxPortRetries) {
+          logger.error(e.getMessage() + ": Netty server failed after "
+            + maxPortRetries + " retries.");
+
+          // If it can't find a right port, it should exit directly.
+          System.exit(-1);
+        }
+      }
+    }
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.netty
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SSLOptions, SparkConf}
 import org.apache.spark.network.util.{TransportConf, ConfigProvider}
 
 /**
@@ -40,11 +40,15 @@ object SparkTransportConf {
 
   /**
    * Utility for creating a [[TransportConf]] from a [[SparkConf]].
+   * @param _conf source [[SparkConf]] to convert to a [[TransportConf]]
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
    */
-  def fromSparkConf(_conf: SparkConf, numUsableCores: Int = 0): TransportConf = {
+  def fromSparkConf(
+      _conf: SparkConf,
+      numUsableCores: Int = 0,
+      ssLOptions: Option[SSLOptions] = None): TransportConf = {
     val conf = _conf.clone
 
     // Specify thread configuration based on our JVM's allocation of cores (rather than necessarily
@@ -56,9 +60,9 @@ object SparkTransportConf {
     conf.set("spark.shuffle.io.clientThreads",
       conf.get("spark.shuffle.io.clientThreads", numThreads.toString))
 
-    new TransportConf(new ConfigProvider {
+    new TransportConf(ssLOptions.fold(new ConfigProvider {
       override def get(name: String): String = conf.get(name)
-    })
+    })(_.createConfigProvider(conf)))
   }
 
   /**
