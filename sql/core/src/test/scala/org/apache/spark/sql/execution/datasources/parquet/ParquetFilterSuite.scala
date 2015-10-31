@@ -323,15 +323,15 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
       withTempPath { dir =>
-        var pathOne = s"${dir.getCanonicalPath}/table1"
+        val pathOne = s"${dir.getCanonicalPath}/table1"
         (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathOne)
-        var pathTwo = s"${dir.getCanonicalPath}/table2"
+        val pathTwo = s"${dir.getCanonicalPath}/table2"
         (1 to 3).map(i => (i, i.toString)).toDF("c", "b").write.parquet(pathTwo)
 
         // If the "c = 1" filter gets pushed down, this query will throw an exception which
         // Parquet emits. This is a Parquet issue (PARQUET-389).
         checkAnswer(
-          sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1"),
+          sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a"),
           (1 to 1).map(i => Row(i, i.toString, null)))
       }
     }
