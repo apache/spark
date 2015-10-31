@@ -164,12 +164,14 @@ class NewHadoopRDD[K, V](
           // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
           // corruption issues when reading compressed input.
           try {
+            reader.close()
           } catch {
             case e: Exception =>
               if (!ShutdownHookManager.inShutdown()) {
                 logWarning("Exception in RecordReader.close()", e)
               }
           } finally {
+            reader = null
           }
           if (bytesReadCallback.isDefined) {
             inputMetrics.updateBytesRead()
