@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.trees
 
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{StructType, DataType}
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
@@ -176,6 +176,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
     val newArgs = productIterator.map {
+      case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
       case s: Seq[_] => s.map {
         case arg: TreeNode[_] if containsChild(arg) =>
@@ -337,6 +338,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
              |Is otherCopyArgs specified correctly for $nodeName.
              |Exception message: ${e.getMessage}
              |ctor: $defaultCtor?
+             |types: ${newArgs.map(_.getClass).mkString(", ")}
              |args: ${newArgs.mkString(", ")}
            """.stripMargin)
     }
