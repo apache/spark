@@ -31,6 +31,8 @@ class BitSet(private[this] var numBits: Int) extends Externalizable {
   private var words = new Array[Long](bit2words(numBits))
   private def numWords = words.length
 
+  def this() = this(0)
+
   /**
    * Compute the capacity (number of bits) that can be represented
    * by this bitset.
