@@ -39,7 +39,7 @@ private[ui] case class RDDOperationGraph(
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean)//, callsite: CallSite)
+private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: CallSite)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
@@ -105,8 +105,8 @@ private[ui] object RDDOperationGraph extends Logging {
       edges ++= rdd.parentIds.map { parentId => RDDOperationEdge(parentId, rdd.id) }
 
       // TODO: differentiate between the intention to cache an RDD and whether it's actually cached
-      val node = nodes.getOrElseUpdate(
-        rdd.id, RDDOperationNode(rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE))
+      val node = nodes.getOrElseUpdate(rdd.id, RDDOperationNode(
+        rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE, rdd.callSite))
 
       if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
@@ -178,7 +178,8 @@ private[ui] object RDDOperationGraph extends Logging {
 
   /** Return the dot representation of a node in an RDDOperationGraph. */
   private def makeDotNode(node: RDDOperationNode): String = {
-    s"""${node.id} [label="${node.name} [${node.id}]"]"""
+    val label = s"${node.name} [${node.id}]\n${node.callsite.shortForm}"
+    s"""${node.id} [label="$label"]"""
   }
 
   /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */
