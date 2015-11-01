@@ -21,7 +21,6 @@ import java.util.{Map => JMap, HashMap => JHashMap}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.{Logging, SimpleFutureAction, ShuffleDependency, MapOutputStatistics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -88,6 +87,8 @@ private[sql] class ExchangeCoordinator(
     new JHashMap[Exchange, ShuffledRowRDD](numExchanges)
 
   // A boolean indicates if this coordinator has made decision on how to shuffle data.
+  // This variable will only be updated by doEstimationIfNecessary, which is protected by
+  // synchronized.
   @volatile private[this] var estimated: Boolean = false
 
   /**
@@ -106,7 +107,7 @@ private[sql] class ExchangeCoordinator(
    */
   private[sql] def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
-    // At here, we have mapOutputStatistics.length <= numExchange, it is because we do not submit
+    // If we have mapOutputStatistics.length <= numExchange, it is because we do not submit
     // a stage if the number of partitions of the RDD is 0.
     assert(mapOutputStatistics.length <= numExchanges)
 
@@ -174,7 +175,13 @@ private[sql] class ExchangeCoordinator(
     partitionStartIndices.toArray
   }
 
-  private def doEstimationIfNecessary(): Unit = {
+  private def doEstimationIfNecessary(): Unit = synchronized {
+    // It is unlikely that this method will be called from multiple threads
+    // (when multiple threads trigger the execution of THIS physical)
+    // because in common use cases, we will create new physical plan after
+    // users apply operations (e.g. projection) to an existing DataFrame.
+    // However, if it happens, we have synchronized to make sure only one
+    // thread will trigger the job submission.
     if (!estimated) {
       // Make sure we have the expected number of registered Exchange operators.
       assert(exchanges.length == numExchanges)
@@ -226,14 +233,12 @@ private[sql] class ExchangeCoordinator(
         i += 1
       }
 
-      // Finally, we acquire a lock and set newPostShuffleRDDs and estimated.
-      this.synchronized {
-        if (!estimated) {
-          assert(postShuffleRDDs.isEmpty)
-          assert(newPostShuffleRDDs.size() == numExchanges)
-          postShuffleRDDs.putAll(newPostShuffleRDDs)
-          estimated = true
-        }
+      // Finally, we set postShuffleRDDs and estimated.
+      if (!estimated) {
+        assert(postShuffleRDDs.isEmpty)
+        assert(newPostShuffleRDDs.size() == numExchanges)
+        postShuffleRDDs.putAll(newPostShuffleRDDs)
+        estimated = true
       }
     }
   }
@@ -247,5 +252,9 @@ private[sql] class ExchangeCoordinator(
     }
 
     postShuffleRDDs.get(exchange)
+  }
+
+  override def toString: String = {
+    s"coordinator[target post-shuffle partition size: $advisoryTargetPostShuffleInputSize]"
   }
 }

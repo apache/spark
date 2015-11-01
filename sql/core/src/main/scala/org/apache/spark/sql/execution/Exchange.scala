@@ -147,7 +147,11 @@ case class Exchange(
     // If an ExchangeCoordinator is needed, we register this Exchange operator
     // to the coordinator when we do prepare. It is important to make sure
     // we register this operator right before the execution instead of register it
-    // in the constructor.
+    // in the constructor because it is possible that we create new instances of
+    // Exchange operators when we transform the physical plan
+    // (then the ExchangeCoordinator will hold references to unneeded Exchanges).
+    // So, we should only call registerExchange just before we start to execute
+    // the plan.
     coordinator match {
       case Some(exchangeCoordinator) => exchangeCoordinator.registerExchange(this)
       case None =>
@@ -296,7 +300,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   private def withExchangeCoordinator(
       children: Seq[SparkPlan],
       requiredChildDistributions: Seq[Distribution]): Seq[SparkPlan] = {
-    val needsCoordinator =
+    val supportsCoordinator =
       if (children.exists(_.isInstanceOf[Exchange])) {
         // Right now, ExchangeCoordinator only support HashPartitionings.
         children.forall {
@@ -320,7 +324,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       }
 
     val withCoordinator =
-      if (adaptiveExecutionEnabled && needsCoordinator) {
+      if (adaptiveExecutionEnabled && supportsCoordinator) {
         val coordinator =
           new ExchangeCoordinator(
             children.length,
