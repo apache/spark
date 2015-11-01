@@ -109,12 +109,12 @@ private[sql] class ExchangeCoordinator(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
     // If we have mapOutputStatistics.length <= numExchange, it is because we do not submit
     // a stage if the number of partitions of the RDD is 0.
-    require(mapOutputStatistics.length <= numExchanges)
+    assert(mapOutputStatistics.length <= numExchanges)
 
     // Make sure we do get the same number of pre-shuffle partitions for those stages.
     val distinctNumPreShufflePartitions =
       mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).distinct
-    require(
+    assert(
       distinctNumPreShufflePartitions.length == 1,
       "There should be only one distinct value of the number pre-shuffle partitions " +
         "among registered Exchange operator.")
@@ -184,7 +184,7 @@ private[sql] class ExchangeCoordinator(
     // thread will trigger the job submission.
     if (!estimated) {
       // Make sure we have the expected number of registered Exchange operators.
-      require(exchanges.length == numExchanges)
+      assert(exchanges.length == numExchanges)
 
       val newPostShuffleRDDs = new JHashMap[Exchange, ShuffledRowRDD](numExchanges)
 
@@ -235,8 +235,8 @@ private[sql] class ExchangeCoordinator(
 
       // Finally, we set postShuffleRDDs and estimated.
       if (!estimated) {
-        require(postShuffleRDDs.isEmpty)
-        require(newPostShuffleRDDs.size() == numExchanges)
+        assert(postShuffleRDDs.isEmpty)
+        assert(newPostShuffleRDDs.size() == numExchanges)
         postShuffleRDDs.putAll(newPostShuffleRDDs)
         estimated = true
       }

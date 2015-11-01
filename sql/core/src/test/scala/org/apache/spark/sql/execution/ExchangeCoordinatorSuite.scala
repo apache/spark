@@ -115,8 +115,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         Array(
           new MapOutputStatistics(0, bytesByPartitionId1),
           new MapOutputStatistics(1, bytesByPartitionId2))
-      intercept[IllegalArgumentException](
-        coordinator.estimatePartitionStartIndices(mapOutputStatistics))
+      intercept[AssertionError](coordinator.estimatePartitionStartIndices(mapOutputStatistics))
     }
 
     {
