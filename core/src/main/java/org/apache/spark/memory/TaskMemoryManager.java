@@ -260,7 +260,7 @@ public class TaskMemoryManager {
   /**
    * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage}.
    */
-  public void freePage(MemoryBlock page, MemoryConsumer consumer) {
+  public void freePage(MemoryBlock page) {
     assert (page.pageNumber != -1) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
     assert(allocatedPages.get(page.pageNumber));
@@ -271,7 +271,6 @@ public class TaskMemoryManager {
     if (logger.isTraceEnabled()) {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
-    consumer.freePage(page);
   }
 
   /**
