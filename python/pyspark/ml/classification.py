@@ -243,6 +243,7 @@ class TreeClassifierParams(object):
                               "gain calculation (case-insensitive). Supported options: " +
                               ", ".join(self.supportedImpurities))
 
+    @since("1.6.0")
     def setImpurity(self, value):
         """
         Sets the value of :py:attr:`impurity`.
@@ -250,6 +251,7 @@ class TreeClassifierParams(object):
         self._paramMap[self.impurity] = value
         return self
 
+    @since("1.6.0")
     def getImpurity(self):
         """
         Gets the value of impurity or its default value.
