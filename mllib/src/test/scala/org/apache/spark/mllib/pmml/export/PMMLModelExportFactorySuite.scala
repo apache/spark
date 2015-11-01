@@ -71,7 +71,7 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
     val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
     assert(svmModelExport.isInstanceOf[ClassificationPMMLModelExport])
   }
-  
+
   test("PMMLModelExportFactory create ClassificationPMMLModelExport "
     + "when passing a Multiclass Logistic Regression") {
     /** 3 classes, 2 features */

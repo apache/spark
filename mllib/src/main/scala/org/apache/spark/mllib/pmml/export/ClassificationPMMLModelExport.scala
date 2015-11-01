@@ -78,7 +78,6 @@ private[mllib] class ClassificationPMMLModelExport(
          .withTargetCategory("0")
        regressionModel.withRegressionTables(regressionTableCategoryZero)
 
- 
        // build binary classification
        if (numClasses == 2) {
          // intercept is stored in model.intercept
@@ -101,17 +100,17 @@ private[mllib] class ClassificationPMMLModelExport(
                regressionTableCategory.withNumericPredictors(new NumericPredictor(fields(j),
                    model.weights(i * (numFeatures + 1) + j)))
              }
-	        regressionModel.withRegressionTables(regressionTableCategory)
-	       } else {
-	         // intercept is zero
-	         val regressionTableCategory = new RegressionTable(0)
-	           .withTargetCategory((i + 1).toString)
-	         for (j <- 0 until numFeatures) {
-	           regressionTableCategory.withNumericPredictors(new NumericPredictor(fields(j),
-	               model.weights(i*numFeatures + j)))
-	         }
-	         regressionModel.withRegressionTables(regressionTableCategory)	    	
-	       }
+             regressionModel.withRegressionTables(regressionTableCategory)
+            } else {
+             // intercept is zero
+             val regressionTableCategory = new RegressionTable(0)
+               .withTargetCategory((i + 1).toString)
+             for (j <- 0 until numFeatures) {
+               regressionTableCategory.withNumericPredictors(new NumericPredictor(fields(j),
+                   model.weights(i*numFeatures + j)))
+             }
+             regressionModel.withRegressionTables(regressionTableCategory)
+            }
          }
        }
 

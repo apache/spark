@@ -81,11 +81,11 @@ class ClassificationPMMLModelExportSuite extends SparkFunSuite {
     // ensure linear SVM has normalization method set to NONE
     assert(pmmlRegressionModel.getNormalizationMethod() == RegressionNormalizationMethodType.NONE)
   }
-  
+
   test("multiclass logistic regression PMML export (wihtout intercept)") {
     /** 3 classes, 2 features */
     val logisticRegressionModel = new LogisticRegressionModel(
-        weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 0.0, 
+        weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 0.0,
         numFeatures = 2, numClasses = 3)
 
     val logisticModelExport = PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)
