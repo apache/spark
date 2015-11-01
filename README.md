@@ -87,10 +87,7 @@ Hadoop, you must build Spark against the same version that your cluster runs.
 Please refer to the build documentation at
 ["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
 for detailed guidance on building for a particular distribution of Hadoop, including
-building for particular Hive and Hive Thriftserver distributions. See also
-["Third Party Hadoop Distributions"](http://spark.apache.org/docs/latest/hadoop-third-party-distributions.html)
-for guidance on building a Spark application that works with a particular
-distribution.
+building for particular Hive and Hive Thriftserver distributions.
 
 ## Configuration
 

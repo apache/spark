@@ -34,8 +34,7 @@ To write a Spark application, you need to add a Maven dependency on Spark. Spark
     version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
-`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+`hadoop-client` for your version of HDFS.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -66,8 +65,7 @@ To write a Spark application in Java, you need to add a dependency on Spark. Spa
     version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
-`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+`hadoop-client` for your version of HDFS.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -93,8 +91,7 @@ This script will load Spark's Java/Scala libraries and allow you to submit appli
 You can also use `bin/pyspark` to launch an interactive Python shell.
 
 If you wish to access HDFS data, you need to use a build of PySpark linking
-to your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+to your version of HDFS.
 [Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
