@@ -180,8 +180,7 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  // REVERT THIS BEFORE COMMIT
-  ignore("PartitioningCollection") {
+  test("PartitioningCollection") {
     withTempTable("normal", "small", "tiny") {
       testData.registerTempTable("normal")
       testData.limit(10).registerTempTable("small")
@@ -312,8 +311,7 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  // REVERT THIS BEFORE COMMIT
-  ignore("EnsureRequirements with compatible child partitionings that satisfy distribution") {
+  test("EnsureRequirements with compatible child partitionings that satisfy distribution") {
     // In this case, all requirements are satisfied and no exchange should be added.
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val childPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
@@ -334,8 +332,7 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   // This is a regression test for SPARK-9703
-  // REVERT THIS BEFORE COMMIT
-  ignore("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
+  test("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
     // Consider an operator that imposes both output distribution and  ordering requirements on its
     // children, such as sort sort merge join. If the distribution requirements are satisfied but
     // the output ordering requirements are unsatisfied, then the planner should only add sorts and
