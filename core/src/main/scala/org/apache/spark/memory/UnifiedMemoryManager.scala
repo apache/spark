@@ -62,19 +62,36 @@ private[spark] class UnifiedMemoryManager private[memory] (
     maxMemory - onHeapExecutionMemoryPool.memoryUsed
   }
 
-  private[memory] def acquireOnHeapExecutionMemory(
+
+  /**
+   * Try to acquire up to `numBytes` of execution memory for the current task and return the
+   * number of bytes obtained, or 0 if none can be allocated.
+   *
+   * This call may block until there is enough free memory in some situations, to make sure each
+   * task has a chance to ramp up to at least 1 / 2N of the total memory pool (where N is the # of
+   * active tasks) before it is forced to spill. This can happen if the number of tasks increase
+   * but an older task had a lot of memory already.
+   */
+  override private[memory] def acquireExecutionMemory(
       numBytes: Long,
-      taskAttemptId: Long): Long = synchronized {
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = synchronized {
     assert(numBytes >= 0)
-    val memoryBorrowedByStorage = math.max(0, storageMemoryPool.memoryUsed - minimumStoragePoolSize)
-    // If there is not enough free memory AND storage has borrowed some execution memory,
-    // then evict as much memory borrowed by storage as needed to grant this request
-    if (numBytes > onHeapExecutionMemoryPool.memoryFree && memoryBorrowedByStorage > 0) {
-      val spaceReclaimed =
-        storageMemoryPool.shrinkPoolByEvictingBlocks(math.min(numBytes, memoryBorrowedByStorage))
-      onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+    memoryMode match {
+      case MemoryMode.ON_HEAP =>
+        val memoryBorrowedByStorage =
+          math.max(0, storageMemoryPool.memoryUsed - minimumStoragePoolSize)
+        // If there is not enough free memory AND storage has borrowed some execution memory,
+        // then evict as much memory borrowed by storage as needed to grant this request
+        if (numBytes > onHeapExecutionMemoryPool.memoryFree && memoryBorrowedByStorage > 0) {
+          val spaceReclaimed = storageMemoryPool.shrinkPoolByEvictingBlocks(
+            math.min(numBytes, memoryBorrowedByStorage))
+          onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+        }
+        onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+      case MemoryMode.OFF_HEAP =>
+        super.acquireExecutionMemory(numBytes, taskAttemptId, memoryMode)
     }
-    onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
   }
 
   override def acquireStorageMemory(

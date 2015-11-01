@@ -19,10 +19,7 @@ package org.apache.spark.memory
 
 import scala.collection.mutable
 
-import com.google.common.annotations.VisibleForTesting
-
-import org.apache.spark.util.Utils
-import org.apache.spark.{SparkException, TaskContext, SparkConf, Logging}
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
@@ -93,7 +90,7 @@ private[spark] abstract class MemoryManager(
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
 
   /**
-   * Try to acquire up to `numBytes` of on-heap execution memory for the current task and return the
+   * Try to acquire up to `numBytes` of execution memory for the current task and return the
    * number of bytes obtained, or 0 if none can be allocated.
    *
    * This call may block until there is enough free memory in some situations, to make sure each
@@ -102,54 +99,28 @@ private[spark] abstract class MemoryManager(
    * but an older task had a lot of memory already.
    */
   private[memory]
-  def acquireOnHeapExecutionMemory(numBytes: Long, taskAttemptId: Long): Long
-
-  /**
-   * Try to acquire up to `numBytes` of off-heap execution memory for the current task and return
-   * the number of bytes obtained, or 0 if none can be allocated.
-   *
-   * This call may block until there is enough free memory in some situations, to make sure each
-   * task has a chance to ramp up to at least 1 / 2N of the total memory pool (where N is the # of
-   * active tasks) before it is forced to spill. This can happen if the number of tasks increase
-   * but an older task had a lot of memory already.
-   */
-  private[memory]
-  def acquireOffHeapExecutionMemory(
+  def acquireExecutionMemory(
       numBytes: Long,
-      taskAttemptId: Long): Long = synchronized {
-    offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = synchronized {
+    memoryMode match {
+      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+    }
   }
 
   /**
-   * Release numBytes of on-heap execution memory belonging to the given task.
+   * Release numBytes of execution memory belonging to the given task.
    */
   private[memory]
-  def releaseOnHeapExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
-    onHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
-  }
-
-  /**
-   * Release numBytes of off-heap execution memory belonging to the given task.
-   */
-  private[memory]
-  final def releaseExecutionMemory(numBytes: Long, taskAttemptId: Long): Unit = synchronized {
-    val curMem = executionMemoryForTask.getOrElse(taskAttemptId, 0L)
-    if (curMem < numBytes) {
-      if (Utils.isTesting) {
-        throw new SparkException(
-          s"Internal error: release called on $numBytes bytes but task only has $curMem")
-      } else {
-        logWarning(s"Internal error: release called on $numBytes bytes but task only has $curMem")
-      }
+  def releaseExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Unit = synchronized {
+    memoryMode match {
+      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
+      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
     }
-    if (executionMemoryForTask.contains(taskAttemptId)) {
-      executionMemoryForTask(taskAttemptId) -= numBytes
-      if (executionMemoryForTask(taskAttemptId) <= 0) {
-        executionMemoryForTask.remove(taskAttemptId)
-      }
-      releaseExecutionMemory(numBytes)
-    }
-    notifyAll() // Notify waiters in acquireExecutionMemory() that memory has been freed
   }
 
   /**
@@ -228,12 +199,17 @@ private[spark] abstract class MemoryManager(
    * Tracks whether Tungsten memory will be allocated on the JVM heap or off-heap using
    * sun.misc.Unsafe.
    */
-  final val tungstenMemoryIsAllocatedInHeap: Boolean =
-    !conf.getBoolean("spark.unsafe.offHeap", false)
+  final val tungstenMemoryMode: MemoryMode = {
+    if (conf.getBoolean("spark.unsafe.offHeap", false)) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
+  }
 
   /**
    * Allocates memory for use by Unsafe/Tungsten code.
    */
-  private[memory] final val tungstenMemoryAllocator: MemoryAllocator =
-    if (tungstenMemoryIsAllocatedInHeap) MemoryAllocator.HEAP else MemoryAllocator.UNSAFE
+  private[memory] final val tungstenMemoryAllocator: MemoryAllocator = {
+    tungstenMemoryMode match {
+      case MemoryMode.ON_HEAP => MemoryAllocator.HEAP
+      case MemoryMode.OFF_HEAP => MemoryAllocator.UNSAFE
+    }
+  }
 }

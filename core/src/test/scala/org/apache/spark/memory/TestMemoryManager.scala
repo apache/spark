@@ -22,10 +22,15 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
-class TestMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 1) {
-  private[memory] override def doAcquireExecutionMemory(
+class TestMemoryManager(conf: SparkConf)
+    extends MemoryManager(conf, numCores = 1, maxOnHeapExecutionMemory = Long.MaxValue) {
+
+  // TODO(josh): separate configs for available on- and off-heap
+
+  override private[memory] def acquireExecutionMemory(
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = {
     if (oomOnce) {
       oomOnce = false
       0
@@ -33,16 +38,10 @@ class TestMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 
       available -= numBytes
       numBytes
     } else {
-      _executionMemoryUsed += available
       val grant = available
       available = 0
       grant
     }
-  }
-  override private[memory] def acquireOffHeapExecutionMemory(
-      numBytes: Long,
-      taskAttemptId: Long): Long = {
-    acquireOnHeapExecutionMemory(numBytes, taskAttemptId)
   }
   override def acquireStorageMemory(
       blockId: BlockId,
@@ -52,13 +51,11 @@ class TestMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def releaseExecutionMemory(numBytes: Long): Unit = {
-    available += numBytes
-    _executionMemoryUsed -= numBytes
-  }
   override def releaseStorageMemory(numBytes: Long): Unit = {}
-  override private[memory] def releaseOnHeapExecutionMemory(numBytes: Long, tid: Long): Unit = {}
-  override private[memory] def releaseOffHeapExecutionMemory(numBytes: Long, tid: Long): Unit = {}
+  override private[memory] def releaseExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Unit = {}
   override def maxStorageMemory: Long = Long.MaxValue
 
   private var oomOnce = false

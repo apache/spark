@@ -56,21 +56,21 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     val taskAttemptId = 0L
     val (mm, _) = makeThings(maxExecutionMem, Long.MaxValue)
     assert(mm.executionMemoryUsed === 0L)
-    assert(mm.acquireOnHeapExecutionMemory(10L, taskAttemptId) === 10L)
+    assert(mm.acquireExecutionMemory(10L, taskAttemptId, MemoryMode.ON_HEAP) === 10L)
     assert(mm.executionMemoryUsed === 10L)
-    assert(mm.acquireOnHeapExecutionMemory(100L, taskAttemptId) === 100L)
+    assert(mm.acquireExecutionMemory(100L, taskAttemptId, MemoryMode.ON_HEAP) === 100L)
     // Acquire up to the max
-    assert(mm.acquireOnHeapExecutionMemory(1000L, taskAttemptId) === 890L)
+    assert(mm.acquireExecutionMemory(1000L, taskAttemptId, MemoryMode.ON_HEAP) === 890L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    assert(mm.acquireOnHeapExecutionMemory(1L, taskAttemptId) === 0L)
+    assert(mm.acquireExecutionMemory(1L, taskAttemptId, MemoryMode.ON_HEAP) === 0L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    mm.releaseOnHeapExecutionMemory(800L, taskAttemptId)
+    mm.releaseExecutionMemory(800L, taskAttemptId, MemoryMode.ON_HEAP)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
-    assert(mm.acquireOnHeapExecutionMemory(1L, taskAttemptId) === 1L)
+    assert(mm.acquireExecutionMemory(1L, taskAttemptId, MemoryMode.ON_HEAP) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
-    mm.releaseOnHeapExecutionMemory(maxExecutionMem, taskAttemptId)
+    mm.releaseExecutionMemory(maxExecutionMem, taskAttemptId, MemoryMode.ON_HEAP)
     assert(mm.executionMemoryUsed === 0L)
   }
 
@@ -120,10 +120,10 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     val dummyBlock = TestBlockId("ain't nobody love like you do")
     val (mm, ms) = makeThings(maxExecutionMem, maxStorageMem)
     // Only execution memory should increase
-    assert(mm.acquireOnHeapExecutionMemory(100L, taskAttemptId) === 100L)
+    assert(mm.acquireExecutionMemory(100L, taskAttemptId, MemoryMode.ON_HEAP) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 100L)
-    assert(mm.acquireOnHeapExecutionMemory(1000L, taskAttemptId) === 100L)
+    assert(mm.acquireExecutionMemory(1000L, taskAttemptId, MemoryMode.ON_HEAP) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 200L)
     // Only storage memory should increase
@@ -132,7 +132,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 200L)
     // Only execution memory should be released
-    mm.releaseOnHeapExecutionMemory(133L, taskAttemptId)
+    mm.releaseExecutionMemory(133L, taskAttemptId, MemoryMode.ON_HEAP)
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 67L)
     // Only storage memory should be released

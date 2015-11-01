@@ -23,6 +23,7 @@ import java.io.IOException;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.TaskContext;
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BaseOrdering;
@@ -126,7 +127,8 @@ public final class UnsafeKVExternalSorter {
       sorter.spill();
       map.free();
       // counting the memory used UnsafeInMemorySorter
-      taskMemoryManager.acquireExecutionMemory(inMemSorter.getMemoryUsage(), sorter);
+      taskMemoryManager.acquireExecutionMemory(
+        inMemSorter.getMemoryUsage(), MemoryMode.ON_HEAP, sorter);
     }
   }
 

@@ -52,12 +52,6 @@ private[spark] class StaticMemoryManager(
     (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
-  override private[memory] def acquireOnHeapExecutionMemory(
-      numBytes: Long,
-      taskAttemptId: Long): Long = synchronized {
-    onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
-  }
-
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,

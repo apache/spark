@@ -17,25 +17,23 @@
 
 package org.apache.spark.memory;
 
-
 import java.io.IOException;
 
 import org.apache.spark.unsafe.memory.MemoryBlock;
-
 
 /**
  * An memory consumer of TaskMemoryManager, which support spilling.
  */
 public abstract class MemoryConsumer {
 
-  private final TaskMemoryManager taskMemoryManager;
+  protected final TaskMemoryManager taskMemoryManager;
   private final long pageSize;
-  private long used;
+  private long onHeapMemoryUsed = 0L;
+  private long offHeapMemoryUsed = 0L;
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize) {
     this.taskMemoryManager = taskMemoryManager;
     this.pageSize = pageSize;
-    this.used = 0;
   }
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager) {
@@ -43,10 +41,14 @@ public abstract class MemoryConsumer {
   }
 
   /**
-   * Returns the size of used memory in bytes.
+   * Returns the size of used on-heap memory in bytes.
    */
-  long getUsed() {
-    return used;
+  long getMemoryUsed(MemoryMode mode) {
+    if (mode == MemoryMode.ON_HEAP) {
+      return onHeapMemoryUsed;
+    } else {
+      return offHeapMemoryUsed;
+    }
   }
 
   /**
@@ -71,29 +73,30 @@ public abstract class MemoryConsumer {
    * @return the amount of released memory in bytes
    * @throws IOException
    */
+  // TODO(josh): clarify assumption that this only frees Tungsten-managed pages (for now).
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
 
   /**
-   * Acquire `size` bytes memory.
+   * Acquire `size` bytes of on-heap execution memory.
    *
    * If there is not enough memory, throws OutOfMemoryError.
    */
   protected void acquireMemory(long size) {
-    long got = taskMemoryManager.acquireExecutionMemory(size, this);
+    long got = taskMemoryManager.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this);
     if (got < size) {
-      taskMemoryManager.releaseExecutionMemory(got, this);
+      taskMemoryManager.releaseExecutionMemory(got, MemoryMode.ON_HEAP, this);
       taskMemoryManager.showMemoryUsage();
       throw new OutOfMemoryError("Could not acquire " + size + " bytes of memory, got " + got);
     }
-    used += got;
+    onHeapMemoryUsed += got;
   }
 
   /**
    * Release `size` bytes memory.
    */
   protected void releaseMemory(long size) {
-    used -= size;
-    taskMemoryManager.releaseExecutionMemory(size, this);
+    onHeapMemoryUsed -= size;
+    taskMemoryManager.releaseExecutionMemory(size, MemoryMode.ON_HEAP, this);
   }
 
   /**
@@ -114,7 +117,11 @@ public abstract class MemoryConsumer {
       taskMemoryManager.showMemoryUsage();
       throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
     }
-    used += page.size();
+    if (taskMemoryManager.tungstenMemoryMode == MemoryMode.ON_HEAP) {
+      onHeapMemoryUsed += page.size();
+    } else {
+      offHeapMemoryUsed += page.size();
+    }
     return page;
   }
 
@@ -122,7 +129,11 @@ public abstract class MemoryConsumer {
    * Free a memory block.
    */
   protected void freePage(MemoryBlock page) {
-    used -= page.size();
+    if (taskMemoryManager.tungstenMemoryMode == MemoryMode.ON_HEAP) {
+      onHeapMemoryUsed -= page.size();
+    } else {
+      offHeapMemoryUsed -= page.size();
+    }
     taskMemoryManager.freePage(page, this);
   }
 }
