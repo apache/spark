@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.ScalaUDF
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
@@ -190,5 +192,87 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     sqlContext.udf.register("intExpected", (x: Int) => x)
     // pass a decimal to intExpected.
     assert(sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
+  }
+
+  private def checkNumUDFs(df: DataFrame, expectedNumUDFs: Int): Unit = {
+    val udfs = df.queryExecution.optimizedPlan.collect {
+      case p: logical.Project => p.projectList.flatMap {
+        case e => e.collect {
+          case udf: ScalaUDF => udf
+        }
+      }
+    }.flatMap(functions => functions)
+    assert(udfs.length === expectedNumUDFs)
+  }
+
+  test("nondeterministic udf: using UDFRegistration") {
+    import org.apache.spark.sql.functions._
+
+    val deterministicUDF = sqlContext.udf.register("plusOne1", (x: Int) => x + 1)
+    val nondeterministicUDF = deterministicUDF.nonDeterministic
+    sqlContext.udf.register("plusOne2", nondeterministicUDF)
+
+    {
+      val df = sql("SELECT 1 as a")
+        .select(col("a"), deterministicUDF(col("a")).as("b"))
+        .select(col("a"), col("b"), deterministicUDF(col("b")).as("c"))
+      checkNumUDFs(df, 3)
+      checkAnswer(df, Row(1, 2, 3))
+    }
+
+    {
+      val df = sql("SELECT 1 as a")
+        .select(col("a"), callUDF("plusOne1", col("a")).as("b"))
+        .select(col("a"), col("b"), callUDF("plusOne1", col("b")).as("c"))
+      checkNumUDFs(df, 3)
+      checkAnswer(df, Row(1, 2, 3))
+    }
+
+    {
+      val df = sql("SELECT 1 as a")
+        .select(col("a"), nondeterministicUDF(col("a")).as("b"))
+        .select(col("a"), col("b"), nondeterministicUDF(col("b")).as("c"))
+      checkNumUDFs(df, 2)
+      checkAnswer(df, Row(1, 2, 3))
+    }
+
+    {
+      val df = sql("SELECT 1 as a")
+        .select(col("a"), callUDF("plusOne2", col("a")).as("b"))
+        .select(col("a"), col("b"), callUDF("plusOne2", col("b")).as("c"))
+      checkNumUDFs(df, 2)
+      checkAnswer(df, Row(1, 2, 3))
+    }
+  }
+
+  test("nondeterministic udf: using udf function") {
+    import org.apache.spark.sql.functions._
+
+    val deterministicUDF = udf((x: Int) => x + 1)
+    val nondeterministicUDF = deterministicUDF.nonDeterministic
+
+    {
+      val df = sql("SELECT 1 as a")
+        .select(col("a"), deterministicUDF(col("a")).as("b"))
+        .select(col("a"), col("b"), deterministicUDF(col("b")).as("c"))
+      checkNumUDFs(df, 3)
+      checkAnswer(df, Row(1, 2, 3))
+    }
+
+    {
+      val df = sql("SELECT 1 as a")
+        .select(col("a"), nondeterministicUDF(col("a")).as("b"))
+        .select(col("a"), col("b"), nondeterministicUDF(col("b")).as("c"))
+      checkNumUDFs(df, 2)
+      checkAnswer(df, Row(1, 2, 3))
+    }
+  }
+
+  test("override a registered udf") {
+    sqlContext.udf.register("intExpected", (x: Int) => x)
+    assert(sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
+
+    sqlContext.udf.register("intExpected", (x: Int) => x + 1)
+    assert(sql("SELECT intExpected(1.0)").head().getInt(0) === 2)
   }
 }

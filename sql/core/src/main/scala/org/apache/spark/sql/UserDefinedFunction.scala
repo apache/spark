@@ -44,11 +44,20 @@ import org.apache.spark.sql.types.DataType
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
-    inputTypes: Seq[DataType] = Nil) {
+    inputTypes: Seq[DataType] = Nil,
+    isDeterministic: Boolean = true) {
 
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes))
+    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes, isDeterministic))
   }
+
+  protected[sql] def builder: Seq[Expression] => ScalaUDF = {
+    (exprs: Seq[Expression]) =>
+      ScalaUDF(f, dataType, exprs, inputTypes, isDeterministic)
+  }
+
+  def nonDeterministic: UserDefinedFunction =
+    UserDefinedFunction(f, dataType, inputTypes, isDeterministic = false)
 }
 
 /**
