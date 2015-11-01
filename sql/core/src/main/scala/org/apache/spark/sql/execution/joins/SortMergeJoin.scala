@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.joins
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -28,10 +27,8 @@ import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 
 /**
- * :: DeveloperApi ::
  * Performs an sort merge join of two child relations.
  */
-@DeveloperApi
 case class SortMergeJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -56,9 +53,6 @@ case class SortMergeJoin(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
 
-  @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
-  @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
-
   protected[this] def isUnsafeMode: Boolean = {
     (codegenEnabled && unsafeEnabled
       && UnsafeProjection.canSupport(leftKeys)
@@ -82,6 +76,28 @@ case class SortMergeJoin(
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       new RowIterator {
+        // The projection used to extract keys from input rows of the left child.
+        private[this] val leftKeyGenerator = {
+          if (isUnsafeMode) {
+            // It is very important to use UnsafeProjection if input rows are UnsafeRows.
+            // Otherwise, GenerateProjection will cause wrong results.
+            UnsafeProjection.create(leftKeys, left.output)
+          } else {
+            newProjection(leftKeys, left.output)
+          }
+        }
+
+        // The projection used to extract keys from input rows of the right child.
+        private[this] val rightKeyGenerator = {
+          if (isUnsafeMode) {
+            // It is very important to use UnsafeProjection if input rows are UnsafeRows.
+            // Otherwise, GenerateProjection will cause wrong results.
+            UnsafeProjection.create(rightKeys, right.output)
+          } else {
+            newProjection(rightKeys, right.output)
+          }
+        }
+
         // An ordering that can be used to compare keys from both sides.
         private[this] val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
         private[this] var currentLeftRow: InternalRow = _

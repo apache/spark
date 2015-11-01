@@ -17,15 +17,15 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{HashMap, ListBuffer}
-import scala.xml.{Node, NodeSeq, Unparsed, Utility}
-
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
-import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
+import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.xml._
+
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
@@ -224,6 +224,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
+      val jobDescription = UIUtils.makeDescription(lastStageDescription, parent.basePath)
+
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
       <tr id={"job-" + job.jobId}>
@@ -231,7 +233,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
         <td>
-          <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
+          {jobDescription}
           <a href={detailUrl} class="name-link">{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>
@@ -263,6 +265,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     val listener = parent.jobProgresslistener
     listener.synchronized {
       val startTime = listener.startTime
+      val endTime = listener.endTime
       val activeJobs = listener.activeJobs.values.toSeq
       val completedJobs = listener.completedJobs.reverse.toSeq
       val failedJobs = listener.failedJobs.reverse.toSeq
@@ -287,13 +290,16 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {if (parent.sc.isDefined) {
-              // Total duration is not meaningful unless the UI is live
-              <li>
-                <strong>Total Uptime: </strong>
-                {UIUtils.formatDuration(System.currentTimeMillis() - startTime)}
-              </li>
-            }}
+            <li>
+              <strong>Total Uptime:</strong>
+              {
+                if (endTime < 0 && parent.sc.isDefined) {
+                  UIUtils.formatDuration(System.currentTimeMillis() - startTime)
+                } else if (endTime > 0) {
+                  UIUtils.formatDuration(endTime - startTime)
+                }
+              }
+            </li>
             <li>
               <strong>Scheduling Mode: </strong>
               {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}

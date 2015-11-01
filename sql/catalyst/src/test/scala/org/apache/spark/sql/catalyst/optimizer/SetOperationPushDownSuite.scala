@@ -30,7 +30,8 @@ class SetOperationPushDownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
       Batch("Union Pushdown", Once,
-        SetOperationPushDown) :: Nil
+        SetOperationPushDown,
+        SimplifyFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)

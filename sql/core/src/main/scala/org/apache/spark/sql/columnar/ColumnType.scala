@@ -17,15 +17,55 @@
 
 package org.apache.spark.sql.columnar
 
+import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
 
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
+
+
+/**
+ * A help class for fast reading Int/Long/Float/Double from ByteBuffer in native order.
+ *
+ * Note: There is not much difference between ByteBuffer.getByte/getShort and
+ * Unsafe.getByte/getShort, so we do not have helper methods for them.
+ *
+ * The unrolling (building columnar cache) is already slow, putLong/putDouble will not help much,
+ * so we do not have helper methods for them.
+ *
+ *
+ * WARNNING: This only works with HeapByteBuffer
+ */
+object ByteBufferHelper {
+  def getInt(buffer: ByteBuffer): Int = {
+    val pos = buffer.position()
+    buffer.position(pos + 4)
+    Platform.getInt(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
+  def getLong(buffer: ByteBuffer): Long = {
+    val pos = buffer.position()
+    buffer.position(pos + 8)
+    Platform.getLong(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
+  def getFloat(buffer: ByteBuffer): Float = {
+    val pos = buffer.position()
+    buffer.position(pos + 4)
+    Platform.getFloat(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
+  def getDouble(buffer: ByteBuffer): Double = {
+    val pos = buffer.position()
+    buffer.position(pos + 8)
+    Platform.getDouble(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+}
 
 /**
  * An abstract class that represents type of a column. Used to append/extract Java objects into/from
@@ -37,9 +77,6 @@ private[sql] sealed abstract class ColumnType[JvmType] {
 
   // The catalyst data type of this column.
   def dataType: DataType
-
-  // A unique ID representing the type.
-  def typeId: Int
 
   // Default size in bytes for one element of type T (e.g. 4 for `Int`).
   def defaultSize: Int
@@ -94,7 +131,7 @@ private[sql] sealed abstract class ColumnType[JvmType] {
    * boxing/unboxing costs whenever possible.
    */
   def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
-    to.update(toOrdinal, from.get(fromOrdinal, dataType))
+    setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 
   /**
@@ -105,9 +142,18 @@ private[sql] sealed abstract class ColumnType[JvmType] {
   override def toString: String = getClass.getSimpleName.stripSuffix("$")
 }
 
+private[sql] object NULL extends ColumnType[Any] {
+
+  override def dataType: DataType = NullType
+  override def defaultSize: Int = 0
+  override def append(v: Any, buffer: ByteBuffer): Unit = {}
+  override def extract(buffer: ByteBuffer): Any = null
+  override def setField(row: MutableRow, ordinal: Int, value: Any): Unit = row.setNullAt(ordinal)
+  override def getField(row: InternalRow, ordinal: Int): Any = null
+}
+
 private[sql] abstract class NativeColumnType[T <: AtomicType](
     val dataType: T,
-    val typeId: Int,
     val defaultSize: Int)
   extends ColumnType[T#InternalType] {
 
@@ -117,7 +163,7 @@ private[sql] abstract class NativeColumnType[T <: AtomicType](
   def scalaTag: TypeTag[dataType.InternalType] = dataType.tag
 }
 
-private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
+private[sql] object INT extends NativeColumnType(IntegerType, 4) {
   override def append(v: Int, buffer: ByteBuffer): Unit = {
     buffer.putInt(v)
   }
@@ -127,11 +173,11 @@ private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
   }
 
   override def extract(buffer: ByteBuffer): Int = {
-    buffer.getInt()
+    ByteBufferHelper.getInt(buffer)
   }
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
-    row.setInt(ordinal, buffer.getInt())
+    row.setInt(ordinal, ByteBufferHelper.getInt(buffer))
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Int): Unit = {
@@ -140,12 +186,13 @@ private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
 
   override def getField(row: InternalRow, ordinal: Int): Int = row.getInt(ordinal)
 
+
   override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
     to.setInt(toOrdinal, from.getInt(fromOrdinal))
   }
 }
 
-private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
+private[sql] object LONG extends NativeColumnType(LongType, 8) {
   override def append(v: Long, buffer: ByteBuffer): Unit = {
     buffer.putLong(v)
   }
@@ -155,11 +202,11 @@ private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
   }
 
   override def extract(buffer: ByteBuffer): Long = {
-    buffer.getLong()
+    ByteBufferHelper.getLong(buffer)
   }
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
-    row.setLong(ordinal, buffer.getLong())
+    row.setLong(ordinal, ByteBufferHelper.getLong(buffer))
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Long): Unit = {
@@ -173,7 +220,7 @@ private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
   }
 }
 
-private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
+private[sql] object FLOAT extends NativeColumnType(FloatType, 4) {
   override def append(v: Float, buffer: ByteBuffer): Unit = {
     buffer.putFloat(v)
   }
@@ -183,11 +230,11 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
   }
 
   override def extract(buffer: ByteBuffer): Float = {
-    buffer.getFloat()
+    ByteBufferHelper.getFloat(buffer)
   }
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
-    row.setFloat(ordinal, buffer.getFloat())
+    row.setFloat(ordinal, ByteBufferHelper.getFloat(buffer))
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Float): Unit = {
@@ -201,7 +248,7 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
   }
 }
 
-private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
+private[sql] object DOUBLE extends NativeColumnType(DoubleType, 8) {
   override def append(v: Double, buffer: ByteBuffer): Unit = {
     buffer.putDouble(v)
   }
@@ -211,11 +258,11 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
   }
 
   override def extract(buffer: ByteBuffer): Double = {
-    buffer.getDouble()
+    ByteBufferHelper.getDouble(buffer)
   }
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
-    row.setDouble(ordinal, buffer.getDouble())
+    row.setDouble(ordinal, ByteBufferHelper.getDouble(buffer))
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Double): Unit = {
@@ -229,7 +276,7 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
   }
 }
 
-private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
+private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
   override def append(v: Boolean, buffer: ByteBuffer): Unit = {
     buffer.put(if (v) 1: Byte else 0: Byte)
   }
@@ -255,7 +302,7 @@ private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
   }
 }
 
-private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
+private[sql] object BYTE extends NativeColumnType(ByteType, 1) {
   override def append(v: Byte, buffer: ByteBuffer): Unit = {
     buffer.put(v)
   }
@@ -283,7 +330,7 @@ private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
   }
 }
 
-private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
+private[sql] object SHORT extends NativeColumnType(ShortType, 2) {
   override def append(v: Short, buffer: ByteBuffer): Unit = {
     buffer.putShort(v)
   }
@@ -311,25 +358,60 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
   }
 }
 
-private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
+/**
+ * A fast path to copy var-length bytes between ByteBuffer and UnsafeRow without creating wrapper
+ * objects.
+ */
+private[sql] trait DirectCopyColumnType[JvmType] extends ColumnType[JvmType] {
+
+  // copy the bytes from ByteBuffer to UnsafeRow
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
+    if (row.isInstanceOf[MutableUnsafeRow]) {
+      val numBytes = buffer.getInt
+      val cursor = buffer.position()
+      buffer.position(cursor + numBytes)
+      row.asInstanceOf[MutableUnsafeRow].writer.write(ordinal, buffer.array(),
+        buffer.arrayOffset() + cursor, numBytes)
+    } else {
+      setField(row, ordinal, extract(buffer))
+    }
+  }
+
+  // copy the bytes from UnsafeRow to ByteBuffer
+  override def append(row: InternalRow, ordinal: Int, buffer: ByteBuffer): Unit = {
+    if (row.isInstanceOf[UnsafeRow]) {
+      row.asInstanceOf[UnsafeRow].writeFieldTo(ordinal, buffer)
+    } else {
+      super.append(row, ordinal, buffer)
+    }
+  }
+}
+
+private[sql] object STRING
+  extends NativeColumnType(StringType, 8) with DirectCopyColumnType[UTF8String] {
+
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     row.getUTF8String(ordinal).numBytes() + 4
   }
 
   override def append(v: UTF8String, buffer: ByteBuffer): Unit = {
-    val stringBytes = v.getBytes
-    buffer.putInt(stringBytes.length).put(stringBytes, 0, stringBytes.length)
+    buffer.putInt(v.numBytes())
+    v.writeTo(buffer)
   }
 
   override def extract(buffer: ByteBuffer): UTF8String = {
     val length = buffer.getInt()
-    val stringBytes = new Array[Byte](length)
-    buffer.get(stringBytes, 0, length)
-    UTF8String.fromBytes(stringBytes)
+    val cursor = buffer.position()
+    buffer.position(cursor + length)
+    UTF8String.fromBytes(buffer.array(), buffer.arrayOffset() + cursor, length)
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: UTF8String): Unit = {
-    row.update(ordinal, value.clone())
+    if (row.isInstanceOf[MutableUnsafeRow]) {
+      row.asInstanceOf[MutableUnsafeRow].writer.write(ordinal, value)
+    } else {
+      row.update(ordinal, value.clone())
+    }
   }
 
   override def getField(row: InternalRow, ordinal: Int): UTF8String = {
@@ -343,54 +425,33 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   override def clone(v: UTF8String): UTF8String = v.clone()
 }
 
-private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
-  override def extract(buffer: ByteBuffer): Int = {
-    buffer.getInt
-  }
-
-  override def append(v: Int, buffer: ByteBuffer): Unit = {
-    buffer.putInt(v)
-  }
-
-  override def getField(row: InternalRow, ordinal: Int): Int = {
-    row.getInt(ordinal)
-  }
-
-  def setField(row: MutableRow, ordinal: Int, value: Int): Unit = {
-    row(ordinal) = value
-  }
-}
-
-private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
-  override def extract(buffer: ByteBuffer): Long = {
-    buffer.getLong
-  }
-
-  override def append(v: Long, buffer: ByteBuffer): Unit = {
-    buffer.putLong(v)
-  }
-
-  override def getField(row: InternalRow, ordinal: Int): Long = {
-    row.getLong(ordinal)
-  }
-
-  override def setField(row: MutableRow, ordinal: Int, value: Long): Unit = {
-    row(ordinal) = value
-  }
-}
-
-private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
-  extends NativeColumnType(
-    DecimalType(precision, scale),
-    10,
-    FIXED_DECIMAL.defaultSize) {
+private[sql] case class COMPACT_DECIMAL(precision: Int, scale: Int)
+  extends NativeColumnType(DecimalType(precision, scale), 8) {
 
   override def extract(buffer: ByteBuffer): Decimal = {
-    Decimal(buffer.getLong(), precision, scale)
+    Decimal(ByteBufferHelper.getLong(buffer), precision, scale)
+  }
+
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
+    if (row.isInstanceOf[MutableUnsafeRow]) {
+      // copy it as Long
+      row.setLong(ordinal, ByteBufferHelper.getLong(buffer))
+    } else {
+      setField(row, ordinal, extract(buffer))
+    }
   }
 
   override def append(v: Decimal, buffer: ByteBuffer): Unit = {
     buffer.putLong(v.toUnscaledLong)
+  }
+
+  override def append(row: InternalRow, ordinal: Int, buffer: ByteBuffer): Unit = {
+    if (row.isInstanceOf[UnsafeRow]) {
+      // copy it as Long
+      buffer.putLong(row.getLong(ordinal))
+    } else {
+      append(getField(row, ordinal), buffer)
+    }
   }
 
   override def getField(row: InternalRow, ordinal: Int): Decimal = {
@@ -406,34 +467,34 @@ private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   }
 }
 
-private[sql] object FIXED_DECIMAL {
-  val defaultSize = 8
+private[sql] object COMPACT_DECIMAL {
+  def apply(dt: DecimalType): COMPACT_DECIMAL = {
+    COMPACT_DECIMAL(dt.precision, dt.scale)
+  }
 }
 
-private[sql] sealed abstract class ByteArrayColumnType(
-    val typeId: Int,
-    val defaultSize: Int)
-  extends ColumnType[Array[Byte]] {
+private[sql] sealed abstract class ByteArrayColumnType[JvmType](val defaultSize: Int)
+  extends ColumnType[JvmType] with DirectCopyColumnType[JvmType] {
 
-  override def actualSize(row: InternalRow, ordinal: Int): Int = {
-    getField(row, ordinal).length + 4
+  def serialize(value: JvmType): Array[Byte]
+  def deserialize(bytes: Array[Byte]): JvmType
+
+  override def append(v: JvmType, buffer: ByteBuffer): Unit = {
+    val bytes = serialize(v)
+    buffer.putInt(bytes.length).put(bytes, 0, bytes.length)
   }
 
-  override def append(v: Array[Byte], buffer: ByteBuffer): Unit = {
-    buffer.putInt(v.length).put(v, 0, v.length)
-  }
-
-  override def extract(buffer: ByteBuffer): Array[Byte] = {
+  override def extract(buffer: ByteBuffer): JvmType = {
     val length = buffer.getInt()
     val bytes = new Array[Byte](length)
     buffer.get(bytes, 0, length)
-    bytes
+    deserialize(bytes)
   }
 }
 
-private[sql] object BINARY extends ByteArrayColumnType(11, 16) {
+private[sql] object BINARY extends ByteArrayColumnType[Array[Byte]](16) {
 
-  def dataType: DataType = BooleanType
+  def dataType: DataType = BinaryType
 
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
     row.update(ordinal, value)
@@ -442,38 +503,187 @@ private[sql] object BINARY extends ByteArrayColumnType(11, 16) {
   override def getField(row: InternalRow, ordinal: Int): Array[Byte] = {
     row.getBinary(ordinal)
   }
+
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    row.getBinary(ordinal).length + 4
+  }
+
+  def serialize(value: Array[Byte]): Array[Byte] = value
+  def deserialize(bytes: Array[Byte]): Array[Byte] = bytes
 }
 
-// Used to process generic objects (all types other than those listed above). Objects should be
-// serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
-// byte array.
-private[sql] case class GENERIC(dataType: DataType) extends ByteArrayColumnType(12, 16) {
-  override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
-    row.update(ordinal, SparkSqlSerializer.deserialize[Any](value))
+private[sql] case class LARGE_DECIMAL(precision: Int, scale: Int)
+  extends ByteArrayColumnType[Decimal](12) {
+
+  override val dataType: DataType = DecimalType(precision, scale)
+
+  override def getField(row: InternalRow, ordinal: Int): Decimal = {
+    row.getDecimal(ordinal, precision, scale)
   }
 
-  override def getField(row: InternalRow, ordinal: Int): Array[Byte] = {
-    SparkSqlSerializer.serialize(row.get(ordinal, dataType))
+  override def setField(row: MutableRow, ordinal: Int, value: Decimal): Unit = {
+    row.setDecimal(ordinal, value, precision)
   }
+
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    4 + getField(row, ordinal).toJavaBigDecimal.unscaledValue().bitLength() / 8 + 1
+  }
+
+  override def serialize(value: Decimal): Array[Byte] = {
+    value.toJavaBigDecimal.unscaledValue().toByteArray
+  }
+
+  override def deserialize(bytes: Array[Byte]): Decimal = {
+    val javaDecimal = new BigDecimal(new BigInteger(bytes), scale)
+    Decimal.apply(javaDecimal, precision, scale)
+  }
+}
+
+private[sql] object LARGE_DECIMAL {
+  def apply(dt: DecimalType): LARGE_DECIMAL = {
+    LARGE_DECIMAL(dt.precision, dt.scale)
+  }
+}
+
+private[sql] case class STRUCT(dataType: StructType)
+  extends ColumnType[UnsafeRow] with DirectCopyColumnType[UnsafeRow] {
+
+  private val numOfFields: Int = dataType.fields.size
+
+  override def defaultSize: Int = 20
+
+  override def setField(row: MutableRow, ordinal: Int, value: UnsafeRow): Unit = {
+    row.update(ordinal, value)
+  }
+
+  override def getField(row: InternalRow, ordinal: Int): UnsafeRow = {
+    row.getStruct(ordinal, numOfFields).asInstanceOf[UnsafeRow]
+  }
+
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    4 + getField(row, ordinal).getSizeInBytes
+  }
+
+  override def append(value: UnsafeRow, buffer: ByteBuffer): Unit = {
+    buffer.putInt(value.getSizeInBytes)
+    value.writeTo(buffer)
+  }
+
+  override def extract(buffer: ByteBuffer): UnsafeRow = {
+    val sizeInBytes = ByteBufferHelper.getInt(buffer)
+    assert(buffer.hasArray)
+    val cursor = buffer.position()
+    buffer.position(cursor + sizeInBytes)
+    val unsafeRow = new UnsafeRow
+    unsafeRow.pointTo(
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
+      numOfFields,
+      sizeInBytes)
+    unsafeRow
+  }
+
+  override def clone(v: UnsafeRow): UnsafeRow = v.copy()
+}
+
+private[sql] case class ARRAY(dataType: ArrayType)
+  extends ColumnType[UnsafeArrayData] with DirectCopyColumnType[UnsafeArrayData] {
+
+  override def defaultSize: Int = 16
+
+  override def setField(row: MutableRow, ordinal: Int, value: UnsafeArrayData): Unit = {
+    row.update(ordinal, value)
+  }
+
+  override def getField(row: InternalRow, ordinal: Int): UnsafeArrayData = {
+    row.getArray(ordinal).asInstanceOf[UnsafeArrayData]
+  }
+
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    val unsafeArray = getField(row, ordinal)
+    4 + unsafeArray.getSizeInBytes
+  }
+
+  override def append(value: UnsafeArrayData, buffer: ByteBuffer): Unit = {
+    buffer.putInt(value.getSizeInBytes)
+    value.writeTo(buffer)
+  }
+
+  override def extract(buffer: ByteBuffer): UnsafeArrayData = {
+    val numBytes = buffer.getInt
+    assert(buffer.hasArray)
+    val cursor = buffer.position()
+    buffer.position(cursor + numBytes)
+    val array = new UnsafeArrayData
+    array.pointTo(
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
+      numBytes)
+    array
+  }
+
+  override def clone(v: UnsafeArrayData): UnsafeArrayData = v.copy()
+}
+
+private[sql] case class MAP(dataType: MapType)
+  extends ColumnType[UnsafeMapData] with DirectCopyColumnType[UnsafeMapData] {
+
+  override def defaultSize: Int = 32
+
+  override def setField(row: MutableRow, ordinal: Int, value: UnsafeMapData): Unit = {
+    row.update(ordinal, value)
+  }
+
+  override def getField(row: InternalRow, ordinal: Int): UnsafeMapData = {
+    row.getMap(ordinal).asInstanceOf[UnsafeMapData]
+  }
+
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    val unsafeMap = getField(row, ordinal)
+    4 + unsafeMap.getSizeInBytes
+  }
+
+  override def append(value: UnsafeMapData, buffer: ByteBuffer): Unit = {
+    buffer.putInt(value.getSizeInBytes)
+    value.writeTo(buffer)
+  }
+
+  override def extract(buffer: ByteBuffer): UnsafeMapData = {
+    val numBytes = buffer.getInt
+    val cursor = buffer.position()
+    buffer.position(cursor + numBytes)
+    val map = new UnsafeMapData
+    map.pointTo(
+      buffer.array(),
+      Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
+      numBytes)
+    map
+  }
+
+  override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()
 }
 
 private[sql] object ColumnType {
   def apply(dataType: DataType): ColumnType[_] = {
     dataType match {
+      case NullType => NULL
       case BooleanType => BOOLEAN
       case ByteType => BYTE
       case ShortType => SHORT
-      case IntegerType => INT
-      case DateType => DATE
-      case LongType => LONG
-      case TimestampType => TIMESTAMP
+      case IntegerType | DateType => INT
+      case LongType | TimestampType => LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
-      case DecimalType.Fixed(precision, scale) if precision < 19 =>
-        FIXED_DECIMAL(precision, scale)
-      case other => GENERIC(other)
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)
+      case dt: DecimalType => LARGE_DECIMAL(dt)
+      case arr: ArrayType => ARRAY(arr)
+      case map: MapType => MAP(map)
+      case struct: StructType => STRUCT(struct)
+      case udt: UserDefinedType[_] => apply(udt.sqlType)
+      case other =>
+        throw new Exception(s"Unsupported type: $other")
     }
   }
 }

@@ -149,8 +149,14 @@ class Interaction(override val uid: String) extends Transformer
     features.reverse.foreach { f =>
       val encodedAttrs = f.dataType match {
         case _: NumericType | BooleanType =>
-          val attr = Attribute.fromStructField(f)
-          encodedFeatureAttrs(Seq(attr), None)
+          val attr = Attribute.decodeStructField(f, preserveName = true)
+          if (attr == UnresolvedAttribute) {
+            encodedFeatureAttrs(Seq(NumericAttribute.defaultAttr.withName(f.name)), None)
+          } else if (!attr.name.isDefined) {
+            encodedFeatureAttrs(Seq(attr.withName(f.name)), None)
+          } else {
+            encodedFeatureAttrs(Seq(attr), None)
+          }
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(f)
           encodedFeatureAttrs(group.attributes.get, Some(group.name))
@@ -221,7 +227,7 @@ class Interaction(override val uid: String) extends Transformer
  *                    count is equal to the number of categories. For numeric features the count
  *                    should be set to 1.
  */
-private[ml] class FeatureEncoder(numFeatures: Array[Int]) {
+private[ml] class FeatureEncoder(numFeatures: Array[Int]) extends Serializable {
   assert(numFeatures.forall(_ > 0), "Features counts must all be positive.")
 
   /** The size of the output vector. */

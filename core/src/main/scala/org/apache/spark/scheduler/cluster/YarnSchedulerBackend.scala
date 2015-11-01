@@ -111,10 +111,10 @@ private[spark] abstract class YarnSchedulerBackend(
      * immediately.
      *
      * In YARN's case however it is crucial to talk to the application master and ask why the
-     * executor had exited. In particular, the executor may have exited due to the executor
-     * having been preempted. If the executor "exited normally" according to the application
-     * master then we pass that information down to the TaskSetManager to inform the
-     * TaskSetManager that tasks on that lost executor should not count towards a job failure.
+     * executor had exited. If the executor exited for some reason unrelated to the running tasks
+     * (e.g., preemption), according to the application master, then we pass that information down
+     * to the TaskSetManager to inform the TaskSetManager that tasks on that lost executor should
+     * not count towards a job failure.
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach { executorId =>
@@ -166,7 +166,9 @@ private[spark] abstract class YarnSchedulerBackend(
     override def receive: PartialFunction[Any, Unit] = {
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
-        amEndpoint = Some(am)
+        amEndpoint = Option(am)
+        // See SPARK-10987.
+        am.send(DriverHello)
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)

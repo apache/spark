@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.test
 
-import java.util
-
-import scala.collection.JavaConverters._
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -39,22 +37,20 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
-  override def serialize(obj: Any): Seq[Double] = {
+  override def serialize(obj: Any): GenericArrayData = {
     obj match {
       case p: ExamplePoint =>
-        Seq(p.x, p.y)
+        val output = new Array[Any](2)
+        output(0) = p.x
+        output(1) = p.y
+        new GenericArrayData(output)
     }
   }
 
   override def deserialize(datum: Any): ExamplePoint = {
     datum match {
-      case values: Seq[_] =>
-        val xy = values.asInstanceOf[Seq[Double]]
-        assert(xy.length == 2)
-        new ExamplePoint(xy(0), xy(1))
-      case values: util.ArrayList[_] =>
-        val xy = values.asInstanceOf[util.ArrayList[Double]].asScala
-        new ExamplePoint(xy(0), xy(1))
+      case values: ArrayData =>
+        new ExamplePoint(values.getDouble(0), values.getDouble(1))
     }
   }
 

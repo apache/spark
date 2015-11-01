@@ -17,12 +17,9 @@
 
 package org.apache.spark.ml.optim
 
-import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
-import org.netlib.util.intW
-
 import org.apache.spark.Logging
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.rdd.RDD
 
 /**
@@ -110,7 +107,7 @@ private[ml] class WeightedLeastSquares(
       j += 1
     }
 
-    val x = choleskySolve(aaBar.values, abBar)
+    val x = new DenseVector(CholeskyDecomposition.solve(aaBar.values, abBar.values))
 
     // compute intercept
     val intercept = if (fitIntercept) {
@@ -121,36 +118,9 @@ private[ml] class WeightedLeastSquares(
 
     new WeightedLeastSquaresModel(x, intercept)
   }
-
-  /**
-   * Solves a symmetric positive definite linear system via Cholesky factorization.
-   * The input arguments are modified in-place to store the factorization and the solution.
-   * @param A the upper triangular part of A
-   * @param bx right-hand side
-   * @return the solution vector
-   */
-  // TODO: SPARK-10490 - consolidate this and the Cholesky solver in ALS
-  private def choleskySolve(A: Array[Double], bx: DenseVector): DenseVector = {
-    val k = bx.size
-    val info = new intW(0)
-    lapack.dppsv("U", k, 1, A, bx.values, k, info)
-    val code = info.`val`
-    assert(code == 0, s"lapack.dpotrs returned $code.")
-    bx
-  }
 }
 
 private[ml] object WeightedLeastSquares {
-
-  /**
-   * Case class for weighted observations.
-   * @param w weight, must be positive
-   * @param a features
-   * @param b label
-   */
-  case class Instance(w: Double, a: Vector, b: Double) {
-    require(w >= 0.0, s"Weight cannot be negative: $w.")
-  }
 
   /**
    * Aggregator to provide necessary summary statistics for solving [[WeightedLeastSquares]].
@@ -189,8 +159,8 @@ private[ml] object WeightedLeastSquares {
      * Adds an instance.
      */
     def add(instance: Instance): this.type = {
-      val Instance(w, a, b) = instance
-      val ak = a.size
+      val Instance(l, w, f) = instance
+      val ak = f.size
       if (!initialized) {
         init(ak)
       }
@@ -198,11 +168,11 @@ private[ml] object WeightedLeastSquares {
       count += 1L
       wSum += w
       wwSum += w * w
-      bSum += w * b
-      bbSum += w * b * b
-      BLAS.axpy(w, a, aSum)
-      BLAS.axpy(w * b, a, abSum)
-      BLAS.spr(w, a, aaSum)
+      bSum += w * l
+      bbSum += w * l * l
+      BLAS.axpy(w, f, aSum)
+      BLAS.axpy(w * l, f, abSum)
+      BLAS.spr(w, f, aaSum)
       this
     }
 

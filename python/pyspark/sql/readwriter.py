@@ -23,6 +23,7 @@ if sys.version >= '3':
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
 
@@ -116,6 +117,10 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+        >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
+        ...     'python/test_support/sql/people1.json'])
+        >>> df.dtypes
+        [('age', 'bigint'), ('aka', 'string'), ('name', 'string')]
         """
         if format is not None:
             self.format(format)
@@ -123,7 +128,15 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            return self._df(self._jreader.load(path))
+            if type(path) == list:
+                paths = path
+                gateway = self._sqlContext._sc._gateway
+                jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
+                for i in range(0, len(paths)):
+                    jpaths[i] = paths[i]
+                return self._df(self._jreader.load(jpaths))
+            else:
+                return self._df(self._jreader.load(path))
         else:
             return self._df(self._jreader.load())
 
@@ -181,10 +194,22 @@ class DataFrameReader(object):
         """
         return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, paths)))
 
+    @ignore_unicode_prefix
+    @since(1.6)
+    def text(self, path):
+        """Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+
+        Each line in the text file is a new row in the resulting DataFrame.
+
+        >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
+        >>> df.collect()
+        [Row(text=u'hello'), Row(text=u'this')]
+        """
+        return self._df(self._jreader.text(path))
+
     @since(1.5)
     def orc(self, path):
-        """
-        Loads an ORC file, returning the result as a :class:`DataFrame`.
+        """Loads an ORC file, returning the result as a :class:`DataFrame`.
 
         ::Note: Currently ORC support is only available together with
         :class:`HiveContext`.
@@ -420,6 +445,16 @@ class DataFrameWriter(object):
             self.partitionBy(partitionBy)
         self._jwrite.parquet(path)
 
+    @since(1.6)
+    def text(self, path):
+        """Saves the content of the DataFrame in a text file at the specified path.
+
+        The DataFrame must have only one column that is of string type.
+        Each row becomes a new line in the output file.
+        """
+        self._jwrite.text(path)
+
+    @since(1.5)
     def orc(self, path, mode=None, partitionBy=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 

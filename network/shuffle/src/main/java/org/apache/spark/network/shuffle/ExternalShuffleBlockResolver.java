@@ -114,10 +114,14 @@ public class ExternalShuffleBlockResolver {
             "recover state for existing applications", registeredExecutorFile, e);
           if (registeredExecutorFile.isDirectory()) {
             for (File f : registeredExecutorFile.listFiles()) {
-              f.delete();
+              if (!f.delete()) {
+                logger.warn("error deleting {}", f.getPath());
+              }
             }
           }
-          registeredExecutorFile.delete();
+          if (!registeredExecutorFile.delete()) {
+            logger.warn("error deleting {}", registeredExecutorFile.getPath());
+          }
           options.createIfMissing(true);
           try {
             tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);

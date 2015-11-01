@@ -212,6 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
+        == Physical Plan ==
         Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
@@ -227,7 +228,7 @@ class DataFrame(object):
         if extended:
             print(self._jdf.queryExecution().toString())
         else:
-            print(self._jdf.queryExecution().executedPlan().toString())
+            print(self._jdf.queryExecution().simpleString())
 
     @since(1.3)
     def isLocal(self):
@@ -300,7 +301,10 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        return self.limit(num).collect()
+        with SCCallSiteSync(self._sc) as css:
+            port = self._sc._jvm.org.apache.spark.sql.execution.EvaluatePython.takeAndServe(
+                self._jdf, num)
+        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -928,6 +932,8 @@ class DataFrame(object):
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
+        :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
+
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([ \
             Row(name='Alice', age=5, height=80), \
@@ -1258,6 +1264,18 @@ class DataFrame(object):
             jdf = self._jdf.drop(col._jc)
         else:
             raise TypeError("col should be a string or a Column")
+        return DataFrame(jdf, self.sql_ctx)
+
+    @ignore_unicode_prefix
+    def toDF(self, *cols):
+        """Returns a new class:`DataFrame` that with new specified column names
+
+        :param cols: list of new column names (string)
+
+        >>> df.toDF('f1', 'f2').collect()
+        [Row(f1=2, f2=u'Alice'), Row(f1=5, f2=u'Bob')]
+        """
+        jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)

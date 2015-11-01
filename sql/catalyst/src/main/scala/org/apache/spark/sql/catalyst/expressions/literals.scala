@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -51,6 +50,32 @@ object Literal {
 
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+  }
+
+  /**
+   * Create a literal with default value for given DataType
+   */
+  def default(dataType: DataType): Literal = dataType match {
+    case NullType => create(null, NullType)
+    case BooleanType => Literal(false)
+    case ByteType => Literal(0.toByte)
+    case ShortType => Literal(0.toShort)
+    case IntegerType => Literal(0)
+    case LongType => Literal(0L)
+    case FloatType => Literal(0.0f)
+    case DoubleType => Literal(0.0)
+    case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
+    case DateType => create(0, DateType)
+    case TimestampType => create(0L, TimestampType)
+    case StringType => Literal("")
+    case BinaryType => Literal("".getBytes)
+    case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
+    case arr: ArrayType => create(Array(), arr)
+    case map: MapType => create(Map(), map)
+    case struct: StructType =>
+      create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
+    case other =>
+      throw new RuntimeException(s"no default for type $dataType")
   }
 }
 
@@ -97,12 +122,12 @@ case class Literal protected (value: Any, dataType: DataType)
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      s"final ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};"
+      s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};"
     } else {
       dataType match {
         case BooleanType =>
           ev.isNull = "false"
-          ev.primitive = value.toString
+          ev.value = value.toString
           ""
         case FloatType =>
           val v = value.asInstanceOf[Float]
@@ -110,7 +135,7 @@ case class Literal protected (value: Any, dataType: DataType)
             super.genCode(ctx, ev)
           } else {
             ev.isNull = "false"
-            ev.primitive = s"${value}f"
+            ev.value = s"${value}f"
             ""
           }
         case DoubleType =>
@@ -119,20 +144,20 @@ case class Literal protected (value: Any, dataType: DataType)
             super.genCode(ctx, ev)
           } else {
             ev.isNull = "false"
-            ev.primitive = s"${value}D"
+            ev.value = s"${value}D"
             ""
           }
         case ByteType | ShortType =>
           ev.isNull = "false"
-          ev.primitive = s"(${ctx.javaType(dataType)})$value"
+          ev.value = s"(${ctx.javaType(dataType)})$value"
           ""
         case IntegerType | DateType =>
           ev.isNull = "false"
-          ev.primitive = value.toString
+          ev.value = value.toString
           ""
         case TimestampType | LongType =>
           ev.isNull = "false"
-          ev.primitive = s"${value}L"
+          ev.value = s"${value}L"
           ""
         // eval() version may be faster for non-primitive types
         case other =>
