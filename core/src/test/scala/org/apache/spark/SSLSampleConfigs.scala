@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.hadoop.conf.Configuration
+
 object SSLSampleConfigs {
   val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
   val privateKeyPath = new File(this.getClass.getResource("/key.pem").toURI).getAbsolutePath
@@ -74,6 +76,40 @@ object SSLSampleConfigs {
     conf.set("spark.ssl.openSslEnabled", "false")
     conf.set("spark.ssl.enabledAlgorithms", enabledAlgorithms)
     conf.set("spark.ssl.protocol", "TLSv1.2")
+    conf
+  }
+
+  def setSparkSSLShuffleConfig(conf: SparkConf): SparkConf = {
+    conf.set("spark.ssl.bts.enabled", "true")
+    conf.set("spark.ssl.bts.keyStore", keyStorePath)
+    conf.set("spark.ssl.bts.privateKey", privateKeyPath)
+    conf.set("spark.ssl.bts.certChain", certChainPath)
+    conf.set("spark.ssl.bts.keyStorePassword", "password")
+    conf.set("spark.ssl.bts.keyPassword", "password")
+    conf.set("spark.ssl.bts.trustStore", trustStorePath)
+    conf.set("spark.ssl.bts.trustStorePassword", "password")
+    conf.set("spark.ssl.bts.trustStoreReloadingEnabled", "false")
+    conf.set("spark.ssl.bts.trustStoreReloadInterval", "10000")
+    conf.set("spark.ssl.bts.openSslEnabled", "false")
+    conf.set("spark.ssl.bts.enabledAlgorithms", enabledAlgorithms)
+    conf.set("spark.ssl.bts.protocol", "TLSv1.2")
+    conf
+  }
+
+  def setSparkSSLShuffleConfig(conf: Configuration): Configuration = {
+    conf.set("spark.ssl.bts.enabled", "true")
+    conf.set("spark.ssl.bts.keyStore", keyStorePath)
+    conf.set("spark.ssl.bts.privateKey", privateKeyPath)
+    conf.set("spark.ssl.bts.certChain", certChainPath)
+    conf.set("spark.ssl.bts.keyStorePassword", "password")
+    conf.set("spark.ssl.bts.keyPassword", "password")
+    conf.set("spark.ssl.bts.trustStore", trustStorePath)
+    conf.set("spark.ssl.bts.trustStorePassword", "password")
+    conf.set("spark.ssl.bts.trustStoreReloadingEnabled", "false")
+    conf.set("spark.ssl.bts.trustStoreReloadInterval", "10000")
+    conf.set("spark.ssl.bts.openSslEnabled", "false")
+    conf.set("spark.ssl.bts.enabledAlgorithms", enabledAlgorithms)
+    conf.set("spark.ssl.bts.protocol", "TLSv1.2")
     conf
   }
 
