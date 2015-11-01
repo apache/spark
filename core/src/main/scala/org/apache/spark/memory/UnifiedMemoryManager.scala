@@ -89,7 +89,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
         // If there is not enough free memory AND storage has borrowed some execution memory,
         // then evict as much memory borrowed by storage as needed to grant this request
         if (numBytes > onHeapExecutionMemoryPool.memoryFree && memoryBorrowedByStorage > 0) {
-          val spaceReclaimed = storageMemoryPool.shrinkPoolByEvictingBlocks(
+          val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
             math.min(numBytes, memoryBorrowedByStorage))
           onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
         }

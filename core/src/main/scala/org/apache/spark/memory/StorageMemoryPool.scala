@@ -105,14 +105,18 @@ class StorageMemoryPool extends MemoryPool with Logging {
   }
 
   // TODO(josh): comment
-  def shrinkPoolByEvictingBlocks(spaceToEnsure: Long): Long = synchronized {
+  def shrinkPoolToFreeSpace(spaceToEnsure: Long): Long = synchronized {
     val spaceFreedByReleasingUnusedMemory = Math.min(spaceToEnsure, memoryFree)
     decrementPoolSize(spaceFreedByReleasingUnusedMemory)
-    val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-    memoryStore.ensureFreeSpace(spaceToEnsure - spaceFreedByReleasingUnusedMemory, evictedBlocks)
-    val spaceFreedByEviction = evictedBlocks.map(_._2.memSize).sum
-    _memoryUsed -= spaceFreedByEviction
-    decrementPoolSize(spaceFreedByEviction)
-    spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
+    if (spaceFreedByReleasingUnusedMemory == spaceToEnsure) {
+      spaceFreedByReleasingUnusedMemory
+    } else {
+      val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+      memoryStore.ensureFreeSpace(spaceToEnsure - spaceFreedByReleasingUnusedMemory, evictedBlocks)
+      val spaceFreedByEviction = evictedBlocks.map(_._2.memSize).sum
+      _memoryUsed -= spaceFreedByEviction
+      decrementPoolSize(spaceFreedByEviction)
+      spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
+    }
   }
 }
