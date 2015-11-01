@@ -259,8 +259,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
         if (stageInfo.rddInfos.exists(_.name == d4.name)) {
           taskMetrics.shuffleReadMetrics should be ('defined)
           val sm = taskMetrics.shuffleReadMetrics.get
-          sm.totalBlocksFetched should be (128)
-          sm.localBlocksFetched should be (128)
+          sm.totalBlocksFetched should be (2*numSlices)
+          sm.localBlocksFetched should be (2*numSlices)
           sm.remoteBlocksFetched should be (0)
           sm.remoteBytesRead should be (0L)
         }
