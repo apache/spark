@@ -44,16 +44,46 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       StructField("b", IntegerType, nullable = false) ::
       StructField("c", StringType, nullable = false) :: Nil)
 
+  /**
+   * Given an array of [[Filter]]s, returns an array of [[Filter]]s that this data source relation
+   * cannot handle.  Spark SQL will apply all returned [[Filter]]s against rows returned by this
+   * data source relation.
+   *
+   * @since 1.6.0
+   */
+  override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
+    def unhandled(filter: Filter): Boolean = {
+      filter match {
+        case EqualTo("b", v) => true
+        case EqualNullSafe("b", v) => true
+        case LessThan("b", v: Int) => true
+        case LessThanOrEqual("b", v: Int) => true
+        case GreaterThan("b", v: Int) => true
+        case GreaterThanOrEqual("b", v: Int) => true
+        case In("b", values) => true
+        case IsNull("b") => true
+        case IsNotNull("b") => true
+        case Not(pred) => unhandled(pred)
+        case And(left, right) => unhandled(left) || unhandled(right)
+        case Or(left, right) => unhandled(left) || unhandled(right)
+        case _ => false
+      }
+    }
+
+    filters.filter(unhandled)
+  }
+
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)
       case "c" => (i: Int) =>
         val c = (i - 1 + 'a').toChar.toString
-        Seq(c * 5 + c.toUpperCase() * 5)
+        Seq(c * 5 + c.toUpperCase * 5)
     }
 
     FiltersPushed.list = filters
+    ColumnsRequired.set = requiredColumns.toSet
 
     // Predicate test on integer column
     def translateFilterOnA(filter: Filter): Int => Boolean = filter match {
@@ -100,6 +130,10 @@ object FiltersPushed {
   var list: Seq[Filter] = Nil
 }
 
+object ColumnsRequired {
+  var set: Set[String] = Set.empty
+}
+
 class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
   protected override lazy val sql = caseInsensitiveContext.sql _
 
@@ -119,7 +153,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
   sqlTest(
     "SELECT * FROM oneToTenFiltered",
     (1 to 10).map(i => Row(i, i * 2, (i - 1 + 'a').toChar.toString * 5
-      + (i - 1 + 'a').toChar.toString.toUpperCase() * 5)).toSeq)
+      + (i - 1 + 'a').toChar.toString.toUpperCase * 5)).toSeq)
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered",
@@ -201,49 +235,52 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
     "SELECT a, b, c FROM oneToTenFiltered WHERE c like '%eE%'",
     Seq(Row(5, 5 * 2, "e" * 5 + "E" * 5)))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE A = 1", 1)
-  testPushDown("SELECT a FROM oneToTenFiltered WHERE A = 1", 1)
-  testPushDown("SELECT b FROM oneToTenFiltered WHERE A = 1", 1)
-  testPushDown("SELECT a, b FROM oneToTenFiltered WHERE A = 1", 1)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 1", 1)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 = a", 1)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE A = 1", 1, Set("a", "b", "c"))
+  testPushDown("SELECT a FROM oneToTenFiltered WHERE A = 1", 1, Set("a"))
+  testPushDown("SELECT b FROM oneToTenFiltered WHERE A = 1", 1, Set("b"))
+  testPushDown("SELECT a, b FROM oneToTenFiltered WHERE A = 1", 1, Set("a", "b"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 1", 1, Set("a", "b", "c"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 = a", 1, Set("a", "b", "c"))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a > 1", 9)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a >= 2", 9)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a > 1", 9, Set("a", "b", "c"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a >= 2", 9, Set("a", "b", "c"))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 < a", 9)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE 2 <= a", 9)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 < a", 9, Set("a", "b", "c"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 2 <= a", 9, Set("a", "b", "c"))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 > a", 0)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE 2 >= a", 2)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 > a", 0, Set("a", "b", "c"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 2 >= a", 2, Set("a", "b", "c"))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 1", 0)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a <= 2", 2)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 1", 0, Set("a", "b", "c"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a <= 2", 2, Set("a", "b", "c"))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a > 1 AND a < 10", 8)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a > 1 AND a < 10", 8, Set("a", "b", "c"))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a IN (1,3,5)", 3)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a IN (1,3,5)", 3, Set("a", "b", "c"))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 20", 0)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE b = 1", 10)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 20", 0, Set("a", "b", "c"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE b = 1", 10, Set("a", "b", "c"))
 
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 5 AND a > 1", 3)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 3 OR a > 8", 4)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE NOT (a < 6)", 5)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 5 AND a > 1", 3, Set("a", "b", "c"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 3 OR a > 8", 4, Set("a", "b", "c"))
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE NOT (a < 6)", 5, Set("a", "b", "c"))
 
-  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like 'c%'", 1)
-  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like 'C%'", 0)
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like 'c%'", 1, Set("a", "b", "c"))
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like 'C%'", 0, Set("a", "b", "c"))
 
-  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%D'", 1)
-  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%d'", 0)
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%D'", 1, Set("a", "b", "c"))
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%d'", 0, Set("a", "b", "c"))
 
-  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%eE%'", 1)
-  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%Ee%'", 0)
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%eE%'", 1, Set("a", "b", "c"))
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%Ee%'", 0, Set("a", "b", "c"))
 
-  testPushDown("SELECT c FROM oneToTenFiltered WHERE c = 'aaaaaAAAAA'", 1)
-  testPushDown("SELECT c FROM oneToTenFiltered WHERE c IN ('aaaaaAAAAA', 'foo')", 1)
+  testPushDown("SELECT c FROM oneToTenFiltered WHERE c = 'aaaaaAAAAA'", 1, Set("c"))
+  testPushDown("SELECT c FROM oneToTenFiltered WHERE c IN ('aaaaaAAAAA', 'foo')", 1, Set("c"))
 
-  def testPushDown(sqlString: String, expectedCount: Int): Unit = {
+  def testPushDown(
+      sqlString: String,
+      expectedCount: Int,
+      requiredColumnNames: Set[String]): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {
       val queryExecution = sql(sqlString).queryExecution
       val rawPlan = queryExecution.executedPlan.collect {
@@ -253,6 +290,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
         case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
       }
       val rawCount = rawPlan.execute().count()
+      assert(ColumnsRequired.set === requiredColumnNames)
 
       if (rawCount != expectedCount) {
         fail(

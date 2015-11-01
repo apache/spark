@@ -289,10 +289,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val (unhandledPredicates, pushedFilters) =
       selectFilters(relation.relation, candidatePredicates)
 
-    val pushedSet = {
+    val handledSet = {
       val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
-      val handledSet = AttributeSet(handledPredicates.flatMap(_.references))
-      handledSet -- projectSet -- filterSet
+      val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
+      AttributeSet(handledPredicates.flatMap(_.references)) -- (projectSet ++ unhandledSet).map(relation.attributeMap)
     }
 
     // Combines all Catalyst filter `Expression`s that are either not convertible to data source
@@ -308,7 +308,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val requestedColumns =
         projects.asInstanceOf[Seq[Attribute]] // Safe due to if above.
           .map(relation.attributeMap)            // Match original case of attributes.
-          .filterNot(pushedSet.contains)
+          .filterNot(handledSet.contains)
 
       val scan = execution.PhysicalRDD.createFromDataSource(
         projects.map(_.toAttribute),
@@ -316,7 +316,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         relation.relation)
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
-      val requestedColumns = (projectSet ++ filterSet -- pushedSet).map(relation.attributeMap).toSeq
+      val requestedColumns = (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
       val scan = execution.PhysicalRDD.createFromDataSource(
         requestedColumns,
