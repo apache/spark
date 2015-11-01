@@ -23,6 +23,7 @@ import scala.collection.mutable.{StringBuilder, ListBuffer}
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.CallSite
 
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
@@ -38,7 +39,7 @@ private[ui] case class RDDOperationGraph(
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean)
+private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean)//, callsite: CallSite)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
