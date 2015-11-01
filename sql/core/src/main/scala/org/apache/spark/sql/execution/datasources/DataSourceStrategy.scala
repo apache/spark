@@ -432,8 +432,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    *
    * @return A pair of `Seq[Expression]` and `Seq[Filter]`. The first element contains all Catalyst
    *         predicate [[Expression]]s that are either not convertible or cannot be handled by
-   *         `relation`. The second element contains all converted data source [[Filter]]s that can
-   *         be handled by `relation`.
+   *         `relation`. The second element contains all converted data source [[Filter]]s.
    */
   protected[sql] def selectFilters(
     relation: BaseRelation,
@@ -467,9 +466,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // handled by `relation`.
     val (unhandledPredicates, _) = unhandled.unzip
 
-    // Translated data source filters that can be handled by `relation`.
-    val (_, handledFilters) = handled.unzip
+    // Translated data source filters, no matter `relation` can handle them or not
+    val (_, translatedFilters) = translated.unzip
 
-    (unrecognizedPredicates ++ unhandledPredicates, handledFilters)
+    (unrecognizedPredicates ++ unhandledPredicates, translatedFilters)
   }
 }

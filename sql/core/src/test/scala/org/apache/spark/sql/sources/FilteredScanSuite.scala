@@ -86,9 +86,8 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
     }
 
     def eval(a: Int) = {
-      val c = (a - 1 + 'a').toChar.toString * 5 + (a - 1 + 'a').toChar.toString.toUpperCase() * 5
-      !filters.map(translateFilterOnA(_)(a)).contains(false) &&
-        !filters.map(translateFilterOnC(_)(c)).contains(false)
+      val c = (a - 1 + 'a').toChar.toString * 5 + (a - 1 + 'a').toChar.toString.toUpperCase * 5
+      filters.forall(translateFilterOnA(_)(a)) && filters.forall(translateFilterOnC(_)(c))
     }
 
     sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
