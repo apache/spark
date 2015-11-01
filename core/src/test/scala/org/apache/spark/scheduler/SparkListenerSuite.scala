@@ -212,7 +212,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       i
     }
 
-    val numSlices = 32
+    val numSlices = 16
     val d = sc.parallelize(0 to 1e3.toInt, numSlices).map(w)
     d.count()
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
