@@ -182,7 +182,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
   }
 
-  test("StageInfo with fewer tasks than number of partitions") {
+  test("StageInfo with fewer tasks than partitions") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
