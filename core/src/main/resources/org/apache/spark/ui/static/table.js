@@ -45,28 +45,28 @@ function toggleThreadStackTrace(threadId, forceAdd) {
     }
 }
 
-// expandOrCollapse - true: expand, false: collapse
-function expandOrCollapseAllThreadStackTrace(expandOrCollapse, toggleButton) {
-    if (expandOrCollapse) {
-        $('.accordion-heading').each(function() {
-            //get thread ID
-            if (!$(this).hasClass("hidden")) {
-                var trId = $(this).attr('id').match(/thread_([0-9]+)_tr/m)[1]
-                toggleThreadStackTrace(trId, true)
-            }
-        })
-        if (toggleButton) {
-            $('.expandbutton').toggleClass('hidden')
+function expandAllThreadStackTrace(toggleButton) {
+    $('.accordion-heading').each(function() {
+        //get thread ID
+        if (!$(this).hasClass("hidden")) {
+            var trId = $(this).attr('id').match(/thread_([0-9]+)_tr/m)[1]
+            toggleThreadStackTrace(trId, true)
         }
-    } else {
-        $('.accordion-body').each(function() {
-            $(this).remove()
-        })
-        if (toggleButton) {
-            $('.expandbutton').toggleClass('hidden');
-        }
+    })
+    if (toggleButton) {
+        $('.expandbutton').toggleClass('hidden')
     }
 }
+
+function collapseAllThreadStackTrace(toggleButton) {
+    $('.accordion-body').each(function() {
+        $(this).remove()
+    })
+    if (toggleButton) {
+        $('.expandbutton').toggleClass('hidden');
+    }
+}
+
 
 // inOrOut - true: over, false: out
 function onMouseOverAndOut(threadId) {
@@ -76,9 +76,9 @@ function onMouseOverAndOut(threadId) {
 }
 
 function onSearchStringChange() {
-    var searchString = $('#search').val()
+    var searchString = $('#search').val().toLowerCase();
     //remove the stacktrace
-    expandOrCollapseAllThreadStackTrace(false, false)
+    collapseAllThreadStackTrace(false, false)
     if (searchString.length == 0) {
         $('tr').each(function() {
             $(this).removeClass('hidden')

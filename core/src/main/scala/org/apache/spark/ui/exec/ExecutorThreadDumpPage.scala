@@ -18,7 +18,6 @@
 package org.apache.spark.ui.exec
 
 import java.net.URLDecoder
-import java.util.regex.Pattern
 import javax.servlet.http.HttpServletRequest
 
 import scala.util.Try
@@ -50,7 +49,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
     val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)
 
     val content = maybeThreadDump.map { threadDump =>
-     val dumpRows = threadDump.sortWith {
+      val dumpRows = threadDump.sortWith {
         case (threadTrace1, threadTrace2) => {
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
@@ -77,10 +76,10 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       <p>Updated at {UIUtils.formatDate(time)}</p>
       {
         // scalastyle:off
-        <p><a class="expandbutton" onClick="expandOrCollapseAllThreadStackTrace(true, true)">
+        <p><a class="expandbutton" onClick="expandAllThreadStackTrace(true)">
           Expand All
         </a></p>
-        <p><a class="expandbutton hidden" onClick="expandOrCollapseAllThreadStackTrace(false, true)">
+        <p><a class="expandbutton hidden" onClick="collapseAllThreadStackTrace(true)">
           Collapse All
         </a></p>
         <div class="form-inline">
@@ -97,9 +96,9 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       }
       <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
         <thead>
-          <th onClick="expandOrCollapseAllThreadStackTrace(false, false)">Thread ID</th>
-          <th onClick="expandOrCollapseAllThreadStackTrace(false, false)">Thread Name</th>
-          <th onClick="expandOrCollapseAllThreadStackTrace(false, false)">Thread State</th>
+          <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
+          <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
+          <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
         </thead>
         <tbody>{dumpRows}</tbody>
       </table>
