@@ -73,13 +73,13 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
   }
   
   test("PMMLModelExportFactory create ClassificationPMMLModelExport "
-	+ "when passing a Multiclass Logistic Regression") {
-	/** 3 classes, 2 features */
-	val multiclassLogisticRegressionModel = new LogisticRegressionModel(
-	    weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0, 
-	    numFeatures = 2, numClasses = 3)
+    + "when passing a Multiclass Logistic Regression") {
+    /** 3 classes, 2 features */
+    val multiclassLogisticRegressionModel = new LogisticRegressionModel(
+        weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0,
+        numFeatures = 2, numClasses = 3)
     val multiclassLogisticRegressionModelExport = PMMLModelExportFactory
-    	.createPMMLModelExport(multiclassLogisticRegressionModel)
+        .createPMMLModelExport(multiclassLogisticRegressionModel)
     assert(multiclassLogisticRegressionModelExport.isInstanceOf[ClassificationPMMLModelExport])
   }
 

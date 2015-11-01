@@ -53,8 +53,6 @@ class ClassificationPMMLModelExportSuite extends SparkFunSuite {
     assert(pmmlRegressionModel.getRegressionTables.get(0).getNumericPredictors.size === 0)
     // ensure logistic regression has normalization method set to LOGIT
     assert(pmmlRegressionModel.getNormalizationMethod() == RegressionNormalizationMethodType.LOGIT)
-    
-    logisticRegressionModel.toPMML("/tmp/test1.xml")
   }
 
   test("linear SVM PMML export") {
@@ -85,11 +83,11 @@ class ClassificationPMMLModelExportSuite extends SparkFunSuite {
   }
   
   test("multiclass logistic regression PMML export (wihtout intercept)") {
-	/** 3 classes, 2 features */
-	val logisticRegressionModel = new LogisticRegressionModel(
-	    weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 0.0, 
-	    numFeatures = 2, numClasses = 3)
-    
+    /** 3 classes, 2 features */
+    val logisticRegressionModel = new LogisticRegressionModel(
+        weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 0.0, 
+        numFeatures = 2, numClasses = 3)
+
     val logisticModelExport = PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)
 
     // assert that the PMML format is as expected
@@ -109,7 +107,7 @@ class ClassificationPMMLModelExportSuite extends SparkFunSuite {
     pmmlRegressionModel = pmml.getModels.get(0).asInstanceOf[RegressionModel]
     assert(pmmlRegressionModel.getRegressionTables.get(2).getTargetCategory === "2")
     assert(pmmlRegressionModel.getRegressionTables.get(2).getNumericPredictors.size
-      === logisticRegressionModel.weights.size / logisticRegressionModel.numFeatures)      
+      === logisticRegressionModel.weights.size / logisticRegressionModel.numFeatures)
     // verify if there is a third table with target category 0 and no predictors
     assert(pmmlRegressionModel.getRegressionTables.get(0).getTargetCategory === "0")
     assert(pmmlRegressionModel.getRegressionTables.get(0).getNumericPredictors.size === 0)
@@ -118,16 +116,14 @@ class ClassificationPMMLModelExportSuite extends SparkFunSuite {
     // ensure the category 1 and 2 tables have intercept 0
     assert(pmmlRegressionModel.getRegressionTables.get(1).getIntercept() === 0)
     assert(pmmlRegressionModel.getRegressionTables.get(2).getIntercept() === 0)
-    
-    logisticRegressionModel.toPMML("/tmp/test2.xml")
   }
-  
+
   test("multiclass logistic regression PMML export (with intercept)") {
-	/** 3 classes, 2 features */
-	val logisticRegressionModel = new LogisticRegressionModel(
-	    weights = Vectors.dense(0.1, 0.2, 0.01, 0.3, 0.4, 0.02), intercept = 0.0, 
-	    numFeatures = 2, numClasses = 3)
-    
+    /** 3 classes, 2 features */
+    val logisticRegressionModel = new LogisticRegressionModel(
+        weights = Vectors.dense(0.1, 0.2, 0.01, 0.3, 0.4, 0.02), intercept = 0.0,
+        numFeatures = 2, numClasses = 3)
+
     val logisticModelExport = PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)
 
     // assert that the PMML format is as expected
@@ -147,7 +143,7 @@ class ClassificationPMMLModelExportSuite extends SparkFunSuite {
     pmmlRegressionModel = pmml.getModels.get(0).asInstanceOf[RegressionModel]
     assert(pmmlRegressionModel.getRegressionTables.get(2).getTargetCategory === "2")
     assert(pmmlRegressionModel.getRegressionTables.get(2).getNumericPredictors.size
-      === logisticRegressionModel.weights.size / (logisticRegressionModel.numFeatures + 1))  
+      === logisticRegressionModel.weights.size / (logisticRegressionModel.numFeatures + 1))
     // verify if there is a third table with target category 0 and no predictors
     assert(pmmlRegressionModel.getRegressionTables.get(0).getTargetCategory === "0")
     assert(pmmlRegressionModel.getRegressionTables.get(0).getNumericPredictors.size === 0)
@@ -156,8 +152,6 @@ class ClassificationPMMLModelExportSuite extends SparkFunSuite {
     // ensure the category 1 and 2 tables have intercept 0
     assert(pmmlRegressionModel.getRegressionTables.get(1).getIntercept() === 0.01)
     assert(pmmlRegressionModel.getRegressionTables.get(2).getIntercept() === 0.02)
-    
-    logisticRegressionModel.toPMML("/tmp/test3.xml")
   }
 
 }

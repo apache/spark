@@ -44,7 +44,7 @@ private[mllib] class ClassificationPMMLModelExport(
      pmml.getHeader.setDescription(description)
 
      if (model.weights.size > 0) {
-       
+
        val fields = new SArray[FieldName](numFeatures)
        val dataDictionary = new DataDictionary
        val miningSchema = new MiningSchema
@@ -52,18 +52,18 @@ private[mllib] class ClassificationPMMLModelExport(
        for (i <- 0 until numFeatures) {
          fields(i) = FieldName.create("field_" + i)
          dataDictionary
-         	.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+           .withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
          miningSchema
            .withMiningFields(new MiningField(fields(i))
            .withUsageType(FieldUsageType.ACTIVE))
        }
-       
+
        val regressionModel = new RegressionModel()
          .withFunctionName(MiningFunctionType.CLASSIFICATION)
          .withMiningSchema(miningSchema)
          .withModelName(description)
          .withNormalizationMethod(normalizationMethod)
-       
+
        var interceptCategoryZero = threshold
        if (RegressionNormalizationMethodType.LOGIT == normalizationMethod) {
          if (threshold <= 0) {
@@ -75,46 +75,44 @@ private[mllib] class ClassificationPMMLModelExport(
          }
        }
        val regressionTableCategoryZero = new RegressionTable(interceptCategoryZero)
-       	.withTargetCategory("0")
+         .withTargetCategory("0")
        regressionModel.withRegressionTables(regressionTableCategoryZero)
 
-       
+ 
        // build binary classification
        if (numClasses == 2) {
          // intercept is stored in model.intercept
          val regressionTableCategoryOne = new RegressionTable(model.intercept)
-         	.withTargetCategory("1")
+           .withTargetCategory("1")
          for (i <- 0 until numFeatures) {
            regressionTableCategoryOne
-           	.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
+             .withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
          }
          regressionModel.withRegressionTables(regressionTableCategoryOne)
        } else {
          // build multiclass classification
-	    for (i <- 0 until numClasses - 1) {
-	      if (model.weights.size == (numClasses - 1) * (numFeatures + 1)) {
-	        // intercept is stored in weights (last element)
-	        val regressionTableCategory = new RegressionTable(
-	            model.weights(i * (numFeatures + 1) + numFeatures))
-	        .withTargetCategory((i + 1).toString)
-	        for (j <- 0 until numFeatures) {
-	          regressionTableCategory
-	          	.withNumericPredictors(new NumericPredictor(fields(j), 
-	          	    model.weights(i * (numFeatures + 1) + j)))
-	        }
+         for (i <- 0 until numClasses - 1) {
+           if (model.weights.size == (numClasses - 1) * (numFeatures + 1)) {
+             // intercept is stored in weights (last element)
+             val regressionTableCategory = new RegressionTable(
+               model.weights(i * (numFeatures + 1) + numFeatures))
+               .withTargetCategory((i + 1).toString)
+             for (j <- 0 until numFeatures) {
+               regressionTableCategory.withNumericPredictors(new NumericPredictor(fields(j),
+                   model.weights(i * (numFeatures + 1) + j)))
+             }
 	        regressionModel.withRegressionTables(regressionTableCategory)
-	      } else {
-	        // intercept is zero
-	        val regressionTableCategory = new RegressionTable(0)
-	        	.withTargetCategory((i+1).toString)
-	        for (j <- 0 until numFeatures) {
-	          regressionTableCategory
-	          	.withNumericPredictors(new NumericPredictor(fields(j), 
-	          	    model.weights(i*numFeatures+j)))
-	        }
-	        regressionModel.withRegressionTables(regressionTableCategory)	    	
-	      }
-	    }
+	       } else {
+	         // intercept is zero
+	         val regressionTableCategory = new RegressionTable(0)
+	           .withTargetCategory((i + 1).toString)
+	         for (j <- 0 until numFeatures) {
+	           regressionTableCategory.withNumericPredictors(new NumericPredictor(fields(j),
+	               model.weights(i*numFeatures + j)))
+	         }
+	         regressionModel.withRegressionTables(regressionTableCategory)	    	
+	       }
+         }
        }
 
        // add target field

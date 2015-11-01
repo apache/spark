@@ -48,11 +48,11 @@ private[mllib] object PMMLModelExportFactory {
           "linear SVM", RegressionNormalizationMethodType.NONE,
           svm.getThreshold.getOrElse(0.0))
       case logistic: LogisticRegressionModel =>
-	    new ClassificationPMMLModelExport(
-	      logistic, 
-	      logistic.numClasses, logistic.numFeatures,
-	      "logistic regression", RegressionNormalizationMethodType.LOGIT,
-	      logistic.getThreshold.getOrElse(0.5))
+        new ClassificationPMMLModelExport(
+          logistic,
+          logistic.numClasses, logistic.numFeatures,
+          "logistic regression", RegressionNormalizationMethodType.LOGIT,
+          logistic.getThreshold.getOrElse(0.5))
       case _ =>
         throw new IllegalArgumentException(
           "PMML Export not supported for model: " + model.getClass.getName)
