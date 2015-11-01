@@ -54,8 +54,11 @@ private[spark] class UnifiedMemoryManager private[memory] (
   extends MemoryManager(
     conf,
     numCores,
+    // TODO(josh): it is confusing how this interacts with page size calculations:
     maxOnHeapExecutionMemory = maxMemory - minimumStoragePoolSize) {
 
+  // At first, all memory is allocated towards execution.
+  // TODO(josh): in light of this policy, the name minimumStoragePoolSize is confusing.
   onHeapExecutionMemoryPool.incrementPoolSize(maxMemory)
 
   override def maxStorageMemory: Long = synchronized {
@@ -76,11 +79,13 @@ private[spark] class UnifiedMemoryManager private[memory] (
       numBytes: Long,
       taskAttemptId: Long,
       memoryMode: MemoryMode): Long = synchronized {
+    assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
     memoryMode match {
       case MemoryMode.ON_HEAP =>
         val memoryBorrowedByStorage =
-          math.max(0, storageMemoryPool.memoryUsed - minimumStoragePoolSize)
+          math.max(storageMemoryPool.memoryFree,
+            storageMemoryPool.poolSize - minimumStoragePoolSize)
         // If there is not enough free memory AND storage has borrowed some execution memory,
         // then evict as much memory borrowed by storage as needed to grant this request
         if (numBytes > onHeapExecutionMemoryPool.memoryFree && memoryBorrowedByStorage > 0) {
@@ -98,10 +103,11 @@ private[spark] class UnifiedMemoryManager private[memory] (
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    if (numBytes > storageMemoryPool.memoryFree
-        && numBytes <= onHeapExecutionMemoryPool.memoryFree) {
-      onHeapExecutionMemoryPool.decrementPoolSize(numBytes)
-      storageMemoryPool.incrementPoolSize(numBytes)
+    assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+    if (numBytes > storageMemoryPool.memoryFree) {
+      val memoryBorrowedFromExecution = Math.min(onHeapExecutionMemoryPool.memoryFree, numBytes)
+      onHeapExecutionMemoryPool.decrementPoolSize(memoryBorrowedFromExecution)
+      storageMemoryPool.incrementPoolSize(memoryBorrowedFromExecution)
     }
     storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
   }

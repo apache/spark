@@ -72,7 +72,7 @@ class StorageMemoryPool extends MemoryPool with Logging {
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
-    // TODO(josh): check whether there is enough memory / handle eviction
+    assert(memoryUsed <= poolSize)
     memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
     // Register evicted blocks, if any, with the active task metrics
     Option(TaskContext.get()).foreach { tc =>
@@ -80,8 +80,9 @@ class StorageMemoryPool extends MemoryPool with Logging {
       val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
       metrics.updatedBlocks = Some(lastUpdatedBlocks ++ evictedBlocks.toSeq)
     }
-    // TODO(josh): is this assertion in the right place?
-    assert(memoryUsed <= poolSize)
+    // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
+    // back into this StorageMemoryPool in order to free. Therefore, these variables should have
+    // been updated.
     val enoughMemory = numBytesToAcquire <= memoryFree
     if (enoughMemory) {
       _memoryUsed += numBytesToAcquire
@@ -103,12 +104,15 @@ class StorageMemoryPool extends MemoryPool with Logging {
     _memoryUsed = 0
   }
 
+  // TODO(josh): comment
   def shrinkPoolByEvictingBlocks(spaceToEnsure: Long): Long = synchronized {
+    val spaceFreedByReleasingUnusedMemory = Math.min(spaceToEnsure, memoryFree)
+    decrementPoolSize(spaceFreedByReleasingUnusedMemory)
     val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-    memoryStore.ensureFreeSpace(spaceToEnsure, evictedBlocks)
-    val spaceFreed = evictedBlocks.map(_._2.memSize).sum
-    _memoryUsed -= spaceFreed
-    decrementPoolSize(spaceFreed)
-    spaceFreed
+    memoryStore.ensureFreeSpace(spaceToEnsure - spaceFreedByReleasingUnusedMemory, evictedBlocks)
+    val spaceFreedByEviction = evictedBlocks.map(_._2.memSize).sum
+    _memoryUsed -= spaceFreedByEviction
+    decrementPoolSize(spaceFreedByEviction)
+    spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
   }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.memory
 
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -29,7 +30,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.storage.MemoryStore
+import org.apache.spark.storage.{StorageLevel, BlockStatus, BlockId, MemoryStore}
 
 
 /**
@@ -78,7 +79,12 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
         require(args(numBytesPos).isInstanceOf[Long], s"bad test: expected ensureFreeSpace " +
           s"argument at index $numBytesPos to be a Long: ${args.mkString(", ")}")
         val numBytes = args(numBytesPos).asInstanceOf[Long]
-        mockEnsureFreeSpace(mm, numBytes)
+        val success = mockEnsureFreeSpace(mm, numBytes)
+        if (success) {
+          args.last.asInstanceOf[mutable.Buffer[(BlockId, BlockStatus)]].append(
+            (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytes, 0L, 0L)))
+        }
+        success
       }
     }
   }

@@ -156,6 +156,8 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     // Acquire some storage memory again, but this time keep it within the storage region
     assert(mm.acquireStorageMemory(dummyBlock, 400L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 400L)
+    assert(mm.storageMemoryUsed === 400L)
+    assert(mm.executionMemoryUsed === 300L)
 //    require(mm.storageMemoryUsed < storageRegionSize,
 //      s"bad test: storage memory used should be within the storage region")
     // Execution cannot evict storage because the latter is within the storage fraction,
