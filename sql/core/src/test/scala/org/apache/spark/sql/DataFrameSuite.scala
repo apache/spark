@@ -105,6 +105,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.head(2).head.schema === testData.schema)
   }
 
+  test("dataframe alias") {
+    val df = Seq(Tuple1(1)).toDF("c").as("t")
+    val dfAlias = df.alias("t2")
+    df.col("t.c")
+    dfAlias.col("t2.c")
+  }
+
   test("simple explode") {
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
@@ -979,5 +986,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-10743: keep the name of expression if possible when do cast") {
     val df = (1 to 10).map(Tuple1.apply).toDF("i").as("src")
     assert(df.select($"src.i".cast(StringType)).columns.head === "i")
+  }
+
+  test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("year").parquet(path.getAbsolutePath)
+        val df = sqlContext.read.parquet(path.getAbsolutePath)
+        checkAnswer(df.filter($"yEAr" > 2000).select($"val"), Row("a"))
+      }
+    }
   }
 }

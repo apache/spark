@@ -26,8 +26,7 @@ import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BS
 import breeze.numerics.{sqrt => brzSqrt}
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
@@ -35,7 +34,6 @@ import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: Experimental ::
  * Represents a row-oriented distributed Matrix with no meaningful row indices.
  *
  * @param rows rows stored as an RDD[Vector]
@@ -45,7 +43,6 @@ import org.apache.spark.storage.StorageLevel
  *              columns will be determined by the size of the first row.
  */
 @Since("1.0.0")
-@Experimental
 class RowMatrix @Since("1.0.0") (
     @Since("1.0.0") val rows: RDD[Vector],
     private var nRows: Long,
@@ -676,7 +673,6 @@ class RowMatrix @Since("1.0.0") (
 }
 
 @Since("1.0.0")
-@Experimental
 object RowMatrix {
 
   /**
