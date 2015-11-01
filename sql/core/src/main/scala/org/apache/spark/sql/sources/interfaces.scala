@@ -585,11 +585,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  final private[sql] def buildScan(
+  final private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -604,7 +604,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
     }
 
-    buildScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
   }
 
   /**
@@ -738,6 +738,44 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       inputFiles: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
     buildScan(requiredColumns, filters, inputFiles)
+  }
+
+  /**
+   * For a non-partitioned relation, this method builds an `RDD[InternalRow]` containing all rows
+   * within this relation. For partitioned relations, this method is called for each selected
+   * partition, and builds an `RDD[InternalRow]` containing all rows within that single partition.
+   *
+   * Note:
+   *
+   * 1. Rows contained in the returned `RDD[InternalRow]` are assumed to be `UnsafeRow`s.
+   * 2. This interface is subject to change in future.
+   *
+   * @param requiredColumns Required columns.
+   * @param filters Candidate filters to be pushed down. The actual filter should be the conjunction
+   *        of all `filters`.  The pushed down filters are currently purely an optimization as they
+   *        will all be evaluated again. This means it is safe to use them with methods that produce
+   *        false positives such as filtering partitions based on a bloom filter.
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
+   * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
+   *        overhead of broadcasting the Configuration for every Hadoop RDD.
+   */
+  private[sql] def buildInternalScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+    val requiredSchema = StructType(requiredColumns.map(dataSchema.apply))
+    val internalRows = {
+      val externalRows = buildScan(requiredColumns, filters, inputFiles, broadcastedConf)
+      execution.RDDConversions.rowToRowRdd(externalRows, requiredSchema.map(_.dataType))
+    }
+
+    internalRows.mapPartitions { iterator =>
+      val unsafeProjection = UnsafeProjection.create(requiredSchema)
+      iterator.map(unsafeProjection)
+    }
   }
 
   /**
