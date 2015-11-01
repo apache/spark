@@ -282,6 +282,14 @@ private[sql] class ParquetRelation(
     }
   }
 
+  override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
+    if (!shouldMergeSchemas && sqlContext.conf.parquetFilterPushDown) {
+      filters.filter(ParquetFilters.createFilter(dataSchema, _).isEmpty)
+    } else {
+      filters
+    }
+  }
+
   override def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],

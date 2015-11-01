@@ -43,7 +43,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         l,
         projects,
         filters,
-        (a, f) => toCatalystRDD(l, a, t.buildScan(a, f))) :: Nil
+        (requestedColumns, allPredicates, _) =>
+          toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _)) =>
       pruneFilterProject(
@@ -266,25 +267,37 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       relation,
       projects,
       filterPredicates,
-      (requestedColumns, pushedFilters) => {
-        scanBuilder(requestedColumns, selectFilters(pushedFilters).toArray)
+      (requestedColumns, _, pushedFilters) => {
+        scanBuilder(requestedColumns, pushedFilters.toArray)
       })
   }
 
   // Based on Catalyst expressions.
   protected def pruneFilterProjectRaw(
-      relation: LogicalRelation,
-      projects: Seq[NamedExpression],
-      filterPredicates: Seq[Expression],
-      scanBuilder: (Seq[Attribute], Seq[Expression]) => RDD[InternalRow]) = {
+    relation: LogicalRelation,
+    projects: Seq[NamedExpression],
+    filterPredicates: Seq[Expression],
+    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow]) = {
 
     val projectSet = AttributeSet(projects.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-    val filterCondition = filterPredicates.reduceLeftOption(expressions.And)
 
-    val pushedFilters = filterPredicates.map { _ transform {
-      case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
+    val candidatePredicates = filterPredicates.map { _ transform {
+        case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
     }}
+
+    val (unhandledPredicates, pushedFilters) =
+      selectFilters(relation.relation, candidatePredicates)
+
+    val pushedSet = {
+      val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
+      val handledSet = AttributeSet(handledPredicates.flatMap(_.references))
+      handledSet -- projectSet -- filterSet
+    }
+
+    // Combines all Catalyst filter `Expression`s that are either not convertible to data source
+    // `Filter`s or cannot be handled by `relation`.
+    val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
 
     if (projects.map(_.toAttribute) == projects &&
         projectSet.size == projects.size &&
@@ -295,18 +308,19 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val requestedColumns =
         projects.asInstanceOf[Seq[Attribute]] // Safe due to if above.
           .map(relation.attributeMap)            // Match original case of attributes.
+          .filterNot(pushedSet.contains)
 
       val scan = execution.PhysicalRDD.createFromDataSource(
         projects.map(_.toAttribute),
-        scanBuilder(requestedColumns, pushedFilters),
+        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation)
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
-      val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
+      val requestedColumns = (projectSet ++ filterSet -- pushedSet).map(relation.attributeMap).toSeq
 
       val scan = execution.PhysicalRDD.createFromDataSource(
         requestedColumns,
-        scanBuilder(requestedColumns, pushedFilters),
+        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation)
       execution.Project(projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
@@ -334,11 +348,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   }
 
   /**
-   * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s,
-   * and convert them.
+   * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
+   *
+   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
-  protected[sql] def selectFilters(filters: Seq[Expression]) = {
-    def translate(predicate: Expression): Option[Filter] = predicate match {
+  protected[sql] def translateFilter(predicate: Expression): Option[Filter] = {
+    predicate match {
       case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
         Some(sources.EqualTo(a.name, convertToScala(v, t)))
       case expressions.EqualTo(Literal(v, t), a: Attribute) =>
@@ -387,16 +402,16 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         Some(sources.IsNotNull(a.name))
 
       case expressions.And(left, right) =>
-        (translate(left) ++ translate(right)).reduceOption(sources.And)
+        (translateFilter(left) ++ translateFilter(right)).reduceOption(sources.And)
 
       case expressions.Or(left, right) =>
         for {
-          leftFilter <- translate(left)
-          rightFilter <- translate(right)
+          leftFilter <- translateFilter(left)
+          rightFilter <- translateFilter(right)
         } yield sources.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translate(child).map(sources.Not)
+        translateFilter(child).map(sources.Not)
 
       case expressions.StartsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
         Some(sources.StringStartsWith(a.name, v.toString))
@@ -409,7 +424,52 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       case _ => None
     }
+  }
 
-    filters.flatMap(translate)
+  /**
+   * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s
+   * and can be handled by `relation`.
+   *
+   * @return A pair of `Seq[Expression]` and `Seq[Filter]`. The first element contains all Catalyst
+   *         predicate [[Expression]]s that are either not convertible or cannot be handled by
+   *         `relation`. The second element contains all converted data source [[Filter]]s that can
+   *         be handled by `relation`.
+   */
+  protected[sql] def selectFilters(
+    relation: BaseRelation,
+    predicates: Seq[Expression]): (Seq[Expression], Seq[Filter]) = {
+
+    // For conciseness, all Catalyst filter expressions of type `expressions.Expression` below are
+    // called `predicate`s, while all data source filters of type `sources.Filter` are simply called
+    // `filter`s.
+
+    val translated: Seq[(Expression, Filter)] =
+      for {
+        predicate <- predicates
+        filter <- translateFilter(predicate)
+      } yield predicate -> filter
+
+    // A map from original Catalyst expressions to corresponding translated data source filters.
+    val translatedMap: Map[Expression, Filter] = translated.toMap
+
+    // Catalyst predicate expressions that cannot be translated to data source filters.
+    val unrecognizedPredicates = predicates.filterNot(translatedMap.contains)
+
+    // Data source filters that cannot be handled by `relation`
+    val unhandledFilters = relation.unhandledFilters(translatedMap.values.toArray).toSet
+
+    val (unhandled, handled) = translated.partition {
+      case (_, filter) =>
+        unhandledFilters.contains(filter)
+    }
+
+    // Catalyst predicate expressions that can be translated to data source filters, but cannot be
+    // handled by `relation`.
+    val (unhandledPredicates, _) = unhandled.unzip
+
+    // Translated data source filters that can be handled by `relation`.
+    val (_, handledFilters) = handled.unzip
+
+    (unrecognizedPredicates ++ unhandledPredicates, handledFilters)
   }
 }
