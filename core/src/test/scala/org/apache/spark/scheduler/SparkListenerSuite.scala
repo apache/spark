@@ -142,7 +142,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.submissionTime should be ('defined)
     stageInfo.completionTime should be ('defined)
     taskInfoMetrics.length should be {4}
-    sc.stop()
   }
 
   test("basic creation of StageInfo with shuffle") {
@@ -181,7 +180,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo3.rddInfos.size should be {1} // ShuffledRDD
     stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
-    sc.stop()
   }
 
   test("StageInfo with fewer tasks than number of partitions") {
@@ -199,7 +197,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.numTasks should be {2}
     stageInfo.rddInfos.size should be {2}
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
-    sc.stop()
   }
 
   test("local metrics") {
@@ -215,14 +212,15 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       i
     }
 
-    val d = sc.parallelize(0 to 1e4.toInt, 64).map(w)
+    val numSlices = 32
+    val d = sc.parallelize(0 to 1e3.toInt, numSlices).map(w)
     d.count()
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be (1)
 
     val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
     val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
-    val d4 = d2.cogroup(d3, 64).map { case (k, (v1, v2)) =>
+    val d4 = d2.cogroup(d3, numSlices).map { case (k, (v1, v2)) =>
       w(k) -> (v1.size, v2.size)
     }
     d4.setName("A Cogroup")
@@ -268,7 +266,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
         }
       }
     }
-    sc.stop()
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
@@ -290,7 +287,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
     assert(listener.endedTasks.contains(TASK_INDEX))
-    sc.stop()
   }
 
   test("onTaskGettingResult() not called when result sent directly") {
@@ -307,7 +303,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.isEmpty)
     assert(listener.endedTasks.contains(TASK_INDEX))
-    sc.stop()
   }
 
   test("onTaskEnd() should be called for all started tasks, even after job has been killed") {
@@ -342,7 +337,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       }
       assert(listener.endedTasks.size === listener.startedTasks.size)
     }
-    sc.stop()
   }
 
   test("SparkListener moves on if a listener throws an exception") {
@@ -375,7 +369,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
     sc.listenerBus.listeners.asScala
       .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
-    sc.stop()
   }
 
   /**
