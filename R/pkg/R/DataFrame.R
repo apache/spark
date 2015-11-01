@@ -308,13 +308,22 @@ setMethod("colnames<-",
             dataFrame(sdf)
           })
 
+rToScalaTypes <- new.env()
+rToScalaTypes[["integer"]]   <- "integer" # in R, integer is 32bit
+rToScalaTypes[["numeric"]]   <- "double"  # in R, numeric == double which is 64bit
+rToScalaTypes[["double"]]    <- "double"
+rToScalaTypes[["character"]] <- "string"
+rToScalaTypes[["logical"]]   <- "boolean"
+
 #' coltypes
 #'
 #' Set the column types of a DataFrame.
 #'
 #' @name coltypes
 #' @param x (DataFrame)
-#' @return value (character) A character vector with the target column types for the given DataFrame
+#' @return value (character) A character vector with the target column types for the given
+#'    DataFrame. Column types can be one of integer, numeric/double, character, logical, or NA
+#'    to keep that column as-is.
 #' @rdname coltypes
 #' @aliases coltypes
 #' @export
@@ -324,7 +333,8 @@ setMethod("colnames<-",
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlContext, path)
-#' coltypes(df) <- c("string", "integer")
+#' coltypes(df) <- c("character", "integer")
+#' coltypes(df) <- c(NA, "numeric")
 #'}
 setMethod("coltypes<-",
           signature(x = "DataFrame", value = "character"),
@@ -336,7 +346,15 @@ setMethod("coltypes<-",
             }
             newCols <- lapply(seq_len(ncols), function(i) {
               col <- getColumn(x, cols[i])
-              cast(col, value[i])
+              if (!is.na(value[i])) {
+                stype <- rToScalaTypes[[value[i]]]
+                if (is.null(stype)) {
+                  stop("Only atomic type is supported for column types")
+                }
+                cast(col, stype)
+              } else {
+                col
+              }
             })
             nx <- select(x, newCols)
             dataFrame(nx@sdf)

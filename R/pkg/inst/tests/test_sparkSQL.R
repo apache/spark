@@ -636,14 +636,20 @@ test_that("coltypes() set the column types", {
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
 
   df1 <- select(df, cast(df$age, "integer"))
-  coltypes(df) <- c("string", "integer")
+  coltypes(df) <- c("character", "integer")
   expect_equal(dtypes(df), list(c("cast(name as string)", "string"), c("cast(age as int)", "int")))
   value <- collect(df[, 2])[[3, 1]]
   expect_equal(value, collect(df1)[[3, 1]])
   expect_equal(value, 22)
 
-  expect_error(coltypes(df) <- c("string"),
+  coltypes(df) <- c(NA, "numeric")
+  expect_equal(dtypes(df), list(c("cast(name as string)", "string"),
+              c("cast(cast(age as int) as double)", "double")))
+
+  expect_error(coltypes(df) <- c("character"),
                "Length of type vector should match the number of columns for DataFrame")
+  expect_error(coltypes(df) <- c("environment", "list"),
+               "Only atomic type is supported for column types")
 })
 
 test_that("head() and first() return the correct data", {
