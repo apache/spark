@@ -385,15 +385,15 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
-#' @rdname colnames
+#' @rdname columns
 #' @export
 setGeneric("colnames", function(x) { standardGeneric("colnames") })
 
-#' @rdname colnames<-
+#' @rdname columns
 #' @export
 setGeneric("colnames<-", function(x, value) { standardGeneric("colnames<-") })
 
-#' @rdname coltypes<-
+#' @rdname columns
 #' @export
 setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
 
