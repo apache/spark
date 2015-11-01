@@ -27,7 +27,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFileRecordReader, CombineFileSplit}
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
@@ -129,7 +128,6 @@ private[spark] class StreamInputFormat extends StreamFileInputFormat[PortableDat
  * @note TaskAttemptContext is not serializable resulting in the confBytes construct
  * @note CombineFileSplit is not serializable resulting in the splitBytes construct
  */
-@Experimental
 class PortableDataStream(
     isplit: CombineFileSplit,
     context: TaskAttemptContext,

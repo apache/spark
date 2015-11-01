@@ -36,7 +36,6 @@ import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
@@ -356,7 +355,6 @@ class HiveContext private[hive](
    *
    * @since 1.2.0
    */
-  @Experimental
   def analyze(tableName: String) {
     val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent))
