@@ -29,7 +29,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.ui.{UIUtils, SparkUI}
+import org.apache.spark.ui.{SparkUI, UIUtils}
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json

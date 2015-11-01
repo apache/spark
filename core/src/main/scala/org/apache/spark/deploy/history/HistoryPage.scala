@@ -220,6 +220,6 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     UIUtils.prependBaseUri("/?" + Array(
       "page=" + linkPage,
       "showIncomplete=" + showIncomplete
-    ).mkString("&"))
+      ).mkString("&"))
   }
 }
