@@ -511,7 +511,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
   }
 
-  test("Executors are added but exit normally while running tasks") {
+  test("Executors exit for reason unrelated to currently running tasks") {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc)
     val taskSet = FakeTask.createTaskSet(4,
@@ -526,11 +526,15 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.executorAdded()
     assert(manager.resourceOffer("exec1", "host1", ANY).isDefined)
     sched.removeExecutor("execA")
-    manager.executorLost("execA", "host1", ExecutorExited(143, true, "Normal termination"))
+    manager.executorLost(
+      "execA",
+      "host1",
+      ExecutorExited(143, false, "Terminated for reason unrelated to running tasks"))
     assert(!sched.taskSetsFailed.contains(taskSet.id))
     assert(manager.resourceOffer("execC", "host2", ANY).isDefined)
     sched.removeExecutor("execC")
-    manager.executorLost("execC", "host2", ExecutorExited(1, false, "Abnormal termination"))
+    manager.executorLost(
+      "execC", "host2", ExecutorExited(1, true, "Terminated due to issue with running tasks"))
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
@@ -779,6 +783,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   test("Test TaskLocation for different host type.") {
     assert(TaskLocation("host1") === HostTaskLocation("host1"))
     assert(TaskLocation("hdfs_cache_host1") === HDFSCacheTaskLocation("host1"))
+    assert(TaskLocation("executor_host1_3") === ExecutorCacheTaskLocation("host1", "3"))
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {

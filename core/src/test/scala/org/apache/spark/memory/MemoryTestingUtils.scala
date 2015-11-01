@@ -15,29 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.encoders
+package org.apache.spark.memory
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkEnv, TaskContextImpl, TaskContext}
 
-class PrimitiveEncoderSuite extends SparkFunSuite {
-  test("long encoder") {
-    val enc = new LongEncoder()
-    val row = enc.toRow(10)
-    assert(row.getLong(0) == 10)
-    assert(enc.fromRow(row) == 10)
-  }
-
-  test("int encoder") {
-    val enc = new IntEncoder()
-    val row = enc.toRow(10)
-    assert(row.getInt(0) == 10)
-    assert(enc.fromRow(row) == 10)
-  }
-
-  test("string encoder") {
-    val enc = new StringEncoder()
-    val row = enc.toRow("test")
-    assert(row.getString(0) == "test")
-    assert(enc.fromRow(row) == "test")
+/**
+ * Helper methods for mocking out memory-management-related classes in tests.
+ */
+object MemoryTestingUtils {
+  def fakeTaskContext(env: SparkEnv): TaskContext = {
+    val taskMemoryManager = new TaskMemoryManager(env.memoryManager, 0)
+    new TaskContextImpl(
+      stageId = 0,
+      partitionId = 0,
+      taskAttemptId = 0,
+      attemptNumber = 0,
+      taskMemoryManager = taskMemoryManager,
+      metricsSystem = env.metricsSystem,
+      internalAccumulators = Seq.empty)
   }
 }

@@ -127,7 +127,12 @@ class GroupedData protected[sql](
       case "stddev" => Stddev
       case "stddev_pop" => StddevPop
       case "stddev_samp" => StddevSamp
+      case "variance" => Variance
+      case "var_pop" => VariancePop
+      case "var_samp" => VarianceSamp
       case "sum" => Sum
+      case "skewness" => Skewness
+      case "kurtosis" => Kurtosis
       case "count" | "size" =>
         // Turn count(*) into count(1)
         (inputExpr: Expression) => inputExpr match {
@@ -251,6 +256,30 @@ class GroupedData protected[sql](
   }
 
   /**
+   * Compute the skewness for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the skewness values for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def skewness(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Skewness)
+  }
+
+  /**
+   * Compute the kurtosis for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the kurtosis values for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def kurtosis(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Kurtosis)
+  }
+
+  /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the max values for them.
@@ -332,5 +361,41 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Sum)
+  }
+
+  /**
+   * Compute the sample variance for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the variance for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def variance(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(Variance)
+  }
+
+  /**
+   * Compute the population variance for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the variance for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def var_pop(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(VariancePop)
+  }
+
+  /**
+   * Compute the sample variance for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the variance for them.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def var_samp(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(VarianceSamp)
   }
 }

@@ -31,13 +31,14 @@ import org.apache.spark.unsafe.types.UTF8String
  * internal binary representation.
  */
 object RowEncoder {
-  def apply(schema: StructType): ClassEncoder[Row] = {
+  def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val extractExpressions = extractorsFor(inputObject, schema)
     val constructExpression = constructorFor(schema)
-    new ClassEncoder[Row](
+    new ExpressionEncoder[Row](
       schema,
+      flat = false,
       extractExpressions.asInstanceOf[CreateStruct].children,
       constructExpression,
       ClassTag(cls))
