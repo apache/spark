@@ -450,7 +450,7 @@ object DecisionTree extends Serializable with Logging {
    */
   private[tree] def findBestSplits(
       input: RDD[BaggedPoint[TreePoint]],
-      metadata: impl.DecisionTreeMetadata,
+      metadata: DecisionTreeMetadata,
       topNodes: Array[Node],
       nodesForGroup: Map[Int, Array[Node]],
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
@@ -730,7 +730,7 @@ object DecisionTree extends Serializable with Logging {
   private def calculateGainForSplit(
       leftImpurityCalculator: ImpurityCalculator,
       rightImpurityCalculator: ImpurityCalculator,
-      metadata: impl.DecisionTreeMetadata,
+      metadata: DecisionTreeMetadata,
       impurity: Double): InformationGainStats = {
     val leftCount = leftImpurityCalculator.count
     val rightCount = rightImpurityCalculator.count
@@ -1025,7 +1025,7 @@ object DecisionTree extends Serializable with Logging {
    */
   protected[tree] def findSplitsBins(
       input: RDD[LabeledPoint],
-      metadata: impl.DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
+      metadata: DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
 
     logDebug("isMulticlass = " + metadata.isMulticlass)
 
@@ -1172,7 +1172,7 @@ object DecisionTree extends Serializable with Logging {
    */
   private[tree] def findSplitsForContinuousFeature(
       featureSamples: Array[Double],
-      metadata: impl.DecisionTreeMetadata,
+      metadata: DecisionTreeMetadata,
       featureIndex: Int): Array[Double] = {
     require(metadata.isContinuous(featureIndex),
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")

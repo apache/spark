@@ -81,10 +81,6 @@ private[ml] object RandomForest extends Logging {
       s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
     }.mkString("\n"))
 
-    println("*****************")
-    metadata.numBins.foreach(x => printf(x.toString + "/"))
-    println("*****************")
-
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, splits, metadata)
@@ -704,7 +700,6 @@ private[ml] object RandomForest extends Logging {
           val (leftChildOffset, rightChildOffset) =
             binAggregates.getLeftRightFeatureOffsets(featureIndexIdx)
 
-          // SETH
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
             Range(0, numSplits).map { splitIndex =>
               val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
@@ -713,7 +708,6 @@ private[ml] object RandomForest extends Logging {
                 leftChildStats, rightChildStats, binAggregates.metadata)
               (splitIndex, gainAndImpurityStats)
             }.maxBy(_._2.gain)
-          // SETH
 
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else {

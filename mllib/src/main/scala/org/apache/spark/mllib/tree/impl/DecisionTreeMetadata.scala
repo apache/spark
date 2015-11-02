@@ -71,7 +71,7 @@ private[spark] class DecisionTreeMetadata(
    * For ordered features, there is 1 more bin than split.
    */
   def numSplits(featureIndex: Int): Int = if (isUnordered(featureIndex)) {
-    numBins(featureIndex) //>> 1
+    numBins(featureIndex)
   } else {
     numBins(featureIndex) - 1
   }
@@ -215,6 +215,6 @@ private[spark] object DecisionTreeMetadata extends Logging {
    * there are math.pow(2, arity - 1) - 1 such splits.
    * Each split has 2 corresponding bins.
    */
-  def numUnorderedBins(arity: Int): Int = ((1 << arity - 1) - 1)
+  def numUnorderedBins(arity: Int): Int = (1 << arity - 1) - 1
 
 }

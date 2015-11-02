@@ -183,19 +183,4 @@ private[spark] class DTStatsAggregator(
 
     this
   }
-
-  def totalsForFeature(featureOffset: Int): Array[Double] = {
-    val numBins = metadata.numSplits(featureOffset)
-    var i = 0
-    val totals = Array.fill[Double](statsSize)(0.0)
-    while (i < numBins) {
-      var j = 0
-      while (j < statsSize) {
-        totals(j) += allStats(featureOffset + i*statsSize + j)
-        j +=1
-      }
-      i += 1
-    }
-    totals
-  }
 }
