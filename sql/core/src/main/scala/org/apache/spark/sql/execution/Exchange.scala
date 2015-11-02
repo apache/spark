@@ -208,6 +208,18 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     }
   }
 
+  private def removeRedundantShuffle(childPlan: SparkPlan): SparkPlan = {
+    // For an query like df1.repartition(1000).join(df2, "_1"), we will repartition df1
+    // with shuffle. Then we perform shuffle again as part of the exchange added here.
+    // To avoid the extra shuffle, we should remove repartition operators if they are
+    // the child of Exchange and shuffle=True.
+    childPlan match {
+      case Repartition(n, true, plan) => plan
+      case Exchange(p, plan) => plan
+      case _ => childPlan
+    }
+  }
+
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
     val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
@@ -220,7 +232,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (child.outputPartitioning.satisfies(distribution)) {
         child
       } else {
-        Exchange(canonicalPartitioning(distribution), child)
+        Exchange(canonicalPartitioning(distribution), removeRedundantShuffle(child))
       }
     }
 
@@ -234,7 +246,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         if (child.outputPartitioning.guarantees(targetPartitioning)) {
           child
         } else {
-          Exchange(targetPartitioning, child)
+          Exchange(targetPartitioning, removeRedundantShuffle(child))
         }
       }
     }

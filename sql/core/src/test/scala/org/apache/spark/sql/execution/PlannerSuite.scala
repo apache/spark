@@ -180,6 +180,20 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("Remove repartition operators when they are the child of Exchange and shuffle=True") {
+    val rdd = org.apache.spark.sql.test.TestSQLContext.sparkContext.parallelize(1 to 100, 100)
+    val df1 = createDataFrame(rdd.map(x => (x, x)))
+    val df2 = createDataFrame(rdd.map(x => (x, x)))
+    val planned = df1.repartition(1000).join(df2, "_1").queryExecution.executedPlan
+    val repartitions = planned.collect { case rep: Repartition => rep }
+    assert(repartitions.isEmpty, "Should remove repartition")
+
+    // DataFrame.coalesce will do repartition with shuffle=False
+    val planned2 = df1.coalesce(1000).join(df2, "_1").queryExecution.executedPlan
+    val repartitions2 = planned2.collect { case rep: Repartition => rep }
+    assert(repartitions2.nonEmpty, "Should not remove repartition")
+  }
+
   test("PartitioningCollection") {
     withTempTable("normal", "small", "tiny") {
       testData.registerTempTable("normal")
