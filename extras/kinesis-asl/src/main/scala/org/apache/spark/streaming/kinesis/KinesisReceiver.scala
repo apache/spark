@@ -157,8 +157,8 @@ private[kinesis] class KinesisReceiver[T](
     *  We're using our custom KinesisRecordProcessor in this case.
     */
     val recordProcessorFactory = new IRecordProcessorFactory {
-      override def createProcessor: IRecordProcessor = new KinesisRecordProcessor(receiver,
-        workerId, new KinesisCheckpointState(checkpointInterval))
+      override def createProcessor: IRecordProcessor =
+        new KinesisRecordProcessor(receiver, workerId, checkpointInterval)
     }
 
     worker = new Worker(recordProcessorFactory, kinesisClientLibConfiguration)

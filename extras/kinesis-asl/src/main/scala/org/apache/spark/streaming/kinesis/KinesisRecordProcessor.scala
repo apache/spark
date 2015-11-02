@@ -27,6 +27,7 @@ import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.Logging
+import org.apache.spark.streaming.Duration
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -38,17 +39,17 @@ import org.apache.spark.Logging
  *
  * @param receiver Kinesis receiver
  * @param workerId for logging purposes
- * @param checkpointState represents the checkpoint state including the next checkpoint time.
- *   It's injected here for mocking purposes.
+ * @param checkpointInterval The period at which to checkpoint to DynamoDB.
  */
 private[kinesis] class KinesisRecordProcessor[T](
     receiver: KinesisReceiver[T],
     workerId: String,
-    checkpointState: KinesisCheckpointState) extends IRecordProcessor with Logging {
+    checkpointInterval: Duration) extends IRecordProcessor with Logging {
 
-  // shardId to be populated during initialize()
+  // shardId and checkpointState to be populated during initialize()
   @volatile
   private var shardId: String = _
+  private var checkpointState: KinesisCheckpointState[T] = _
 
   /**
    * The Kinesis Client Library calls this method during IRecordProcessor initialization.
@@ -57,6 +58,7 @@ private[kinesis] class KinesisRecordProcessor[T](
    */
   override def initialize(shardId: String) {
     this.shardId = shardId
+    checkpointState = new KinesisCheckpointState[T](receiver, checkpointInterval, workerId, shardId)
     logInfo(s"Initialized workerId $workerId with shardId $shardId")
   }
 
@@ -72,36 +74,9 @@ private[kinesis] class KinesisRecordProcessor[T](
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
     if (!receiver.isStopped()) {
       try {
+        checkpointState.setCheckpointer(checkpointer)
         receiver.addRecords(shardId, batch)
         logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
-
-        /*
-         *
-         * Checkpoint the sequence number of the last record successfully stored.
-         * Note that in this current implementation, the checkpointing occurs only when after
-         * checkpointIntervalMillis from the last checkpoint, AND when there is new record
-         * to process. This leads to the checkpointing lagging behind what records have been
-         * stored by the receiver. Ofcourse, this can lead records processed more than once,
-         * under failures and restarts.
-         *
-         * TODO: Instead of checkpointing here, run a separate timer task to perform
-         * checkpointing so that it checkpoints in a timely manner independent of whether
-         * new records are available or not.
-         */
-        if (checkpointState.shouldCheckpoint()) {
-          receiver.getLatestSeqNumToCheckpoint(shardId).foreach { latestSeqNum =>
-            /* Perform the checkpoint */
-            KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(latestSeqNum), 4, 100)
-
-            /* Update the next checkpoint time */
-            checkpointState.advanceCheckpoint()
-
-            logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint of ${batch.size}" +
-              s" records for shardId $shardId")
-            logDebug(s"Checkpoint:  Next checkpoint is at " +
-              s" ${checkpointState.checkpointClock.getTimeMillis()} for shardId $shardId")
-          }
-        }
       } catch {
         case NonFatal(e) => {
           /*
@@ -135,18 +110,17 @@ private[kinesis] class KinesisRecordProcessor[T](
    */
   override def shutdown(checkpointer: IRecordProcessorCheckpointer, reason: ShutdownReason) {
     logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
-    reason match {
+    // We want to return a checkpointer based on the shutdown cause. If we want to terminate,
+    // then we want to use the given checkpointer to checkpoint one last time. In other cases,
+    // we return a `null` so that we don't checkpoint one last time.
+    val cp: IRecordProcessorCheckpointer = reason match {
       /*
        * TERMINATE Use Case.  Checkpoint.
        * Checkpoint to indicate that all records from the shard have been drained and processed.
        * It's now OK to read from the new shards that resulted from a resharding event.
        */
       case ShutdownReason.TERMINATE =>
-        val latestSeqNumToCheckpointOption = receiver.getLatestSeqNumToCheckpoint(shardId)
-        if (latestSeqNumToCheckpointOption.nonEmpty) {
-          KinesisRecordProcessor.retryRandom(
-            checkpointer.checkpoint(latestSeqNumToCheckpointOption.get), 4, 100)
-        }
+        checkpointer
 
       /*
        * ZOMBIE Use Case.  NoOp.
@@ -155,9 +129,14 @@ private[kinesis] class KinesisRecordProcessor[T](
        * This may lead to records being processed more than once.
        */
       case ShutdownReason.ZOMBIE =>
+        null // return null so that we don't checkpoint
 
       /* Unknown reason.  NoOp */
       case _ =>
+        null // return null so that we don't checkpoint
+    }
+    if (checkpointState != null) {
+      checkpointState.shutdown(cp)
     }
   }
 }

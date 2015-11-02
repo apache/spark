@@ -16,39 +16,77 @@
  */
 package org.apache.spark.streaming.kinesis
 
+import java.util.concurrent._
+
+import scala.util.control.NonFatal
+
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
+
 import org.apache.spark.Logging
 import org.apache.spark.streaming.Duration
-import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 /**
- * This is a helper class for managing checkpoint clocks.
+ * This is a helper class for managing Kinesis checkpointing.
  *
- * @param checkpointInterval
- * @param currentClock.  Default to current SystemClock if none is passed in (mocking purposes)
+ * @param receiver The receiver that keeps track of which sequence numbers we can checkpoint
+ * @param checkpointInterval How frequently we will checkpoint to DynamoDB
+ * @param workerId Worker Id of KCL worker for logging purposes
+ * @param shardId The shard this worker was consuming data from
  */
-private[kinesis] class KinesisCheckpointState(
+private[kinesis] class KinesisCheckpointState[T](
+    receiver: KinesisReceiver[T],
     checkpointInterval: Duration,
-    currentClock: Clock = new SystemClock())
-  extends Logging {
+    workerId: String,
+    shardId: String) extends Logging {
 
-  /* Initialize the checkpoint clock using the given currentClock + checkpointInterval millis */
-  val checkpointClock = new ManualClock()
-  checkpointClock.setTime(currentClock.getTimeMillis() + checkpointInterval.milliseconds)
+  private var _checkpointer: Option[IRecordProcessorCheckpointer] = None
 
-  /**
-   * Check if it's time to checkpoint based on the current time and the derived time
-   *   for the next checkpoint
-   *
-   * @return true if it's time to checkpoint
-   */
-  def shouldCheckpoint(): Boolean = {
-    new SystemClock().getTimeMillis() > checkpointClock.getTimeMillis()
+  private val checkpointerThread = startCheckpointerThread()
+
+  /** Update the checkpointer instance to the most recent one. */
+  def setCheckpointer(checkpointer: IRecordProcessorCheckpointer): Unit = {
+    _checkpointer = Option(checkpointer)
+  }
+
+  /** Perform the checkpoint */
+  private def checkpoint(checkpointer: Option[IRecordProcessorCheckpointer]): Unit = {
+    // if this method throws an exception, then the scheduled task will not run again
+    try {
+      checkpointer.foreach { cp =>
+        receiver.getLatestSeqNumToCheckpoint(shardId).foreach { latestSeqNum =>
+          /* Perform the checkpoint */
+          KinesisRecordProcessor.retryRandom(cp.checkpoint(latestSeqNum), 4, 100)
+
+          logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint at sequence number" +
+            s" $latestSeqNum for shardId $shardId")
+        }
+      }
+    } catch {
+      case NonFatal(e) =>
+        logError("Failed to checkpoint to DynamoDB.", e)
+    }
+  }
+
+  /** Start the checkpointer thread with the given checkpoint duration. */
+  private def startCheckpointerThread(): ScheduledFuture[_] = {
+    val period = checkpointInterval.milliseconds
+    val ex = new ScheduledThreadPoolExecutor(1)
+    val task = new Runnable {
+      def run() = checkpoint(_checkpointer)
+    }
+    ex.scheduleAtFixedRate(task, period, period, TimeUnit.MILLISECONDS)
   }
 
   /**
-   * Advance the checkpoint clock by the checkpoint interval.
+   * Shutdown the checkpointing task. We don't interrupt an ongoing checkpoint process.
+   *
+   * If a checkpointer is provided, e.g. on IRecordProcessor.shutdown [[ShutdownReason.TERMINATE]],
+   * we will use that to make the final checkpoint. If `null` is provided, we will not make the
+   * checkpoint, e.g. in case of [[ShutdownReason.ZOMBIE]].
    */
-  def advanceCheckpoint(): Unit = {
-    checkpointClock.advance(checkpointInterval.milliseconds)
+  def shutdown(checkpointer: IRecordProcessorCheckpointer): Unit = {
+    checkpointerThread.cancel(false)
+    checkpoint(Option(checkpointer))
   }
 }

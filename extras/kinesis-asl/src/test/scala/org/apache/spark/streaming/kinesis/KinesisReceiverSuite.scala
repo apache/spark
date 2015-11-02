@@ -21,16 +21,17 @@ import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions._
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 import org.mockito.Matchers._
+import org.mockito.Mockito
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.{BeforeAndAfter, Matchers}
 
-import org.apache.spark.streaming.{Milliseconds, TestSuiteBase}
-import org.apache.spark.util.{Clock, ManualClock, Utils}
+import org.apache.spark.streaming.{Duration, Milliseconds, TestSuiteBase}
+import org.apache.spark.util.{Clock, Utils}
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
@@ -44,6 +45,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   val workerId = "dummyWorkerId"
   val shardId = "dummyShardId"
   val seqNum = "dummySeqNum"
+  val checkpointInterval = Duration(10)
   val someSeqNum = Some(seqNum)
 
   val record1 = new Record()
@@ -54,24 +56,20 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
 
   var receiverMock: KinesisReceiver[Array[Byte]] = _
   var checkpointerMock: IRecordProcessorCheckpointer = _
-  var checkpointClockMock: ManualClock = _
-  var checkpointStateMock: KinesisCheckpointState = _
-  var currentClockMock: Clock = _
 
   override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
-    checkpointClockMock = mock[ManualClock]
-    checkpointStateMock = mock[KinesisCheckpointState]
-    currentClockMock = mock[Clock]
   }
 
-  override def afterFunction(): Unit = {
-    super.afterFunction()
-    // Since this suite was originally written using EasyMock, add this to preserve the old
-    // mocking semantics (see SPARK-5735 for more details)
-    verifyNoMoreInteractions(receiverMock, checkpointerMock, checkpointClockMock,
-      checkpointStateMock, currentClockMock)
+  /** Initialize a record processor with the defaults */
+  def withRecordProcessor(f: IRecordProcessor => Unit): Unit = {
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointInterval)
+    try {
+      f(recordProcessor)
+    } finally {
+      recordProcessor.shutdown(null, null) // shutdown checkpointer thread
+    }
   }
 
   test("check serializability of SerializableAWSCredentials") {
@@ -82,29 +80,31 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   test("process records including store and checkpoint") {
     when(receiverMock.isStopped()).thenReturn(false)
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
-    when(checkpointStateMock.shouldCheckpoint()).thenReturn(true)
 
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
-    recordProcessor.initialize(shardId)
-    recordProcessor.processRecords(batch, checkpointerMock)
+    withRecordProcessor { recordProcessor =>
+      recordProcessor.initialize(shardId)
+      recordProcessor.processRecords(batch, checkpointerMock)
 
-    verify(receiverMock, times(1)).isStopped()
-    verify(receiverMock, times(1)).addRecords(shardId, batch)
-    verify(receiverMock, times(1)).getLatestSeqNumToCheckpoint(shardId)
-    verify(checkpointStateMock, times(1)).shouldCheckpoint()
-    verify(checkpointerMock, times(1)).checkpoint(anyString)
-    verify(checkpointStateMock, times(1)).advanceCheckpoint()
+      val numCheckpoints = 2
+      Thread.sleep(numCheckpoints * 2 * checkpointInterval.milliseconds)
+
+      verify(receiverMock, times(1)).isStopped()
+      verify(receiverMock, times(1)).addRecords(shardId, batch)
+      verify(receiverMock, Mockito.atLeast(numCheckpoints)).getLatestSeqNumToCheckpoint(shardId)
+      verify(checkpointerMock, Mockito.atLeast(numCheckpoints)).checkpoint(anyString)
+    }
   }
 
   test("shouldn't store and checkpoint when receiver is stopped") {
     when(receiverMock.isStopped()).thenReturn(true)
 
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
-    recordProcessor.processRecords(batch, checkpointerMock)
+    withRecordProcessor { recordProcessor =>
+      recordProcessor.processRecords(batch, checkpointerMock)
 
-    verify(receiverMock, times(1)).isStopped()
-    verify(receiverMock, never).addRecords(anyString, anyListOf(classOf[Record]))
-    verify(checkpointerMock, never).checkpoint(anyString)
+      verify(receiverMock, times(1)).isStopped()
+      verify(receiverMock, never).addRecords(anyString, anyListOf(classOf[Record]))
+      verify(checkpointerMock, never).checkpoint(anyString)
+    }
   }
 
   test("shouldn't checkpoint when exception occurs during store") {
@@ -114,9 +114,10 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     ).thenThrow(new RuntimeException())
 
     intercept[RuntimeException] {
-      val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
-      recordProcessor.initialize(shardId)
-      recordProcessor.processRecords(batch, checkpointerMock)
+      withRecordProcessor { recordProcessor =>
+        recordProcessor.initialize(shardId)
+        recordProcessor.processRecords(batch, checkpointerMock)
+      }
     }
 
     verify(receiverMock, times(1)).isStopped()
@@ -124,68 +125,47 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(checkpointerMock, never).checkpoint(anyString)
   }
 
-  test("should set checkpoint time to currentTime + checkpoint interval upon instantiation") {
-    when(currentClockMock.getTimeMillis()).thenReturn(0)
-
-    val checkpointIntervalMillis = 10
-    val checkpointState =
-      new KinesisCheckpointState(Milliseconds(checkpointIntervalMillis), currentClockMock)
-    assert(checkpointState.checkpointClock.getTimeMillis() == checkpointIntervalMillis)
-
-    verify(currentClockMock, times(1)).getTimeMillis()
-  }
-
   test("should checkpoint if we have exceeded the checkpoint interval") {
-    when(currentClockMock.getTimeMillis()).thenReturn(0)
-
-    val checkpointState = new KinesisCheckpointState(Milliseconds(Long.MinValue), currentClockMock)
-    assert(checkpointState.shouldCheckpoint())
-
-    verify(currentClockMock, times(1)).getTimeMillis()
+    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
+    val checkpointState =
+      new KinesisCheckpointState(receiverMock, checkpointInterval, workerId, shardId)
+    checkpointState.setCheckpointer(checkpointerMock)
+    Thread.sleep(checkpointInterval.milliseconds * 5)
+    verify(checkpointerMock, Mockito.atLeastOnce()).checkpoint(seqNum)
+    checkpointState.shutdown(null)
   }
 
   test("shouldn't checkpoint if we have not exceeded the checkpoint interval") {
-    when(currentClockMock.getTimeMillis()).thenReturn(0)
-
-    val checkpointState = new KinesisCheckpointState(Milliseconds(Long.MaxValue), currentClockMock)
-    assert(!checkpointState.shouldCheckpoint())
-
-    verify(currentClockMock, times(1)).getTimeMillis()
-  }
-
-  test("should add to time when advancing checkpoint") {
-    when(currentClockMock.getTimeMillis()).thenReturn(0)
-
-    val checkpointIntervalMillis = 10
+    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
     val checkpointState =
-      new KinesisCheckpointState(Milliseconds(checkpointIntervalMillis), currentClockMock)
-    assert(checkpointState.checkpointClock.getTimeMillis() == checkpointIntervalMillis)
-    checkpointState.advanceCheckpoint()
-    assert(checkpointState.checkpointClock.getTimeMillis() == (2 * checkpointIntervalMillis))
-
-    verify(currentClockMock, times(1)).getTimeMillis()
+      new KinesisCheckpointState(receiverMock, Milliseconds(Long.MaxValue), workerId, shardId)
+    checkpointState.setCheckpointer(checkpointerMock)
+    verify(checkpointerMock, never()).checkpoint(anyString())
+    checkpointState.shutdown(null)
   }
 
   test("shutdown should checkpoint if the reason is TERMINATE") {
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
-    recordProcessor.initialize(shardId)
-    recordProcessor.shutdown(checkpointerMock, ShutdownReason.TERMINATE)
+    withRecordProcessor { recordProcessor =>
+      recordProcessor.initialize(shardId)
+      recordProcessor.shutdown(checkpointerMock, ShutdownReason.TERMINATE)
 
-    verify(receiverMock, times(1)).getLatestSeqNumToCheckpoint(shardId)
-    verify(checkpointerMock, times(1)).checkpoint(anyString)
+      verify(receiverMock, times(1)).getLatestSeqNumToCheckpoint(shardId)
+      verify(checkpointerMock, times(1)).checkpoint(anyString)
+    }
   }
 
   test("shutdown should not checkpoint if the reason is something other than TERMINATE") {
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
-    recordProcessor.initialize(shardId)
-    recordProcessor.shutdown(checkpointerMock, ShutdownReason.ZOMBIE)
-    recordProcessor.shutdown(checkpointerMock, null)
+    withRecordProcessor { recordProcessor =>
+      recordProcessor.initialize(shardId)
+      recordProcessor.shutdown(checkpointerMock, ShutdownReason.ZOMBIE)
+      recordProcessor.shutdown(checkpointerMock, null)
 
-    verify(checkpointerMock, never).checkpoint(anyString)
+      verify(checkpointerMock, never).checkpoint(anyString)
+    }
   }
 
   test("retry success on first attempt") {
