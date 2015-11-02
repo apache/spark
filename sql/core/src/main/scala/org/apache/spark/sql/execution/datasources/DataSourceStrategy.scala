@@ -272,7 +272,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       })
   }
 
-  // Based on Catalyst expressions.
+  // Based on Catalyst expressions. The `scanBuilder` function accepts three arguments:
+  //
+  //  1. A `Seq[Attribute]`, containing all required column attributes, used to handle traits like
+  //     `PrunedFilteredScan`.
+  //  2. A `Seq[Expression]`, containing all gathered Catalyst filter expressions, used by
+  //     `CatalystScan`.
+  //  3. A `Seq[Filter]`, containing all data source `Filter`s that are converted from (possibly a
+  //     subset of) Catalyst filter expressions and can be handled by `relation`.
   protected def pruneFilterProjectRaw(
     relation: LogicalRelation,
     projects: Seq[NamedExpression],
@@ -289,6 +296,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val (unhandledPredicates, pushedFilters) =
       selectFilters(relation.relation, candidatePredicates)
 
+    // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
+    // them from requested columns.
     val handledSet = {
       val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
       val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
@@ -305,10 +314,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.
-      val requestedColumns =
-        projects.asInstanceOf[Seq[Attribute]] // Safe due to if above.
-          .map(relation.attributeMap)            // Match original case of attributes.
-          .filterNot(handledSet.contains)
+      val requestedColumns = projects
+        // Safe due to if above.
+        .asInstanceOf[Seq[Attribute]]
+        // Match original case of attributes.
+        .map(relation.attributeMap)
+        // Don't request columns that are only referenced by pushed filters.
+        .filterNot(handledSet.contains)
 
       val scan = execution.PhysicalRDD.createFromDataSource(
         projects.map(_.toAttribute),
@@ -316,7 +328,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         relation.relation)
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
-      val requestedColumns = (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
+      // Don't request columns that are only referenced by pushed filters.
+      val requestedColumns =
+        (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
       val scan = execution.PhysicalRDD.createFromDataSource(
         requestedColumns,
@@ -457,14 +471,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Data source filters that cannot be handled by `relation`
     val unhandledFilters = relation.unhandledFilters(translatedMap.values.toArray).toSet
 
-    val (unhandled, handled) = translated.partition {
-      case (_, filter) =>
-        unhandledFilters.contains(filter)
-    }
-
     // Catalyst predicate expressions that can be translated to data source filters, but cannot be
     // handled by `relation`.
-    val (unhandledPredicates, _) = unhandled.unzip
+    val unhandledPredicates = for {
+      (predicate, filter) <- translated if unhandledFilters.contains(filter)
+    } yield predicate
 
     // Translated data source filters, no matter `relation` can handle them or not
     val (_, translatedFilters) = translated.unzip

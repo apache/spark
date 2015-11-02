@@ -44,13 +44,6 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       StructField("b", IntegerType, nullable = false) ::
       StructField("c", StringType, nullable = false) :: Nil)
 
-  /**
-   * Given an array of [[Filter]]s, returns an array of [[Filter]]s that this data source relation
-   * cannot handle.  Spark SQL will apply all returned [[Filter]]s against rows returned by this
-   * data source relation.
-   *
-   * @since 1.6.0
-   */
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     def unhandled(filter: Filter): Boolean = {
       filter match {
@@ -130,6 +123,7 @@ object FiltersPushed {
   var list: Seq[Filter] = Nil
 }
 
+// Used together with `SimpleFilteredScan` to check pushed columns.
 object ColumnsRequired {
   var set: Set[String] = Set.empty
 }
@@ -148,6 +142,9 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
         |  to '10'
         |)
       """.stripMargin)
+
+    // UDF for testing filter push-down
+    caseInsensitiveContext.udf.register("udf_even", (_: Int) % 2 == 0)
   }
 
   sqlTest(
@@ -277,12 +274,18 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
   testPushDown("SELECT c FROM oneToTenFiltered WHERE c = 'aaaaaAAAAA'", 1, Set("c"))
   testPushDown("SELECT c FROM oneToTenFiltered WHERE c IN ('aaaaaAAAAA', 'foo')", 1, Set("c"))
 
+  // Columns only referenced by UDF filter must be required, as UDF filters can't be pushed down.
+  testPushDown("SELECT c FROM oneToTenFiltered WHERE udf_even(A)", 10, Set("a", "c"))
+
   def testPushDown(
       sqlString: String,
       expectedCount: Int,
       requiredColumnNames: Set[String]): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {
-      val queryExecution = sql(sqlString).queryExecution
+      val df = sql(sqlString)
+      df.show()
+
+      val queryExecution = df.queryExecution
       val rawPlan = queryExecution.executedPlan.collect {
         case p: execution.PhysicalRDD => p
       } match {
@@ -301,4 +304,3 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 }
-
