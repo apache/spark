@@ -1224,11 +1224,13 @@ class Log(Base):
 
     def __init__(self, event, task_instance, owner=None):
         self.dttm = datetime.now()
-        self.dag_id = task_instance.dag_id
-        self.task_id = task_instance.task_id
-        self.execution_date = task_instance.execution_date
         self.event = event
         self.owner = owner or task_instance.task.owner
+
+        if task_instance:
+            self.dag_id = task_instance.dag_id
+            self.task_id = task_instance.task_id
+            self.execution_date = task_instance.execution_date
 
 
 @functools.total_ordering
