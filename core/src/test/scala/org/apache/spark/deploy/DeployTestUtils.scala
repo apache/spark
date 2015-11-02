@@ -33,7 +33,7 @@ private[deploy] object DeployTestUtils {
   def createAppInfo() : ApplicationInfo = {
     val appDesc = createAppDesc()
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      "id", appDesc, JsonConstants.submitDate, null, Int.MaxValue, appDesc.appUiUrl)
+      "id", appDesc, JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
   }

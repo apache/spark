@@ -769,7 +769,7 @@ private[deploy] class Master(
     val now = System.currentTimeMillis()
     val date = new Date(now)
     val appId = newApplicationId(date)
-    new ApplicationInfo(now, appId, desc, date, driver, defaultCores, desc.appUiUrl)
+    new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
   }
 
   private def registerApplication(app: ApplicationInfo): Unit = {
@@ -921,7 +921,7 @@ private[deploy] class Master(
       val eventLogDir = app.desc.eventLogDir
         .getOrElse {
           // Event logging is not enabled for this application
-          app.appUiUrl = notFoundBasePath
+          app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
           return None
         }
 
@@ -955,7 +955,7 @@ private[deploy] class Master(
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it
-      app.appUiUrl = ui.basePath
+      app.appUIUrlAtHistoryServer = Some(ui.basePath)
       Some(ui)
     } catch {
       case fnf: FileNotFoundException =>
@@ -965,7 +965,7 @@ private[deploy] class Master(
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        app.appUIUrlAtHistoryServer = Some(notFoundBasePath + s"?msg=$msg&title=$title")
         None
       case e: Exception =>
         // Relay exception message to application UI page
@@ -974,7 +974,8 @@ private[deploy] class Master(
         var msg = s"Exception in replaying log for application $appName!"
         logError(msg, e)
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
+        app.appUIUrlAtHistoryServer =
+            Some(notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title")
         None
     }
   }

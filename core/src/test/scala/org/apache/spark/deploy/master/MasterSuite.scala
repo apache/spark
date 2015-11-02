@@ -67,8 +67,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
         coresPerExecutor = None),
       submitDate = new Date(),
       driver = null,
-      defaultCores = 0,
-      appUiUrl = ""
+      defaultCores = 0
     )
 
     val driverToPersist = new DriverInfo(
@@ -372,7 +371,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val desc = new ApplicationDescription(
       "test", maxCores, memoryPerExecutorMb, null, "", None, None, coresPerExecutor)
     val appId = System.currentTimeMillis.toString
-    new ApplicationInfo(0, appId, desc, new Date, null, Int.MaxValue, desc.appUiUrl)
+    new ApplicationInfo(0, appId, desc, new Date, null, Int.MaxValue)
   }
 
   private def makeWorkerInfo(memoryMb: Int, cores: Int): WorkerInfo = {
