@@ -2499,6 +2499,18 @@ class XCom(Base):
 
         return query.all()
 
+    @classmethod
+    @provide_session
+    def delete(cls, xcoms, session=None):
+        if isinstance(xcoms, XCom):
+            xcoms = [xcoms]
+        for xcom in xcoms:
+            if not isinstance(xcom, XCom):
+                raise TypeError(
+                    'Expected XCom; received {}'.format(type(xcom)))
+            session.delete(xcom)
+        session.commit()
+
 
 class Pool(Base):
     __tablename__ = "slot_pool"
