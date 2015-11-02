@@ -106,7 +106,7 @@ public class TaskMemoryManager {
   final MemoryMode tungstenMemoryMode;
 
   /**
-   * The size of memory granted to each consumer.
+   * Tracks spillable memory consumers.
    */
   @GuardedBy("this")
   private final HashSet<MemoryConsumer> consumers;
@@ -145,7 +145,7 @@ public class TaskMemoryManager {
       if (got < required) {
         // Call spill() on other consumers to release memory
         for (MemoryConsumer c: consumers) {
-          if (c != null && c != consumer && c.getMemoryUsed(mode) > 0) {
+          if (c != consumer && c.getMemoryUsed(mode) > 0) {
             try {
               // TODO(josh): subtlety / implementation detail: today, spill() happens to only
               // release Tungsten pages.
@@ -183,7 +183,9 @@ public class TaskMemoryManager {
         }
       }
 
-      consumers.add(consumer);
+      if (consumer != null) {
+        consumers.add(consumer);
+      }
       logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
     }
@@ -200,6 +202,7 @@ public class TaskMemoryManager {
   /**
    * Dump the memory usage of all consumers.
    */
+  // TODO(josh): also report memory not allocated to any particular consumer.
   public void showMemoryUsage() {
     logger.info("Memory used in task " + taskAttemptId);
     synchronized (this) {
@@ -352,12 +355,12 @@ public class TaskMemoryManager {
     synchronized (this) {
       Arrays.fill(pageTable, null);
       for (MemoryConsumer c: consumers) {
-        if (c != null && c.getMemoryUsed(MemoryMode.ON_HEAP) > 0) {
+        if (c.getMemoryUsed(MemoryMode.ON_HEAP) > 0) {
           // In case of failed task, it's normal to see leaked memory
           logger.warn("leak " + Utils.bytesToString(c.getMemoryUsed(MemoryMode.ON_HEAP)) +
             " of on-heap memory from " + c);
         }
-        if (c != null && c.getMemoryUsed(MemoryMode.OFF_HEAP) > 0) {
+        if (c.getMemoryUsed(MemoryMode.OFF_HEAP) > 0) {
           // In case of failed task, it's normal to see leaked memory
           logger.warn("leak " + Utils.bytesToString(c.getMemoryUsed(MemoryMode.OFF_HEAP)) +
             " of off-heap memory from " + c);
