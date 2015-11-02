@@ -1235,6 +1235,30 @@ class Matrices(object):
         return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
 
 
+class QRDecomposition(object):
+    """
+    Represents QR factors.
+    """
+    def __init__(self, Q, R):
+        self._Q = Q
+        self._R = R
+
+    @property
+    def Q(self):
+        """
+        An orthogonal matrix Q in a QR decomposition.
+        May be null if not computed.
+        """
+        return self._Q
+
+    @property
+    def R(self):
+        """
+        An upper triangular matrix R in a QR decomposition.
+        """
+        return self._R
+
+
 def _test():
     import doctest
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)

@@ -28,7 +28,8 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import _convert_to_vector, Matrix
+from pyspark.mllib.linalg import _convert_to_vector, Matrix, QRDecomposition
+from pyspark.mllib.stat import MultivariateStatisticalSummary
 from pyspark.storagelevel import StorageLevel
 
 
@@ -151,6 +152,148 @@ class RowMatrix(DistributedMatrix):
         6
         """
         return self._java_matrix_wrapper.call("numCols")
+
+    def computeColumnSummaryStatistics(self):
+        """
+        Computes column-wise summary statistics.
+
+        :return: :class:`MultivariateStatisticalSummary` object
+                 containing column-wise summary statistics.
+
+        >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6]])
+        >>> mat = RowMatrix(rows)
+
+        >>> colStats = mat.computeColumnSummaryStatistics()
+        >>> colStats.mean()
+        array([ 2.5,  3.5,  4.5])
+        """
+        java_col_stats = self._java_matrix_wrapper.call("computeColumnSummaryStatistics")
+        return MultivariateStatisticalSummary(java_col_stats)
+
+    def computeCovariance(self):
+        """
+        Computes the covariance matrix, treating each row as an
+        observation. Note that this cannot be computed on matrices
+        with more than 65535 columns.
+
+        >>> rows = sc.parallelize([[1, 2], [2, 1]])
+        >>> mat = RowMatrix(rows)
+
+        >>> mat.computeCovariance()
+        DenseMatrix(2, 2, [0.5, -0.5, -0.5, 0.5], 0)
+        """
+        return self._java_matrix_wrapper.call("computeCovariance")
+
+    def computeGramianMatrix(self):
+        """
+        Computes the Gramian matrix `A^T A`. Note that this cannot be
+        computed on matrices with more than 65535 columns.
+
+        >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6]])
+        >>> mat = RowMatrix(rows)
+
+        >>> mat.computeGramianMatrix()
+        DenseMatrix(3, 3, [17.0, 22.0, 27.0, 22.0, 29.0, 36.0, 27.0, 36.0, 45.0], 0)
+        """
+        return self._java_matrix_wrapper.call("computeGramianMatrix")
+
+    def columnSimilarities(self, threshold=0.0):
+        """
+        Compute similarities between columns of this matrix.
+
+        The threshold parameter is a trade-off knob between estimate
+        quality and computational cost.
+
+        The default threshold setting of 0 guarantees deterministically
+        correct results, but uses the brute-force approach of computing
+        normalized dot products.
+
+        Setting the threshold to positive values uses a sampling
+        approach and incurs strictly less computational cost than the
+        brute-force approach. However the similarities computed will
+        be estimates.
+
+        The sampling guarantees relative-error correctness for those
+        pairs of columns that have similarity greater than the given
+        similarity threshold.
+
+        To describe the guarantee, we set some notation:
+            * Let A be the smallest in magnitude non-zero element of
+              this matrix.
+            * Let B be the largest in magnitude non-zero element of
+              this matrix.
+            * Let L be the maximum number of non-zeros per row.
+
+        For example, for {0,1} matrices: A=B=1.
+        Another example, for the Netflix matrix: A=1, B=5
+
+        For those column pairs that are above the threshold, the
+        computed similarity is correct to within 20% relative error
+        with probability at least 1 - (0.981)^10/B^
+
+        The shuffle size is bounded by the *smaller* of the following
+        two expressions:
+
+            * O(n log(n) L / (threshold * A))
+            * O(m L^2^)
+
+        The latter is the cost of the brute-force approach, so for
+        non-zero thresholds, the cost is always cheaper than the
+        brute-force approach.
+
+        :param: threshold: Set to 0 for deterministic guaranteed
+                           correctness. Similarities above this
+                           threshold are estimated with the cost vs
+                           estimate quality trade-off described above.
+        :return: An n x n sparse upper-triangular CoordinateMatrix of
+                 cosine similarities between columns of this matrix.
+
+        >>> rows = sc.parallelize([[1, 2], [1, 5]])
+        >>> mat = RowMatrix(rows)
+
+        >>> sims = mat.columnSimilarities()
+        >>> round(sims.entries.first().value, 12)
+        0.919145030018
+        """
+        java_sims_mat = self._java_matrix_wrapper.call("columnSimilarities", float(threshold))
+        return CoordinateMatrix(java_sims_mat)
+
+    def tallSkinnyQR(self, computeQ=False):
+        """
+        Compute the QR decomposition of this RowMatrix.
+
+        The implementation is designed to optimize the QR decomposition
+        (factorization) for the RowMatrix of a tall and skinny shape.
+
+        Reference:
+         Paul G. Constantine, David F. Gleich. "Tall and skinny QR
+         factorizations in MapReduce architectures"
+         ([[http://dx.doi.org/10.1145/1996092.1996103]])
+
+        :param: computeQ: whether to computeQ
+        :return: QRDecomposition(Q: RowMatrix, R: Matrix), where
+                 Q = None if computeQ = false.
+
+        >>> rows = sc.parallelize([[3, -6], [4, -8], [0, 1]])
+        >>> mat = RowMatrix(rows)
+        >>> decomp = mat.tallSkinnyQR(True)
+
+        >>> # Test with absolute values
+        >>> decomp.Q.rows.map(lambda row: abs(row.toArray()).tolist()).collect()
+        [[0.6..., 0.0], [0.8..., 0.0], [0.0, 1.0]]
+
+        >>> # Test with absolute values
+        >>> abs(decomp.R.toArray()).tolist()
+        [[5.0, 10.0], [0.0, 1.0]]
+        """
+        decomp = JavaModelWrapper(self._java_matrix_wrapper.call("tallSkinnyQR", computeQ))
+        if computeQ:
+            java_Q = decomp.call("Q")
+            Q = RowMatrix(java_Q)
+        else:
+            Q = None
+        R = decomp.call("R")
+        return QRDecomposition(Q, R)
 
 
 class IndexedRow(object):
