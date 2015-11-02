@@ -223,6 +223,7 @@ object Utils {
  * in a separate group. The results are then combined in a second aggregate.
  *
  * TODO Expression cannocalization
+ * TODO Eliminate foldable expressions from distinct clauses.
  * TODO This eliminates all distinct expressions. We could safely pass one to the aggregate
  *      operator. Perhaps this is a good thing? It is much simpler to plan later on...
  */
@@ -238,8 +239,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     // Collect all aggregate expressions.
     val aggExpressions = a.aggregateExpressions.flatMap { e =>
       e.collect {
-        case ae: AggregateExpression2 =>
-          ae
+        case ae: AggregateExpression2 => ae
       }
     }
 
@@ -254,6 +254,17 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.map(expressionAttributePair)
       val groupByAttrs = groupByMap.map(_._2)
+
+      // Functions used to modify aggregate functions and their inputs.
+      def evalWithinGroup(id: Literal, e: Expression) = If(EqualTo(gid, id), e, nullify(e))
+      def patchAggregateFunctionChildren(
+          af: AggregateFunction2,
+          id: Literal,
+          attrs: Map[Expression, Expression]): AggregateFunction2 = {
+        af.withNewChildren(af.children.map { case afc =>
+          evalWithinGroup(id, attrs(afc))
+        }).asInstanceOf[AggregateFunction2]
+      }
 
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq
@@ -277,11 +288,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
           // Final aggregate
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
-            val naf = af.withNewChildren(af.children.map { case afc =>
-              // Make sure only the input originating from the projection above is used for
-              // aggregation.
-              If(EqualTo(gid, id), distinctAggChildAttrMap(afc), nullify(afc))
-            }).asInstanceOf[AggregateFunction2]
+            val naf = patchAggregateFunctionChildren(af, id, distinctAggChildAttrMap)
             (e, e.copy(aggregateFunction = naf, isDistinct = false))
           }
 
@@ -295,13 +302,17 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
 
       // Setup aggregates for 'regular' aggregate expressions.
       val regularAggOperatorMap = regularAggExprs.map { e =>
+        val id = Literal(0)
+
         // Perform the actual aggregation in the initial aggregate.
-        val a = Alias(e.transform(regularAggChildAttrMap), "ra")()
+        val af = patchAggregateFunctionChildren(e.aggregateFunction, id, regularAggChildAttrMap)
+        val a = Alias(e.copy(aggregateFunction = af), "ra")()
+
         // Get the result of the first aggregate in the last aggregate.
         val b = AggregateExpression2(aggregate.First(
-            If(EqualTo(gid, Literal(0)), a.toAttribute, nullify(e)), Literal(true)),
-            mode = Complete,
-            isDistinct = false)
+          evalWithinGroup(id, a.toAttribute), Literal(true)),
+          mode = Complete,
+          isDistinct = false)
         (e, a, b)
       }
 
@@ -327,7 +338,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       // Construct the expand operator.
       val expand = Expand(
         regularAggProjection ++ distinctAggProjections,
-        groupByAttrs ++ distinctAggChildAttrs ++ regularAggChildAttrMap.values.toSeq :+ gid,
+        groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.values.toSeq,
         a.child)
 
       // Construct the first aggregate operator. This de-duplicates the all the children of
