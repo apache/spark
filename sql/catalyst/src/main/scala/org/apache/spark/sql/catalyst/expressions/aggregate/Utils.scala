@@ -55,10 +55,14 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
 
-        // We do not support multiple COUNT DISTINCT columns for now.
-        case expressions.CountDistinct(children) if children.length == 1 =>
+        case expressions.CountDistinct(children) =>
+          val child = if (children.size > 1) {
+            DropAnyNull(CreateStruct(children))
+          } else {
+            children.head
+          }
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(children.head),
+            aggregateFunction = aggregate.Count(child),
             mode = aggregate.Complete,
             isDistinct = true)
 
