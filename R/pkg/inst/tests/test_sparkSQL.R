@@ -637,14 +637,13 @@ test_that("coltypes() set the column types", {
 
   df1 <- select(df, cast(df$age, "integer"))
   coltypes(df) <- c("character", "integer")
-  expect_equal(dtypes(df), list(c("cast(name as string)", "string"), c("cast(age as int)", "int")))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "int")))
   value <- collect(df[, 2])[[3, 1]]
   expect_equal(value, collect(df1)[[3, 1]])
   expect_equal(value, 22)
 
   coltypes(df) <- c(NA, "numeric")
-  expect_equal(dtypes(df), list(c("cast(name as string)", "string"),
-              c("cast(cast(age as int) as double)", "double")))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
 
   expect_error(coltypes(df) <- c("character"),
                "Length of type vector should match the number of columns for DataFrame")
