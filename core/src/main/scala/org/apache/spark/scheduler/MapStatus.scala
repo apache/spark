@@ -19,9 +19,8 @@ package org.apache.spark.scheduler
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
-import org.roaringbitmap.RoaringBitmap
-
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.Utils
 
 /**
@@ -133,7 +132,7 @@ private[spark] class CompressedMapStatus(
 private[spark] class HighlyCompressedMapStatus private (
     private[this] var loc: BlockManagerId,
     private[this] var numNonEmptyBlocks: Int,
-    private[this] var emptyBlocks: RoaringBitmap,
+    private[this] var emptyBlocks: BitSet,
     private[this] var avgSize: Long)
   extends MapStatus with Externalizable {
 
@@ -146,7 +145,7 @@ private[spark] class HighlyCompressedMapStatus private (
   override def location: BlockManagerId = loc
 
   override def getSizeForBlock(reduceId: Int): Long = {
-    if (emptyBlocks.contains(reduceId)) {
+    if (emptyBlocks.get(reduceId)) {
       0
     } else {
       avgSize
@@ -161,7 +160,7 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
-    emptyBlocks = new RoaringBitmap()
+    emptyBlocks = new BitSet
     emptyBlocks.readExternal(in)
     avgSize = in.readLong()
   }
@@ -177,15 +176,15 @@ private[spark] object HighlyCompressedMapStatus {
     // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
     // blocks. From a performance standpoint, we benefit from tracking empty blocks because
     // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
-    val emptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
+    val emptyBlocks = new BitSet(totalNumBlocks)
     while (i < totalNumBlocks) {
       var size = uncompressedSizes(i)
       if (size > 0) {
         numNonEmptyBlocks += 1
         totalSize += size
       } else {
-        emptyBlocks.add(i)
+        emptyBlocks.set(i)
       }
       i += 1
     }
