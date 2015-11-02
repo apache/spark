@@ -149,7 +149,7 @@ case class Exchange(
     // we register this operator right before the execution instead of register it
     // in the constructor because it is possible that we create new instances of
     // Exchange operators when we transform the physical plan
-    // (then the ExchangeCoordinator will hold references to unneeded Exchanges).
+    // (then the ExchangeCoordinator will hold references of unneeded Exchanges).
     // So, we should only call registerExchange just before we start to execute
     // the plan.
     coordinator match {
@@ -158,18 +158,13 @@ case class Exchange(
     }
   }
 
-  def prepareShuffleDependency(
-      newNumPreShufflePartitions: Option[Int] = None)
-  : ShuffleDependency[Int, InternalRow, InternalRow] = {
+  /**
+   * Returns a [[ShuffleDependency]] that will partition rows of its child based on
+   * the partitioning scheme defined in `newPartitioning`. Those partitions of
+   * the returned ShuffleDependency will be the input of shuffle.
+   */
+  private[sql] def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
     val rdd = child.execute()
-    // If the number of pre-shuffle partitions is specified,
-    // we change the newPartitioning to use that number first.
-    // newNumPreShufflePartitions is only allowed when newPartitioning
-    // is a HashPartitioning.
-    newNumPreShufflePartitions.foreach { numPartitions =>
-      assert(newPartitioning.isInstanceOf[HashPartitioning])
-      newPartitioning = newPartitioning.withNumPartitions(numPartitions)
-    }
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
@@ -233,7 +228,13 @@ case class Exchange(
     dependency
   }
 
-  def preparePostShuffleRDD(
+  /**
+   * Returns a [[ShuffledRowRDD]] that represents the post-shuffle dataset.
+   * This [[ShuffledRowRDD]] is created based on a given [[ShuffleDependency]] and an optional
+   * partition start indices array. If this optional array is defined, the returned
+   * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
+   */
+  private[sql] def preparePostShuffleRDD(
       shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
       specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
     // If an array of partition start indices is provided, we need to use this array
@@ -297,6 +298,10 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     }
   }
 
+  /**
+   * Adds [[ExchangeCoordinator]] to [[Exchange]]s if adaptive query execution is enabled
+   * and partitioning schemes of these [[Exchange]]s support [[ExchangeCoordinator]].
+   */
   private def withExchangeCoordinator(
       children: Seq[SparkPlan],
       requiredChildDistributions: Seq[Distribution]): Seq[SparkPlan] = {
@@ -338,10 +343,10 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             // If this child is not an Exchange, we need to add an Exchange for now.
             // Ideally, we can try to avoid this Exchange. However, when we reach here,
             // there are at least two children operators (because if there is a single child
-            // and we can avoid Exchange, this method will not be called). Although we can
-            // make two children have the same number of post-shuffle partitions. Their
-            // numbers of pre-shuffle partitions may be different. For example, let's say
-            // we have the following plan
+            // and we can avoid Exchange, supportsCoordinator will be false and we
+            // will not reach here.). Although we can make two children have the same number of
+            // post-shuffle partitions. Their numbers of pre-shuffle partitions may be different.
+            // For example, let's say we have the following plan
             //         Join
             //         /  \
             //       Agg  Exchange
@@ -365,16 +370,13 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             // In this case, two Aggs shuffle data with the same column of the join condition.
             // After we use ExchangeCoordinator, these two Aggs may not be partitioned in the same
             // way. Let's say that Agg1 and Agg2 both have 5 pre-shuffle partitions and 2
-            // post-shuffle partitions. However, Agg1 fetches those pre-shuffle partitions by
-            // using a partitionStartIndices [0, 3]. But, Agg1 fetches those pre-shuffle
-            // partitions by using another partitionStartIndices [0, 4]. So, Agg1 and Agg2
-            // are actually not partitioned in the same way. So, we need to add Exchanges at here.
+            // post-shuffle partitions. It is possible that Agg1 fetches those pre-shuffle
+            // partitions by using a partitionStartIndices [0, 3]. However, Agg2 may fetch its
+            // pre-shuffle partitions by using another partitionStartIndices [0, 4].
+            // So, Agg1 and Agg2 are actually not co-partitioned.
             //
             // It will be great to introduce a new Partitioning to represent the post-shuffle
             // partitions when one post-shuffle partition includes multiple pre-shuffle partitions.
-
-            // Because originally we do not have an Exchange operator, we can just use this child
-            // operator's outputPartitioning to shuffle data.
             val targetPartitioning = canonicalPartitioning(distribution)
             assert(targetPartitioning.isInstanceOf[HashPartitioning])
             Exchange(targetPartitioning, child, Some(coordinator))
@@ -419,6 +421,12 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     }
 
     // Now, we need to add ExchangeCoordinator if necessary.
+    // Actually, it is not a good idea to add ExchangeCoordinators while we are adding Exchanges.
+    // However, with the way that we plan the query, we do not have a place where we have a
+    // global picture of all shuffle dependencies of a post-shuffle stage. So, we add coordinator
+    // at here for now.
+    // Once we finish https://issues.apache.org/jira/browse/SPARK-10665,
+    // we can first add Exchanges and then add coordinator once we have a DAG of query fragments.
     children = withExchangeCoordinator(children, requiredChildDistributions)
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
@@ -442,4 +450,3 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     case operator: SparkPlan => ensureDistributionAndOrdering(operator)
   }
 }
-

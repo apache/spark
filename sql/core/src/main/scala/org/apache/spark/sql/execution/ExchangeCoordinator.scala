@@ -30,30 +30,35 @@ import org.apache.spark.sql.catalyst.InternalRow
  * Right now, the work of this coordinator is to determine the number of post-shuffle partitions
  * for a stage that needs to fetch shuffle data from one or multiple stages.
  *
- * A coordinator is constructed with two parameters, `numExchanges` and
- * `targetPostShuffleInputSize`. `numExchanges` is used to indicated that how many [[Exchange]]s
- * that will be registered to this coordinator. So, when we start to do any actual work, we have
- * a way to make sure that we have got expected number of [[Exchange]]s.
- * `targetPostShuffleInputSize` is the targeted size of a post-shuffle partition's input data size.
- * With this parameter, we can estimate the number of post-shuffle partitions. This parameter
- * is configured through `spark.sql.adaptive.shuffle.targetPostShuffleInputSize`.
+ * A coordinator is constructed with three parameters, `numExchanges`,
+ * `targetPostShuffleInputSize`, and `minNumPostShufflePartitions`.
+ *  - `numExchanges` is used to indicated that how many [[Exchange]]s that will be registered to
+ *    this coordinator. So, when we start to do any actual work, we have a way to make sure that
+ *    we have got expected number of [[Exchange]]s.
+ *  - `targetPostShuffleInputSize` is the targeted size of a post-shuffle partition's
+ *    input data size. With this parameter, we can estimate the number of post-shuffle partitions.
+ *    This parameter is configured through
+ *    `spark.sql.adaptive.shuffle.targetPostShuffleInputSize`.
+ *  - `minNumPostShufflePartitions` is an optional parameter. If it is defined, this coordinator
+ *    will try to make sure that there are at least `minNumPostShufflePartitions` post-shuffle
+ *    partitions.
  *
  * The workflow of this coordinator is described as follows:
  *  - Before the execution of a [[SparkPlan]], for an [[Exchange]] operator,
  *    if an [[ExchangeCoordinator]] is assigned to it, it registers itself to this coordinator.
  *    This happens in the `doPrepare` method.
  *  - Once we start to execute a physical plan, an [[Exchange]] registered to this coordinator will
- *    call `postShuffleRDD` to get its corresponding post-shuffle [[RDD]]. If this coordinator has
- *    made the decision on how to shuffle data, this [[Exchange]] will immediately get its
- *    corresponding post-shuffle [[RDD]].
+ *    call `postShuffleRDD` to get its corresponding post-shuffle [[ShuffledRowRDD]].
+ *    If this coordinator has made the decision on how to shuffle data, this [[Exchange]] will
+ *    immediately get its corresponding post-shuffle [[ShuffledRowRDD]].
  *  - If this coordinator has not made the decision on how to shuffle data, it will ask those
  *    registered [[Exchange]]s to submit their pre-shuffle stages. Then, based on the the size
  *    statistics of pre-shuffle partitions, this coordinator will determine the number of
  *    post-shuffle partitions and pack multiple pre-shuffle partitions with continuous indices
- *    to a post-shuffle partition whenever necessary.
- *  - Finally, this coordinator will create post-shuffle [[RDD]]s for all registered [[Exchange]]s.
- *    So, when an [[Exchange]] calls `postShuffleRDD`, this coordinator can lookup the
- *    corresponding [[RDD]].
+ *    to a single post-shuffle partition whenever necessary.
+ *  - Finally, this coordinator will create post-shuffle [[ShuffledRowRDD]]s for all registered
+ *    [[Exchange]]s. So, when an [[Exchange]] calls `postShuffleRDD`, this coordinator can
+ *    lookup the corresponding [[RDD]].
  *
  * The strategy used to determine the number of post-shuffle partitions is described as follows.
  * To determine the number of post-shuffle partitions, we have a target input size for a
@@ -69,9 +74,6 @@ import org.apache.spark.sql.catalyst.InternalRow
  *  - post-shuffle partition 0: pre-shuffle partition 0 and 1
  *  - post-shuffle partition 1: pre-shuffle partition 2
  *  - post-shuffle partition 2: pre-shuffle partition 3 and 4
- *
- * If `minNumPostShufflePartitions` is defined. This ExchangeCoordinator will try to enforce
- * the minimal number of post-shuffle partitions to this number.
  */
 private[sql] class ExchangeCoordinator(
     numExchanges: Int,
@@ -82,11 +84,11 @@ private[sql] class ExchangeCoordinator(
   // The registered Exchange operators.
   private[this] val exchanges = ArrayBuffer[Exchange]()
 
-  // This map that is used to lookup the post-shuffle RDD for an Exchange operator.
+  // This map is used to lookup the post-shuffle ShuffledRowRDD for an Exchange operator.
   private[this] val postShuffleRDDs: JMap[Exchange, ShuffledRowRDD] =
     new JHashMap[Exchange, ShuffledRowRDD](numExchanges)
 
-  // A boolean indicates if this coordinator has made decision on how to shuffle data.
+  // A boolean that indicates if this coordinator has made decision on how to shuffle data.
   // This variable will only be updated by doEstimationIfNecessary, which is protected by
   // synchronized.
   @volatile private[this] var estimated: Boolean = false
@@ -108,20 +110,8 @@ private[sql] class ExchangeCoordinator(
   private[sql] def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
     // If we have mapOutputStatistics.length <= numExchange, it is because we do not submit
-    // a stage if the number of partitions of the RDD is 0.
+    // a stage when the number of partitions of this dependency is 0.
     assert(mapOutputStatistics.length <= numExchanges)
-
-    // Make sure we do get the same number of pre-shuffle partitions for those stages.
-    val distinctNumPreShufflePartitions =
-      mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).distinct
-    assert(
-      distinctNumPreShufflePartitions.length == 1,
-      "There should be only one distinct value of the number pre-shuffle partitions " +
-        "among registered Exchange operator.")
-
-    val numPreShufflePartitions = distinctNumPreShufflePartitions.head
-    val partitionStartIndices = ArrayBuffer[Int]()
-    var postShuffleInputSize = 0L
 
     // If minNumPostShufflePartitions is defined, it is possible that we need to use a
     // value less than advisoryTargetPostShuffleInputSize as the target input size of
@@ -142,8 +132,20 @@ private[sql] class ExchangeCoordinator(
       s"advisoryTargetPostShuffleInputSize: $advisoryTargetPostShuffleInputSize, " +
       s"targetPostShuffleInputSize $targetPostShuffleInputSize.")
 
+    // Make sure we do get the same number of pre-shuffle partitions for those stages.
+    val distinctNumPreShufflePartitions =
+      mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).distinct
+    assert(
+      distinctNumPreShufflePartitions.length == 1,
+      "There should be only one distinct value of the number pre-shuffle partitions " +
+        "among registered Exchange operator.")
+    val numPreShufflePartitions = distinctNumPreShufflePartitions.head
+
+    val partitionStartIndices = ArrayBuffer[Int]()
     // The first element of partitionStartIndices is always 0.
     partitionStartIndices += 0
+
+    var postShuffleInputSize = 0L
 
     var i = 0
     while (i < numPreShufflePartitions) {
@@ -234,12 +236,10 @@ private[sql] class ExchangeCoordinator(
       }
 
       // Finally, we set postShuffleRDDs and estimated.
-      if (!estimated) {
-        assert(postShuffleRDDs.isEmpty)
-        assert(newPostShuffleRDDs.size() == numExchanges)
-        postShuffleRDDs.putAll(newPostShuffleRDDs)
-        estimated = true
-      }
+      assert(postShuffleRDDs.isEmpty)
+      assert(newPostShuffleRDDs.size() == numExchanges)
+      postShuffleRDDs.putAll(newPostShuffleRDDs)
+      estimated = true
     }
   }
 

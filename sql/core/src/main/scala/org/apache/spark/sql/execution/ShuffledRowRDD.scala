@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
  * (identified by `postShufflePartitionIndex`) contains a range of pre-shuffle partitions
  * (`startPreShufflePartitionIndex` to `endPreShufflePartitionIndex - 1`, inclusive).
  */
-private class ShuffledRowRDDPartition(
+private final class ShuffledRowRDDPartition(
     val postShufflePartitionIndex: Int,
     val startPreShufflePartitionIndex: Int,
     val endPreShufflePartitionIndex: Int) extends Partition {
@@ -81,6 +81,8 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
     case _ =>
       false
   }
+
+  override def hashCode(): Int = 31 * parent.hashCode() + Arrays.hashCode(partitionStartIndices)
 }
 
 /**
@@ -107,7 +109,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  *
  * When `specifiedPartitionStartIndices` is not defined, there will be
  * `dependency.partitioner.numPartitions` post-shuffle partitions. For this case,
- * every post-shuffle partition is a pre-shuffle partition.
+ * a post-shuffle partition is created for every pre-shuffle partition.
  */
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
@@ -124,7 +126,7 @@ class ShuffledRowRDD(
       (0 until numPreShufflePartitions).toArray
   }
 
-  private val part: Partitioner =
+  private[this] val part: Partitioner =
     new CoalescedPartitioner(dependency.partitioner, partitionStartIndices)
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
