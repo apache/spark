@@ -55,7 +55,8 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.driver.port",
       "spark.master",
       "spark.yarn.keytab",
-      "spark.yarn.principal")
+      "spark.yarn.principal",
+      "spark.ui.filters")
 
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
@@ -66,6 +67,14 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
         newSparkConf.set(prop, value)
       }
     }
+
+    // Add Yarn proxy filter specific configurations to the recovered SparkConf
+    val filter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+    val filterPrefix = s"spark.$filter.param."
+    newReloadConf.getAll
+      .filter { case (k, v) => k.startsWith(filterPrefix) && k.length > filterPrefix.length }
+      .foreach { case (k, v) => newSparkConf.set(k, v) }
+
     newSparkConf
   }
 
