@@ -282,15 +282,19 @@ private[sql] class ParquetRelation(
     }
   }
 
-  override def buildScan(
+  override def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
+
+    // When merging schemas is enabled and the column of the given filter does not exist,
+    // Parquet emits an exception which is an issue of Parquet (PARQUET-389).
+    val safeParquetFilterPushDown = !shouldMergeSchemas && parquetFilterPushDown
 
     // Parquet row group size. We will use this value as the value for
     // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
@@ -305,7 +309,7 @@ private[sql] class ParquetRelation(
         dataSchema,
         parquetBlockSize,
         useMetadataCache,
-        parquetFilterPushDown,
+        safeParquetFilterPushDown,
         assumeBinaryIsString,
         assumeInt96IsTimestamp) _
 
@@ -357,7 +361,7 @@ private[sql] class ParquetRelation(
               id, i, rawSplits.get(i).asInstanceOf[InputSplit with Writable])
           }
         }
-      }.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
+      }
     }
   }
 

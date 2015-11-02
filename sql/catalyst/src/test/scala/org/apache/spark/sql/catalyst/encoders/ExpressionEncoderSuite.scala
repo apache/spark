@@ -57,6 +57,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(false)
   encodeDecodeTest(1.toShort)
   encodeDecodeTest(1.toByte)
+  encodeDecodeTest("hello")
 
   encodeDecodeTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 

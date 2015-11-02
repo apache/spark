@@ -742,6 +742,10 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
+#' @rdname denseRank
+#' @export
+setGeneric("denseRank", function(x) { standardGeneric("denseRank") })
+
 #' @rdname explode
 #' @export
 setGeneric("explode", function(x) { standardGeneric("explode") })
@@ -878,6 +882,10 @@ setGeneric("ntile", function(x) { standardGeneric("ntile") })
 #' @export
 setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
+#' @rdname percentRank
+#' @export
+setGeneric("percentRank", function(x) { standardGeneric("percentRank") })
+
 #' @rdname pmod
 #' @export
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
@@ -893,6 +901,10 @@ setGeneric("rand", function(seed) { standardGeneric("rand") })
 #' @rdname randn
 #' @export
 setGeneric("randn", function(seed) { standardGeneric("randn") })
+
+#' @rdname rank
+#' @export
+setGeneric("rank", function(x, ...) { standardGeneric("rank") })
 
 #' @rdname regexp_extract
 #' @export
@@ -910,6 +922,10 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 #' @rdname rint
 #' @export
 setGeneric("rint", function(x, ...) { standardGeneric("rint") })
+
+#' @rdname rowNumber
+#' @export
+setGeneric("rowNumber", function(x) { standardGeneric("rowNumber") })
 
 #' @rdname rpad
 #' @export

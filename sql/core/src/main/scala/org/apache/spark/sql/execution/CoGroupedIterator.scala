@@ -38,17 +38,19 @@ class CoGroupedIterator(
   private var currentLeftData: (InternalRow, Iterator[InternalRow]) = _
   private var currentRightData: (InternalRow, Iterator[InternalRow]) = _
 
-  override def hasNext: Boolean = left.hasNext || right.hasNext
-
-  override def next(): (InternalRow, Iterator[InternalRow], Iterator[InternalRow]) = {
-    if (currentLeftData.eq(null) && left.hasNext) {
+  override def hasNext: Boolean = {
+    if (currentLeftData == null && left.hasNext) {
       currentLeftData = left.next()
     }
-    if (currentRightData.eq(null) && right.hasNext) {
+    if (currentRightData == null && right.hasNext) {
       currentRightData = right.next()
     }
 
-    assert(currentLeftData.ne(null) || currentRightData.ne(null))
+    currentLeftData != null || currentRightData != null
+  }
+
+  override def next(): (InternalRow, Iterator[InternalRow], Iterator[InternalRow]) = {
+    assert(hasNext)
 
     if (currentLeftData.eq(null)) {
       // left is null, right is not null, consume the right data.

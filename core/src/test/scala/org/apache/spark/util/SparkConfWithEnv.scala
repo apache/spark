@@ -15,25 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.memory;
+package org.apache.spark.util
 
-import org.apache.spark.unsafe.Platform;
+import org.apache.spark.SparkConf
 
 /**
- * A simple {@link MemoryAllocator} that uses {@code Unsafe} to allocate off-heap memory.
+ * Customized SparkConf that allows env variables to be overridden.
  */
-public class UnsafeMemoryAllocator implements MemoryAllocator {
-
-  @Override
-  public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    long address = Platform.allocateMemory(size);
-    return new MemoryBlock(null, address, size);
+class SparkConfWithEnv(env: Map[String, String]) extends SparkConf(false) {
+  override def getenv(name: String): String = {
+    env.get(name).getOrElse(super.getenv(name))
   }
 
-  @Override
-  public void free(MemoryBlock memory) {
-    assert (memory.obj == null) :
-      "baseObject not null; are you trying to use the off-heap allocator to free on-heap memory?";
-    Platform.freeMemory(memory.offset);
+  override def clone: SparkConf = {
+    new SparkConfWithEnv(env).setAll(getAll)
   }
+
 }

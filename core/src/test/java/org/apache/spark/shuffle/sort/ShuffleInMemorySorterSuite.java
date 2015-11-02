@@ -26,7 +26,7 @@ import org.junit.Test;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.memory.GrantEverythingMemoryManager;
+import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.memory.TaskMemoryManager;
 
@@ -60,8 +60,8 @@ public class ShuffleInMemorySorterSuite {
     };
     final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new GrantEverythingMemoryManager(conf), 0);
-    final MemoryBlock dataPage = memoryManager.allocatePage(2048);
+      new TaskMemoryManager(new TestMemoryManager(conf), 0);
+    final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
     final Object baseObject = dataPage.getBaseObject();
     final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(4);
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
