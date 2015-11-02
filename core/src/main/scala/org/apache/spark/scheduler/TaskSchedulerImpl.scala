@@ -470,7 +470,9 @@ private[spark] class TaskSchedulerImpl(
       } else {
          executorIdToHost.get(executorId) match {
            case Some(_) =>
-             // We may need to update rootPool in case the executor was pending a real loss reason.
+             // If the host mapping still exists, it means we don't know the loss reason for the
+             // executor. So call removeExecutor() to update tasks running on that executor when
+             // the real loss reason is finally known.
              removeExecutor(executorId, reason)
 
            case None =>
@@ -491,7 +493,8 @@ private[spark] class TaskSchedulerImpl(
 
   /**
    * Remove an executor from all our data structures and mark it as lost. If the executor's loss
-   * reason is not yet known, do not yet remove its association with its host.
+   * reason is not yet known, do not yet remove its association with its host nor update the status
+   * of any running tasks, since the loss reason defines whether we'll fail those tasks.
    */
   private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
     activeExecutorIds -= executorId
