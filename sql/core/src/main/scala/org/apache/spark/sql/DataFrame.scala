@@ -241,6 +241,18 @@ class DataFrame private[sql](
     sb.toString()
   }
 
+  private[sql] def sortInternal(global: Boolean, sortExprs: Seq[Column]): DataFrame = {
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
+      col.expr match {
+        case expr: SortOrder =>
+          expr
+        case expr: Expression =>
+          SortOrder(expr, Ascending)
+      }
+    }
+    Sort(sortOrder, global = global, logicalPlan)
+  }
+
   override def toString: String = {
     try {
       schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")
@@ -633,15 +645,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sort(sortExprs: Column*): DataFrame = {
-    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
-      col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
-      }
-    }
-    Sort(sortOrder, global = true, logicalPlan)
+    sortInternal(true, sortExprs)
   }
 
   /**
@@ -661,6 +665,44 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs : _*)
+
+  /**
+   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting DataFrame is hash partitioned.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def distributeBy(partitionExprs: Seq[Column], numPartitions: Int): DataFrame = {
+    RepartitionByExpression(partitionExprs.map { _.expr }, logicalPlan, Some(numPartitions))
+  }
+
+  /**
+   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions preserving
+   * the existing number of partitions. The resulting DataFrame is hash partitioned.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def distributeBy(partitionExprs: Seq[Column]): DataFrame = {
+    RepartitionByExpression(partitionExprs.map { _.expr }, logicalPlan, None)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def localSort(sortCol: String, sortCols: String*): DataFrame = localSort(sortCol, sortCols : _*)
+
+  /**
+   * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def localSort(sortExprs: Column*): DataFrame = {
+    sortInternal(false, sortExprs)
+  }
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
