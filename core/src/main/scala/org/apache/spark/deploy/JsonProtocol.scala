@@ -22,7 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
-import org.apache.spark.deploy.worker.ExecutorRunner
+import org.apache.spark.deploy.worker.ExecutorRunnerInfo
 
 private[deploy] object JsonProtocol {
  def writeWorkerInfo(obj: WorkerInfo): JObject = {
@@ -60,11 +60,11 @@ private[deploy] object JsonProtocol {
     ("command" -> obj.command.toString)
   }
 
-  def writeExecutorRunner(obj: ExecutorRunner): JObject = {
-    ("id" -> obj.execId) ~
-    ("memory" -> obj.memory) ~
+  def writeExecutorRunner(obj: ExecutorRunnerInfo): JObject = {
+    ("id" -> obj.setup.id) ~
+    ("memory" -> obj.setup.memory) ~
     ("appid" -> obj.appId) ~
-    ("appdesc" -> writeApplicationDescription(obj.appDesc))
+    ("appdesc" -> writeApplicationDescription(obj.setup.description))
   }
 
   def writeDriverInfo(obj: DriverInfo): JObject = {

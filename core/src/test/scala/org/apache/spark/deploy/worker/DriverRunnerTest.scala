@@ -33,8 +33,12 @@ class DriverRunnerTest extends SparkFunSuite {
     val command = new Command("mainClass", Seq(), Map(), Seq(), Seq(), Seq())
     val driverDescription = new DriverDescription("jarUrl", 512, 1, true, command)
     val conf = new SparkConf()
-    new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
-      driverDescription, null, "akka://1.2.3.4/worker/", new SecurityManager(conf))
+    val processSetup = ChildProcessCommonSetup(
+      "driverId", driverDescription.cores, driverDescription.mem, "localhost", "localhost", 8081,
+      new File("workDir"), driverDescription)
+    val workerSetup = WorkerSetup("akka://1.2.3.4/worker/", new File("sparkHome"),
+      conf, new SecurityManager(conf))
+    new DriverRunnerImpl(processSetup, workerSetup, (x, y, z) => {})
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {

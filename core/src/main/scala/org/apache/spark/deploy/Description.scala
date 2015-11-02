@@ -17,12 +17,6 @@
 
 package org.apache.spark.deploy
 
-private[deploy] case class DriverDescription(
-    jarUrl: String,
-    mem: Int,
-    cores: Int,
-    supervise: Boolean,
-    command: Command) extends Description {
-
-  override def toString: String = s"DriverDescription (${command.mainClass})"
+trait Description {
+  def command: Command
 }
