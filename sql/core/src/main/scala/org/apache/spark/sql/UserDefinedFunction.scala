@@ -45,19 +45,19 @@ case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
     inputTypes: Seq[DataType] = Nil,
-    isDeterministic: Boolean = true) {
+    deterministic: Boolean = true) {
 
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes, isDeterministic))
+    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes, deterministic))
   }
 
   protected[sql] def builder: Seq[Expression] => ScalaUDF = {
     (exprs: Seq[Expression]) =>
-      ScalaUDF(f, dataType, exprs, inputTypes, isDeterministic)
+      ScalaUDF(f, dataType, exprs, inputTypes, deterministic)
   }
 
-  def nonDeterministic: UserDefinedFunction =
-    UserDefinedFunction(f, dataType, inputTypes, isDeterministic = false)
+  def nondeterministic: UserDefinedFunction =
+    UserDefinedFunction(f, dataType, inputTypes, deterministic = false)
 }
 
 /**
