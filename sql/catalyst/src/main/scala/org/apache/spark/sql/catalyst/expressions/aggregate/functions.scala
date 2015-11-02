@@ -281,15 +281,13 @@ case class Max(child: Expression) extends DeclarativeAggregate {
   )
 
   override val updateExpressions = Seq(
-    /* max = */ If(IsNull(child), max, If(IsNull(max), child, Greatest(Seq(max, child))))
+    /* max = */ If(IsNull(max), child, If(LessThan(max, child), child, max))
   )
 
-  override val mergeExpressions = {
-    val greatest = Greatest(Seq(max.left, max.right))
-    Seq(
-      /* max = */ If(IsNull(max.right), max.left, If(IsNull(max.left), max.right, greatest))
-    )
-  }
+  override val mergeExpressions = Seq(
+    /* max = */
+    If(IsNull(max.right), max.left, If(LessThan(max.right, max.left), max.left, max.right))
+  )
 
   override val evaluateExpression = max
 }
@@ -315,15 +313,13 @@ case class Min(child: Expression) extends DeclarativeAggregate {
   )
 
   override val updateExpressions = Seq(
-    /* min = */ If(IsNull(child), min, If(IsNull(min), child, Least(Seq(min, child))))
+    /* min = */  If(IsNull(min), child, If(GreaterThan(min, child), child, min))
   )
 
-  override val mergeExpressions = {
-    val least = Least(Seq(min.left, min.right))
-    Seq(
-      /* min = */ If(IsNull(min.right), min.left, If(IsNull(min.left), min.right, least))
-    )
-  }
+  override val mergeExpressions = Seq(
+    /* min = */
+    If(IsNull(min.right), min.left, If(GreaterThan(min.right, min.left), min.left, min.right))
+  )
 
   override val evaluateExpression = min
 }
