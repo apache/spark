@@ -572,12 +572,10 @@ private[yarn] class YarnAllocator(
       val nodes = cr.getNodes
       if (nodes == null) {
         localityFree += cr
+      } else if (nodes.asScala.toSet.intersect(preferredHosts).nonEmpty) {
+        localityMatched += cr
       } else {
-        if (nodes.asScala.toSet.intersect(preferredHosts).nonEmpty) {
-          localityMatched += cr
-        } else {
-          localityUnMatched += cr
-        }
+        localityUnMatched += cr
       }
     }
 

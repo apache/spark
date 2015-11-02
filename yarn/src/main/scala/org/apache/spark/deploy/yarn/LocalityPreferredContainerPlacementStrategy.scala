@@ -198,7 +198,12 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
   }
 
   /**
-   * Calculate the host to possible number of containers for pending allocated containers.
+   * According to the locality ratio and number of container requests, calculate the host to
+   * possible number of containers for pending allocated containers.
+   *
+   * If current locality ratio of hosts is: Host1 : Host2 : Host3 = 20 : 20 : 10,
+   * and pending container requests is 3, so the possible number of containers on
+   * Host1 : Host2 : Host3 will be 1.2 : 1.2 : 0.6.
    * @param localityMatchedPendingAllocations A sequence of pending container request which
    *                                          matches the localities of current required tasks.
    * @return a Map with hostname as key and possible number of containers on this host as value
