@@ -384,58 +384,46 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
   )
 
   override val updateExpressions = {
-
-    def newCount: Expression = {
-        Add(count, Cast(Literal(1), resultType))
-    }
+    val value = Cast(child, resultType) - avg
+    val newCount = count + Cast(Literal(1), resultType)
 
     // update average
     // avg = avg + (value - avg)/count
-    def avgAdd: Expression = {
-      avg + ((Cast(child, resultType) - avg) / newCount)
-    }
+    val newAvg = avg + (value / newCount)
 
     // update sum of square of difference from mean
     // Mk = Mk + (value - preAvg) * (value - updatedAvg)
-    def mkAdd: Expression = {
-      val delta1 = Cast(child, resultType) - avg
-      val delta2 = Cast(child, resultType) - avgAdd
-      mk + (delta1 * delta2)
-    }
+    val newMk =  mk + (value - avg) * (value - newAvg)
 
     Seq(
       /* count = */ If(IsNull(child), count, newCount),
-      /* avg = */ If(IsNull(child), avg, avgAdd),
-      /* mk = */ If(IsNull(child), mk, mkAdd)
+      /* avg = */ If(IsNull(child), avg, newAvg),
+      /* mk = */ If(IsNull(child), mk, newMk)
     )
   }
 
   override val mergeExpressions = {
 
     // count merge
-    def countMerge: Expression = {
-      count.left + count.right
-    }
+    val newCount = count.left + count.right
 
     // average merge
-    def avgMerge: Expression = {
-      ((avg.left * count.left) + (avg.right * count.right)) / countMerge
-    }
+    val newAvg = ((avg.left * count.left) + (avg.right * count.right)) / newCount
 
     // update sum of square differences
-    def mkMerge: Expression = {
+    val newMk = {
       val avgDelta = avg.right - avg.left
-      val mkDelta = (avgDelta * avgDelta) * (count.left * count.right) / countMerge
+      val mkDelta = (avgDelta * avgDelta) * (count.left * count.right) / newCount
       mk.left + mk.right + mkDelta
     }
 
     Seq(
       /* count = */ If(IsNull(count.left), count.right,
-                       If(IsNull(count.right), count.left, countMerge)),
+                       If(IsNull(count.right), count.left, newCount)),
       /* avg = */ If(IsNull(avg.left), avg.right,
-                     If(IsNull(avg.right), avg.left, avgMerge)),
+                     If(IsNull(avg.right), avg.left, newAvg)),
       /* mk = */ If(IsNull(mk.left), mk.right,
-                    If(IsNull(mk.right), mk.left, mkMerge))
+                    If(IsNull(mk.right), mk.left, newMk))
     )
   }
 
