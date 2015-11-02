@@ -81,7 +81,7 @@ object Gini extends Impurity {
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  * @param numClasses  Number of classes for label.
  */
-private[tree] class GiniAggregator(numClasses: Int)
+private[spark] class GiniAggregator(numClasses: Int)
   extends ImpurityAggregator(numClasses) with Serializable {
 
   /**
@@ -108,6 +108,10 @@ private[tree] class GiniAggregator(numClasses: Int)
    */
   def getCalculator(allStats: Array[Double], offset: Int): GiniCalculator = {
     new GiniCalculator(allStats.view(offset, offset + statsSize).toArray)
+  }
+
+  def getCalculator(sufficientStats: Array[Double]): GiniCalculator = {
+    new GiniCalculator(sufficientStats.clone())
   }
 
 }

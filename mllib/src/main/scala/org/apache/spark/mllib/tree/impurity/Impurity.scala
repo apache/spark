@@ -90,6 +90,12 @@ private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Ser
    */
   def getCalculator(allStats: Array[Double], offset: Int): ImpurityCalculator
 
+  /**
+   * Get an [[ImpurityCalculator]] for a (node, feature, bin).
+   * @param sufficientStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   */
+  def getCalculator(sufficientStats: Array[Double]): ImpurityCalculator
+
 }
 
 /**

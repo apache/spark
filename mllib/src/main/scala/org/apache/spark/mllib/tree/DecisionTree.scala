@@ -381,16 +381,6 @@ object DecisionTree extends Serializable with Logging {
           }
           splitIndex += 1
         }
-//        while (splitIndex < numSplits) {
-//          if (splits(featureIndex)(splitIndex).categories.contains(featureValue)) {
-//            agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label,
-//              instanceWeight)
-//          } else {
-//            agg.featureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label,
-//              instanceWeight)
-//          }
-//          splitIndex += 1
-//        }
       } else {
         // Ordered feature
         val binIndex = treePoint.binnedFeatures(featureIndex)
@@ -460,7 +450,7 @@ object DecisionTree extends Serializable with Logging {
    */
   private[tree] def findBestSplits(
       input: RDD[BaggedPoint[TreePoint]],
-      metadata: DecisionTreeMetadata,
+      metadata: impl.DecisionTreeMetadata,
       topNodes: Array[Node],
       nodesForGroup: Map[Int, Array[Node]],
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
@@ -529,6 +519,7 @@ object DecisionTree extends Serializable with Logging {
           mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, splits,
             metadata.unorderedFeatures, instanceWeight, featuresForNode)
         }
+        agg(aggNodeIndex).updateParent(baggedPoint.datum.label, instanceWeight)
       }
     }
 
@@ -739,7 +730,7 @@ object DecisionTree extends Serializable with Logging {
   private def calculateGainForSplit(
       leftImpurityCalculator: ImpurityCalculator,
       rightImpurityCalculator: ImpurityCalculator,
-      metadata: DecisionTreeMetadata,
+      metadata: impl.DecisionTreeMetadata,
       impurity: Double): InformationGainStats = {
     val leftCount = leftImpurityCalculator.count
     val rightCount = rightImpurityCalculator.count
@@ -857,38 +848,17 @@ object DecisionTree extends Serializable with Logging {
         val (leftChildOffset, rightChildOffset) =
           binAggregates.getLeftRightFeatureOffsets(featureIndexIdx)
 
-        // SETH
-        val leftSplits = Range(0, numSplits).map { splitIndex =>
-          binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-        }
-        val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)
-        var splitIndex = 0
-        while (splitIndex < numSplits - 1) {
-          binAggregates.mergeForFeature(nodeFeatureOffset, splitIndex + 1, splitIndex)
-          splitIndex += 1
-        }
-
-        val (bestFeatureSplitIndex, bestFeatureGainStats) = leftSplits.map { leftChildStats =>
-          val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits - 1)
-          rightChildStats.subtract(leftChildStats)
-          predictWithImpurity = Some(predictWithImpurity.getOrElse(
-            calculatePredictImpurity(leftChildStats, rightChildStats)))
-          val gainStats = calculateGainForSplit(leftChildStats,
-            rightChildStats, binAggregates.metadata, predictWithImpurity.get._2)
-          (splitIndex, gainStats)
-        }.maxBy(_._2.gain)
-        // SETH
-
-//        val (bestFeatureSplitIndex, bestFeatureGainStats) =
-//          Range(0, numSplits).map { splitIndex =>
-//            val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
+        val (bestFeatureSplitIndex, bestFeatureGainStats) =
+          Range(0, numSplits).map { splitIndex =>
+            val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
+            val rightChildStats = binAggregates.getParentImpurityCalculator().subtract(leftChildStats)
 //            val rightChildStats = binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
-//            predictWithImpurity = Some(predictWithImpurity.getOrElse(
-//              calculatePredictImpurity(leftChildStats, rightChildStats)))
-//            val gainStats = calculateGainForSplit(leftChildStats,
-//              rightChildStats, binAggregates.metadata, predictWithImpurity.get._2)
-//            (splitIndex, gainStats)
-//          }.maxBy(_._2.gain)
+            predictWithImpurity = Some(predictWithImpurity.getOrElse(
+              calculatePredictImpurity(leftChildStats, rightChildStats)))
+            val gainStats = calculateGainForSplit(leftChildStats,
+              rightChildStats, binAggregates.metadata, predictWithImpurity.get._2)
+            (splitIndex, gainStats)
+          }.maxBy(_._2.gain)
         (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
       } else {
         // Ordered categorical feature
@@ -1055,7 +1025,7 @@ object DecisionTree extends Serializable with Logging {
    */
   protected[tree] def findSplitsBins(
       input: RDD[LabeledPoint],
-      metadata: DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
+      metadata: impl.DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
 
     logDebug("isMulticlass = " + metadata.isMulticlass)
 
@@ -1202,7 +1172,7 @@ object DecisionTree extends Serializable with Logging {
    */
   private[tree] def findSplitsForContinuousFeature(
       featureSamples: Array[Double],
-      metadata: DecisionTreeMetadata,
+      metadata: impl.DecisionTreeMetadata,
       featureIndex: Int): Array[Double] = {
     require(metadata.isContinuous(featureIndex),
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")

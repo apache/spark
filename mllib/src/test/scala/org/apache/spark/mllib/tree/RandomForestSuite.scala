@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree
 
+import org.apache.spark.ml.tree.impl
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
@@ -121,7 +123,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       val seeds = Array(123, 5354, 230, 349867, 23987)
       val maxMemoryUsage: Long = 128 * 1024L * 1024L
       val metadata =
-        DecisionTreeMetadata.buildMetadata(rdd, strategy, numTrees, featureSubsetStrategy)
+        impl.DecisionTreeMetadata.buildMetadata(rdd, strategy, numTrees, featureSubsetStrategy)
       seeds.foreach { seed =>
         val failString = s"Failed on test with:" +
           s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +

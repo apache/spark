@@ -135,7 +135,7 @@ private class RandomForest (
 
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata =
-      DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
+      impl.DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
     logDebug("algo = " + strategy.algo)
     logDebug("numTrees = " + numTrees)
     logDebug("seed = " + seed)
@@ -468,7 +468,7 @@ object RandomForest extends Serializable with Logging {
   private[tree] def selectNodesToSplit(
       nodeQueue: mutable.Queue[(Int, Node)],
       maxMemoryUsage: Long,
-      metadata: DecisionTreeMetadata,
+      metadata: impl.DecisionTreeMetadata,
       rng: scala.util.Random): (Map[Int, Array[Node]], Map[Int, Map[Int, NodeIndexInfo]]) = {
     // Collect some nodes to split:
     //  nodesForGroup(treeIndex) = nodes to split
@@ -510,7 +510,7 @@ object RandomForest extends Serializable with Logging {
    *                       If None, then use all features.
    */
   private[tree] def aggregateSizeForNode(
-      metadata: DecisionTreeMetadata,
+      metadata: impl.DecisionTreeMetadata,
       featureSubset: Option[Array[Int]]): Long = {
     val totalBins = if (featureSubset.nonEmpty) {
       featureSubset.get.map(featureIndex => metadata.numBins(featureIndex).toLong).sum

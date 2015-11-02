@@ -254,22 +254,12 @@ private[ml] object RandomForest extends Logging {
         val numSplits = agg.metadata.numSplits(featureIndex)
         val featureSplits = splits(featureIndex)
         var splitIndex = 0
-//        while (splitIndex < numSplits) {
-//          if (featureSplits(splitIndex).shouldGoLeft(featureValue, featureSplits)) {
-//            agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
-//          } else {
-//            agg.featureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
-//          }
-//          splitIndex += 1
-//        }
-
         while (splitIndex < numSplits) {
           if (featureSplits(splitIndex).shouldGoLeft(featureValue, featureSplits)) {
             agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
           }
           splitIndex += 1
         }
-
       } else {
         // Ordered feature
         val binIndex = treePoint.binnedFeatures(featureIndex)
@@ -406,6 +396,7 @@ private[ml] object RandomForest extends Logging {
           mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, splits,
             metadata.unorderedFeatures, instanceWeight, featuresForNode)
         }
+        agg(aggNodeIndex).updateParent(baggedPoint.datum.label, instanceWeight)
       }
     }
 
@@ -670,7 +661,7 @@ private[ml] object RandomForest extends Logging {
 
     // Calculate InformationGain and ImpurityStats if current node is top node
     val level = LearningNode.indexToLevel(node.id)
-    var gainAndImpurityStats: ImpurityStats = if (level ==0) {
+    var gainAndImpurityStats: ImpurityStats = if (level == 0) {
       null
     } else {
       node.stats
@@ -714,34 +705,16 @@ private[ml] object RandomForest extends Logging {
             binAggregates.getLeftRightFeatureOffsets(featureIndexIdx)
 
           // SETH
-          val leftSplits = Range(0, numSplits).map { splitIndex =>
-            binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-          }
-          val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)
-          var splitIndex = 0
-          while (splitIndex < numSplits - 1) {
-            binAggregates.mergeForFeature(nodeFeatureOffset, splitIndex + 1, splitIndex)
-            splitIndex += 1
-          }
-
-          val (bestFeatureSplitIndex, bestFeatureGainStats) = leftSplits.map { leftChildStats =>
-            val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits - 1)
-            rightChildStats.subtract(leftChildStats)
-            gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
-              leftChildStats, rightChildStats, binAggregates.metadata)
-            (splitIndex, gainAndImpurityStats)
-          }.maxBy(_._2.gain)
+          val (bestFeatureSplitIndex, bestFeatureGainStats) =
+            Range(0, numSplits).map { splitIndex =>
+              val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
+              val rightChildStats = binAggregates.getParentImpurityCalculator().subtract(leftChildStats)
+              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
+                leftChildStats, rightChildStats, binAggregates.metadata)
+              (splitIndex, gainAndImpurityStats)
+            }.maxBy(_._2.gain)
           // SETH
 
-//          val (bestFeatureSplitIndex, bestFeatureGainStats) =
-//            Range(0, numSplits).map { splitIndex =>
-//              val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-//              val rightChildStats =
-//                binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
-//              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
-//                leftChildStats, rightChildStats, binAggregates.metadata)
-//              (splitIndex, gainAndImpurityStats)
-//            }.maxBy(_._2.gain)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else {
           // Ordered categorical feature

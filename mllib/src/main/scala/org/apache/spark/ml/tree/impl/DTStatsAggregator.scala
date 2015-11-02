@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.impl
+package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.mllib.tree.impurity._
 
@@ -172,14 +172,13 @@ private[spark] class DTStatsAggregator(
       i += 1
     }
 
-    require(statsSize == other.statsSize,
-      s"DTStatsAggregator.merge requires that both aggregators have the same length parent stats vectors."
-        + s" This aggregator is of length $statsSize, but the other is ${other.statsSize}.")
     var j = 0
+    // TODO: Test BLAS.axpy
     while (j < statsSize) {
       parentStats(j) += other.parentStats(j)
       j += 1
     }
+
 
     this
   }
