@@ -160,7 +160,7 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
-    emptyBlocks = new BitSet(0)
+    emptyBlocks = new BitSet
     emptyBlocks.readExternal(in)
     avgSize = in.readLong()
   }
