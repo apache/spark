@@ -134,6 +134,6 @@ public abstract class MemoryConsumer {
     } else {
       offHeapMemoryUsed -= page.size();
     }
-    taskMemoryManager.freePage(page);
+    taskMemoryManager.freePage(page, this);
   }
 }
