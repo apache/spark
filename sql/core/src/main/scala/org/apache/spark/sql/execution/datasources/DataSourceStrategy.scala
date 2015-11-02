@@ -301,7 +301,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val handledSet = {
       val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
       val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
-      AttributeSet(handledPredicates.flatMap(_.references)) -- (projectSet ++ unhandledSet).map(relation.attributeMap)
+      AttributeSet(handledPredicates.flatMap(_.references)) --
+        (projectSet ++ unhandledSet).map(relation.attributeMap)
     }
 
     // Combines all Catalyst filter `Expression`s that are either not convertible to data source
