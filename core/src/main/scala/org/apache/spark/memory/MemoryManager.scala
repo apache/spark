@@ -17,6 +17,8 @@
 
 package org.apache.spark.memory
 
+import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, Logging}
@@ -38,9 +40,11 @@ private[spark] abstract class MemoryManager(
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
-  // TODO(josh): think through and document thread-safety contracts
+  @GuardedBy("this")
   protected val storageMemoryPool = new StorageMemoryPool(this)
+  @GuardedBy("this")
   protected val onHeapExecutionMemoryPool = new ExecutionMemoryPool(this, "on-heap execution")
+  @GuardedBy("this")
   protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, "off-heap execution")
 
   offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeapSize", 0))
@@ -56,7 +60,7 @@ private[spark] abstract class MemoryManager(
    * Set the [[MemoryStore]] used by this manager to evict cached blocks.
    * This must be set after construction due to initialization ordering constraints.
    */
-  final def setMemoryStore(store: MemoryStore): Unit = {
+  final def setMemoryStore(store: MemoryStore): Unit = synchronized {
     storageMemoryPool.setMemoryStore(store)
   }
 
@@ -70,7 +74,7 @@ private[spark] abstract class MemoryManager(
   def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
   }
 
