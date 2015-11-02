@@ -90,6 +90,7 @@ private[streaming] class StateImpl[S] extends State[S] {
 
   def remove(): Unit = {
     require(!timingOut, "Cannot remove the state that is timing out")
+    require(!removed, "Cannot remove the state that has already been removed")
     removed = true
   }
 

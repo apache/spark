@@ -78,7 +78,7 @@ private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMa
 
 /** Implementation of StateMap based on Spark's OpenHashMap */
 private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
-    @transient @volatile private var parentStateMap: StateMap[K, S],
+    @transient @volatile var parentStateMap: StateMap[K, S],
     initialCapacity: Int = 64,
     deltaChainThreshold: Int = DELTA_CHAIN_LENGTH_THRESHOLD
   ) extends StateMap[K, S] { self =>
@@ -99,8 +99,12 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
   /** Get the session data if it exists */
   override def get(key: K): Option[S] = {
     val stateInfo = deltaMap(key)
-    if (stateInfo != null && !stateInfo.deleted) {
-      Some(stateInfo.data)
+    if (stateInfo != null) {
+      if (!stateInfo.deleted) {
+        Some(stateInfo.data)
+      } else {
+        None
+      }
     } else {
       parentStateMap.get(key)
     }
@@ -183,6 +187,10 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
       ("    " * (deltaChainLength - 1)) +"+--- "
     } else ""
     parentStateMap.toDebugString() + "\n" + deltaMap.iterator.mkString(tabs, "\n" + tabs, "")
+  }
+
+  override def toString(): String = {
+    s"[${System.identityHashCode(this)}, ${System.identityHashCode(parentStateMap)}]"
   }
 
   private def writeObject(outputStream: ObjectOutputStream): Unit = {
