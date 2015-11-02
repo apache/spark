@@ -27,7 +27,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.{Vector, DenseVector, Vectors}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{SQLContext, DataFrame, Row}
 
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -603,6 +603,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         // To clalify that the normal solver is used here.
         assert(model.summary.objectiveHistory.length == 1)
         assert(model.summary.objectiveHistory(0) == 0.0)
+        val devianceResidualsR = Array(-0.35566, 0.34504)
+        val seCoefR = Array(0.0011756, 0.0009032)
+        val tValsR = Array(3998, 7971)
+        val pValsR = Array(0, 0)
+        model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
+          assert(x._1 ~== x._2 absTol 1E-3) }
+        model.summary.seCoef.zip(seCoefR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+        model.summary.tVals.map(_.round).zip(tValsR).foreach{ x => assert(x._1 === x._2) }
+        model.summary.pVals.map(_.round).zip(pValsR).foreach{ x => assert(x._1 === x._2) }
       }
     }
   }
@@ -724,5 +733,64 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         .objectiveHistory
         .sliding(2)
         .forall(x => x(0) >= x(1)))
+  }
+
+  test("linear regression training summary with weighted samples by normal solver") {
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+    val instances = sc.parallelize(Seq(
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2).toDF()
+
+    /*
+       R code:
+
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+       b <- c(17, 19, 23, 29)
+       w <- c(1, 2, 3, 4)
+       df <- as.data.frame(cbind(A, b))
+       model <- glm(formula = "b ~ .", data = df, weights = w)
+       summary(model)
+
+       Call:
+       glm(formula = "b ~ .", data = df, weights = w)
+
+       Deviance Residuals:
+            1       2       3       4
+        1.920  -1.358  -1.109   0.960
+
+       Coefficients:
+                   Estimate Std. Error t value Pr(>|t|)
+       (Intercept)   18.080      9.608   1.882    0.311
+       V1             6.080      5.556   1.094    0.471
+       V2            -0.600      1.960  -0.306    0.811
+
+       (Dispersion parameter for gaussian family taken to be 7.68)
+
+           Null deviance: 202.00  on 3  degrees of freedom
+       Residual deviance:   7.68  on 1  degrees of freedom
+       AIC: 18.783
+
+       Number of Fisher Scoring iterations: 2
+     */
+
+    val model = new LinearRegression().setWeightCol("weight").setSolver("normal").fit(instances)
+    val weightsR = Vectors.dense(Array(6.080, -0.600))
+    val interceptR = 18.080
+    val devianceResidualsR = Array(-1.358, 1.920)
+    val seCoefR = Array(5.556, 1.960)
+    val tValsR = Array(1.094, -0.306)
+    val pValsR = Array(0.471, 0.811)
+
+    assert(model.weights ~== weightsR absTol 1E-3)
+    assert(model.intercept ~== interceptR absTol 1E-3)
+    model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    model.summary.seCoef.zip(seCoefR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    model.summary.tVals.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    model.summary.pVals.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
   }
 }
