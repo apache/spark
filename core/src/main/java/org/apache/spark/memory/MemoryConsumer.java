@@ -68,12 +68,13 @@ public abstract class MemoryConsumer {
    *
    * Note: In order to avoid possible deadlock, should not call acquireMemory() from spill().
    *
+   * Note: today, this only frees Tungsten-managed pages.
+   *
    * @param size the amount of memory should be released
    * @param trigger the MemoryConsumer that trigger this spilling
    * @return the amount of released memory in bytes
    * @throws IOException
    */
-  // TODO(josh): clarify assumption that this only frees Tungsten-managed pages (for now).
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
 
   /**

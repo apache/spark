@@ -132,23 +132,20 @@ public class TaskMemoryManager {
       MemoryMode mode,
       MemoryConsumer consumer) {
     assert(required >= 0);
-    // TODO(josh): handle spill differently based on type of request (on-heap vs off-heap).
-    // If we are allocating tungsten pages off-heap and receive a request to allocate on-heap
+    // If we are allocating Tungsten pages off-heap and receive a request to allocate on-heap
     // memory here, then it may not make sense to spill since that would only end up freeing
     // off-heap memory. This is subject to change, though, so it may be risky to make this
     // optimization now in case we forget to undo it late when making changes.
     synchronized (this) {
       long got = memoryManager.acquireExecutionMemory(required, taskAttemptId, mode);
 
-      // try to release memory from other consumers first, then we can reduce the frequency of
+      // Try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
       if (got < required) {
         // Call spill() on other consumers to release memory
         for (MemoryConsumer c: consumers) {
           if (c != consumer && c.getMemoryUsed(mode) > 0) {
             try {
-              // TODO(josh): subtlety / implementation detail: today, spill() happens to only
-              // release Tungsten pages.
               long released = c.spill(required - got, consumer);
               if (released > 0 && mode == tungstenMemoryMode) {
                 logger.info("Task {} released {} from {} for {}", taskAttemptId,
