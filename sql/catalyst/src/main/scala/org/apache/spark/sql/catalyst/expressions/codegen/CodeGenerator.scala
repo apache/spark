@@ -27,6 +27,7 @@ import org.codehaus.janino.ClassBodyEvaluator
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.{MapData, ArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
@@ -391,26 +392,24 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
-      classOf[UnsafeMapData].getName
+      classOf[UnsafeMapData].getName,
+      classOf[MutableRow].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
     def formatted = CodeFormatter.format(code)
-    def withLineNums = formatted.split("\n").zipWithIndex.map {
-      case (l, n) => f"${n + 1}%03d $l"
-    }.mkString("\n")
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      withLineNums
+      formatted
     })
 
     try {
       evaluator.cook("generated.java", code)
     } catch {
       case e: Exception =>
-        val msg = s"failed to compile: $e\n$withLineNums"
+        val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
         throw new Exception(msg, e)
     }

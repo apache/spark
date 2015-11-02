@@ -256,8 +256,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
+    val primitivesAsString = extraOptions.getOrElse("primitivesAsString", "false").toBoolean
     sqlContext.baseRelationToDataFrame(
-      new JSONRelation(Some(jsonRDD), samplingRatio, userSpecifiedSchema, None, None)(sqlContext))
+      new JSONRelation(
+        Some(jsonRDD),
+        samplingRatio,
+        primitivesAsString,
+        userSpecifiedSchema,
+        None,
+        None)(sqlContext)
+    )
   }
 
   /**
@@ -301,6 +309,22 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def table(tableName: String): DataFrame = {
     DataFrame(sqlContext, sqlContext.catalog.lookupRelation(TableIdentifier(tableName)))
   }
+
+  /**
+   * Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+   * Each line in the text file is a new row in the resulting DataFrame. For example:
+   * {{{
+   *   // Scala:
+   *   sqlContext.read.text("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   sqlContext.read().text("/path/to/spark/README.md")
+   * }}}
+   *
+   * @param path input path
+   * @since 1.6.0
+   */
+  def text(path: String): DataFrame = format("text").load(path)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
