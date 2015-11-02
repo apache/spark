@@ -26,7 +26,6 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.{TrackStateRDD, TrackStateRDDRecord}
 
 
-
 abstract class EmittedRecordsDStream[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
     ssc: StreamingContext) extends DStream[T](ssc) {
 

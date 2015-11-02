@@ -115,11 +115,11 @@ class StateMapSuite extends SparkFunSuite {
     /**
      * Example: Operations combinations with 2 map copies
      *
-     * -----------------------------------------------
+     * _______________________________________________
      * |         |      Copy1      |     Copy2       |
      * |         |-----------------|-----------------|
      * |         |   Op1    Op2    |    Op3    Op4   |
-     * | --------|-----------------|-----------------|
+     * |---------|-----------------|-----------------|
      * | key 0   |   put    put   | |   put    put   |
      * | key 1   |   put    put   | |   put    rem   |
      * | key 2   |   put    put   |c|   rem    put   |
@@ -136,9 +136,8 @@ class StateMapSuite extends SparkFunSuite {
      * | key 13  |   rem    rem   |p|   put    rem   |
      * | key 14  |   rem    rem   | |   rem    put   |
      * | key 15  |   rem    rem   | |   rem    rem   |
-     * -----------------------------------------------
+     * |_________|_________________|_________________|
      */
-
 
     for(opId <- 0 until numTotalOps) {
       for (keyId <- 0 until numKeys) {
