@@ -23,15 +23,25 @@ import org.apache.spark.rpc.RpcAddress
 /**
  * An address identifier for an RPC endpoint.
  *
- * @param host host name of the remote process.
- * @param port the port the remote RPC environment binds to.
- * @param name name of the remote endpoint.
+ * The `rpcAddress` may be null, in which case the endpoint is registered via a client-only
+ * connection and can only be reached via the client that sent the endpoint reference.
+ *
+ * @param rpcAddress The socket address of the endpint.
+ * @param name Name of the endpoint.
  */
-private[netty] case class RpcEndpointAddress(host: String, port: Int, name: String) {
+private[netty] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val name: String) {
 
-  def toRpcAddress: RpcAddress = RpcAddress(host, port)
+  require(name != null, "RpcEndpoint name must be provided.")
 
-  override val toString = s"spark://$name@$host:$port"
+  def this(host: String, port: Int, name: String) = {
+    this(RpcAddress(host, port), name)
+  }
+
+  override val toString = if (rpcAddress != null) {
+      s"spark://$name@${rpcAddress.host}:${rpcAddress.port}"
+    } else {
+      s"spark-client://$name"
+    }
 }
 
 private[netty] object RpcEndpointAddress {
@@ -51,7 +61,7 @@ private[netty] object RpcEndpointAddress {
           uri.getQuery != null) {
         throw new SparkException("Invalid Spark URL: " + sparkUrl)
       }
-      RpcEndpointAddress(host, port, name)
+      new RpcEndpointAddress(host, port, name)
     } catch {
       case e: java.net.URISyntaxException =>
         throw new SparkException("Invalid Spark URL: " + sparkUrl, e)
