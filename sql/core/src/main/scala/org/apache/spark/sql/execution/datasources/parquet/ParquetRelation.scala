@@ -377,8 +377,8 @@ private[sql] class ParquetRelation(
     // We only load summary files when configured to merge schema and respect summaries
     if (shouldMergeSchemas && mergeRespectSummaries) {
       val file = status.getPath
-      file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
-        file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
+      !(file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
+        file.getName == ParquetFileWriter.PARQUET_METADATA_FILE || status.isDir)
     } else {
       super[HadoopFsRelation].fileStatusFilter(status)
     }
