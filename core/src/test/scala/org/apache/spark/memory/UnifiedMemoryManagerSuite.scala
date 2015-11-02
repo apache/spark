@@ -47,18 +47,6 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     UnifiedMemoryManager(conf, numCores = 1)
   }
 
-//  private def getStorageRegionSize(mm: UnifiedMemoryManager): Long = {
-//    (mm invokePrivate PrivateMethod[StorageMemoryPool]('storageMemoryPool)()).poolSize
-//  }
-
-//  test("storage region size") {
-//    val maxMemory = 1000L
-//    val (mm, _) = makeThings(maxMemory)
-//    val expectedStorageRegionSize = maxMemory * storageFraction
-//    val actualStorageRegionSize = getStorageRegionSize(mm)
-//    assert(expectedStorageRegionSize === actualStorageRegionSize)
-//  }
-
   test("basic execution memory") {
     val maxMemory = 1000L
     val taskAttemptId = 0L
@@ -124,22 +112,11 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val maxMemory = 1000L
     val taskAttemptId = 0L
     val (mm, ms) = makeThings(maxMemory)
-    // First, ensure the test classes are set up as expected
-    val expectedStorageRegionSize = 500L
-    val expectedExecutionRegionSize = 500L
-//    val storageRegionSize = getStorageRegionSize(mm)
-    val executionRegionSize = maxMemory - expectedStorageRegionSize
-//    require(storageRegionSize === expectedStorageRegionSize,
-//      "bad test: storage region size is unexpected")
-    require(executionRegionSize === expectedExecutionRegionSize,
-      "bad test: storage region size is unexpected")
     // Acquire enough storage memory to exceed the storage region
     assert(mm.acquireStorageMemory(dummyBlock, 750L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 750L)
     assert(mm.executionMemoryUsed === 0L)
     assert(mm.storageMemoryUsed === 750L)
-//    require(mm.storageMemoryUsed > storageRegionSize,
-//      s"bad test: storage memory used should exceed the storage region")
     // Execution needs to request 250 bytes to evict storage memory
     assert(mm.acquireExecutionMemory(100L, taskAttemptId, MemoryMode.ON_HEAP) === 100L)
     assert(mm.executionMemoryUsed === 100L)
@@ -150,16 +127,13 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assertEnsureFreeSpaceCalled(ms, 200L)
     assert(mm.executionMemoryUsed === 300L)
     mm.releaseAllStorageMemory()
-    require(mm.executionMemoryUsed < executionRegionSize,
-      s"bad test: execution memory used should be within the execution region")
+    require(mm.executionMemoryUsed === 300L)
     require(mm.storageMemoryUsed === 0, "bad test: all storage memory should have been released")
     // Acquire some storage memory again, but this time keep it within the storage region
     assert(mm.acquireStorageMemory(dummyBlock, 400L, evictedBlocks))
     assertEnsureFreeSpaceCalled(ms, 400L)
     assert(mm.storageMemoryUsed === 400L)
     assert(mm.executionMemoryUsed === 300L)
-//    require(mm.storageMemoryUsed < storageRegionSize,
-//      s"bad test: storage memory used should be within the storage region")
     // Execution cannot evict storage because the latter is within the storage fraction,
     // so grant only what's remaining without evicting anything, i.e. 1000 - 300 - 400 = 300
     assert(mm.acquireExecutionMemory(400L, taskAttemptId, MemoryMode.ON_HEAP) === 300L)
@@ -172,22 +146,11 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val maxMemory = 1000L
     val taskAttemptId = 0L
     val (mm, ms) = makeThings(maxMemory)
-    // First, ensure the test classes are set up as expected
-    val expectedStorageRegionSize = 500L
-    val expectedExecutionRegionSize = 500L
-//    val storageRegionSize = getStorageRegionSize(mm)
-    val executionRegionSize = maxMemory - expectedStorageRegionSize
-//    require(storageRegionSize === expectedStorageRegionSize,
-//      "bad test: storage region size is unexpected")
-    require(executionRegionSize === expectedExecutionRegionSize,
-      "bad test: storage region size is unexpected")
     // Acquire enough execution memory to exceed the execution region
     assert(mm.acquireExecutionMemory(800L, taskAttemptId, MemoryMode.ON_HEAP) === 800L)
     assert(mm.executionMemoryUsed === 800L)
     assert(mm.storageMemoryUsed === 0L)
     assertEnsureFreeSpaceNotCalled(ms)
-    require(mm.executionMemoryUsed > executionRegionSize,
-      s"bad test: execution memory used should exceed the execution region")
     // Storage should not be able to evict execution
     assert(mm.acquireStorageMemory(dummyBlock, 100L, evictedBlocks))
     assert(mm.executionMemoryUsed === 800L)
@@ -204,8 +167,6 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.executionMemoryUsed === 200L)
     assert(mm.storageMemoryUsed === 0L)
     assertEnsureFreeSpaceNotCalled(ms)
-    require(mm.executionMemoryUsed < executionRegionSize,
-      s"bad test: execution memory used should be within the execution region")
     // Storage should still not be able to evict execution
     assert(mm.acquireStorageMemory(dummyBlock, 750L, evictedBlocks))
     assert(mm.executionMemoryUsed === 200L)
