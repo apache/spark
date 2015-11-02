@@ -323,6 +323,53 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(11.125) :: Nil)
   }
 
+  test("test mean no key in output") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT mean(value)
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin),
+      Row(-0.5) :: Row(20.0) :: Row(null) :: Row(10.0) :: Nil)
+  }
+
+  test("test mean") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT key, mean(value)
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin),
+      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT mean(value), key
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin),
+      Row(20.0, 1) :: Row(-0.5, 2) :: Row(null, 3) :: Row(10.0, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT mean(value) + 1.5, key + 10
+          |FROM agg1
+          |GROUP BY key + 10
+        """.stripMargin),
+      Row(21.5, 11) :: Row(1.0, 12) :: Row(null, 13) :: Row(11.5, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT mean(value) FROM agg1
+        """.stripMargin),
+      Row(11.125) :: Nil)
+  }
+
   test("first_value and last_value") {
     // We force to use a single partition for the sort and aggregate to make result
     // deterministic.
