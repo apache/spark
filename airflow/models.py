@@ -1156,8 +1156,7 @@ class TaskInstance(Base):
             task_ids,
             dag_id=None,
             key=XCOM_RETURN_KEY,
-            include_prior_dates=False,
-            limit=None):
+            include_prior_dates=False):
         """
         Pull XComs that optionally meet certain criteria.
 
@@ -1186,9 +1185,6 @@ class TaskInstance(Base):
             execution_date are returned. If True, XComs from previous dates
             are returned as well.
         :type include_prior_dates: bool
-        :param limit: the maximum number of results to return. Pass None for
-            no limit.
-        :type limit: int
         """
 
         if dag_id is None:
