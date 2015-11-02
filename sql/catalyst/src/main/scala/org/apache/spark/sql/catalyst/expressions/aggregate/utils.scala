@@ -127,6 +127,12 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = true)
 
+        case expressions.Corr(left, right) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Corr(left, right),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
         case expressions.ApproxCountDistinct(child, rsd) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.HyperLogLogPlusPlus(child, rsd),
