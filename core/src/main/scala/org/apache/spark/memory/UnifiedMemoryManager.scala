@@ -41,30 +41,30 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * up most of the storage space, in which case the new blocks will be evicted immediately
  * according to their respective storage levels.
  *
- * @param minimumStoragePoolSize Size of the storage region, in bytes.
- *                               This region is not statically reserved; execution can borrow from
- *                               it if necessary. Cached blocks can be evicted only if actual
- *                               storage memory usage exceeds this region.
+ * @param storageRegionSize Size of the storage region, in bytes.
+ *                          This region is not statically reserved; execution can borrow from
+ *                          it if necessary. Cached blocks can be evicted only if actual
+ *                          storage memory usage exceeds this region.
  */
 private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
     maxMemory: Long,
-    private val minimumStoragePoolSize: Long,
+    private val storageRegionSize: Long,
     numCores: Int)
   extends MemoryManager(
     conf,
     numCores,
     // TODO(josh): it is confusing how this interacts with page size calculations:
-    maxOnHeapExecutionMemory = maxMemory - minimumStoragePoolSize) {
+    maxOnHeapExecutionMemory = maxMemory - storageRegionSize) {
 
-  // At first, all memory is allocated towards execution.
-  // TODO(josh): in light of this policy, the name minimumStoragePoolSize is confusing.
+  // We always maintain the invariant that
+  //    onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory
+  // At first, all memory is allocated towards execution:
   onHeapExecutionMemoryPool.incrementPoolSize(maxMemory)
 
   override def maxStorageMemory: Long = synchronized {
     maxMemory - onHeapExecutionMemoryPool.memoryUsed
   }
-
 
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the
@@ -83,18 +83,24 @@ private[spark] class UnifiedMemoryManager private[memory] (
     assert(numBytes >= 0)
     memoryMode match {
       case MemoryMode.ON_HEAP =>
-        val memoryBorrowedByStorage =
-          math.max(storageMemoryPool.memoryFree,
-            storageMemoryPool.poolSize - minimumStoragePoolSize)
-        // If there is not enough free memory AND storage has borrowed some execution memory,
-        // then evict as much memory borrowed by storage as needed to grant this request
-        if (numBytes > onHeapExecutionMemoryPool.memoryFree && memoryBorrowedByStorage > 0) {
-          val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
-            math.min(numBytes, memoryBorrowedByStorage))
-          onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+        if (numBytes > onHeapExecutionMemoryPool.memoryFree) {
+          // There is not enough free memory in the execution pool, so try to reclaim memory from
+          // storage. We can reclaim any free memory from the storage pool. If the storage pool
+          // has grown to become larger than `storageRegionSize`, we can evict blocks and reclaim
+          // the memory that storage has borrowed from execution.
+          val memoryReclaimableFromStorage =
+            math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
+          if (memoryReclaimableFromStorage > 0) {
+            // Only reclaim as much space as is necessary and available:
+            val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
+              math.min(numBytes, memoryReclaimableFromStorage))
+            onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+          }
         }
         onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
       case MemoryMode.OFF_HEAP =>
+        // For now, we only support on-heap caching of data, so we do not need to interact with
+        // the storage pool when allocating off-heap memory. This will change in the future, though.
         super.acquireExecutionMemory(numBytes, taskAttemptId, memoryMode)
     }
   }
@@ -104,7 +110,10 @@ private[spark] class UnifiedMemoryManager private[memory] (
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+    assert(numBytes >= 0)
     if (numBytes > storageMemoryPool.memoryFree) {
+      // There is not enough free memory in the storage pool, so try to borrow free memory from
+      // the execution pool.
       val memoryBorrowedFromExecution = Math.min(onHeapExecutionMemoryPool.memoryFree, numBytes)
       onHeapExecutionMemoryPool.decrementPoolSize(memoryBorrowedFromExecution)
       storageMemoryPool.incrementPoolSize(memoryBorrowedFromExecution)
@@ -127,7 +136,7 @@ object UnifiedMemoryManager {
     new UnifiedMemoryManager(
       conf,
       maxMemory = maxMemory,
-      minimumStoragePoolSize =
+      storageRegionSize =
         (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong,
       numCores = numCores)
   }

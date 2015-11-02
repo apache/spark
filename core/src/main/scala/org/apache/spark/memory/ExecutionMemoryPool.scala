@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.Logging
 
 /**
- * Implements policies and bookkeeping for sharing a fixed-size pool of memory between tasks.
+ * Implements policies and bookkeeping for sharing a adjustable-sized pool of memory between tasks.
  *
  * Tries to ensure that each task gets a reasonable share of memory, instead of some task ramping up
  * to a large amount first and then causing others to spill to disk repeatedly.
@@ -39,7 +39,10 @@ import org.apache.spark.Logging
  * @param memoryManager a [[MemoryManager]] instance to synchronize on
  * @param poolName a human-readable name for this pool, for use in log messages
  */
-class ExecutionMemoryPool(memoryManager: Object, poolName: String) extends MemoryPool with Logging {
+class ExecutionMemoryPool(
+    memoryManager: Object,
+    poolName: String
+  ) extends MemoryPool(memoryManager) with Logging {
 
   /**
    * Map from taskAttemptId -> memory consumption in bytes
@@ -115,6 +118,9 @@ class ExecutionMemoryPool(memoryManager: Object, poolName: String) extends Memor
     0L  // Never reached
   }
 
+  /**
+   * Release `numBytes` of memory acquired by the given task.
+   */
   def releaseMemory(numBytes: Long, taskAttemptId: Long): Unit = memoryManager.synchronized {
     val curMem = memoryForTask.getOrElse(taskAttemptId, 0L)
     var memoryToFree = if (curMem < numBytes) {

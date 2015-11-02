@@ -39,7 +39,7 @@ private[spark] abstract class MemoryManager(
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
   // TODO(josh): think through and document thread-safety contracts
-  protected val storageMemoryPool = new StorageMemoryPool()
+  protected val storageMemoryPool = new StorageMemoryPool(this)
   protected val onHeapExecutionMemoryPool = new ExecutionMemoryPool(this, "on-heap execution")
   protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, "off-heap execution")
 

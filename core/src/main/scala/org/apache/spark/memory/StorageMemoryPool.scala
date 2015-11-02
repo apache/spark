@@ -17,17 +17,28 @@
 
 package org.apache.spark.memory
 
-import org.apache.spark.{TaskContext, Logging}
-import org.apache.spark.storage.{MemoryStore, BlockStatus, BlockId}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-class StorageMemoryPool extends MemoryPool with Logging {
+import org.apache.spark.{TaskContext, Logging}
+import org.apache.spark.storage.{MemoryStore, BlockStatus, BlockId}
 
+/**
+ * Performs bookkeeping for managing an adjustable-size pool of memory that is used for storage
+ * (caching).
+ *
+ * @param memoryManager a [[MemoryManager]] instance to synchronize on
+ */
+class StorageMemoryPool(memoryManager: Object) extends MemoryPool(memoryManager) with Logging {
+
+  @GuardedBy("memoryManager")
   private[this] var _memoryUsed: Long = 0L
 
-  override def memoryUsed: Long = _memoryUsed
+  override def memoryUsed: Long = memoryManager.synchronized {
+    _memoryUsed
+  }
 
   private var _memoryStore: MemoryStore = _
   def memoryStore: MemoryStore = {
@@ -53,7 +64,7 @@ class StorageMemoryPool extends MemoryPool with Logging {
   def acquireMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = memoryManager.synchronized {
     acquireMemory(blockId, numBytes, numBytes, evictedBlocks)
   }
 
@@ -69,7 +80,7 @@ class StorageMemoryPool extends MemoryPool with Logging {
       blockId: BlockId,
       numBytesToAcquire: Long,
       numBytesToFree: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = memoryManager.synchronized {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
@@ -90,7 +101,7 @@ class StorageMemoryPool extends MemoryPool with Logging {
     enoughMemory
   }
 
-  def releaseMemory(size: Long): Unit = synchronized {
+  def releaseMemory(size: Long): Unit = memoryManager.synchronized {
     if (size > _memoryUsed) {
       logWarning(s"Attempted to release $size bytes of storage " +
         s"memory when we only have ${_memoryUsed} bytes")
@@ -100,19 +111,24 @@ class StorageMemoryPool extends MemoryPool with Logging {
     }
   }
 
-  def releaseAllMemory(): Unit = synchronized {
+  def releaseAllMemory(): Unit = memoryManager.synchronized {
     _memoryUsed = 0
   }
 
-  // TODO(josh): comment
-  def shrinkPoolToFreeSpace(spaceToEnsure: Long): Long = synchronized {
-    val spaceFreedByReleasingUnusedMemory = Math.min(spaceToEnsure, memoryFree)
+  /**
+   * Try to shrink the size of this storage memory pool by `spaceToFree` bytes. Return the number
+   * of bytes removed from the pool's capacity.
+   */
+  def shrinkPoolToFreeSpace(spaceToFree: Long): Long = memoryManager.synchronized {
+    // First, shrink the pool by reclaiming free memory:
+    val spaceFreedByReleasingUnusedMemory = Math.min(spaceToFree, memoryFree)
     decrementPoolSize(spaceFreedByReleasingUnusedMemory)
-    if (spaceFreedByReleasingUnusedMemory == spaceToEnsure) {
+    if (spaceFreedByReleasingUnusedMemory == spaceToFree) {
       spaceFreedByReleasingUnusedMemory
     } else {
+      // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
       val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-      memoryStore.ensureFreeSpace(spaceToEnsure - spaceFreedByReleasingUnusedMemory, evictedBlocks)
+      memoryStore.ensureFreeSpace(spaceToFree - spaceFreedByReleasingUnusedMemory, evictedBlocks)
       val spaceFreedByEviction = evictedBlocks.map(_._2.memSize).sum
       _memoryUsed -= spaceFreedByEviction
       decrementPoolSize(spaceFreedByEviction)
