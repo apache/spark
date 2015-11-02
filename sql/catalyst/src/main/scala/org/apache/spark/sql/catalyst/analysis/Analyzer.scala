@@ -105,7 +105,7 @@ class Analyzer(
         // here use the CTE definition first, check table name only and ignore database name
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
         case u : UnresolvedRelation =>
-          val substituted = cteRelations.get(u.tableIdentifier.last).map { relation =>
+          val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
             val withAlias = u.alias.map(Subquery(_, relation))
             withAlias.getOrElse(relation)
           }
@@ -141,32 +141,31 @@ class Analyzer(
    */
   object ResolveAliases extends Rule[LogicalPlan] {
     private def assignAliases(exprs: Seq[NamedExpression]) = {
-      // The `UnresolvedAlias`s will appear only at root of a expression tree, we don't need
-      // to traverse the whole tree.
       exprs.zipWithIndex.map {
-        case (u @ UnresolvedAlias(child), i) =>
-          child match {
-            case _: UnresolvedAttribute => u
-            case ne: NamedExpression => ne
-            case g: Generator if g.resolved && g.elementTypes.size > 1 => MultiAlias(g, Nil)
-            case e if !e.resolved => u
-            case other => Alias(other, s"_c$i")()
+        case (expr, i) =>
+          expr transform {
+            case u @ UnresolvedAlias(child) => child match {
+              case ne: NamedExpression => ne
+              case e if !e.resolved => u
+              case g: Generator if g.elementTypes.size > 1 => MultiAlias(g, Nil)
+              case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
+              case other => Alias(other, s"_c$i")()
+            }
           }
-        case (other, _) => other
-      }
+      }.asInstanceOf[Seq[NamedExpression]]
     }
 
+    private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =
+      exprs.exists(_.find(_.isInstanceOf[UnresolvedAlias]).isDefined)
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case Aggregate(groups, aggs, child)
-        if child.resolved && aggs.exists(_.isInstanceOf[UnresolvedAlias]) =>
+      case Aggregate(groups, aggs, child) if child.resolved && hasUnresolvedAlias(aggs) =>
         Aggregate(groups, assignAliases(aggs), child)
 
-      case g: GroupingAnalytics
-        if g.child.resolved && g.aggregations.exists(_.isInstanceOf[UnresolvedAlias]) =>
+      case g: GroupingAnalytics if g.child.resolved && hasUnresolvedAlias(g.aggregations) =>
         g.withNewAggs(assignAliases(g.aggregations))
 
-      case Project(projectList, child)
-        if child.resolved && projectList.exists(_.isInstanceOf[UnresolvedAlias]) =>
+      case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
     }
   }
@@ -257,7 +256,7 @@ class Analyzer(
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"no such table ${u.tableName}")
+          u.failAnalysis(s"Table not found: ${u.tableName}")
       }
     }
 
@@ -265,7 +264,13 @@ class Analyzer(
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
         i.copy(table = EliminateSubQueries(getTable(u)))
       case u: UnresolvedRelation =>
-        getTable(u)
+        try {
+          getTable(u)
+        } catch {
+          case _: AnalysisException if u.tableIdentifier.database.isDefined =>
+            // delay the exception into CheckAnalysis, then it could be resolved as data source.
+            u
+        }
     }
   }
 
@@ -482,7 +487,7 @@ class Analyzer(
       val newOrdering = resolveSortOrders(ordering, grandchild, throws = true)
       // Construct a set that contains all of the attributes that we need to evaluate the
       // ordering.
-      val requiredAttributes = AttributeSet(newOrdering.filter(_.resolved))
+      val requiredAttributes = AttributeSet(newOrdering).filter(_.resolved)
       // Figure out which ones are missing from the projection, so that we can add them and
       // remove them after the sort.
       val missingInProject = requiredAttributes -- child.output
@@ -553,7 +558,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case filter @ Filter(havingCondition,
              aggregate @ Aggregate(grouping, originalAggExprs, child))
-          if aggregate.resolved && !filter.resolved =>
+          if aggregate.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
         val aggregatedCondition =
@@ -831,6 +836,10 @@ class Analyzer(
             val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
             extractedExprBuffer += withName
             withName.toAttribute
+
+          // Extracts other attributes
+          case attr: Attribute => extractExpr(attr)
+
         }.asInstanceOf[NamedExpression]
       }
 

@@ -116,27 +116,18 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
-  // Make sure we set those test specific confs correctly when we create
-  // the SQLConf as well as when we call clear.
-  override protected[sql] def createSession(): SQLSession = {
-    new this.SQLSession()
-  }
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+    // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
+    override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
+    override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
 
-  protected[hive] class SQLSession extends super.SQLSession {
-    protected[sql] override lazy val conf: SQLConf = new SQLConf {
-      // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
-      // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
-      override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
-      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+    clear()
 
-      clear()
+    override def clear(): Unit = {
+      super.clear()
 
-      override def clear(): Unit = {
-        super.clear()
-
-        TestHiveContext.overrideConfs.map {
-          case (key, value) => setConfString(key, value)
-        }
+      TestHiveContext.overrideConfs.map {
+        case (key, value) => setConfString(key, value)
       }
     }
   }
@@ -200,7 +191,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       // Make sure any test tables referenced are loaded.
       val referencedTables =
         describedTables ++
-        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.last }
+        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
       val referencedTestTables = referencedTables.filter(testTables.contains)
       logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)

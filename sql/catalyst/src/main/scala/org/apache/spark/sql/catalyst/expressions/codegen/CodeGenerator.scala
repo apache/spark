@@ -27,6 +27,7 @@ import org.codehaus.janino.ClassBodyEvaluator
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.{MapData, ArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
@@ -42,10 +43,10 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  * @param code The sequence of statements required to evaluate the expression.
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
  *                 to null.
- * @param primitive A term for a possible primitive value of the result of the evaluation. Not
- *                      valid if `isNull` is set to `true`.
+ * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
+ *              valid if `isNull` is set to `true`.
  */
-case class GeneratedExpressionCode(var code: String, var isNull: String, var primitive: String)
+case class GeneratedExpressionCode(var code: String, var isNull: String, var value: String)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported
@@ -99,6 +100,9 @@ class CodeGenContext {
   final val JAVA_FLOAT = "float"
   final val JAVA_DOUBLE = "double"
 
+  /** The variable name of the input row in generated code. */
+  final val INPUT_ROW = "i"
+
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
   /**
@@ -112,21 +116,22 @@ class CodeGenContext {
   }
 
   /**
-   * Returns the code to access a value in `SpecializedGetters` for a given DataType.
+   * Returns the specialized code to access a value from `inputRow` at `ordinal`.
    */
-  def getValue(getter: String, dataType: DataType, ordinal: String): String = {
+  def getValue(input: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$getter.get${primitiveTypeName(jt)}($ordinal)"
-      case t: DecimalType => s"$getter.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-      case StringType => s"$getter.getUTF8String($ordinal)"
-      case BinaryType => s"$getter.getBinary($ordinal)"
-      case CalendarIntervalType => s"$getter.getInterval($ordinal)"
-      case t: StructType => s"$getter.getStruct($ordinal, ${t.size})"
-      case _: ArrayType => s"$getter.getArray($ordinal)"
-      case _: MapType => s"$getter.getMap($ordinal)"
+      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+      case StringType => s"$input.getUTF8String($ordinal)"
+      case BinaryType => s"$input.getBinary($ordinal)"
+      case CalendarIntervalType => s"$input.getInterval($ordinal)"
+      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
+      case _: ArrayType => s"$input.getArray($ordinal)"
+      case _: MapType => s"$input.getMap($ordinal)"
       case NullType => "null"
-      case _ => s"($jt)$getter.get($ordinal, null)"
+      case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
+      case _ => s"($jt)$input.get($ordinal, null)"
     }
   }
 
@@ -140,6 +145,7 @@ class CodeGenContext {
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       // The UTF8String may came from UnsafeRow, otherwise clone is cheap (re-use the bytes)
       case StringType => s"$row.update($ordinal, $value.clone())"
+      case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       case _ => s"$row.update($ordinal, $value)"
     }
   }
@@ -174,6 +180,9 @@ class CodeGenContext {
     case _: MapType => "MapData"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
+    case udt: UserDefinedType[_] => javaType(udt.sqlType)
+    case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
+    case ObjectType(cls) => cls.getName
     case _ => "Object"
   }
 
@@ -217,6 +226,7 @@ class CodeGenContext {
     case FloatType => s"(java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2"
     case DoubleType => s"(java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
+    case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
     case other => s"$c1.equals($c2)"
   }
 
@@ -250,6 +260,7 @@ class CodeGenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
+    case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw new IllegalArgumentException("cannot generate compare code for un-comparable type")
   }
@@ -272,6 +283,7 @@ class CodeGenContext {
    * 64kb code size limit in JVM
    *
    * @param row the variable name of row that is used by expressions
+   * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
     val blocks = new ArrayBuffer[String]()
@@ -380,14 +392,24 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
-      classOf[UnsafeMapData].getName
+      classOf[UnsafeMapData].getName,
+      classOf[MutableRow].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
+
+    def formatted = CodeFormatter.format(code)
+
+    logDebug({
+      // Only add extra debugging info to byte code when we are going to print the source code.
+      evaluator.setDebuggingInformation(true, true, false)
+      formatted
+    })
+
     try {
-      evaluator.cook(code)
+      evaluator.cook("generated.java", code)
     } catch {
       case e: Exception =>
-        val msg = s"failed to compile: $e\n" + CodeFormatter.format(code)
+        val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
         throw new Exception(msg, e)
     }

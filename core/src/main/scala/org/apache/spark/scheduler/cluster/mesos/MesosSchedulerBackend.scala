@@ -68,7 +68,12 @@ private[spark] class MesosSchedulerBackend(
   override def start() {
     classLoader = Thread.currentThread.getContextClassLoader
     val driver = createSchedulerDriver(
-      master, MesosSchedulerBackend.this, sc.sparkUser, sc.appName, sc.conf)
+      master,
+      MesosSchedulerBackend.this,
+      sc.sparkUser,
+      sc.appName,
+      sc.conf,
+      sc.ui.map(_.appUIAddress))
     startScheduler(driver)
   }
 
@@ -389,7 +394,7 @@ private[spark] class MesosSchedulerBackend(
                             slaveId: SlaveID, status: Int) {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
                                                                  slaveId.getValue))
-    recordSlaveLost(d, slaveId, ExecutorExited(status, isNormalExit = false))
+    recordSlaveLost(d, slaveId, ExecutorExited(status, exitCausedByApp = true))
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {

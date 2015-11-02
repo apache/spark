@@ -62,10 +62,21 @@ private[spark] class ApplicationMaster(
     .asInstanceOf[YarnConfiguration]
   private val isClusterMode = args.userClass != null
 
-  // Default to numExecutors * 2, with minimum of 3
-  private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
-    sparkConf.getInt("spark.yarn.max.worker.failures",
-      math.max(sparkConf.getInt("spark.executor.instances", 0) *  2, 3)))
+  // Default to twice the number of executors (twice the maximum number of executors if dynamic
+  // allocation is enabled), with a minimum of 3.
+
+  private val maxNumExecutorFailures = {
+    val defaultKey =
+      if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+        "spark.dynamicAllocation.maxExecutors"
+      } else {
+        "spark.executor.instances"
+      }
+    val effectiveNumExecutors = sparkConf.getInt(defaultKey, 0)
+    val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
+
+    sparkConf.getInt("spark.yarn.max.executor.failures", defaultMaxNumExecutorFailures)
+  }
 
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
@@ -255,7 +266,6 @@ private[spark] class ApplicationMaster(
       driverRef,
       yarnConf,
       _sparkConf,
-      if (sc != null) sc.preferredNodeLocationData else Map(),
       uiAddress,
       historyAddress,
       securityMgr)
@@ -345,7 +355,7 @@ private[spark] class ApplicationMaster(
             if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
               finish(FinalApplicationStatus.FAILED,
                 ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-                "Max number of executor failures reached")
+                s"Max number of executor failures ($maxNumExecutorFailures) reached")
             } else {
               logDebug("Sending progress")
               allocator.allocateResources()
@@ -558,13 +568,15 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
-
     }
 
     override def receive: PartialFunction[Any, Unit] = {
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
         driver.send(x)
+
+      case DriverHello =>
+        // SPARK-10987: no action needed for this message.
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

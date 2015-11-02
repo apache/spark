@@ -184,22 +184,6 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
-  // Flag to control if reduce tasks are assigned preferred locations
-  private val shuffleLocalityEnabled =
-    sc.getConf.getBoolean("spark.shuffle.reduceLocality.enabled", true)
-  // Number of map, reduce tasks above which we do not assign preferred locations
-  // based on map output sizes. We limit the size of jobs for which assign preferred locations
-  // as computing the top locations by size becomes expensive.
-  private[this] val SHUFFLE_PREF_MAP_THRESHOLD = 1000
-  // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
-  private[this] val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
-
-  // Fraction of total map output that must be at a location for it to considered as a preferred
-  // location for a reduce task.
-  // Making this larger will focus on fewer locations where most data can be read locally, but
-  // may lead to more delay in scheduling if those locations are busy.
-  private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
-
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -369,10 +353,12 @@ class DAGScheduler(
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      for (i <- 0 until locs.length) {
-        stage.outputLocs(i) = Option(locs(i)).toList // locs(i) will be null if missing
+      (0 until locs.length).foreach { i =>
+        if (locs(i) ne null) {
+          // locs(i) will be null if missing
+          stage.addOutputLoc(i, locs(i))
+        }
       }
-      stage.numAvailableOutputs = locs.count(_ != null)
     } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
@@ -910,7 +896,7 @@ class DAGScheduler(
     submitStage(finalStage)
 
     // If the whole stage has already finished, tell the listener and remove it
-    if (!finalStage.outputLocs.contains(Nil)) {
+    if (finalStage.isAvailable) {
       markMapStageJobAsFinished(job, mapOutputTracker.getStatistics(dependency))
     }
 
@@ -947,24 +933,12 @@ class DAGScheduler(
     stage.pendingPartitions.clear()
 
     // First figure out the indexes of partition ids to compute.
-    val (allPartitions: Seq[Int], partitionsToCompute: Seq[Int]) = {
-      stage match {
-        case stage: ShuffleMapStage =>
-          val allPartitions = 0 until stage.numPartitions
-          val filteredPartitions = allPartitions.filter { id => stage.outputLocs(id).isEmpty }
-          (allPartitions, filteredPartitions)
-        case stage: ResultStage =>
-          val job = stage.resultOfJob.get
-          val allPartitions = 0 until job.numPartitions
-          val filteredPartitions = allPartitions.filter { id => !job.finished(id) }
-          (allPartitions, filteredPartitions)
-      }
-    }
+    val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
 
     // Create internal accumulators if the stage has no accumulators initialized.
     // Reset internal accumulators only if this stage is not partially submitted
     // Otherwise, we may override existing accumulator values from some tasks
-    if (stage.internalAccumulators.isEmpty || allPartitions == partitionsToCompute) {
+    if (stage.internalAccumulators.isEmpty || stage.numPartitions == partitionsToCompute.size) {
       stage.resetInternalAccumulators()
     }
 
@@ -1218,7 +1192,7 @@ class DAGScheduler(
 
               clearCacheLocs()
 
-              if (shuffleStage.outputLocs.contains(Nil)) {
+              if (!shuffleStage.isAvailable) {
                 // Some tasks had failed; let's resubmit this shuffleStage
                 // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
@@ -1570,25 +1544,10 @@ class DAGScheduler(
             return locs
           }
         }
+
       case _ =>
     }
 
-    // If the RDD has shuffle dependencies and shuffle locality is enabled, pick locations that
-    // have at least REDUCER_PREF_LOCS_FRACTION of data as preferred locations
-    if (shuffleLocalityEnabled && rdd.partitions.length < SHUFFLE_PREF_REDUCE_THRESHOLD) {
-      rdd.dependencies.foreach {
-        case s: ShuffleDependency[_, _, _] =>
-          if (s.rdd.partitions.length < SHUFFLE_PREF_MAP_THRESHOLD) {
-            // Get the preferred map output locations for this reducer
-            val topLocsForReducer = mapOutputTracker.getLocationsWithLargestOutputs(s.shuffleId,
-              partition, rdd.partitions.length, REDUCER_PREF_LOCS_FRACTION)
-            if (topLocsForReducer.nonEmpty) {
-              return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
-            }
-          }
-        case _ =>
-      }
-    }
     Nil
   }
 

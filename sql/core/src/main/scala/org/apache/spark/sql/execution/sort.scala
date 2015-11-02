@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.rdd.{MapPartitionsWithPreparationRDD, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.{SparkEnv, InternalAccumulator, TaskContext}
+import org.apache.spark.{InternalAccumulator, SparkEnv, TaskContext}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines various sort operators.
@@ -48,7 +49,8 @@ case class Sort(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
     child.execute().mapPartitions( { iterator =>
       val ordering = newOrdering(sortOrder, child.output)
-      val sorter = new ExternalSorter[InternalRow, Null, InternalRow](ordering = Some(ordering))
+      val sorter = new ExternalSorter[InternalRow, Null, InternalRow](
+        TaskContext.get(), ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r.copy(), null)))
       val baseIterator = sorter.iterator.map(_._1)
       val context = TaskContext.get()
@@ -75,6 +77,7 @@ case class Sort(
  * @param testSpillFrequency Method for configuring periodic spilling in unit tests. If set, will
  *                           spill every `frequency` records.
  */
+
 case class TungstenSort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
@@ -93,15 +96,18 @@ case class TungstenSort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  override private[sql] lazy val metrics = Map(
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+
   protected override def doExecute(): RDD[InternalRow] = {
     val schema = child.schema
     val childOutput = child.output
 
-    /**
-     * Set up the sorter in each partition before computing the parent partition.
-     * This makes sure our sorter is not starved by other sorters used in the same task.
-     */
-    def preparePartition(): UnsafeExternalRowSorter = {
+    val dataSize = longMetric("dataSize")
+    val spillSize = longMetric("spillSize")
+
+    child.execute().mapPartitions { iter =>
       val ordering = newOrdering(sortOrder, childOutput)
 
       // The comparator for comparing prefix
@@ -116,31 +122,26 @@ case class TungstenSort(
         }
       }
 
-      val pageSize = SparkEnv.get.shuffleMemoryManager.pageSizeBytes
+      val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
       val sorter = new UnsafeExternalRowSorter(
         schema, ordering, prefixComparator, prefixComputer, pageSize)
       if (testSpillFrequency > 0) {
         sorter.setTestSpillFrequency(testSpillFrequency)
       }
-      sorter
-    }
 
-    /** Compute a partition using the sorter already set up previously. */
-    def executePartition(
-        taskContext: TaskContext,
-        partitionIndex: Int,
-        sorter: UnsafeExternalRowSorter,
-        parentIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
-      val sortedIterator = sorter.sort(parentIterator.asInstanceOf[Iterator[UnsafeRow]])
-      taskContext.internalMetricsToAccumulators(
+      // Remember spill data size of this task before execute this operator so that we can
+      // figure out how many bytes we spilled for this operator.
+      val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
+
+      val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
+
+      dataSize += sorter.getPeakMemoryUsage
+      spillSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore
+
+      TaskContext.get().internalMetricsToAccumulators(
         InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
       sortedIterator
     }
-
-    // Note: we need to set up the external sorter in each partition before computing
-    // the parent partition, so we cannot simply use `mapPartitions` here (SPARK-9709).
-    new MapPartitionsWithPreparationRDD[InternalRow, InternalRow, UnsafeExternalRowSorter](
-      child.execute(), preparePartition, executePartition, preservesPartitioning = true)
   }
 
 }

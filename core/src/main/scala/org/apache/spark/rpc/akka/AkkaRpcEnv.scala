@@ -39,10 +39,6 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
  *
  * TODO Once we remove all usages of Akka in other place, we can move this file to a new project and
  * remove Akka from the dependencies.
- *
- * @param actorSystem
- * @param conf
- * @param boundPort
  */
 private[spark] class AkkaRpcEnv private[akka] (
     val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
@@ -166,9 +162,9 @@ private[spark] class AkkaRpcEnv private[akka] (
             _sender ! AkkaMessage(response, false)
           }
 
-          // Some RpcEndpoints need to know the sender's address
-          override val sender: RpcEndpointRef =
-            new AkkaRpcEndpointRef(defaultAddress, _sender, conf)
+          // Use "lazy" because most of RpcEndpoints don't need "senderAddress"
+          override lazy val senderAddress: RpcAddress =
+            new AkkaRpcEndpointRef(defaultAddress, _sender, conf).address
         })
       } else {
         endpoint.receive

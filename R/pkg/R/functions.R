@@ -18,16 +18,21 @@
 #' @include generics.R column.R
 NULL
 
-#' Creates a \code{Column} of literal value.
+#' lit
 #'
-#' The passed in object is returned directly if it is already a \linkS4class{Column}.
-#' If the object is a Scala Symbol, it is converted into a \linkS4class{Column} also.
-#' Otherwise, a new \linkS4class{Column} is created to represent the literal value.
+#' A new \linkS4class{Column} is created to represent the literal value.
+#' If the parameter is a \linkS4class{Column}, it is returned unchanged.
 #'
 #' @family normal_funcs
 #' @rdname lit
 #' @name lit
 #' @export
+#' @examples
+#' \dontrun{
+#' lit(df$name)
+#' select(df, lit("x"))
+#' select(df, lit("2015-01-01"))
+#'}
 setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -231,6 +236,28 @@ setMethod("ceil",
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ceil", x@jc)
             column(jc)
+          })
+
+#' Though scala functions has "col" function, we don't expose it in SparkR
+#' because we don't want to conflict with the "col" function in the R base
+#' package and we also have "column" function exported which is an alias of "col".
+col <- function(x) {
+  column(callJStatic("org.apache.spark.sql.functions", "col", x))
+}
+
+#' column
+#'
+#' Returns a Column based on the given column name.
+#'
+#' @rdname col
+#' @name column
+#' @family normal_funcs
+#' @export
+#' @examples \dontrun{column(df)}
+setMethod("column",
+          signature(x = "character"),
+          function(x) {
+            col(x)
           })
 
 #' cos
@@ -1985,4 +2012,194 @@ setMethod("ifelse",
                                             test, yes),
                                 "otherwise", no)
               column(jc)
+          })
+
+###################### Window functions######################
+
+#' cumeDist
+#'
+#' Window function: returns the cumulative distribution of values within a window partition,
+#' i.e. the fraction of rows that are below the current row.
+#' 
+#'   N = total number of rows in the partition
+#'   cumeDist(x) = number of values before (and including) x / N
+#'   
+#' This is equivalent to the CUME_DIST function in SQL.
+#'
+#' @rdname cumeDist
+#' @name cumeDist
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{cumeDist()}
+setMethod("cumeDist",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "cumeDist")
+            column(jc)
+          })
+
+#' denseRank
+#' 
+#' Window function: returns the rank of rows within a window partition, without any gaps.
+#' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+#' sequence when there are ties. That is, if you were ranking a competition using denseRank
+#' and had three people tie for second place, you would say that all three were in second
+#' place and that the next person came in third.
+#' 
+#' This is equivalent to the DENSE_RANK function in SQL.
+#'
+#' @rdname denseRank
+#' @name denseRank
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{denseRank()}
+setMethod("denseRank",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "denseRank")
+            column(jc)
+          })
+
+#' lag
+#'
+#' Window function: returns the value that is `offset` rows before the current row, and
+#' `defaultValue` if there is less than `offset` rows before the current row. For example,
+#' an `offset` of one will return the previous row at any given point in the window partition.
+#' 
+#' This is equivalent to the LAG function in SQL.
+#'
+#' @rdname lag
+#' @name lag
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{lag(df$c)}
+setMethod("lag",
+          signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
+          function(x, offset, defaultValue = NULL) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              x
+            }
+
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "lag", col, as.integer(offset), defaultValue)
+            column(jc)
+          })
+
+#' lead
+#'
+#' Window function: returns the value that is `offset` rows after the current row, and
+#' `null` if there is less than `offset` rows after the current row. For example,
+#' an `offset` of one will return the next row at any given point in the window partition.
+#' 
+#' This is equivalent to the LEAD function in SQL.
+#'
+#' @rdname lead
+#' @name lead
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{lead(df$c)}
+setMethod("lead",
+          signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
+          function(x, offset, defaultValue = NULL) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              x
+            }
+
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "lead", col, as.integer(offset), defaultValue)
+            column(jc)
+          })
+
+#' ntile
+#'
+#' Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
+#' partition. Fow example, if `n` is 4, the first quarter of the rows will get value 1, the second
+#' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
+#' 
+#' This is equivalent to the NTILE function in SQL.
+#'
+#' @rdname ntile
+#' @name ntile
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{ntile(1)}
+setMethod("ntile",
+          signature(x = "numeric"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "ntile", as.integer(x))
+            column(jc)
+          })
+
+#' percentRank
+#'
+#' Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+#' 
+#' This is computed by:
+#' 
+#'   (rank of row in its partition - 1) / (number of rows in the partition - 1)
+#'
+#' This is equivalent to the PERCENT_RANK function in SQL.
+#'
+#' @rdname percentRank
+#' @name percentRank
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{percentRank()}
+setMethod("percentRank",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "percentRank")
+            column(jc)
+          })
+
+#' rank
+#'
+#' Window function: returns the rank of rows within a window partition.
+#' 
+#' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+#' sequence when there are ties. That is, if you were ranking a competition using denseRank
+#' and had three people tie for second place, you would say that all three were in second
+#' place and that the next person came in third.
+#' 
+#' This is equivalent to the RANK function in SQL.
+#'
+#' @rdname rank
+#' @name rank
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{rank()}
+setMethod("rank",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "rank")
+            column(jc)
+          })
+
+# Expose rank() in the R base package
+setMethod("rank",
+          signature(x = "ANY"),
+          function(x, ...) {
+            base::rank(x, ...)
+          })
+
+#' rowNumber
+#'
+#' Window function: returns a sequential number starting at 1 within a window partition.
+#' 
+#' This is equivalent to the ROW_NUMBER function in SQL.
+#'
+#' @rdname rowNumber
+#' @name rowNumber
+#' @family window_funcs
+#' @export
+#' @examples \dontrun{rowNumber()}
+setMethod("rowNumber",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "rowNumber")
+            column(jc)
           })

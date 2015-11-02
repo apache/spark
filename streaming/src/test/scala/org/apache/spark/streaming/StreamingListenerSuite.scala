@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedBuffer, SynchronizedMap}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -140,6 +140,90 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     }
   }
 
+  test("output operation reporting") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count())
+    inputStream.foreachRDD(_.collect())
+    inputStream.foreachRDD(_.count())
+
+    val collector = new OutputOperationInfoCollector
+    ssc.addStreamingListener(collector)
+
+    ssc.start()
+    try {
+      eventually(timeout(30 seconds), interval(20 millis)) {
+        collector.startedOutputOperationIds.take(3) should be (Seq(0, 1, 2))
+        collector.completedOutputOperationIds.take(3) should be (Seq(0, 1, 2))
+      }
+    } finally {
+      ssc.stop()
+    }
+  }
+
+  test("onBatchCompleted with successful batch") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count)
+
+    val failureReasons = startStreamingContextAndCollectFailureReasons(ssc)
+    assert(failureReasons != null && failureReasons.isEmpty,
+      "A successful batch should not set errorMessage")
+  }
+
+  test("onBatchCompleted with failed batch and one failed job") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD { _ =>
+      throw new RuntimeException("This is a failed job")
+    }
+
+    // Check if failureReasons contains the correct error message
+    val failureReasons = startStreamingContextAndCollectFailureReasons(ssc, isFailed = true)
+    assert(failureReasons != null)
+    assert(failureReasons.size === 1)
+    assert(failureReasons.contains(0))
+    assert(failureReasons(0).contains("This is a failed job"))
+  }
+
+  test("onBatchCompleted with failed batch and multiple failed jobs") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD { _ =>
+      throw new RuntimeException("This is a failed job")
+    }
+    inputStream.foreachRDD { _ =>
+      throw new RuntimeException("This is another failed job")
+    }
+
+    // Check if failureReasons contains the correct error messages
+    val failureReasons =
+      startStreamingContextAndCollectFailureReasons(ssc, isFailed = true)
+    assert(failureReasons != null)
+    assert(failureReasons.size === 2)
+    assert(failureReasons.contains(0))
+    assert(failureReasons.contains(1))
+    assert(failureReasons(0).contains("This is a failed job"))
+    assert(failureReasons(1).contains("This is another failed job"))
+  }
+
+  private def startStreamingContextAndCollectFailureReasons(
+      _ssc: StreamingContext, isFailed: Boolean = false): Map[Int, String] = {
+    val failureReasonsCollector = new FailureReasonsCollector()
+    _ssc.addStreamingListener(failureReasonsCollector)
+    val batchCounter = new BatchCounter(_ssc)
+    _ssc.start()
+    // Make sure running at least one batch
+    batchCounter.waitUntilBatchesCompleted(expectedNumCompletedBatches = 1, timeout = 10000)
+    if (isFailed) {
+      intercept[RuntimeException] {
+        _ssc.awaitTerminationOrTimeout(10000)
+      }
+    }
+    _ssc.stop()
+    failureReasonsCollector.failureReasons.toMap
+  }
+
   /** Check if a sequence of numbers is in increasing order */
   def isInIncreasingOrder(seq: Seq[Long]): Boolean = {
     for (i <- 1 until seq.size) {
@@ -191,6 +275,22 @@ class ReceiverInfoCollector extends StreamingListener {
   }
 }
 
+/** Listener that collects information on processed output operations */
+class OutputOperationInfoCollector extends StreamingListener {
+  val startedOutputOperationIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
+  val completedOutputOperationIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
+
+  override def onOutputOperationStarted(
+      outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = {
+    startedOutputOperationIds += outputOperationStarted.outputOperationInfo.id
+  }
+
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
+    completedOutputOperationIds += outputOperationCompleted.outputOperationInfo.id
+  }
+}
+
 class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_ONLY) with Logging {
   def onStart() {
     Future {
@@ -204,4 +304,19 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
     }
   }
   def onStop() { }
+}
+
+/**
+ * A StreamingListener that saves all latest `failureReasons` in a batch.
+ */
+class FailureReasonsCollector extends StreamingListener {
+
+  val failureReasons = new HashMap[Int, String] with SynchronizedMap[Int, String]
+
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
+    outputOperationCompleted.outputOperationInfo.failureReason.foreach { f =>
+      failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
+    }
+  }
 }

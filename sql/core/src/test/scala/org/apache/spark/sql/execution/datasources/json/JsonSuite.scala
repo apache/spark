@@ -47,13 +47,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val factory = new JsonFactory()
     def enforceCorrectType(value: Any, dataType: DataType): Any = {
       val writer = new StringWriter()
-      val generator = factory.createGenerator(writer)
-      generator.writeObject(value)
-      generator.flush()
+      Utils.tryWithResource(factory.createGenerator(writer)) { generator =>
+        generator.writeObject(value)
+        generator.flush()
+      }
 
-      val parser = factory.createParser(writer.toString)
-      parser.nextToken()
-      JacksonParser.convertField(factory, parser, dataType)
+      Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
+        parser.nextToken()
+        JacksonParser.convertField(factory, parser, dataType)
+      }
     }
 
     val intNumber: Int = 2147483647
@@ -630,6 +632,136 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
+  test("Loading a JSON dataset primitivesAsString returns schema with primitive types as strings") {
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    val jsonDF = sqlContext.read.option("primitivesAsString", "true").json(path)
+
+    val expectedSchema = StructType(
+      StructField("bigInteger", StringType, true) ::
+      StructField("boolean", StringType, true) ::
+      StructField("double", StringType, true) ::
+      StructField("integer", StringType, true) ::
+      StructField("long", StringType, true) ::
+      StructField("null", StringType, true) ::
+      StructField("string", StringType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+
+    jsonDF.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql("select * from jsonTable"),
+      Row("92233720368547758070",
+      "true",
+      "1.7976931348623157E308",
+      "10",
+      "21474836470",
+      null,
+      "this is a simple string.")
+    )
+  }
+
+  test("Loading a JSON dataset primitivesAsString returns complex fields as strings") {
+    val jsonDF = sqlContext.read.option("primitivesAsString", "true").json(complexFieldAndType1)
+
+    val expectedSchema = StructType(
+      StructField("arrayOfArray1", ArrayType(ArrayType(StringType, true), true), true) ::
+      StructField("arrayOfArray2", ArrayType(ArrayType(StringType, true), true), true) ::
+      StructField("arrayOfBigInteger", ArrayType(StringType, true), true) ::
+      StructField("arrayOfBoolean", ArrayType(StringType, true), true) ::
+      StructField("arrayOfDouble", ArrayType(StringType, true), true) ::
+      StructField("arrayOfInteger", ArrayType(StringType, true), true) ::
+      StructField("arrayOfLong", ArrayType(StringType, true), true) ::
+      StructField("arrayOfNull", ArrayType(StringType, true), true) ::
+      StructField("arrayOfString", ArrayType(StringType, true), true) ::
+      StructField("arrayOfStruct", ArrayType(
+        StructType(
+          StructField("field1", StringType, true) ::
+          StructField("field2", StringType, true) ::
+          StructField("field3", StringType, true) :: Nil), true), true) ::
+      StructField("struct", StructType(
+        StructField("field1", StringType, true) ::
+        StructField("field2", StringType, true) :: Nil), true) ::
+      StructField("structWithArrayFields", StructType(
+        StructField("field1", ArrayType(StringType, true), true) ::
+        StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+
+    jsonDF.registerTempTable("jsonTable")
+
+    // Access elements of a primitive array.
+    checkAnswer(
+      sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from jsonTable"),
+      Row("str1", "str2", null)
+    )
+
+    // Access an array of null values.
+    checkAnswer(
+      sql("select arrayOfNull from jsonTable"),
+      Row(Seq(null, null, null, null))
+    )
+
+    // Access elements of a BigInteger array (we use DecimalType internally).
+    checkAnswer(
+      sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from jsonTable"),
+      Row("922337203685477580700", "-922337203685477580800", null)
+    )
+
+    // Access elements of an array of arrays.
+    checkAnswer(
+      sql("select arrayOfArray1[0], arrayOfArray1[1] from jsonTable"),
+      Row(Seq("1", "2", "3"), Seq("str1", "str2"))
+    )
+
+    // Access elements of an array of arrays.
+    checkAnswer(
+      sql("select arrayOfArray2[0], arrayOfArray2[1] from jsonTable"),
+      Row(Seq("1", "2", "3"), Seq("1.1", "2.1", "3.1"))
+    )
+
+    // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
+    checkAnswer(
+      sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from jsonTable"),
+      Row("str2", "2.1")
+    )
+
+    // Access elements of an array of structs.
+    checkAnswer(
+      sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
+        "from jsonTable"),
+      Row(
+        Row("true", "str1", null),
+        Row("false", null, null),
+        Row(null, null, null),
+        null)
+    )
+
+    // Access a struct and fields inside of it.
+    checkAnswer(
+      sql("select struct, struct.field1, struct.field2 from jsonTable"),
+      Row(
+        Row("true", "92233720368547758070"),
+        "true",
+        "92233720368547758070") :: Nil
+    )
+
+    // Access an array field of a struct.
+    checkAnswer(
+      sql("select structWithArrayFields.field1, structWithArrayFields.field2 from jsonTable"),
+      Row(Seq("4", "5", "6"), Seq("str1", "str2"))
+    )
+
+    // Access elements of an array field of a struct.
+    checkAnswer(
+      sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from jsonTable"),
+      Row("5", null)
+    )
+  }
+
   test("Loading a JSON dataset from a text file with SQL") {
     val dir = Utils.createTempDir()
     dir.delete()
@@ -827,7 +959,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       withTempTable("jsonTable") {
         val jsonDF = sqlContext.read.json(corruptRecords)
         jsonDF.registerTempTable("jsonTable")
-
         val schema = StructType(
           StructField("_unparsed", StringType, true) ::
           StructField("a", StringType, true) ::
@@ -844,7 +975,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
               |FROM jsonTable
             """.stripMargin),
           Row(null, null, null, "{") ::
-            Row(null, null, null, "") ::
             Row(null, null, null, """{"a":1, b:2}""") ::
             Row(null, null, null, """{"a":{, b:3}""") ::
             Row("str_a_4", "str_b_4", "str_c_4", null) ::
@@ -869,7 +999,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
               |WHERE _unparsed IS NOT NULL
             """.stripMargin),
           Row("{") ::
-            Row("") ::
             Row("""{"a":1, b:2}""") ::
             Row("""{"a":{, b:3}""") ::
             Row("]") :: Nil
@@ -958,9 +1087,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val jsonDF = sqlContext.read.json(primitiveFieldAndType)
     val primTable = sqlContext.read.json(jsonDF.toJSON)
-    primTable.registerTempTable("primativeTable")
+    primTable.registerTempTable("primitiveTable")
     checkAnswer(
-        sql("select * from primativeTable"),
+        sql("select * from primitiveTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
@@ -1037,24 +1166,28 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val relation0 = new JSONRelation(
       Some(empty),
       1.0,
+      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation0 = LogicalRelation(relation0)
     val relation1 = new JSONRelation(
       Some(singleRow),
       1.0,
+      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation1 = LogicalRelation(relation1)
     val relation2 = new JSONRelation(
       Some(singleRow),
       0.5,
+      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation2 = LogicalRelation(relation2)
     val relation3 = new JSONRelation(
       Some(singleRow),
       1.0,
+      false,
       Some(StructType(StructField("b", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation3 = LogicalRelation(relation3)
