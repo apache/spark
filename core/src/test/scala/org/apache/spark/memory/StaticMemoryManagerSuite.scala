@@ -43,10 +43,15 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     (mm, ms)
   }
 
-  override protected def createMemoryManager(maxMemory: Long): MemoryManager = {
+  override protected def createMemoryManager(
+      maxOnHeapExecutionMemory: Long,
+      maxOffHeapExecutionMemory: Long): StaticMemoryManager = {
     new StaticMemoryManager(
-      conf,
-      maxOnHeapExecutionMemory = maxMemory,
+      conf.clone
+        .set("spark.memory.fraction", "1")
+        .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
+        .set("spark.memory.offHeapSize", maxOffHeapExecutionMemory.toString),
+      maxOnHeapExecutionMemory = maxOnHeapExecutionMemory,
       maxStorageMemory = 0,
       numCores = 1)
   }

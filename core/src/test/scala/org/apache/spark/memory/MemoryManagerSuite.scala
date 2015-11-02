@@ -138,16 +138,18 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
   }
 
   /**
-   * Create a MemoryManager with the specified execution memory limit and no storage memory.
+   * Create a MemoryManager with the specified execution memory limits and no storage memory.
    */
-  protected def createMemoryManager(maxExecutionMemory: Long): MemoryManager
+  protected def createMemoryManager(
+     maxOnHeapExecutionMemory: Long,
+     maxOffHeapExecutionMemory: Long = 0L): MemoryManager
 
   // -- Tests of sharing of execution memory between tasks ----------------------------------------
   // Prior to Spark 1.6, these tests were part of ShuffleMemoryManagerSuite.
 
   implicit val ec = ExecutionContext.global
 
-  test("single task requesting execution memory") {
+  test("single task requesting on-heap execution memory") {
     val manager = createMemoryManager(1000L)
     val taskMemoryManager = new TaskMemoryManager(manager, 0)
 
@@ -167,7 +169,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     assert(taskMemoryManager.acquireExecutionMemory(100L, MemoryMode.ON_HEAP, null) === 0L)
   }
 
-  test("two tasks requesting full execution memory") {
+  test("two tasks requesting full on-heap execution memory") {
     val memoryManager = createMemoryManager(1000L)
     val t1MemManager = new TaskMemoryManager(memoryManager, 1)
     val t2MemManager = new TaskMemoryManager(memoryManager, 2)
@@ -187,7 +189,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     assert(Await.result(t2Result2, 200.millis) === 0L)
   }
 
-  test("two tasks cannot grow past 1 / N of execution memory") {
+  test("two tasks cannot grow past 1 / N of on-heap execution memory") {
     val memoryManager = createMemoryManager(1000L)
     val t1MemManager = new TaskMemoryManager(memoryManager, 1)
     val t2MemManager = new TaskMemoryManager(memoryManager, 2)
@@ -207,7 +209,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     assert(Await.result(t2Result2, futureTimeout) === 250L)
   }
 
-  test("tasks can block to get at least 1 / 2N of execution memory") {
+  test("tasks can block to get at least 1 / 2N of on-heap execution memory") {
     val memoryManager = createMemoryManager(1000L)
     val t1MemManager = new TaskMemoryManager(memoryManager, 1)
     val t2MemManager = new TaskMemoryManager(memoryManager, 2)
@@ -265,6 +267,26 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
 
     val t1Result2 = Future { t1MemManager.acquireExecutionMemory(300L, MemoryMode.ON_HEAP, null) }
     assert(Await.result(t1Result2, 200.millis) === 0L)
+  }
+
+  test("off-heap execution allocations cannot exceed limit") {
+    val memoryManager = createMemoryManager(
+      maxOnHeapExecutionMemory = 0L,
+      maxOffHeapExecutionMemory = 1000L)
+
+    val tMemManager = new TaskMemoryManager(memoryManager, 1)
+    val result1 = Future { tMemManager.acquireExecutionMemory(1000L, MemoryMode.OFF_HEAP, null) }
+    assert(Await.result(result1, 200.millis) === 1000L)
+    assert(tMemManager.getMemoryConsumptionForThisTask === 1000L)
+
+    val result2 = Future { tMemManager.acquireExecutionMemory(300L, MemoryMode.OFF_HEAP, null) }
+    assert(Await.result(result2, 200.millis) === 0L)
+
+    assert(tMemManager.getMemoryConsumptionForThisTask === 1000L)
+    tMemManager.releaseExecutionMemory(500L, MemoryMode.OFF_HEAP, null)
+    assert(tMemManager.getMemoryConsumptionForThisTask === 500L)
+    tMemManager.releaseExecutionMemory(500L, MemoryMode.OFF_HEAP, null)
+    assert(tMemManager.getMemoryConsumptionForThisTask === 0l)
   }
 }
 
