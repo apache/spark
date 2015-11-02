@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.IntegerType
 class ExpandSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits.localSeqToDataFrameHolder
 
-  def testExpand(f: SparkPlan => SparkPlan) = {
+  private def testExpand(f: SparkPlan => SparkPlan): Unit = {
     val input = (1 to 1000).map(Tuple1.apply)
     val projections = Seq.tabulate(2) { i =>
       Alias(BoundReference(0, IntegerType, false), "id")() :: Alias(Literal(i), "gid")() :: Nil
