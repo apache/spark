@@ -18,10 +18,11 @@
 package org.apache.spark
 
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+
+import org.apache.avro.{SchemaNormalization, Schema}
 
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
@@ -161,6 +162,26 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     this
   }
 
+  private final val avroNamespace = "avro.schema."
+
+  /**
+   * Use Kryo serialization and register the given set of Avro schemas so that the generic
+   * record serializer can decrease network IO
+   */
+  def registerAvroSchemas(schemas: Schema*): SparkConf = {
+    for (schema <- schemas) {
+      set(avroNamespace + SchemaNormalization.parsingFingerprint64(schema), schema.toString)
+    }
+    this
+  }
+
+  /** Gets all the avro schemas in the configuration used in the generic Avro record serializer */
+  def getAvroSchema: Map[Long, String] = {
+    getAll.filter { case (k, v) => k.startsWith(avroNamespace) }
+      .map { case (k, v) => (k.substring(avroNamespace.length).toLong, v) }
+      .toMap
+  }
+
   /** Remove a parameter from the configuration */
   def remove(key: String): SparkConf = {
     settings.remove(key)
@@ -226,6 +247,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   def getSizeAsBytes(key: String, defaultValue: String): Long = {
     Utils.byteStringAsBytes(get(key, defaultValue))
+  }
+
+  /**
+   * Get a size parameter as bytes, falling back to a default if not set.
+   */
+  def getSizeAsBytes(key: String, defaultValue: Long): Long = {
+    Utils.byteStringAsBytes(get(key, defaultValue + "B"))
   }
 
   /**
@@ -361,6 +389,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val driverOptsKey = "spark.driver.extraJavaOptions"
     val driverClassPathKey = "spark.driver.extraClassPath"
     val driverLibraryPathKey = "spark.driver.extraLibraryPath"
+    val sparkExecutorInstances = "spark.executor.instances"
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -389,16 +418,35 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     // Validate memory fractions
-    val memoryKeys = Seq(
+    val deprecatedMemoryKeys = Seq(
       "spark.storage.memoryFraction",
       "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",
       "spark.storage.unrollFraction",
       "spark.storage.safetyFraction")
+    val memoryKeys = Seq(
+      "spark.memory.fraction",
+      "spark.memory.storageFraction") ++
+      deprecatedMemoryKeys
     for (key <- memoryKeys) {
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
-        throw new IllegalArgumentException("$key should be between 0 and 1 (was '$value').")
+        throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
+      }
+    }
+
+    // Warn against deprecated memory fractions (unless legacy memory management mode is enabled)
+    val legacyMemoryManagementKey = "spark.memory.useLegacyMode"
+    val legacyMemoryManagement = getBoolean(legacyMemoryManagementKey, false)
+    if (!legacyMemoryManagement) {
+      val keyset = deprecatedMemoryKeys.toSet
+      val detected = settings.keys().asScala.filter(keyset.contains)
+      if (detected.nonEmpty) {
+        logWarning("Detected deprecated memory fraction settings: " +
+          detected.mkString("[", ", ", "]") + ". As of Spark 1.6, execution and storage " +
+          "memory management are unified. All memory fractions used in the old model are " +
+          "now deprecated and no longer read. If you wish to use the old memory management, " +
+          s"you may explicitly enable `$legacyMemoryManagementKey` (not recommended).")
       }
     }
 
@@ -446,6 +494,24 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           logWarning(s"Setting '$key' to '$value' as a work-around.")
           set(key, value)
         }
+      }
+    }
+
+    if (!contains(sparkExecutorInstances)) {
+      sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
+        val warning =
+          s"""
+             |SPARK_WORKER_INSTANCES was detected (set to '$value').
+             |This is deprecated in Spark 1.0+.
+             |
+             |Please instead use:
+             | - ./spark-submit with --num-executors to specify the number of executors
+             | - Or set SPARK_EXECUTOR_INSTANCES
+             | - spark.executor.instances to configure the number of instances in the spark config.
+        """.stripMargin
+        logWarning(warning)
+
+        set("spark.executor.instances", value)
       }
     }
   }
@@ -527,7 +593,11 @@ private[spark] object SparkConf extends Logging {
     "spark.rpc.askTimeout" -> Seq(
       AlternateConfig("spark.akka.askTimeout", "1.4")),
     "spark.rpc.lookupTimeout" -> Seq(
-      AlternateConfig("spark.akka.lookupTimeout", "1.4"))
+      AlternateConfig("spark.akka.lookupTimeout", "1.4")),
+    "spark.streaming.fileStream.minRememberDuration" -> Seq(
+      AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
+    "spark.yarn.max.executor.failures" -> Seq(
+      AlternateConfig("spark.yarn.max.worker.failures", "1.5"))
     )
 
   /**
@@ -551,7 +621,7 @@ private[spark] object SparkConf extends Logging {
   /**
    * Return whether the given config should be passed to an executor on start-up.
    *
-   * Certain akka and authentication configs are required of the executor when it connects to
+   * Certain akka and authentication configs are required from the executor when it connects to
    * the scheduler, while the rest of the spark configs can be inherited from the driver later.
    */
   def isExecutorStartupConf(name: String): Boolean = {

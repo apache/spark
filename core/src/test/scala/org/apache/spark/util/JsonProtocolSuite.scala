@@ -83,6 +83,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
+    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", Seq(
+      (1L, 2, 3, makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800,
+        hasHadoopInput = true, hasOutput = true))))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -102,6 +105,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
+    testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
   }
 
   test("Dependent Classes") {
@@ -147,7 +151,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
-    testTaskEndReason(ExecutorLostFailure("100"))
+    testTaskEndReason(TaskCommitDenied(2, 3, 4))
+    testTaskEndReason(ExecutorLostFailure("100", true))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -159,7 +164,8 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("ExceptionFailure backward compatibility") {
-    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null, None)
+    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null,
+      None, None)
     val oldEvent = JsonProtocol.taskEndReasonToJson(exceptionFailure)
       .removeField({ _._1 == "Full Stack Trace" })
     assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
@@ -290,10 +296,10 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("ExecutorLostFailure backward compatibility") {
     // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
-    val executorLostFailure = ExecutorLostFailure("100")
+    val executorLostFailure = ExecutorLostFailure("100", true)
     val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
       .removeField({ _._1 == "Executor ID" })
-    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown")
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", true)
     assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
@@ -345,6 +351,26 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldStageInfo = JsonProtocol.stageInfoToJson(stageInfo).removeField({ _._1 == "Parent IDs"})
     val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details")
     assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
+  }
+
+  // `TaskCommitDenied` was added in 1.3.0 but JSON de/serialization logic was added in 1.5.1
+  test("TaskCommitDenied backward compatibility") {
+    val denied = TaskCommitDenied(1, 2, 3)
+    val oldDenied = JsonProtocol.taskEndReasonToJson(denied)
+      .removeField({ _._1 == "Job ID" })
+      .removeField({ _._1 == "Partition ID" })
+      .removeField({ _._1 == "Attempt Number" })
+    val expectedDenied = TaskCommitDenied(-1, -1, -1)
+    assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
+  }
+
+  test("AccumulableInfo backward compatibility") {
+    // "Internal" property of AccumulableInfo were added after 1.5.1.
+    val accumulableInfo = makeAccumulableInfo(1)
+    val oldJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
+      .removeField({ _._1 == "Internal" })
+    val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
+    assert(false === oldInfo.internal)
   }
 
   /** -------------------------- *
@@ -440,10 +466,20 @@ class JsonProtocolSuite extends SparkFunSuite {
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
       case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
-        assert(e1.executorId == e1.executorId)
+        assert(e1.executorId === e1.executorId)
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
-        assert(e1.executorId == e1.executorId)
+        assert(e1.executorId === e1.executorId)
+      case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
+        assert(e1.execId === e2.execId)
+        assertSeqEquals[(Long, Int, Int, TaskMetrics)](e1.taskMetrics, e2.taskMetrics, (a, b) => {
+          val (taskId1, stageId1, stageAttemptId1, metrics1) = a
+          val (taskId2, stageId2, stageAttemptId2, metrics2) = b
+          assert(taskId1 === taskId2)
+          assert(stageId1 === stageId2)
+          assert(stageAttemptId1 === stageAttemptId2)
+          assertEquals(metrics1, metrics2)
+        })
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -484,7 +520,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   private def assertEquals(info1: TaskInfo, info2: TaskInfo) {
     assert(info1.taskId === info2.taskId)
     assert(info1.index === info2.index)
-    assert(info1.attempt === info2.attempt)
+    assert(info1.attemptNumber === info2.attemptNumber)
     assert(info1.launchTime === info2.launchTime)
     assert(info1.executorId === info2.executorId)
     assert(info1.host === info2.host)
@@ -562,8 +598,15 @@ class JsonProtocolSuite extends SparkFunSuite {
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
-      case (ExecutorLostFailure(execId1), ExecutorLostFailure(execId2)) =>
+      case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
+          TaskCommitDenied(jobId2, partitionId2, attemptNumber2)) =>
+        assert(jobId1 === jobId2)
+        assert(partitionId1 === partitionId2)
+        assert(attemptNumber1 === attemptNumber2)
+      case (ExecutorLostFailure(execId1, exit1CausedByApp),
+          ExecutorLostFailure(execId2, exit2CausedByApp)) =>
         assert(execId1 === execId2)
+        assert(exit1CausedByApp === exit2CausedByApp)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }
@@ -689,15 +732,15 @@ class JsonProtocolSuite extends SparkFunSuite {
     val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
       speculative)
     val (acc1, acc2, acc3) =
-      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3))
+      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true))
     taskInfo.accumulables += acc1
     taskInfo.accumulables += acc2
     taskInfo.accumulables += acc3
     taskInfo
   }
 
-  private def makeAccumulableInfo(id: Int): AccumulableInfo =
-    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id)
+  private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
+    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id, internal)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -778,13 +821,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      }
       |    ]
       |  },
@@ -832,13 +877,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      }
       |    ]
       |  }
@@ -868,19 +915,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  }
@@ -908,19 +958,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  }
@@ -954,19 +1007,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1040,19 +1096,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1123,19 +1182,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1217,13 +1279,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1275,13 +1339,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1350,13 +1416,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1442,13 +1510,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    }
@@ -1598,4 +1668,55 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  "Removed Reason": "test reason"
       |}
     """
+
+  private val executorMetricsUpdateJsonString =
+  s"""
+     |{
+     |  "Event": "SparkListenerExecutorMetricsUpdate",
+     |  "Executor ID": "exec3",
+     |  "Metrics Updated": [
+     |  {
+     |    "Task ID": 1,
+     |    "Stage ID": 2,
+     |    "Stage Attempt ID": 3,
+     |    "Task Metrics": {
+     |    "Host Name": "localhost",
+     |    "Executor Deserialize Time": 300,
+     |    "Executor Run Time": 400,
+     |    "Result Size": 500,
+     |    "JVM GC Time": 600,
+     |    "Result Serialization Time": 700,
+     |    "Memory Bytes Spilled": 800,
+     |    "Disk Bytes Spilled": 0,
+     |    "Input Metrics": {
+     |      "Data Read Method": "Hadoop",
+     |      "Bytes Read": 2100,
+     |      "Records Read": 21
+     |    },
+     |    "Output Metrics": {
+     |      "Data Write Method": "Hadoop",
+     |      "Bytes Written": 1200,
+     |      "Records Written": 12
+     |    },
+     |    "Updated Blocks": [
+     |      {
+     |        "Block ID": "rdd_0_0",
+     |        "Status": {
+     |          "Storage Level": {
+     |            "Use Disk": true,
+     |            "Use Memory": true,
+     |            "Use ExternalBlockStore": false,
+     |            "Deserialized": false,
+     |            "Replication": 2
+     |          },
+     |          "Memory Size": 0,
+     |          "ExternalBlockStore Size": 0,
+     |          "Disk Size": 0
+     |        }
+     |      }
+     |    ]
+     |  }
+     |  }]
+     |}
+   """.stripMargin
 }

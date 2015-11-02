@@ -375,6 +375,7 @@ class TestCreateNullValue {
     // parameters of the closure constructor. This allows us to test whether
     // null values are created correctly for each type.
     val nestedClosure = () => {
+      // scalastyle:off println
       if (s.toString == "123") { // Don't really output them to avoid noisy
         println(bo)
         println(c)
@@ -389,6 +390,7 @@ class TestCreateNullValue {
       val closure = () => {
         println(getX)
       }
+      // scalastyle:on println
       ClosureCleaner.clean(closure)
     }
     nestedClosure()

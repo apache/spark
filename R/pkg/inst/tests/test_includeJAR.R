@@ -18,8 +18,8 @@ context("include an external JAR in SparkContext")
 
 runScript <- function() {
   sparkHome <- Sys.getenv("SPARK_HOME")
-  jarPath <- paste("--jars",
-                   shQuote(file.path(sparkHome, "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar")))
+  sparkTestJarPath <- "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar"
+  jarPath <- paste("--jars", shQuote(file.path(sparkHome, sparkTestJarPath)))
   scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/jarTest.R")
   submitPath <- file.path(sparkHome, "bin/spark-submit")
   res <- system2(command = submitPath,

@@ -18,13 +18,13 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
-import scala.math.max
 
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 
 
 /**
@@ -250,7 +250,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.toString()
   }
 
+  // scalastyle:off println
   def printTreeString(): Unit = println(treeString)
+  // scalastyle:on println
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))
@@ -290,7 +292,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] def merge(that: StructType): StructType =
     StructType.merge(this, that).asInstanceOf[StructType]
 
-  private[spark] override def asNullable: StructType = {
+  override private[spark] def asNullable: StructType = {
     val newFields = fields.map {
       case StructField(name, dataType, nullable, metadata) =>
         StructField(name, dataType.asNullable, nullable = true, metadata)
@@ -298,15 +300,29 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
     StructType(newFields)
   }
-}
 
+  override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
+    f(this) || fields.exists(field => field.dataType.existsRecursively(f))
+  }
+
+  @transient
+  private[sql] lazy val interpretedOrdering =
+    InterpretedOrdering.forSchema(this.fields.map(_.dataType))
+}
 
 object StructType extends AbstractDataType {
 
-  private[sql] override def defaultConcreteType: DataType = new StructType
+  override private[sql] def defaultConcreteType: DataType = new StructType
 
-  private[sql] override def isParentOf(childCandidate: DataType): Boolean = {
-    childCandidate.isInstanceOf[StructType]
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[StructType]
+  }
+
+  override private[sql] def simpleString: String = "struct"
+
+  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
+    case t: StructType => t
+    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
   }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
@@ -357,10 +373,19 @@ object StructType extends AbstractDataType {
         StructType(newFields)
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
-      DecimalType.Fixed(rightPrecision, rightScale)) =>
-        DecimalType(
-          max(leftScale, rightScale) + max(leftPrecision - leftScale, rightPrecision - rightScale),
-          max(leftScale, rightScale))
+        DecimalType.Fixed(rightPrecision, rightScale)) =>
+        if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
+          DecimalType(leftPrecision, leftScale)
+        } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
+        } else if (leftPrecision != rightPrecision) {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"precision $leftPrecision and $rightPrecision")
+        } else {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"scala $leftScale and $rightScale")
+        }
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt

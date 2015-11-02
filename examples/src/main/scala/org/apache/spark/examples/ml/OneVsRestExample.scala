@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
@@ -183,3 +184,4 @@ object OneVsRestExample {
     (NANO.toSeconds(t1 - t0), result)
   }
 }
+// scalastyle:on println

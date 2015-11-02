@@ -18,17 +18,43 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.datasources.ResolvedDataSource
 
 class ResolvedDataSourceSuite extends SparkFunSuite {
 
-  test("builtin sources") {
-    assert(ResolvedDataSource.lookupDataSource("jdbc") ===
-      classOf[org.apache.spark.sql.jdbc.DefaultSource])
+  test("jdbc") {
+    assert(
+      ResolvedDataSource.lookupDataSource("jdbc") ===
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.DefaultSource])
+    assert(
+      ResolvedDataSource.lookupDataSource("org.apache.spark.sql.execution.datasources.jdbc") ===
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.DefaultSource])
+    assert(
+      ResolvedDataSource.lookupDataSource("org.apache.spark.sql.jdbc") ===
+        classOf[org.apache.spark.sql.execution.datasources.jdbc.DefaultSource])
+  }
 
-    assert(ResolvedDataSource.lookupDataSource("json") ===
-      classOf[org.apache.spark.sql.json.DefaultSource])
+  test("json") {
+    assert(
+      ResolvedDataSource.lookupDataSource("json") ===
+      classOf[org.apache.spark.sql.execution.datasources.json.DefaultSource])
+    assert(
+      ResolvedDataSource.lookupDataSource("org.apache.spark.sql.execution.datasources.json") ===
+        classOf[org.apache.spark.sql.execution.datasources.json.DefaultSource])
+    assert(
+      ResolvedDataSource.lookupDataSource("org.apache.spark.sql.json") ===
+        classOf[org.apache.spark.sql.execution.datasources.json.DefaultSource])
+  }
 
-    assert(ResolvedDataSource.lookupDataSource("parquet") ===
-      classOf[org.apache.spark.sql.parquet.DefaultSource])
+  test("parquet") {
+    assert(
+      ResolvedDataSource.lookupDataSource("parquet") ===
+      classOf[org.apache.spark.sql.execution.datasources.parquet.DefaultSource])
+    assert(
+      ResolvedDataSource.lookupDataSource("org.apache.spark.sql.execution.datasources.parquet") ===
+        classOf[org.apache.spark.sql.execution.datasources.parquet.DefaultSource])
+    assert(
+      ResolvedDataSource.lookupDataSource("org.apache.spark.sql.parquet") ===
+        classOf[org.apache.spark.sql.execution.datasources.parquet.DefaultSource])
   }
 }

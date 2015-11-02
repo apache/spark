@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.mutable.Map
+import scala.collection.Map
 import scala.language.existentials
 
 import org.apache.spark._
@@ -35,15 +35,24 @@ import org.apache.spark.util.CallSite
  */
 private[scheduler] sealed trait DAGSchedulerEvent
 
+/** A result-yielding job was submitted on a target RDD */
 private[scheduler] case class JobSubmitted(
     jobId: Int,
     finalRDD: RDD[_],
     func: (TaskContext, Iterator[_]) => _,
     partitions: Array[Int],
-    allowLocal: Boolean,
     callSite: CallSite,
     listener: JobListener,
     properties: Properties = null)
+  extends DAGSchedulerEvent
+
+/** A map stage as submitted to run as a separate job */
+private[scheduler] case class MapStageSubmitted(
+  jobId: Int,
+  dependency: ShuffleDependency[_, _, _],
+  callSite: CallSite,
+  listener: JobListener,
+  properties: Properties = null)
   extends DAGSchedulerEvent
 
 private[scheduler] case class StageCancelled(stageId: Int) extends DAGSchedulerEvent
@@ -74,6 +83,7 @@ private[scheduler] case class ExecutorAdded(execId: String, host: String) extend
 private[scheduler] case class ExecutorLost(execId: String) extends DAGSchedulerEvent
 
 private[scheduler]
-case class TaskSetFailed(taskSet: TaskSet, reason: String) extends DAGSchedulerEvent
+case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
+  extends DAGSchedulerEvent
 
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent

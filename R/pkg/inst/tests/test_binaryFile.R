@@ -20,7 +20,7 @@ context("functions on binary files")
 # JavaSparkContext handle
 sc <- sparkR.init()
 
-mockFile = c("Spark is pretty.", "Spark is awesome.")
+mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("saveAsObjectFile()/objectFile() following textFile() works", {
   fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")

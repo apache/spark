@@ -17,10 +17,7 @@
 # limitations under the License.
 #
 
-# Note that this will not necessarily work as intended with non-GNU sed (e.g. OS X)
-BASEDIR=$(dirname $0)/..
-find $BASEDIR -name 'pom.xml' | grep -v target \
-  | xargs -I {} sed -i -e 's/\(artifactId.*\)_2.11/\1_2.10/g' {}
+# This script exists for backwards compability. Use change-scala-version.sh instead.
+echo "This script is deprecated. Please instead run: change-scala-version.sh 2.10"
 
-# Also update <scala.binary.version> in parent POM
-sed -i -e '0,/<scala\.binary\.version>2.11</s//<scala.binary.version>2.10</' $BASEDIR/pom.xml
+$(dirname $0)/change-scala-version.sh 2.10

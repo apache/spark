@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
@@ -78,3 +79,4 @@ object StatefulNetworkWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

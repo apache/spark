@@ -19,7 +19,7 @@ package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -116,9 +116,9 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
       // The eventually is required to ensure that all data in the batch has been processed.
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
         val flattenOutputBuffer = outputBuffer.flatten
-        val headers = flattenOutputBuffer.map(_.event.getHeaders.map {
-          case kv => (kv._1.toString, kv._2.toString)
-        }).map(mapAsJavaMap)
+        val headers = flattenOutputBuffer.map(_.event.getHeaders.asScala.map {
+          case (key, value) => (key.toString, value.toString)
+        }).map(_.asJava)
         val bodies = flattenOutputBuffer.map(e => new String(e.event.getBody.array(), UTF_8))
         utils.assertOutput(headers, bodies)
       }

@@ -74,6 +74,35 @@ class MatricesSuite extends SparkFunSuite {
     }
   }
 
+  test("index in matrices incorrect input") {
+    val sm = Matrices.sparse(3, 2, Array(0, 2, 3), Array(1, 2, 1), Array(0.0, 1.0, 2.0))
+    val dm = Matrices.dense(3, 2, Array(0.0, 2.3, 1.4, 3.2, 1.0, 9.1))
+    Array(sm, dm).foreach { mat =>
+      intercept[IllegalArgumentException] { mat.index(4, 1) }
+      intercept[IllegalArgumentException] { mat.index(1, 4) }
+      intercept[IllegalArgumentException] { mat.index(-1, 2) }
+      intercept[IllegalArgumentException] { mat.index(1, -2) }
+    }
+  }
+
+  test("equals") {
+    val dm1 = Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0))
+    assert(dm1 === dm1)
+    assert(dm1 !== dm1.transpose)
+
+    val dm2 = Matrices.dense(2, 2, Array(0.0, 2.0, 1.0, 3.0))
+    assert(dm1 === dm2.transpose)
+
+    val sm1 = dm1.asInstanceOf[DenseMatrix].toSparse
+    assert(sm1 === sm1)
+    assert(sm1 === dm1)
+    assert(sm1 !== sm1.transpose)
+
+    val sm2 = dm2.asInstanceOf[DenseMatrix].toSparse
+    assert(sm1 === sm2.transpose)
+    assert(sm1 === dm2.transpose)
+  }
+
   test("matrix copies are deep copies") {
     val m = 3
     val n = 2

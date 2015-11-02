@@ -22,11 +22,11 @@ import scala.language.existentials
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
-import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
-import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
+import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap, CompactBuffer}
+import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
 import org.apache.spark.serializer.Serializer
 
@@ -75,7 +75,9 @@ private[spark] class CoGroupPartition(
  * @param part partitioner used to partition the shuffle output
  */
 @DeveloperApi
-class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
+class CoGroupedRDD[K: ClassTag](
+    @transient var rdds: Seq[RDD[_ <: Product2[K, _]]],
+    part: Partitioner)
   extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {
 
   // For example, `(k, a) cogroup (k, b)` produces k -> Array(ArrayBuffer as, ArrayBuffer bs).
@@ -94,13 +96,14 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    rdds.map { rdd: RDD[_ <: Product2[K, _]] =>
+    rdds.map { rdd: RDD[_] =>
       if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency[K, Any, CoGroupCombiner](rdd, part, serializer)
+        new ShuffleDependency[K, Any, CoGroupCombiner](
+          rdd.asInstanceOf[RDD[_ <: Product2[K, _]]], part, serializer)
       }
     }
   }
@@ -125,15 +128,13 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   override val partitioner: Some[Partitioner] = Some(part)
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Array[Iterable[_]])] = {
-    val sparkConf = SparkEnv.get.conf
-    val externalSorting = sparkConf.getBoolean("spark.shuffle.spill", true)
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = dependencies.length
 
     // A list of (rdd iterator, dependency number) pairs
     val rddIterators = new ArrayBuffer[(Iterator[Product2[K, Any]], Int)]
     for ((dep, depNum) <- dependencies.zipWithIndex) dep match {
-      case oneToOneDependency: OneToOneDependency[Product2[K, Any]] =>
+      case oneToOneDependency: OneToOneDependency[Product2[K, Any]] @unchecked =>
         val dependencyPartition = split.narrowDeps(depNum).get.split
         // Read them from the parent
         val it = oneToOneDependency.rdd.iterator(dependencyPartition, context)
@@ -147,32 +148,16 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         rddIterators += ((it, depNum))
     }
 
-    if (!externalSorting) {
-      val map = new AppendOnlyMap[K, CoGroupCombiner]
-      val update: (Boolean, CoGroupCombiner) => CoGroupCombiner = (hadVal, oldVal) => {
-        if (hadVal) oldVal else Array.fill(numRdds)(new CoGroup)
-      }
-      val getCombiner: K => CoGroupCombiner = key => {
-        map.changeValue(key, update)
-      }
-      rddIterators.foreach { case (it, depNum) =>
-        while (it.hasNext) {
-          val kv = it.next()
-          getCombiner(kv._1)(depNum) += kv._2
-        }
-      }
-      new InterruptibleIterator(context,
-        map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
-    } else {
-      val map = createExternalMap(numRdds)
-      for ((it, depNum) <- rddIterators) {
-        map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
-      }
-      context.taskMetrics.incMemoryBytesSpilled(map.memoryBytesSpilled)
-      context.taskMetrics.incDiskBytesSpilled(map.diskBytesSpilled)
-      new InterruptibleIterator(context,
-        map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
+    val map = createExternalMap(numRdds)
+    for ((it, depNum) <- rddIterators) {
+      map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
     }
+    context.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
+    context.internalMetricsToAccumulators(
+      InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
+    new InterruptibleIterator(context,
+      map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
   }
 
   private def createExternalMap(numRdds: Int)

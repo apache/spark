@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.hadoop.hbase.client.HBaseAdmin
@@ -62,3 +63,4 @@ object HBaseTest {
     admin.close()
   }
 }
+// scalastyle:on println

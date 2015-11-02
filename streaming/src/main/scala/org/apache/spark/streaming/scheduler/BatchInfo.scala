@@ -24,20 +24,25 @@ import org.apache.spark.streaming.Time
  * :: DeveloperApi ::
  * Class having information on completed batches.
  * @param batchTime   Time of the batch
- * @param streamIdToNumRecords A map of input stream id to record number
+ * @param streamIdToInputInfo A map of input stream id to its input info
  * @param submissionTime  Clock time of when jobs of this batch was submitted to
  *                        the streaming scheduler queue
  * @param processingStartTime Clock time of when the first job of this batch started processing
  * @param processingEndTime Clock time of when the last job of this batch finished processing
+ * @param outputOperationInfos The output operations in this batch
  */
 @DeveloperApi
 case class BatchInfo(
     batchTime: Time,
-    streamIdToNumRecords: Map[Int, Long],
+    streamIdToInputInfo: Map[Int, StreamInputInfo],
     submissionTime: Long,
     processingStartTime: Option[Long],
-    processingEndTime: Option[Long]
+    processingEndTime: Option[Long],
+    outputOperationInfos: Map[Int, OutputOperationInfo]
   ) {
+
+  @deprecated("Use streamIdToInputInfo instead", "1.5.0")
+  def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
 
   /**
    * Time taken for the first job of this batch to start processing from the time this batch
@@ -63,5 +68,6 @@ case class BatchInfo(
   /**
    * The number of recorders received by the receivers in this batch.
    */
-  def numRecords: Long = streamIdToNumRecords.values.sum
+  def numRecords: Long = streamIdToInputInfo.values.map(_.numRecords).sum
+
 }

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scopt.OptionParser
@@ -75,7 +76,7 @@ object MovieLensALS {
         .text("path to a MovieLens dataset of movies")
         .action((x, c) => c.copy(movies = x))
       opt[Int]("rank")
-        .text(s"rank, default: ${defaultParams.rank}}")
+        .text(s"rank, default: ${defaultParams.rank}")
         .action((x, c) => c.copy(rank = x))
       opt[Int]("maxIter")
         .text(s"max number of iterations, default: ${defaultParams.maxIter}")
@@ -178,3 +179,4 @@ object MovieLensALS {
     sc.stop()
   }
 }
+// scalastyle:on println

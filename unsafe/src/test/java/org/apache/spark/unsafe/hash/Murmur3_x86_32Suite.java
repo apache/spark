@@ -17,12 +17,13 @@
 
 package org.apache.spark.unsafe.hash;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
 
-import junit.framework.Assert;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -56,7 +57,7 @@ public class Murmur3_x86_32Suite {
     Random rand = new Random();
 
     // A set used to track collision rate.
-    Set<Integer> hashcodes = new HashSet<Integer>();
+    Set<Integer> hashcodes = new HashSet<>();
     for (int i = 0; i < size; i++) {
       int vint = rand.nextInt();
       long lint = rand.nextLong();
@@ -76,18 +77,18 @@ public class Murmur3_x86_32Suite {
     Random rand = new Random();
 
     // A set used to track collision rate.
-    Set<Integer> hashcodes = new HashSet<Integer>();
+    Set<Integer> hashcodes = new HashSet<>();
     for (int i = 0; i < size; i++) {
       int byteArrSize = rand.nextInt(100) * 8;
       byte[] bytes = new byte[byteArrSize];
       rand.nextBytes(bytes);
 
       Assert.assertEquals(
-        hasher.hashUnsafeWords(bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize),
-        hasher.hashUnsafeWords(bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+        hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
+        hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
       hashcodes.add(hasher.hashUnsafeWords(
-        bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+        bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 
     // A very loose bound.
@@ -98,19 +99,19 @@ public class Murmur3_x86_32Suite {
   public void randomizedStressTestPaddedStrings() {
     int size = 64000;
     // A set used to track collision rate.
-    Set<Integer> hashcodes = new HashSet<Integer>();
+    Set<Integer> hashcodes = new HashSet<>();
     for (int i = 0; i < size; i++) {
       int byteArrSize = 8;
-      byte[] strBytes = ("" + i).getBytes();
+      byte[] strBytes = String.valueOf(i).getBytes(StandardCharsets.UTF_8);
       byte[] paddedBytes = new byte[byteArrSize];
       System.arraycopy(strBytes, 0, paddedBytes, 0, strBytes.length);
 
       Assert.assertEquals(
-        hasher.hashUnsafeWords(paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize),
-        hasher.hashUnsafeWords(paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+        hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
+        hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
       hashcodes.add(hasher.hashUnsafeWords(
-        paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+        paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 
     // A very loose bound.

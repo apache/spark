@@ -119,7 +119,7 @@ test_that("cleanClosure on R functions", {
   # Test for overriding variables in base namespace (Issue: SparkR-196).
   nums <- as.list(1:10)
   rdd <- parallelize(sc, nums, 2L)
-  t = 4  # Override base::t in .GlobalEnv.
+  t <- 4  # Override base::t in .GlobalEnv.
   f <- function(x) { x > t }
   newF <- cleanClosure(f)
   env <- environment(newF)

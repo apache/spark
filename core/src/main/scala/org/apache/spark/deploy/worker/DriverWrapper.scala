@@ -53,14 +53,16 @@ object DriverWrapper {
         Thread.currentThread.setContextClassLoader(loader)
 
         // Delegate to supplied main class
-        val clazz = Class.forName(mainClass, true, loader)
+        val clazz = Utils.classForName(mainClass)
         val mainMethod = clazz.getMethod("main", classOf[Array[String]])
         mainMethod.invoke(null, extraArgs.toArray[String])
 
         rpcEnv.shutdown()
 
       case _ =>
+        // scalastyle:off println
         System.err.println("Usage: DriverWrapper <workerUrl> <userJar> <driverMainClass> [options]")
+        // scalastyle:on println
         System.exit(-1)
     }
   }

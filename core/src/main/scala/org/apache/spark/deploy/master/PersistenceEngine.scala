@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.master
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.RpcEnv
 
 import scala.reflect.ClassTag
 
@@ -80,8 +81,11 @@ abstract class PersistenceEngine {
    * Returns the persisted data sorted by their respective ids (which implies that they're
    * sorted by time of creation).
    */
-  final def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
-    (read[ApplicationInfo]("app_"), read[DriverInfo]("driver_"), read[WorkerInfo]("worker_"))
+  final def readPersistedData(
+      rpcEnv: RpcEnv): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
+    rpcEnv.deserialize { () =>
+      (read[ApplicationInfo]("app_"), read[DriverInfo]("driver_"), read[WorkerInfo]("worker_"))
+    }
   }
 
   def close() {}

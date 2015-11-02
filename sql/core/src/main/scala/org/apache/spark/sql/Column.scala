@@ -22,8 +22,10 @@ import scala.language.implicitConversions
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.encoders.Encoder
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
 
 
@@ -36,15 +38,20 @@ private[sql] object Column {
   def unapply(col: Column): Option[Expression] = Some(col.expr)
 }
 
+/**
+ * A [[Column]] where an [[Encoder]] has been given for the expected return type.
+ * @since 1.6.0
+ */
+class TypedColumn[T](expr: Expression)(implicit val encoder: Encoder[T]) extends Column(expr)
 
 /**
  * :: Experimental ::
  * A column in a [[DataFrame]].
  *
- * @groupname java_expr_ops Java-specific expression operators.
- * @groupname expr_ops Expression operators.
- * @groupname df_ops DataFrame functions.
- * @groupname Ungrouped Support functions for DataFrames.
+ * @groupname java_expr_ops Java-specific expression operators
+ * @groupname expr_ops Expression operators
+ * @groupname df_ops DataFrame functions
+ * @groupname Ungrouped Support functions for DataFrames
  *
  * @since 1.3.0
  */
@@ -54,7 +61,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
     case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
-    case _ => UnresolvedAttribute(name)
+    case _ => UnresolvedAttribute.quotedString(name)
   })
 
   /** Creates a column based on the given expression. */
@@ -68,6 +75,14 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   override def hashCode: Int = this.expr.hashCode
+
+  /**
+   * Provides a type hint about the expected return value of this column.  This information can
+   * be used by operations such as `select` on a [[Dataset]] to automatically convert the
+   * results into the correct JVM types.
+   * @since 1.6.0
+   */
+  def as[T : Encoder]: TypedColumn[T] = new TypedColumn[T](expr)
 
   /**
    * Extracts a value or values from a complex type.
@@ -401,6 +416,14 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   /**
+   * True if the current expression is NaN.
+   *
+   * @group expr_ops
+   * @since 1.5.0
+   */
+  def isNaN: Column = IsNaN(expr)
+
+  /**
    * True if the current expression is null.
    *
    * @group expr_ops
@@ -619,8 +642,19 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
+  @deprecated("use isin", "1.5.0")
   @scala.annotation.varargs
-  def in(list: Any*): Column = In(expr, list.map(lit(_).expr))
+  def in(list: Any*): Column = isin(list : _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the evaluated values of the arguments.
+   *
+   * @group expr_ops
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def isin(list: Any*): Column = In(expr, list.map(lit(_).expr))
 
   /**
    * SQL like expression.
@@ -734,10 +768,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   df.select($"colA".as("colB"))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String): Column = Alias(expr, alias)()
+  def as(alias: String): Column = expr match {
+    case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
+    case other => Alias(other, alias)()
+  }
 
   /**
    * (Scala-specific) Assigns the given aliases to the results of a table generating function.
@@ -770,10 +810,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   df.select($"colA".as('colB))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: Symbol): Column = Alias(expr, alias.name)()
+  def as(alias: Symbol): Column = expr match {
+    case ne: NamedExpression => Alias(expr, alias.name)(explicitMetadata = Some(ne.metadata))
+    case other => Alias(other, alias.name)()
+  }
 
   /**
    * Gives the column an alias with metadata.
@@ -804,8 +850,8 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def cast(to: DataType): Column = expr match {
-    // Lift alias out of cast so we can support col.as("name").cast(IntegerType)
-    case Alias(childExpr, name) => Alias(Cast(childExpr, to), name)()
+    // keeps the name of expression if possible when do cast.
+    case ne: NamedExpression => UnresolvedAlias(Cast(expr, to))
     case _ => Cast(expr, to)
   }
 
@@ -860,11 +906,13 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def explain(extended: Boolean): Unit = {
+    // scalastyle:off println
     if (extended) {
       println(expr)
     } else {
       println(expr.prettyString)
     }
+    // scalastyle:on println
   }
 
   /**
@@ -986,7 +1034,7 @@ class ColumnName(name: String) extends Column(name) {
    * Creates a new [[StructField]] of type decimal.
    * @since 1.3.0
    */
-  def decimal: StructField = StructField(name, DecimalType.Unlimited)
+  def decimal: StructField = StructField(name, DecimalType.USER_DEFAULT)
 
   /**
    * Creates a new [[StructField]] of type decimal.

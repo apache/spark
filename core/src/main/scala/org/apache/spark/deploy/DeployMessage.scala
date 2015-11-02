@@ -69,9 +69,14 @@ private[deploy] object DeployMessages {
 
   // Master to Worker
 
-  case class RegisteredWorker(master: RpcEndpointRef, masterWebUiUrl: String) extends DeployMessage
+  sealed trait RegisterWorkerResponse
 
-  case class RegisterWorkerFailed(message: String) extends DeployMessage
+  case class RegisteredWorker(master: RpcEndpointRef, masterWebUiUrl: String) extends DeployMessage
+    with RegisterWorkerResponse
+
+  case class RegisterWorkerFailed(message: String) extends DeployMessage with RegisterWorkerResponse
+
+  case object MasterInStandby extends DeployMessage with RegisterWorkerResponse
 
   case class ReconnectWorker(masterUrl: String) extends DeployMessage
 
@@ -106,6 +111,10 @@ private[deploy] object DeployMessages {
   case class UnregisterApplication(appId: String)
 
   case class MasterChangeAcknowledged(appId: String)
+
+  case class RequestExecutors(appId: String, requestedTotal: Int)
+
+  case class KillExecutors(appId: String, executorIds: Seq[String])
 
   // Master to AppClient
 

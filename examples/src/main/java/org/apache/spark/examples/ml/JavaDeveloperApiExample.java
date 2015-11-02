@@ -124,7 +124,7 @@ class MyJavaLogisticRegression
 
   /**
    * Param for max number of iterations
-   * <p/>
+   * <p>
    * NOTE: The usual way to add a parameter to a model or algorithm is to include:
    * - val myParamName: ParamType
    * - def getMyParamName
@@ -220,9 +220,14 @@ class MyJavaLogisticRegressionModel
   public int numClasses() { return 2; }
 
   /**
+   * Number of features the model was trained on.
+   */
+  public int numFeatures() { return weights_.size(); }
+
+  /**
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
-   * <p/>
+   * <p>
    * This is used for the defaul implementation of [[transform()]].
    *
    * In Java, we have to make this method public since Java does not understand Scala's protected
@@ -230,6 +235,7 @@ class MyJavaLogisticRegressionModel
    */
   @Override
   public MyJavaLogisticRegressionModel copy(ParamMap extra) {
-    return copyValues(new MyJavaLogisticRegressionModel(uid(), weights_), extra);
+    return copyValues(new MyJavaLogisticRegressionModel(uid(), weights_), extra)
+      .setParent(parent());
   }
 }

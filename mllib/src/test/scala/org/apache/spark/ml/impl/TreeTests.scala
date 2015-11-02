@@ -124,4 +124,22 @@ private[ml] object TreeTests extends SparkFunSuite {
         "checkEqual failed since the two tree ensembles were not identical")
     }
   }
+
+  /**
+   * Helper method for constructing a tree for testing.
+   * Given left, right children, construct a parent node.
+   * @param split  Split for parent node
+   * @return  Parent node with children attached
+   */
+  def buildParentNode(left: Node, right: Node, split: Split): Node = {
+    val leftImp = left.impurityStats
+    val rightImp = right.impurityStats
+    val parentImp = leftImp.copy.add(rightImp)
+    val leftWeight = leftImp.count / parentImp.count.toDouble
+    val rightWeight = rightImp.count / parentImp.count.toDouble
+    val gain = parentImp.calculate() -
+      (leftWeight * leftImp.calculate() + rightWeight * rightImp.calculate())
+    val pred = parentImp.predict
+    new InternalNode(pred, parentImp.calculate(), gain, left, right, split, parentImp)
+  }
 }

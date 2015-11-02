@@ -81,6 +81,7 @@ class SaslRpcHandler extends RpcHandler {
 
     if (saslServer == null) {
       // First message in the handshake, setup the necessary state.
+      client.setClientId(saslMessage.appId);
       saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
         conf.saslServerAlwaysEncrypt());
     }
@@ -114,9 +115,18 @@ class SaslRpcHandler extends RpcHandler {
 
   @Override
   public void connectionTerminated(TransportClient client) {
-    if (saslServer != null) {
-      saslServer.dispose();
+    try {
+      delegate.connectionTerminated(client);
+    } finally {
+      if (saslServer != null) {
+        saslServer.dispose();
+      }
     }
+  }
+
+  @Override
+  public void exceptionCaught(Throwable cause, TransportClient client) {
+    delegate.exceptionCaught(cause, client);
   }
 
 }
