@@ -23,8 +23,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, InsertIntoTable}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -169,11 +169,21 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     val partitions = partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
+
+    // A partitioned relation schema's can be different from the input logicalPlan, since
+    // partition columns are all moved after data column. We Project to adjust the ordering.
+    // TODO: this belongs in the analyzer.
+    val input = partitioningColumns.map { parCols =>
+      val projectList = df.logicalPlan.output.filterNot(c => parCols.contains(c.name)) ++
+        parCols.map(UnresolvedAttribute(_))
+      Project(projectList, df.logicalPlan)
+    }.getOrElse(df.logicalPlan)
+
     df.sqlContext.executePlan(
       InsertIntoTable(
         UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
-        df.logicalPlan,
+        input,
         overwrite,
         ifNotExists = false)).toRdd
   }
