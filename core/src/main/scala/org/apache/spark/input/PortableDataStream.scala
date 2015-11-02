@@ -83,7 +83,6 @@ private[spark] abstract class StreamBasedRecordReader[T](
     if (!processed) {
       val fileIn = new PortableDataStream(split, context, index)
       value = parseStream(fileIn)
-      fileIn.close() // if it has not been open yet, close does nothing
       key = fileIn.getPath
       processed = true
       true
@@ -136,12 +135,6 @@ class PortableDataStream(
     index: Integer)
   extends Serializable {
 
-  // transient forces file to be reopened after being serialization
-  // it is also used for non-serializable classes
-
-  @transient private var fileIn: DataInputStream = null
-  @transient private var isOpen = false
-
   private val confBytes = {
     val baos = new ByteArrayOutputStream()
     SparkHadoopUtil.get.getConfigurationFromJobContext(context).
@@ -177,39 +170,24 @@ class PortableDataStream(
   }
 
   /**
-   * Create a new DataInputStream from the split and context
+   * Create a new DataInputStream from the split and context. The user of this method is responsible
+   * for closing the stream after usage.
    */
   def open(): DataInputStream = {
-    if (!isOpen) {
-      val pathp = split.getPath(index)
-      val fs = pathp.getFileSystem(conf)
-      fileIn = fs.open(pathp)
-      isOpen = true
-    }
-    fileIn
+    val pathp = split.getPath(index)
+    val fs = pathp.getFileSystem(conf)
+    fs.open(pathp)
   }
 
   /**
    * Read the file as a byte array
    */
   def toArray(): Array[Byte] = {
-    open()
-    val innerBuffer = ByteStreams.toByteArray(fileIn)
-    close()
-    innerBuffer
-  }
-
-  /**
-   * Close the file (if it is currently open)
-   */
-  def close(): Unit = {
-    if (isOpen) {
-      try {
-        fileIn.close()
-        isOpen = false
-      } catch {
-        case ioe: java.io.IOException => // do nothing
-      }
+    val stream = open()
+    try {
+      ByteStreams.toByteArray(stream)
+    } finally {
+      stream.close()
     }
   }
 
