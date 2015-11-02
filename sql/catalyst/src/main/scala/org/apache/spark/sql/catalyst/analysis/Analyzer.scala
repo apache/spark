@@ -245,9 +245,11 @@ class Analyzer(
         // e.g. SELECT a, b, sum(a) FROM src GROUP BY a, b with rollup ==>
         //      SELECT a, b, sum(a1) FROM (SELECT a, b, a AS a1 FROM src) GROUP BY a, b with rollup
 
-        // collect all the distinct attributes that are in both aggregation functions and group by clauses
+        // collect all the distinct attributes that are in both aggregation functions and
+        // group by clauses
         val attrInAggregatedFuncAndGroupBy = aggregation.collect {
-          case aggFunc: Alias => aggFunc.collect {case a : Attribute if newGroupByExprs.contains(a) => a}
+          case aggFunc: Alias => aggFunc.collect {
+            case a : Attribute if newGroupByExprs.contains(a) => a}
         }.flatten.distinct
 
         val alias4AttrInAggregatedFuncAndGroupBy = new ArrayBuffer[Alias]()
@@ -259,13 +261,16 @@ class Analyzer(
           (a, alias.toAttribute)
         })
 
-        val nonAttributeGroupByExpressionsToAttribute = nonAttributeGroupByExpressions.map(a=>a.toAttribute)
+        val nonAttributeGroupByExpressionsToAttribute =
+          nonAttributeGroupByExpressions.map(a => a.toAttribute)
 
         val newAggregation = aggregation.map {
           case a : Alias => a.transform {
-            // must avoid the alias replacement by the first step; otherwise, the following case will fail:
+            // Must avoid replace the alias replaced by the first step;
+            // otherwise, the following case will fail:
             //    select a + b, b, sum(a - b) from test group by a + b, b with cube
-            case e => attrInAggregatedFuncPairs.find(_._1==e && !nonAttributeGroupByExpressionsToAttribute.contains(e)).
+            case e => attrInAggregatedFuncPairs.find(
+              _._1==e && !nonAttributeGroupByExpressionsToAttribute.contains(e)).
               map(_._2).getOrElse(e)
           }.asInstanceOf[NamedExpression]
           case other => other
