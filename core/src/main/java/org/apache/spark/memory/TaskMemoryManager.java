@@ -202,17 +202,23 @@ public class TaskMemoryManager {
   /**
    * Dump the memory usage of all consumers.
    */
-  // TODO(josh): also report memory not allocated to any particular consumer.
   public void showMemoryUsage() {
     logger.info("Memory used in task " + taskAttemptId);
     synchronized (this) {
+      long memoryAccountedForByConsumers = 0;
       for (MemoryConsumer c: consumers) {
         long totalMemUsage =
           c.getMemoryUsed(MemoryMode.OFF_HEAP) + c.getMemoryUsed(MemoryMode.ON_HEAP);
+        memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
           logger.info("Acquired by " + c + ": " + Utils.bytesToString(totalMemUsage));
         }
       }
+      long memoryNotAccountedFor =
+        memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
+      logger.info(
+        "{} bytes of memory were used by task {} but are not associated with specific consumers",
+        memoryNotAccountedFor, taskAttemptId);
     }
   }
 
@@ -376,7 +382,7 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Returns the memory consumption, in bytes, for the current task
+   * Returns the memory consumption, in bytes, for the current task.
    */
   public long getMemoryConsumptionForThisTask() {
     return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
