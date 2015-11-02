@@ -49,7 +49,7 @@ public abstract class StreamManager {
   /**
    * Called in response to a stream() request. The returned data is streamed to the client
    * through a single TCP connection.
-   * <p/>
+   *
    * Note the <code>streamId</code> argument is not related to the similarly named argument in the
    * {@link #getChunk(long, int)} method.
    *
