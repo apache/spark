@@ -34,14 +34,11 @@ private[python] class LDAModelWrapper(model: LDAModel) {
   def describeTopics(jsc: JavaSparkContext): DataFrame = describeTopics(this.model.vocabSize, jsc)
 
   def describeTopics(maxTermsPerTopic: Int, jsc: JavaSparkContext): DataFrame = {
-    val sqlContext = new SQLContext(jsc.sc)
-    import sqlContext.implicits._
-
     // Since the return value of `describeTopics` is a little complicated,
-    // the return value are converted to `Row` to take advantage of DataFrame serialization.
+    // it is converted into `Row` to take advantage of DataFrame serialization.
+    val sqlContext = new SQLContext(jsc.sc)
     val topics = model.describeTopics(maxTermsPerTopic)
-    val rdd = jsc.sc.parallelize(topics)
-    rdd.toDF("terms", "termWeights")
+    sqlContext.createDataFrame(topics).toDF("terms", "termWeights")
   }
 
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
