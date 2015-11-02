@@ -24,13 +24,13 @@ import java.util.HashMap;
 import com.google.common.collect.ImmutableMap;
 import org.junit.Test;
 
-import static junit.framework.Assert.*;
+import static org.junit.Assert.*;
 
 import static org.apache.spark.unsafe.types.UTF8String.*;
 
 public class UTF8StringSuite {
 
-  private void checkBasic(String str, int len) throws UnsupportedEncodingException {
+  private static void checkBasic(String str, int len) throws UnsupportedEncodingException {
     UTF8String s1 = fromString(str);
     UTF8String s2 = fromBytes(str.getBytes("utf8"));
     assertEquals(s1.numChars(), len);
@@ -42,12 +42,12 @@ public class UTF8StringSuite {
 
     assertEquals(s1.hashCode(), s2.hashCode());
 
-    assertEquals(s1.compareTo(s2), 0);
+    assertEquals(0, s1.compareTo(s2));
 
-    assertEquals(s1.contains(s2), true);
-    assertEquals(s2.contains(s1), true);
-    assertEquals(s1.startsWith(s1), true);
-    assertEquals(s1.endsWith(s1), true);
+    assertTrue(s1.contains(s2));
+    assertTrue(s2.contains(s1));
+    assertTrue(s1.startsWith(s1));
+    assertTrue(s1.endsWith(s1));
   }
 
   @Test
@@ -59,8 +59,8 @@ public class UTF8StringSuite {
 
   @Test
   public void emptyStringTest() {
-    assertEquals(fromString(""), EMPTY_UTF8);
-    assertEquals(fromBytes(new byte[0]), EMPTY_UTF8);
+    assertEquals(EMPTY_UTF8, fromString(""));
+    assertEquals(EMPTY_UTF8, fromBytes(new byte[0]));
     assertEquals(0, EMPTY_UTF8.numChars());
     assertEquals(0, EMPTY_UTF8.numBytes());
   }
@@ -76,9 +76,9 @@ public class UTF8StringSuite {
 
     byte[] buf1 = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     byte[] buf2 = {1, 2, 3};
-    UTF8String str1 = UTF8String.fromBytes(buf1, 0, 3);
-    UTF8String str2 = UTF8String.fromBytes(buf1, 0, 8);
-    UTF8String str3 = UTF8String.fromBytes(buf2);
+    UTF8String str1 = fromBytes(buf1, 0, 3);
+    UTF8String str2 = fromBytes(buf1, 0, 8);
+    UTF8String str3 = fromBytes(buf2);
     assertTrue(str1.getPrefix() - str2.getPrefix() < 0);
     assertEquals(str1.getPrefix(), str3.getPrefix());
   }
@@ -98,7 +98,7 @@ public class UTF8StringSuite {
     assertTrue(fromString("你好123").compareTo(fromString("你好122")) > 0);
   }
 
-  protected void testUpperandLower(String upper, String lower) {
+  protected static void testUpperandLower(String upper, String lower) {
     UTF8String us = fromString(upper);
     UTF8String ls = fromString(lower);
     assertEquals(ls, us.toLowerCase());
@@ -127,22 +127,22 @@ public class UTF8StringSuite {
   @Test
   public void concatTest() {
     assertEquals(EMPTY_UTF8, concat());
-    assertEquals(null, concat((UTF8String) null));
+    assertNull(concat((UTF8String) null));
     assertEquals(EMPTY_UTF8, concat(EMPTY_UTF8));
     assertEquals(fromString("ab"), concat(fromString("ab")));
     assertEquals(fromString("ab"), concat(fromString("a"), fromString("b")));
     assertEquals(fromString("abc"), concat(fromString("a"), fromString("b"), fromString("c")));
-    assertEquals(null, concat(fromString("a"), null, fromString("c")));
-    assertEquals(null, concat(fromString("a"), null, null));
-    assertEquals(null, concat(null, null, null));
+    assertNull(concat(fromString("a"), null, fromString("c")));
+    assertNull(concat(fromString("a"), null, null));
+    assertNull(concat(null, null, null));
     assertEquals(fromString("数据砖头"), concat(fromString("数据"), fromString("砖头")));
   }
 
   @Test
   public void concatWsTest() {
     // Returns null if the separator is null
-    assertEquals(null, concatWs(null, (UTF8String)null));
-    assertEquals(null, concatWs(null, fromString("a")));
+    assertNull(concatWs(null, (UTF8String) null));
+    assertNull(concatWs(null, fromString("a")));
 
     // If separator is null, concatWs should skip all null inputs and never return null.
     UTF8String sep = fromString("哈哈");
@@ -381,16 +381,16 @@ public class UTF8StringSuite {
   
   @Test
   public void levenshteinDistance() {
-    assertEquals(EMPTY_UTF8.levenshteinDistance(EMPTY_UTF8), 0);
-    assertEquals(EMPTY_UTF8.levenshteinDistance(fromString("a")), 1);
-    assertEquals(fromString("aaapppp").levenshteinDistance(EMPTY_UTF8), 7);
-    assertEquals(fromString("frog").levenshteinDistance(fromString("fog")), 1);
-    assertEquals(fromString("fly").levenshteinDistance(fromString("ant")),3);
-    assertEquals(fromString("elephant").levenshteinDistance(fromString("hippo")), 7);
-    assertEquals(fromString("hippo").levenshteinDistance(fromString("elephant")), 7);
-    assertEquals(fromString("hippo").levenshteinDistance(fromString("zzzzzzzz")), 8);
-    assertEquals(fromString("hello").levenshteinDistance(fromString("hallo")),1);
-    assertEquals(fromString("世界千世").levenshteinDistance(fromString("千a世b")),4);
+    assertEquals(0, EMPTY_UTF8.levenshteinDistance(EMPTY_UTF8));
+    assertEquals(1, EMPTY_UTF8.levenshteinDistance(fromString("a")));
+    assertEquals(7, fromString("aaapppp").levenshteinDistance(EMPTY_UTF8));
+    assertEquals(1, fromString("frog").levenshteinDistance(fromString("fog")));
+    assertEquals(3, fromString("fly").levenshteinDistance(fromString("ant")));
+    assertEquals(7, fromString("elephant").levenshteinDistance(fromString("hippo")));
+    assertEquals(7, fromString("hippo").levenshteinDistance(fromString("elephant")));
+    assertEquals(8, fromString("hippo").levenshteinDistance(fromString("zzzzzzzz")));
+    assertEquals(1, fromString("hello").levenshteinDistance(fromString("hallo")));
+    assertEquals(4, fromString("世界千世").levenshteinDistance(fromString("千a世b")));
   }
 
   @Test
@@ -432,14 +432,14 @@ public class UTF8StringSuite {
 
   @Test
   public void findInSet() {
-    assertEquals(fromString("ab").findInSet(fromString("ab")), 1);
-    assertEquals(fromString("a,b").findInSet(fromString("b")), 2);
-    assertEquals(fromString("abc,b,ab,c,def").findInSet(fromString("ab")), 3);
-    assertEquals(fromString("ab,abc,b,ab,c,def").findInSet(fromString("ab")), 1);
-    assertEquals(fromString(",,,ab,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
-    assertEquals(fromString(",ab,abc,b,ab,c,def").findInSet(fromString("")), 1);
-    assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
-    assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("def")), 6);
+    assertEquals(1, fromString("ab").findInSet(fromString("ab")));
+    assertEquals(2, fromString("a,b").findInSet(fromString("b")));
+    assertEquals(3, fromString("abc,b,ab,c,def").findInSet(fromString("ab")));
+    assertEquals(1, fromString("ab,abc,b,ab,c,def").findInSet(fromString("ab")));
+    assertEquals(4, fromString(",,,ab,abc,b,ab,c,def").findInSet(fromString("ab")));
+    assertEquals(1, fromString(",ab,abc,b,ab,c,def").findInSet(fromString("")));
+    assertEquals(4, fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("ab")));
+    assertEquals(6, fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("def")));
   }
 
   @Test

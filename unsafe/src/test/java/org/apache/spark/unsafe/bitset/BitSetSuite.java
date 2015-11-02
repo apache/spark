@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.bitset;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -25,7 +25,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 public class BitSetSuite {
 
   private static BitSet createBitSet(int capacity) {
-    assert capacity % 64 == 0;
+    Assert.assertEquals(0, capacity % 64);
     return new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
   }
 
