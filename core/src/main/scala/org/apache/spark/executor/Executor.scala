@@ -437,7 +437,7 @@ private[spark] class Executor(
           metrics.updateAccumulators()
 
           if (isLocal) {
-            // JobProgressListener will hold an reference of it during
+            // JobProgressListener will hold a reference of it during
             // onExecutorMetricsUpdate(), then JobProgressListener can not see
             // the changes of metrics any more, so make a deep copy of it
             val copiedMetrics = Utils.deserialize[TaskMetrics](Utils.serialize(metrics))
@@ -452,6 +452,9 @@ private[spark] class Executor(
 
     env.blockTransferService.getMemMetrics(this.executorMetrics)
     val executorMetrics = if (isLocal) {
+      // JobProgressListener might hold a reference of it during onExecutorMetricsUpdate()
+      // in future, if then JobProgressListener can not see the changes of metrics any
+      // more, so make a deep copy of it here for future change.
       Utils.deserialize[ExecutorMetrics](Utils.serialize(this.executorMetrics))
     } else {
       this.executorMetrics

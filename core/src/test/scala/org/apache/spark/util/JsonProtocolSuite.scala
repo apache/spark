@@ -1677,7 +1677,7 @@ class JsonProtocolSuite extends SparkFunSuite {
      |  "Executor Metrics Updated": {
      |    "Executor Hostname": null
      |  },
-     |  "Task Metrics Updated": [
+     |  "Metrics Updated": [
      |  {
      |    "Task ID": 1,
      |    "Stage ID": 2,

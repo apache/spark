@@ -50,7 +50,5 @@ class ExecutorMetrics extends Serializable {
 @DeveloperApi
 case class TransportMetrics(
     timeStamp: Long,
-    clientOnheapSize: Long,
-    clientDirectheapSize: Long,
-    serverOnheapSize: Long,
-    serverDirectheapSize: Long)
+    onHeapSize: Long,
+    directSize: Long)

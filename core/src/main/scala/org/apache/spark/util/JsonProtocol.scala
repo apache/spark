@@ -232,7 +232,7 @@ private[spark] object JsonProtocol {
     ("Event" -> Utils.getFormattedClassName(metricsUpdate)) ~
     ("Executor ID" -> execId) ~
     ("Executor Metrics Updated" -> executorMetricsToJson(executorMetrics)) ~
-    ("Task Metrics Updated" -> taskMetrics.map { case (taskId, stageId, stageAttemptId, metrics) =>
+    ("Metrics Updated" -> taskMetrics.map { case (taskId, stageId, stageAttemptId, metrics) =>
       ("Task ID" -> taskId) ~
       ("Stage ID" -> stageId) ~
       ("Stage Attempt ID" -> stageAttemptId) ~
@@ -296,10 +296,8 @@ private[spark] object JsonProtocol {
 
   def transportMetricsToJson(transportMetrics: TransportMetrics): JValue = {
     ("TimeStamep" -> transportMetrics.timeStamp) ~
-    ("ClientOnheapSize" -> transportMetrics.clientOnheapSize) ~
-    ("ClientDirectheapSize" -> transportMetrics.clientDirectheapSize) ~
-    ("ServerOnheapSize" -> transportMetrics.serverOnheapSize) ~
-    ("ServerDirectheapSize" -> transportMetrics.serverDirectheapSize)
+    ("OnHeapSize" -> transportMetrics.onHeapSize) ~
+    ("DirectSize" -> transportMetrics.directSize)
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -722,17 +720,15 @@ private[spark] object JsonProtocol {
     val metrics = new ExecutorMetrics
     metrics.setHostname((json \ "Executor Hostname").extract[String])
     metrics.setTransportMetrics(
-      Utils.jsonOption((json \ "TransportMetrics")).map(transportMetrisFromJson))
+      Utils.jsonOption((json \ "TransportMetrics")).map(transportMetricsFromJson))
     metrics
   }
 
-  def transportMetrisFromJson(json: JValue): TransportMetrics = {
+  def transportMetricsFromJson(json: JValue): TransportMetrics = {
     val metrics = new TransportMetrics(
       (json \ "TimeStamep").extract[Long],
-      (json \ "ClientOnheapSize").extract[Long],
-      (json \ "ClientDirectheapSize").extract[Long],
-      (json \ "ServerOnheapSize").extract[Long],
-      (json \ "ServerDirectheapSize").extract[Long])
+      (json \ "OnHeapSize").extract[Long],
+      (json \ "DirectSize").extract[Long])
     metrics
   }
 

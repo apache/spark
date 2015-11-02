@@ -22,7 +22,7 @@ import scala.concurrent.{Future, Promise}
 
 import io.netty.buffer._
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.executor.{TransportMetrics, ExecutorMetrics}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -32,7 +32,6 @@ import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{RetryingBlockFetcher, BlockFetchingListener, OneForOneBlockFetcher}
 import org.apache.spark.network.shuffle.protocol.UploadBlock
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.SparkEnv
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.{Clock, Utils, SystemClock}
 
@@ -64,17 +63,17 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     val currentTime = clock.getTimeMillis()
     val clientPooledAllocator = clientFactory.getPooledAllocator()
     val serverAllocator = server.getAllocator()
-    val clientDirectHeapSize: Long = sumOfMetrics(
+    val clientDirectSize: Long = sumOfMetrics(
       clientPooledAllocator.directArenas().asScala.toList)
     val clientOnHeapSize: Long = sumOfMetrics(clientPooledAllocator.heapArenas().asScala.toList)
-    val serverDirectHeapSize: Long = sumOfMetrics(serverAllocator.directArenas().asScala.toList)
+    val serverDirectSize: Long = sumOfMetrics(serverAllocator.directArenas().asScala.toList)
     val serverOnHeapSize: Long = sumOfMetrics(serverAllocator.heapArenas().asScala.toList)
-    executorMetrics.setTransportMetrics(Some(TransportMetrics(currentTime,
-      clientOnHeapSize, clientDirectHeapSize, serverOnHeapSize, serverDirectHeapSize)))
-    logDebug(s"current Netty client directHeapSize is $clientDirectHeapSize, " +
-      s"client heapSize is $clientOnHeapSize, server directHeapsize is $serverDirectHeapSize, " +
+    logDebug(s"Current Netty Client directSize is $clientDirectSize, " +
+      s"Client HeapSize is $clientOnHeapSize, server directHeapsize is $serverDirectSize, " +
       s"server heapsize is $serverOnHeapSize, executer id is " +
       s"${SparkEnv.get.blockManager.blockManagerId.executorId}")
+    executorMetrics.setTransportMetrics(Some(TransportMetrics(currentTime,
+      clientOnHeapSize + serverOnHeapSize, clientDirectSize + serverDirectSize)))
   }
 
   private def sumOfMetrics(arenaMetricList: List[PoolArenaMetric]): Long = {

@@ -34,10 +34,10 @@ private[ui] class MemTableBase(
   protected def columns: Seq[Node] = {
     <th>Executor ID</th>
     <th>Address</th>
-    <th>Net Memory (on-heap)</th>
-    <th>Net Memory (direct-heap)</th>
-    <th>Peak Net Memory (on-heap) / Happen Time</th>
-    <th>Peak Net Read (direct-heap) / Happen Time</th>
+    <th>Network Memory (on-heap)</th>
+    <th>Network Memory (direct-heap)</th>
+    <th>Peak Network Memory (on-heap) / Happen Time</th>
+    <th>Peak Network Read (direct-heap) / Happen Time</th>
   }
 
   def toNodeSeq: Seq[Node] = {
@@ -68,20 +68,20 @@ private[ui] class MemTableBase(
       </td>
       {if (info._2.transportInfo.isDefined) {
         <td>
-          {Utils.bytesToString(info._2.transportInfo.get.onheapSize)}
+          {Utils.bytesToString(info._2.transportInfo.get.onHeapSize)}
         </td>
         <td>
-          {Utils.bytesToString(info._2.transportInfo.get.directheapSize)}
+          {Utils.bytesToString(info._2.transportInfo.get.directSize)}
         </td>
         <td>
-          {Utils.bytesToString(info._2.transportInfo.get.peakOnheapSizeTime.memorySize)}
+          {Utils.bytesToString(info._2.transportInfo.get.peakOnHeapSizeTime.memorySize)}
           /
-          {UIUtils.formatDate(info._2.transportInfo.get.peakOnheapSizeTime.timeStamp)}
+          {UIUtils.formatDate(info._2.transportInfo.get.peakOnHeapSizeTime.timeStamp)}
         </td>
         <td>
-          {Utils.bytesToString(info._2.transportInfo.get.peakDirectheapSizeTime.memorySize)}
+          {Utils.bytesToString(info._2.transportInfo.get.peakDirectSizeTime.memorySize)}
           /
-          {UIUtils.formatDate(info._2.transportInfo.get.peakDirectheapSizeTime.timeStamp)}
+          {UIUtils.formatDate(info._2.transportInfo.get.peakDirectSizeTime.timeStamp)}
         </td>
       } else {
         <td>N/A</td>
