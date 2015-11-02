@@ -13,6 +13,9 @@ import wtforms
 from wtforms.compat import text_type
 
 from airflow.configuration import conf
+from airflow import login
+from airflow import models
+from airflow import settings
 AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
 
 
@@ -67,6 +70,27 @@ def limit_sql(sql, limit, conn_type):
             LIMIT {limit}
             """.format(**locals())
     return sql
+
+
+def action_logging(action):
+    '''
+    Decorator to log user actions
+    '''
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            session = settings.Session()
+            session.add(
+                models.Log(
+                    event=action,
+                    task_instance=None,
+                    owner=login.current_user.username
+                    ))
+            session.commit()
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
 
 def gzipped(f):
     '''
