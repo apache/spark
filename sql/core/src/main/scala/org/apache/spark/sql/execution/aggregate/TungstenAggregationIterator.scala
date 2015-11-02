@@ -511,10 +511,9 @@ class TungstenAggregationIterator(
         val newInput = inputIter.next()
         numInputRows += 1
         val groupingKey = groupProjection.apply(newInput)
-        val buffer: UnsafeRow = if (i < fallbackStartsAt) {
-          hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
-        } else {
-          null
+        var buffer: UnsafeRow = null
+        if (i < fallbackStartsAt) {
+          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
         }
         if (buffer == null) {
           val sorter = hashMap.destructAndCreateExternalSorter()
@@ -525,6 +524,8 @@ class TungstenAggregationIterator(
           }
           i = 0
           hashMap = createHashMap()
+          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+          assert(buffer != null)
         }
         processRow(buffer, newInput)
         i += 1
