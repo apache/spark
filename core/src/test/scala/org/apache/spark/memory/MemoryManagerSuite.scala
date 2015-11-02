@@ -30,7 +30,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.storage.{StorageLevel, BlockStatus, BlockId, MemoryStore}
+import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, StorageLevel}
 
 
 /**
