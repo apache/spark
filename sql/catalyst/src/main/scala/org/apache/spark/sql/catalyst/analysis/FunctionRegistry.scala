@@ -185,6 +185,7 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Last]("last_value"),
     expression[Max]("max"),
+    expression[Average]("mean"),
     expression[Min]("min"),
     expression[Stddev]("stddev"),
     expression[StddevPop]("stddev_pop"),

@@ -301,6 +301,15 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     checkAnswer(
       sqlContext.sql(
         """
+          |SELECT key, mean(value)
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin),
+      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
           |SELECT avg(value), key
           |FROM agg1
           |GROUP BY key
