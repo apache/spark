@@ -201,8 +201,22 @@ class UDFSuite extends QueryTest with SharedSQLContext {
           case udf: ScalaUDF => udf
         }
       }
-    }.flatMap(functions => functions)
+    }.flatten
     assert(udfs.length === expectedNumUDFs)
+  }
+
+  test("foldable udf") {
+    import org.apache.spark.sql.functions._
+
+    val myUDF = udf((x: Int) => x + 1)
+
+    {
+      val df = sql("SELECT 1 as a")
+        .select(col("a"), myUDF(col("a")).as("b"))
+        .select(col("a"), col("b"), myUDF(col("b")).as("c"))
+      checkNumUDFs(df, 0)
+      checkAnswer(df, Row(1, 2, 3))
+    }
   }
 
   test("nondeterministic udf: using UDFRegistration") {
@@ -213,7 +227,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     sqlContext.udf.register("plusOne2", nondeterministicUDF)
 
     {
-      val df = sql("SELECT 1 as a")
+      val df = sqlContext.range(1, 2).select(col("id").as("a"))
         .select(col("a"), deterministicUDF(col("a")).as("b"))
         .select(col("a"), col("b"), deterministicUDF(col("b")).as("c"))
       checkNumUDFs(df, 3)
@@ -221,7 +235,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     }
 
     {
-      val df = sql("SELECT 1 as a")
+      val df = sqlContext.range(1, 2).select(col("id").as("a"))
         .select(col("a"), callUDF("plusOne1", col("a")).as("b"))
         .select(col("a"), col("b"), callUDF("plusOne1", col("b")).as("c"))
       checkNumUDFs(df, 3)
@@ -229,7 +243,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     }
 
     {
-      val df = sql("SELECT 1 as a")
+      val df = sqlContext.range(1, 2).select(col("id").as("a"))
         .select(col("a"), nondeterministicUDF(col("a")).as("b"))
         .select(col("a"), col("b"), nondeterministicUDF(col("b")).as("c"))
       checkNumUDFs(df, 2)
@@ -237,7 +251,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     }
 
     {
-      val df = sql("SELECT 1 as a")
+      val df = sqlContext.range(1, 2).select(col("id").as("a"))
         .select(col("a"), callUDF("plusOne2", col("a")).as("b"))
         .select(col("a"), col("b"), callUDF("plusOne2", col("b")).as("c"))
       checkNumUDFs(df, 2)
@@ -252,7 +266,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val nondeterministicUDF = deterministicUDF.nonDeterministic
 
     {
-      val df = sql("SELECT 1 as a")
+      val df = sqlContext.range(1, 2).select(col("id").as("a"))
         .select(col("a"), deterministicUDF(col("a")).as("b"))
         .select(col("a"), col("b"), deterministicUDF(col("b")).as("c"))
       checkNumUDFs(df, 3)
@@ -260,6 +274,15 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     }
 
     {
+      val df = sqlContext.range(1, 2).select(col("id").as("a"))
+        .select(col("a"), nondeterministicUDF(col("a")).as("b"))
+        .select(col("a"), col("b"), nondeterministicUDF(col("b")).as("c"))
+      checkNumUDFs(df, 2)
+      checkAnswer(df, Row(1, 2, 3))
+    }
+
+    {
+      // nondeterministicUDF will not be foldable.
       val df = sql("SELECT 1 as a")
         .select(col("a"), nondeterministicUDF(col("a")).as("b"))
         .select(col("a"), col("b"), nondeterministicUDF(col("b")).as("c"))

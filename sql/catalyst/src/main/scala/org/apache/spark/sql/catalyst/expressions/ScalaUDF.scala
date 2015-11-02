@@ -38,6 +38,8 @@ case class ScalaUDF(
 
   override def toString: String = s"UDF(${children.mkString(",")})"
 
+  override def foldable: Boolean = deterministic && children.forall(_.foldable)
+
   override def deterministic: Boolean = isDeterministic && children.forall(_.deterministic)
 
   // scalastyle:off
