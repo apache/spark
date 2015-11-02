@@ -368,6 +368,7 @@ public class TaskMemoryManager {
       }
       consumers.clear();
     }
+
     return memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
   }
 
