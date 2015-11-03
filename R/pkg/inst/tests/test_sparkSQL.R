@@ -1471,7 +1471,7 @@ test_that("Method coltypes() to get R's data types of a DataFrame", {
                        structField("c4", "timestamp"))
 
   DF <- createDataFrame(sqlContext, data, schema)
-  expect_equal(coltypes(DF), c("integer", "logical", "timestamp"))
+  expect_equal(coltypes(DF), c("integer", "logical", "POSIXct"))
 })
 
 unlink(parquetPath)

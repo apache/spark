@@ -1925,12 +1925,17 @@ setMethod("attach",
 setMethod("coltypes",
           signature(x = "DataFrame"),
           function(x) {
-            # Get the data types of the DataFrame by invoking dtypes() function.
-            # Some post-processing is needed.
-            types <- as.character(t(as.data.frame(dtypes(x))[2,]))
+            # Get the data types of the DataFrame by invoking dtypes() function
+            types <- lapply(dtypes(irisDF), function(x) {x[[2]]})
             
-            # Map Spark data types into R's data types
-            rTypes <- as.character(DATA_TYPES[types])
+            # Map Spark data types into R's data types using DATA_TYPES environment
+            rTypes <- lapply(types, function(x) { 
+              if (exists(x, envir=DATA_TYPES)) {
+                get(x, envir=DATA_TYPES) 
+              } else {
+                stop(paste("Unsupported data type: ", x))
+              }
+            })
             
             # Find which types could not be mapped
             naIndices <- which(is.na(rTypes))
