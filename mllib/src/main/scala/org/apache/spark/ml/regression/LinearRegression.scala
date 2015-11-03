@@ -490,7 +490,7 @@ class LinearRegressionSummary private[regression] (
   /** number of instances in DataFrame predictions */
   lazy val numInstances: Long = predictions.count()
 
-  lazy private val dfe: Long = if (model.getFitIntercept) {
+  private val degreesOfFreedom: Long = if (model.getFitIntercept) {
     numInstances - model.weights.size - 1
   } else {
     numInstances - model.weights.size
@@ -526,12 +526,14 @@ class LinearRegressionSummary private[regression] (
         predictions.select(t(col(model.getPredictionCol), col(model.getLabelCol),
           col(model.getWeightCol)).as("wse")).agg(sum(col("wse"))).first().getDouble(0)
       }
-      val sigma2 = rss / dfe
+      val sigma2 = rss / degreesOfFreedom
       diagInvAtWA.map(_ * sigma2).map(math.sqrt(_))
     }
   }
 
-  /** T-statistic of estimated coefficients */
+  /** T-statistic of estimated coefficients.
+    * Note that t-statistic of estimated intercept is not supported currently.
+    */
   lazy val tValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
@@ -541,13 +543,15 @@ class LinearRegressionSummary private[regression] (
     }
   }
 
-  /** Two-sided p-value of estimated coefficients */
+  /** Two-sided p-value of estimated coefficients.
+    * Note that p-value of estimated intercept is not supported currently.
+    */
   lazy val pValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
         "No p values available for this LinearRegressionModel")
     } else {
-      tValues.map { x => 2.0 * (1.0 - StudentsT(dfe.toDouble).cdf(math.abs(x))) }
+      tValues.map { x => 2.0 * (1.0 - StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
     }
   }
 
