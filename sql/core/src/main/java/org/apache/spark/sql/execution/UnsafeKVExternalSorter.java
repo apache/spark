@@ -142,6 +142,11 @@ public final class UnsafeKVExternalSorter {
       value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(), prefix);
   }
 
+  /**
+   * Merges another UnsafeKVExternalSorter into `this`, the other one will be emptied.
+   *
+   * @throws IOException
+   */
   public void merge(UnsafeKVExternalSorter other) throws IOException {
     sorter.merge(other.sorter);
   }

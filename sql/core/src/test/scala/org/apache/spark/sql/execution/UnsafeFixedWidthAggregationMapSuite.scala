@@ -294,10 +294,13 @@ class UnsafeFixedWidthAggregationMapSuite
     var count = 0
     val iter = sorter.sortedIterator()
     while (iter.next()) {
+      // At here, we also test if copy is correct.
+      iter.getKey.copy()
+      iter.getValue.copy()
       count += 1
     }
 
-    // 1 record in one map.
+    // 1 record per map, spilled 42 times.
     assert(count === 42)
   }
 

@@ -393,6 +393,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public void merge(UnsafeExternalSorter other) throws IOException {
     other.spill();
     spillWriters.addAll(other.spillWriters);
+    // remove them from `spillWriters`, or the files will be deleted in `cleanupResources`.
     other.spillWriters.clear();
     other.cleanupResources();
   }

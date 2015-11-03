@@ -34,14 +34,18 @@ import org.apache.spark.sql.types.StructType
  *
  * This iterator first uses hash-based aggregation to process input rows. It uses
  * a hash map to store groups and their corresponding aggregation buffers. If we
- * this map cannot allocate memory from memory manager,
- * it switches to sort-based aggregation. The process of the switch has the following step:
+ * this map cannot allocate memory from memory manager, it spill the map into disk
+ * and create a new one. After processed all the input, then merge all the spills
+ * together using external sorter, and do sort-based aggregation.
+ *
+ * The process has the following step:
+ *  - Step 0: Do hash-based aggregation.
  *  - Step 1: Sort all entries of the hash map based on values of grouping expressions and
  *            spill them to disk.
  *  - Step 2: Create a external sorter based on the spilled sorted map entries.
- *  - Step 3: Redirect all input rows to the external sorter.
- *  - Step 4: Get a sorted [[KVIterator]] from the external sorter.
- *  - Step 5: Initialize sort-based aggregation.
+ *  - Step 3: Get a sorted [[KVIterator]] from the external sorter.
+ *  - Step 4: Create a new map, repeat step 0 until no more input.
+ *  - Step 5: Initialize sort-based aggregation on the sorted iterator.
  * Then, this iterator works in the way of sort-based aggregation.
  *
  * The code of this class is organized as follows:
@@ -492,8 +496,9 @@ class TungstenAggregationIterator(
 
   // The function used to read and process input rows. When processing input rows,
   // it first uses hash-based aggregation by putting groups and their buffers in
-  // hashMap. If we could not allocate more memory for the map, we switch to
-  // sort-based aggregation (by calling switchToSortBasedAggregation).
+  // hashMap. If there is not enough memory, it will multiple hash-maps, spilling
+  // after each becomes full then using sort to merge these spills, finally do sort
+  // based aggregation.
   private def processInputs(fallbackStartsAt: Int): Unit = {
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
