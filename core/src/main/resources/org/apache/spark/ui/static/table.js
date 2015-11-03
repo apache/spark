@@ -78,7 +78,7 @@ function onMouseOverAndOut(threadId) {
 function onSearchStringChange() {
     var searchString = $('#search').val().toLowerCase();
     //remove the stacktrace
-    collapseAllThreadStackTrace(false, false)
+    collapseAllThreadStackTrace(false)
     if (searchString.length == 0) {
         $('tr').each(function() {
             $(this).removeClass('hidden')
