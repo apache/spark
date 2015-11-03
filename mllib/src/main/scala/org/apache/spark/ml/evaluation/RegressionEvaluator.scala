@@ -23,7 +23,8 @@ import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DoubleType, FloatType}
 
 /**
  * :: Experimental ::
@@ -72,10 +73,13 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   override def evaluate(dataset: DataFrame): Double = {
     val schema = dataset.schema
-    SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
-    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    val predictionType = schema($(predictionCol)).dataType
+    require(predictionType == FloatType || predictionType == DoubleType)
+    val labelType = schema($(labelCol)).dataType
+    require(labelType == FloatType || labelType == DoubleType)
 
-    val predictionAndLabels = dataset.select($(predictionCol), $(labelCol))
+    val predictionAndLabels = dataset
+      .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
       .map { case Row(prediction: Double, label: Double) =>
         (prediction, label)
       }
