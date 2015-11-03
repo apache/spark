@@ -31,7 +31,8 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 CLASS="org.apache.spark.deploy.master.Master"
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  pattern="usage"
+  echo "Usage: ./sbin/start-master.sh [options]"
+  pattern="Usage:"
   pattern+="\|Using Spark's default log4j profile:"
   pattern+="\|Registered signal handlers for"
 

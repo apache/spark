@@ -39,7 +39,8 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 CLASS="org.apache.spark.deploy.worker.Worker"
 
 if [[ $# -lt 1 ]] || [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  pattern="usage"
+  echo "Usage: ./sbin/start-slave.sh [options] <master>"
+  pattern="Usage:"
   pattern+="\|Using Spark's default log4j profile:"
   pattern+="\|Registered signal handlers for"
 
