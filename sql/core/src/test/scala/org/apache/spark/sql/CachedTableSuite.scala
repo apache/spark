@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.PhysicalRDD
 
 import scala.concurrent.duration._
@@ -352,5 +353,63 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
 
     assert(sparkPlan.collect { case e: InMemoryColumnarTableScan => e }.size === 3)
     assert(sparkPlan.collect { case e: PhysicalRDD => e }.size === 0)
+  }
+
+  /**
+   * Verifies that the plan for `df` contains `expected` number of Exchange operators.
+   */
+  private def verifyNumExchanges(df: DataFrame, expected: Int): Unit = {
+    assert(df.queryExecution.executedPlan.collect { case e: Exchange => e }.size == expected)
+  }
+
+  test("A cached table preserves the partitioning and ordering of its cached SparkPlan") {
+    val table3x = testData.unionAll(testData).unionAll(testData)
+    table3x.registerTempTable("testData3x")
+
+    sql("SELECT key, value FROM testData3x ORDER BY key").registerTempTable("orderedTable")
+    sqlContext.cacheTable("orderedTable")
+    assertCached(sqlContext.table("orderedTable"))
+    // Should not have an exchange as the query is already sorted on the group by key.
+    verifyNumExchanges(sql("SELECT key, count(*) FROM orderedTable GROUP BY key"), 0)
+    checkAnswer(
+      sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
+      sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
+    sqlContext.uncacheTable("orderedTable")
+
+    // Set up two tables distributed in the same way. Try this with the data distributed into
+    // different number of partitions.
+    for (numPartitions <- 1 until 10 by 4) {
+      testData.distributeBy(Column("key") :: Nil, numPartitions).registerTempTable("t1")
+      testData2.distributeBy(Column("a") :: Nil, numPartitions).registerTempTable("t2")
+      sqlContext.cacheTable("t1")
+      sqlContext.cacheTable("t2")
+
+      // Joining them should result in no exchanges.
+      verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
+      checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
+        sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
+
+      // Grouping on the partition key should result in no exchanges
+      verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
+      checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
+        sql("SELECT count(*) FROM testData GROUP BY key"))
+
+      sqlContext.uncacheTable("t1")
+      sqlContext.uncacheTable("t2")
+      sqlContext.dropTempTable("t1")
+      sqlContext.dropTempTable("t2")
+    }
+
+    // Distribute the tables into non-matching number of partitions. Need to shuffle.
+    testData.distributeBy(Column("key") :: Nil, 6).registerTempTable("t1")
+    testData2.distributeBy(Column("a") :: Nil, 3).registerTempTable("t2")
+    sqlContext.cacheTable("t1")
+    sqlContext.cacheTable("t2")
+
+    verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 2)
+    sqlContext.uncacheTable("t1")
+    sqlContext.uncacheTable("t2")
+    sqlContext.dropTempTable("t1")
+    sqlContext.dropTempTable("t2")
   }
 }
