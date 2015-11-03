@@ -1676,8 +1676,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         if (addToCurrentThread) {
           val currentCL = Utils.getContextOrSparkClassLoader
           currentCL match {
-            case cl: MutableURLClassLoader =>  cl.addURL(new URI(key).toURL())
-            case _ => logWarning(s"Unsupported cl $currentCL will not update jars for current thread")
+            case cl: MutableURLClassLoader => cl.addURL(new URI(key).toURL())
+            case _ => logWarning(s"Unsupported cl $currentCL will not update jars thread cl")
           }
         }
       }
