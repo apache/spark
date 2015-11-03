@@ -274,7 +274,7 @@ object Exchange {
  * input partition ordering requirements are met.
  */
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
-  private def numPreShufflePartitions: Int = sqlContext.conf.numShufflePartitions
+  private def defaultNumPreShufflePartitions: Int = sqlContext.conf.numShufflePartitions
 
   private def targetPostShuffleInputSize: Long = sqlContext.conf.targetPostShuffleInputSize
 
@@ -288,12 +288,15 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   /**
    * Given a required distribution, returns a partitioning that satisfies that distribution.
    */
-  private def canonicalPartitioning(requiredDistribution: Distribution): Partitioning = {
+  private def createPartitioning(
+      requiredDistribution: Distribution,
+      numPartitions: Int): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
       case ClusteredDistribution(clustering) =>
-        HashPartitioning(clustering, numPreShufflePartitions)
-      case OrderedDistribution(ordering) => RangePartitioning(ordering, numPreShufflePartitions)
+        HashPartitioning(clustering, defaultNumPreShufflePartitions)
+      case OrderedDistribution(ordering) =>
+        RangePartitioning(ordering, defaultNumPreShufflePartitions)
       case dist => sys.error(s"Do not know how to satisfy distribution $dist")
     }
   }
@@ -377,7 +380,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             //
             // It will be great to introduce a new Partitioning to represent the post-shuffle
             // partitions when one post-shuffle partition includes multiple pre-shuffle partitions.
-            val targetPartitioning = canonicalPartitioning(distribution)
+            val targetPartitioning =
+              createPartitioning(distribution, defaultNumPreShufflePartitions)
             assert(targetPartitioning.isInstanceOf[HashPartitioning])
             Exchange(targetPartitioning, child, Some(coordinator))
         }
@@ -401,7 +405,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (child.outputPartitioning.satisfies(distribution)) {
         child
       } else {
-        Exchange(canonicalPartitioning(distribution), child)
+        Exchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
       }
     }
 
@@ -410,12 +414,34 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     if (children.length > 1
         && requiredChildDistributions.toSet != Set(UnspecifiedDistribution)
         && !Partitioning.allCompatible(children.map(_.outputPartitioning))) {
-      children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
-        val targetPartitioning = canonicalPartitioning(distribution)
-        if (child.outputPartitioning.guarantees(targetPartitioning)) {
-          child
-        } else {
-          Exchange(targetPartitioning, child)
+
+      // First check if the existing partitions of the children all match. This means they are
+      // partitioned by the same partitioning into the same number of partitions. In that case,
+      // don't try to make them match `defaultPartitions`, just use the existing partitioning.
+      // TODO: this should be a cost based decision. For example, a big relation should probably
+      // maintain its existing number of partitions and smaller partitions should be shuffled.
+      // defaultPartitions is arbitrary.
+      val numPartitions = children.head.outputPartitioning.numPartitions
+      val useExistingPartitioning = children.zip(requiredChildDistributions).forall {
+        case (child, distribution) => {
+          child.outputPartitioning.guarantees(
+            createPartitioning(distribution, numPartitions))
+        }
+      }
+
+      children = if (useExistingPartitioning) {
+        children
+      } else {
+        children.zip(requiredChildDistributions).map {
+          case (child, distribution) => {
+            val targetPartitioning =
+              createPartitioning(distribution, defaultNumPreShufflePartitions)
+            if (child.outputPartitioning.guarantees(targetPartitioning)) {
+              child
+            } else {
+              Exchange(targetPartitioning, child)
+            }
+          }
         }
       }
     }
@@ -434,7 +460,10 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
         if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
-          sqlContext.planner.BasicOperators.getSortOperator(requiredOrdering, global = false, child)
+          sqlContext.planner.BasicOperators.getSortOperator(
+            requiredOrdering,
+            global = false,
+            child)
         } else {
           child
         }
