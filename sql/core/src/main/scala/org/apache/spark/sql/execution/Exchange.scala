@@ -242,7 +242,7 @@ case class Exchange(
     // update the number of post-shuffle partitions.
     specifiedPartitionStartIndices.foreach { indices =>
       assert(newPartitioning.isInstanceOf[HashPartitioning])
-      newPartitioning = newPartitioning.withNumPartitions(indices.length)
+      newPartitioning = UnknownPartitioning(indices.length)
     }
     new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
   }
@@ -262,7 +262,7 @@ case class Exchange(
 
 object Exchange {
   def apply(newPartitioning: Partitioning, child: SparkPlan): Exchange = {
-    Exchange(newPartitioning, child, None: Option[ExchangeCoordinator])
+    Exchange(newPartitioning, child, coordinator = None: Option[ExchangeCoordinator])
   }
 }
 
@@ -315,7 +315,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             child.outputPartitioning match {
               case hash: HashPartitioning => true
               case collection: PartitioningCollection =>
-                collection.partitionings.exists(_.isInstanceOf[HashPartitioning])
+                collection.partitionings.forall(_.isInstanceOf[HashPartitioning])
               case _ => false
             }
         }

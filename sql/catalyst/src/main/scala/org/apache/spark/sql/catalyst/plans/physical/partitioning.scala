@@ -165,11 +165,6 @@ sealed trait Partitioning {
    * produced by `A` could have also been produced by `B`.
    */
   def guarantees(other: Partitioning): Boolean = this == other
-
-  def withNumPartitions(newNumPartitions: Int): Partitioning = {
-    throw new IllegalStateException(
-      s"It is not allowed to call withNumPartitions method of a ${this.getClass.getSimpleName}")
-  }
 }
 
 object Partitioning {
@@ -254,9 +249,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case _ => false
   }
 
-  override def withNumPartitions(newNumPartitions: Int): HashPartitioning = {
-    HashPartitioning(expressions, newNumPartitions)
-  }
 }
 
 /**
