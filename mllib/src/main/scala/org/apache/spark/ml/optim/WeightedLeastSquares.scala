@@ -26,10 +26,12 @@ import org.apache.spark.rdd.RDD
  * Model fitted by [[WeightedLeastSquares]].
  * @param coefficients model coefficients
  * @param intercept model intercept
+ * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1
  */
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
-    val intercept: Double) extends Serializable
+    val intercept: Double,
+    val diagInvAtWA: DenseVector) extends Serializable
 
 /**
  * Weighted least squares solver via normal equation.
@@ -73,7 +75,9 @@ private[ml] class WeightedLeastSquares(
     val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_))
     summary.validate()
     logInfo(s"Number of instances: ${summary.count}.")
+    val k = summary.k
     val triK = summary.triK
+    val wSum = summary.wSum
     val bBar = summary.bBar
     val bStd = summary.bStd
     val aBar = summary.aBar
@@ -109,6 +113,11 @@ private[ml] class WeightedLeastSquares(
 
     val x = new DenseVector(CholeskyDecomposition.solve(aaBar.values, abBar.values))
 
+    val aaInv = CholeskyDecomposition.inverse(aaBar.values, k)
+    // aaInv is a packed upper triangular matrix, here we get all elements on diagonal
+    val diagInvAtWA = new DenseVector((1 to k).map { i =>
+      aaInv(i + (i - 1) * i / 2 - 1) / wSum }.toArray)
+
     // compute intercept
     val intercept = if (fitIntercept) {
       bBar - BLAS.dot(aBar, x)
@@ -116,7 +125,7 @@ private[ml] class WeightedLeastSquares(
       0.0
     }
 
-    new WeightedLeastSquaresModel(x, intercept)
+    new WeightedLeastSquaresModel(x, intercept, diagInvAtWA)
   }
 }
 
@@ -131,7 +140,7 @@ private[ml] object WeightedLeastSquares {
     var k: Int = _
     var count: Long = _
     var triK: Int = _
-    private var wSum: Double = _
+    var wSum: Double = _
     private var wwSum: Double = _
     private var bSum: Double = _
     private var bbSum: Double = _

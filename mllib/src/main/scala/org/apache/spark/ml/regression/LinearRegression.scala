@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
+import breeze.stats.distributions.StudentsT
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
@@ -36,7 +37,7 @@ import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.functions.{col, udf, lit}
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -173,8 +174,11 @@ class LinearRegression(override val uid: String)
         summaryModel.transform(dataset),
         predictionColName,
         $(labelCol),
+        summaryModel,
+        model.diagInvAtWA.toArray,
         $(featuresCol),
         Array(0D))
+
       return lrModel.setSummary(trainingSummary)
     }
 
@@ -203,7 +207,7 @@ class LinearRegression(override val uid: String)
     val yMean = ySummarizer.mean(0)
     val yStd = math.sqrt(ySummarizer.variance(0))
 
-    // If the yStd is zero, then the intercept is yMean with zero weights;
+    // If the yStd is zero, then the intercept is yMean with zero coefficient;
     // as a result, training is not needed.
     if (yStd == 0.0) {
       logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
@@ -221,6 +225,8 @@ class LinearRegression(override val uid: String)
         summaryModel.transform(dataset),
         predictionColName,
         $(labelCol),
+        model,
+        Array(0D),
         $(featuresCol),
         Array(0D))
       return copyValues(model.setSummary(trainingSummary))
@@ -316,6 +322,8 @@ class LinearRegression(override val uid: String)
       summaryModel.transform(dataset),
       predictionColName,
       $(labelCol),
+      model,
+      Array(0D),
       $(featuresCol),
       objectiveHistory)
     model.setSummary(trainingSummary)
@@ -331,14 +339,17 @@ class LinearRegression(override val uid: String)
 @Experimental
 class LinearRegressionModel private[ml] (
     override val uid: String,
-    val weights: Vector,
+    val coefficients: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
-  override val numFeatures: Int = weights.size
+  @deprecated("Use coefficients instead.", "1.6.0")
+  def weights: Vector = coefficients
+
+  override val numFeatures: Int = coefficients.size
 
   /**
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
@@ -368,7 +379,8 @@ class LinearRegressionModel private[ml] (
   private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
-    new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName, $(labelCol))
+    new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName,
+      $(labelCol), this, Array(0D))
   }
 
   /**
@@ -387,11 +399,11 @@ class LinearRegressionModel private[ml] (
 
 
   override protected def predict(features: Vector): Double = {
-    dot(features, weights) + intercept
+    dot(features, coefficients) + intercept
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    val newModel = copyValues(new LinearRegressionModel(uid, weights, intercept), extra)
+    val newModel = copyValues(new LinearRegressionModel(uid, coefficients, intercept), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     newModel.setParent(parent)
   }
@@ -400,7 +412,7 @@ class LinearRegressionModel private[ml] (
 /**
  * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
- * training weights except for the objective trace.
+ * training coefficients except for the objective trace.
  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
@@ -409,9 +421,11 @@ class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
     labelCol: String,
+    model: LinearRegressionModel,
+    diagInvAtWA: Array[Double],
     val featuresCol: String,
     val objectiveHistory: Array[Double])
-  extends LinearRegressionSummary(predictions, predictionCol, labelCol) {
+  extends LinearRegressionSummary(predictions, predictionCol, labelCol, model, diagInvAtWA) {
 
   /** Number of training iterations until termination */
   val totalIterations = objectiveHistory.length
@@ -427,7 +441,9 @@ class LinearRegressionTrainingSummary private[regression] (
 class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,
-    val labelCol: String) extends Serializable {
+    val labelCol: String,
+    val model: LinearRegressionModel,
+    val diagInvAtWA: Array[Double]) extends Serializable {
 
   @transient private val metrics = new RegressionMetrics(
     predictions
@@ -469,6 +485,75 @@ class LinearRegressionSummary private[regression] (
   @transient lazy val residuals: DataFrame = {
     val t = udf { (pred: Double, label: Double) => label - pred }
     predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
+  }
+
+  /** Number of instances in DataFrame predictions */
+  lazy val numInstances: Long = predictions.count()
+
+  /** Degrees of freedom */
+  private val degreesOfFreedom: Long = if (model.getFitIntercept) {
+    numInstances - model.coefficients.size - 1
+  } else {
+    numInstances - model.coefficients.size
+  }
+
+  /**
+   * The weighted residuals, the usual residuals rescaled by
+   * the square root of the instance weights.
+   */
+  lazy val devianceResiduals: Array[Double] = {
+    val weighted = if (model.getWeightCol.isEmpty) lit(1.0) else sqrt(col(model.getWeightCol))
+    val dr = predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))
+      .multiply(weighted).as("weightedResiduals"))
+      .select(min(col("weightedResiduals")).as("min"), max(col("weightedResiduals")).as("max"))
+      .first()
+    Array(dr.getDouble(0), dr.getDouble(1))
+  }
+
+  /**
+   * Standard error of estimated coefficients.
+   * Note that standard error of estimated intercept is not supported currently.
+   */
+  lazy val coefficientStandardErrors: Array[Double] = {
+    if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
+      throw new UnsupportedOperationException(
+        "No Std. Error of coefficients available for this LinearRegressionModel")
+    } else {
+      val rss = if (model.getWeightCol.isEmpty) {
+        meanSquaredError * numInstances
+      } else {
+        val t = udf { (pred: Double, label: Double, weight: Double) =>
+          math.pow(label - pred, 2.0) * weight }
+        predictions.select(t(col(model.getPredictionCol), col(model.getLabelCol),
+          col(model.getWeightCol)).as("wse")).agg(sum(col("wse"))).first().getDouble(0)
+      }
+      val sigma2 = rss / degreesOfFreedom
+      diagInvAtWA.map(_ * sigma2).map(math.sqrt(_))
+    }
+  }
+
+  /** T-statistic of estimated coefficients.
+    * Note that t-statistic of estimated intercept is not supported currently.
+    */
+  lazy val tValues: Array[Double] = {
+    if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
+      throw new UnsupportedOperationException(
+        "No t-statistic available for this LinearRegressionModel")
+    } else {
+      model.coefficients.toArray.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
+    }
+  }
+
+  /** Two-sided p-value of estimated coefficients.
+    * Note that p-value of estimated intercept is not supported currently.
+    */
+  lazy val pValues: Array[Double] = {
+    if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
+      throw new UnsupportedOperationException(
+        "No p-value available for this LinearRegressionModel")
+    } else {
+      tValues.map { x => 2.0 * (1.0 - StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
+    }
   }
 
 }

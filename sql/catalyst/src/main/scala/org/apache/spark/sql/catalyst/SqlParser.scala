@@ -337,12 +337,23 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | sign.? ~ unsignedFloat ^^ {
       case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f))
     }
+    | sign.? ~ unsignedDecimal ^^ {
+      case s ~ d => Literal(toDecimalOrDouble(s.getOrElse("") + d))
+    }
     )
 
   protected lazy val unsignedFloat: Parser[String] =
     ( "." ~> numericLit ^^ { u => "0." + u }
     | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
     )
+
+  protected lazy val unsignedDecimal: Parser[String] =
+    ( "." ~> decimalLit ^^ { u => "0." + u }
+    | elem("scientific_notation", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
+    )
+
+  def decimalLit: Parser[String] =
+    elem("scientific_notation", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
 
   protected lazy val sign: Parser[String] = ("+" | "-")
 
@@ -466,9 +477,9 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)
-    | ident <~ "." ~ "*" ^^ { case tableName => UnresolvedStar(Option(tableName)) }
-    | primary
-    )
+    | (ident <~ "."). + <~ "*" ^^ { case target => { UnresolvedStar(Option(target)) }
+    } | primary
+   )
 
   protected lazy val signedPrimary: Parser[Expression] =
     sign ~ primary ^^ { case s ~ e => if (s == "-") UnaryMinus(e) else e }

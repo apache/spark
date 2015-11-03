@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -78,9 +79,17 @@ class Dataset[T] private(
    * ************* */
 
   /**
-   * Returns a new `Dataset` where each record has been mapped on to the specified type.
-   * TODO: should bind here...
-   * TODO: document binding rules
+   * Returns a new `Dataset` where each record has been mapped on to the specified type.  The
+   * method used to map columns depend on the type of `U`:
+   *  - When `U` is a class, fields for the class will be mapped to columns of the same name
+   *    (case sensitivity is determined by `spark.sql.caseSensitive`)
+   *  - When `U` is a tuple, the columns will be be mapped by ordinal (i.e. the first column will
+   *    be assigned to `_1`).
+   *  - When `U` is a primitive type (i.e. String, Int, etc). then the first column of the
+   *    [[DataFrame]] will be used.
+   *
+   * If the schema of the [[DataFrame]] does not match the desired `U` type, you can use `select`
+   * along with `alias` or `as` to rearrange or rename as required.
    * @since 1.6.0
    */
   def as[U : Encoder]: Dataset[U] = {
@@ -223,6 +232,27 @@ class Dataset[T] private(
       executed,
       inputPlan.output,
       withGroupingKey.newColumns)
+  }
+
+  /**
+   * Returns a [[GroupedDataset]] where the data is grouped by the given [[Column]] expressions.
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def groupBy(cols: Column*): GroupedDataset[Row, T] = {
+    val withKeyColumns = logicalPlan.output ++ cols.map(_.expr).map(UnresolvedAlias)
+    val withKey = Project(withKeyColumns, logicalPlan)
+    val executed = sqlContext.executePlan(withKey)
+
+    val dataAttributes = executed.analyzed.output.dropRight(cols.size)
+    val keyAttributes = executed.analyzed.output.takeRight(cols.size)
+
+    new GroupedDataset(
+      RowEncoder(keyAttributes.toStructType),
+      encoderFor[T],
+      executed,
+      dataAttributes,
+      keyAttributes)
   }
 
   /* ****************** *
@@ -390,7 +420,9 @@ class Dataset[T] private(
     val rightEncoder =
       if (other.encoder.flat) other.encoder else other.encoder.nested(rightData.toAttribute)
     implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(leftEncoder, rightEncoder)
+      ExpressionEncoder.tuple(
+        leftEncoder,
+        rightEncoder.rebind(right.output, left.output ++ right.output))
 
     withPlan[(T, U)](other) { (left, right) =>
       Project(

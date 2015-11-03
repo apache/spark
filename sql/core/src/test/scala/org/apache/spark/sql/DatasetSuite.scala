@@ -203,6 +203,54 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", 30), ("b", 3), ("c", 1))
   }
 
+  test("groupBy columns, mapGroups") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy($"_1")
+    val agged = grouped.mapGroups { case (g, iter) =>
+      Iterator((g.getString(0), iter.map(_._2).sum))
+    }
+
+    checkAnswer(
+      agged,
+      ("a", 30), ("b", 3), ("c", 1))
+  }
+
+  test("groupBy columns asKey, mapGroups") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy($"_1").asKey[String]
+    val agged = grouped.mapGroups { case (g, iter) =>
+      Iterator((g, iter.map(_._2).sum))
+    }
+
+    checkAnswer(
+      agged,
+      ("a", 30), ("b", 3), ("c", 1))
+  }
+
+  test("groupBy columns asKey tuple, mapGroups") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy($"_1", lit(1)).asKey[(String, Int)]
+    val agged = grouped.mapGroups { case (g, iter) =>
+      Iterator((g, iter.map(_._2).sum))
+    }
+
+    checkAnswer(
+      agged,
+      (("a", 1), 30), (("b", 1), 3), (("c", 1), 1))
+  }
+
+  test("groupBy columns asKey class, mapGroups") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy($"_1".as("a"), lit(1).as("b")).asKey[ClassData]
+    val agged = grouped.mapGroups { case (g, iter) =>
+      Iterator((g, iter.map(_._2).sum))
+    }
+
+    checkAnswer(
+      agged,
+      (ClassData("a", 1), 30), (ClassData("b", 1), 3), (ClassData("c", 1), 1))
+  }
+
   test("cogroup") {
     val ds1 = Seq(1 -> "a", 3 -> "abc", 5 -> "hello", 3 -> "foo").toDS()
     val ds2 = Seq(2 -> "q", 3 -> "w", 5 -> "e", 5 -> "r").toDS()
@@ -213,5 +261,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       cogrouped,
       1 -> "a#", 2 -> "#q", 3 -> "abcfoo#w", 5 -> "hello#er")
+  }
+
+  test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
+    val ds1 = Seq("1", "2").toDS().as("a")
+    val ds2 = Seq(2, 3).toDS().as("b")
+
+    val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
+    checkAnswer(joined, ("2", 2))
   }
 }

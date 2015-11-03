@@ -23,6 +23,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 
+import org.apache.spark.unsafe.Platform;
+
 /**
  * A simple {@link MemoryAllocator} that can allocate up to 16GB using a JVM long primitive array.
  */
@@ -45,9 +47,6 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
   @Override
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    if (size % 8 != 0) {
-      throw new IllegalArgumentException("Size " + size + " was not a multiple of 8");
-    }
     if (shouldPool(size)) {
       synchronized (this) {
         final LinkedList<WeakReference<MemoryBlock>> pool = bufferPoolsBySize.get(size);
@@ -64,8 +63,8 @@ public class HeapMemoryAllocator implements MemoryAllocator {
         }
       }
     }
-    long[] array = new long[(int) (size / 8)];
-    return MemoryBlock.fromLongArray(array);
+    long[] array = new long[(int) ((size + 7) / 8)];
+    return new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
   }
 
   @Override

@@ -23,6 +23,7 @@ import java.util
 import com.clearspring.analytics.hash.MurmurHash
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -56,37 +57,37 @@ case class Average(child: Expression) extends DeclarativeAggregate {
     case _ => DoubleType
   }
 
-  private val currentSum = AttributeReference("currentSum", sumDataType)()
-  private val currentCount = AttributeReference("currentCount", LongType)()
+  private val sum = AttributeReference("sum", sumDataType)()
+  private val count = AttributeReference("count", LongType)()
 
-  override val aggBufferAttributes = currentSum :: currentCount :: Nil
+  override val aggBufferAttributes = sum :: count :: Nil
 
   override val initialValues = Seq(
-    /* currentSum = */ Cast(Literal(0), sumDataType),
-    /* currentCount = */ Literal(0L)
+    /* sum = */ Cast(Literal(0), sumDataType),
+    /* count = */ Literal(0L)
   )
 
   override val updateExpressions = Seq(
-    /* currentSum = */
+    /* sum = */
     Add(
-      currentSum,
+      sum,
       Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
-    /* currentCount = */ If(IsNull(child), currentCount, currentCount + 1L)
+    /* count = */ If(IsNull(child), count, count + 1L)
   )
 
   override val mergeExpressions = Seq(
-    /* currentSum = */ currentSum.left + currentSum.right,
-    /* currentCount = */ currentCount.left + currentCount.right
+    /* sum = */ sum.left + sum.right,
+    /* count = */ count.left + count.right
   )
 
-  // If all input are nulls, currentCount will be 0 and we will get null after the division.
+  // If all input are nulls, count will be 0 and we will get null after the division.
   override val evaluateExpression = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       // increase the precision and scale to prevent precision loss
       val dt = DecimalType.bounded(p + 14, s + 4)
-      Cast(Cast(currentSum, dt) / Cast(currentCount, dt), resultType)
+      Cast(Cast(sum, dt) / Cast(count, dt), resultType)
     case _ =>
-      Cast(currentSum, resultType) / Cast(currentCount, resultType)
+      Cast(sum, resultType) / Cast(count, resultType)
   }
 }
 
@@ -101,23 +102,23 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  private val currentCount = AttributeReference("currentCount", LongType)()
+  private val count = AttributeReference("count", LongType)()
 
-  override val aggBufferAttributes = currentCount :: Nil
+  override val aggBufferAttributes = count :: Nil
 
   override val initialValues = Seq(
-    /* currentCount = */ Literal(0L)
+    /* count = */ Literal(0L)
   )
 
   override val updateExpressions = Seq(
-    /* currentCount = */ If(IsNull(child), currentCount, currentCount + 1L)
+    /* count = */ If(IsNull(child), count, count + 1L)
   )
 
   override val mergeExpressions = Seq(
-    /* currentCount = */ currentCount.left + currentCount.right
+    /* count = */ count.left + count.right
   )
 
-  override val evaluateExpression = Cast(currentCount, LongType)
+  override val evaluateExpression = Cast(count, LongType)
 }
 
 /**
@@ -355,30 +356,188 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
 
   private val sumDataType = resultType
 
-  private val currentSum = AttributeReference("currentSum", sumDataType)()
+  private val sum = AttributeReference("sum", sumDataType)()
 
   private val zero = Cast(Literal(0), sumDataType)
 
-  override val aggBufferAttributes = currentSum :: Nil
+  override val aggBufferAttributes = sum :: Nil
 
   override val initialValues = Seq(
-    /* currentSum = */ Literal.create(null, sumDataType)
+    /* sum = */ Literal.create(null, sumDataType)
   )
 
   override val updateExpressions = Seq(
-    /* currentSum = */
-    Coalesce(Seq(Add(Coalesce(Seq(currentSum, zero)), Cast(child, sumDataType)), currentSum))
+    /* sum = */
+    Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType)), sum))
   )
 
   override val mergeExpressions = {
-    val add = Add(Coalesce(Seq(currentSum.left, zero)), Cast(currentSum.right, sumDataType))
+    val add = Add(Coalesce(Seq(sum.left, zero)), Cast(sum.right, sumDataType))
     Seq(
-      /* currentSum = */
-      Coalesce(Seq(add, currentSum.left))
+      /* sum = */
+      Coalesce(Seq(add, sum.left))
     )
   }
 
-  override val evaluateExpression = Cast(currentSum, resultType)
+  override val evaluateExpression = Cast(sum, resultType)
+}
+
+/**
+ * Compute Pearson correlation between two expressions.
+ * When applied on empty data (i.e., count is zero), it returns NULL.
+ *
+ * Definition of Pearson correlation can be found at
+ * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
+ *
+ * @param left one of the expressions to compute correlation with.
+ * @param right another expression to compute correlation with.
+ */
+case class Corr(
+    left: Expression,
+    right: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate {
+
+  def children: Seq[Expression] = Seq(left, right)
+
+  def nullable: Boolean = false
+
+  def dataType: DataType = DoubleType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
+
+  def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+
+  def inputAggBufferAttributes: Seq[AttributeReference] = aggBufferAttributes.map(_.newInstance())
+
+  val aggBufferAttributes: Seq[AttributeReference] = Seq(
+    AttributeReference("xAvg", DoubleType)(),
+    AttributeReference("yAvg", DoubleType)(),
+    AttributeReference("Ck", DoubleType)(),
+    AttributeReference("MkX", DoubleType)(),
+    AttributeReference("MkY", DoubleType)(),
+    AttributeReference("count", LongType)())
+
+  // Local cache of mutableAggBufferOffset(s) that will be used in update and merge
+  private[this] val mutableAggBufferOffsetPlus1 = mutableAggBufferOffset + 1
+  private[this] val mutableAggBufferOffsetPlus2 = mutableAggBufferOffset + 2
+  private[this] val mutableAggBufferOffsetPlus3 = mutableAggBufferOffset + 3
+  private[this] val mutableAggBufferOffsetPlus4 = mutableAggBufferOffset + 4
+  private[this] val mutableAggBufferOffsetPlus5 = mutableAggBufferOffset + 5
+
+  // Local cache of inputAggBufferOffset(s) that will be used in update and merge
+  private[this] val inputAggBufferOffsetPlus1 = inputAggBufferOffset + 1
+  private[this] val inputAggBufferOffsetPlus2 = inputAggBufferOffset + 2
+  private[this] val inputAggBufferOffsetPlus3 = inputAggBufferOffset + 3
+  private[this] val inputAggBufferOffsetPlus4 = inputAggBufferOffset + 4
+  private[this] val inputAggBufferOffsetPlus5 = inputAggBufferOffset + 5
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def initialize(buffer: MutableRow): Unit = {
+    buffer.setDouble(mutableAggBufferOffset, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus1, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus2, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus3, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus4, 0.0)
+    buffer.setLong(mutableAggBufferOffsetPlus5, 0L)
+  }
+
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val leftEval = left.eval(input)
+    val rightEval = right.eval(input)
+
+    if (leftEval != null && rightEval != null) {
+      val x = leftEval.asInstanceOf[Double]
+      val y = rightEval.asInstanceOf[Double]
+
+      var xAvg = buffer.getDouble(mutableAggBufferOffset)
+      var yAvg = buffer.getDouble(mutableAggBufferOffsetPlus1)
+      var Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      var MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+      var MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
+      var count = buffer.getLong(mutableAggBufferOffsetPlus5)
+
+      val deltaX = x - xAvg
+      val deltaY = y - yAvg
+      count += 1
+      xAvg += deltaX / count
+      yAvg += deltaY / count
+      Ck += deltaX * (y - yAvg)
+      MkX += deltaX * (x - xAvg)
+      MkY += deltaY * (y - yAvg)
+
+      buffer.setDouble(mutableAggBufferOffset, xAvg)
+      buffer.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+      buffer.setDouble(mutableAggBufferOffsetPlus2, Ck)
+      buffer.setDouble(mutableAggBufferOffsetPlus3, MkX)
+      buffer.setDouble(mutableAggBufferOffsetPlus4, MkY)
+      buffer.setLong(mutableAggBufferOffsetPlus5, count)
+    }
+  }
+
+  // Merge counters from other partitions. Formula can be found at:
+  // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    val count2 = buffer2.getLong(inputAggBufferOffsetPlus5)
+
+    // We only go to merge two buffers if there is at least one record aggregated in buffer2.
+    // We don't need to check count in buffer1 because if count2 is more than zero, totalCount
+    // is more than zero too, then we won't get a divide by zero exception.
+    if (count2 > 0) {
+      var xAvg = buffer1.getDouble(mutableAggBufferOffset)
+      var yAvg = buffer1.getDouble(mutableAggBufferOffsetPlus1)
+      var Ck = buffer1.getDouble(mutableAggBufferOffsetPlus2)
+      var MkX = buffer1.getDouble(mutableAggBufferOffsetPlus3)
+      var MkY = buffer1.getDouble(mutableAggBufferOffsetPlus4)
+      var count = buffer1.getLong(mutableAggBufferOffsetPlus5)
+
+      val xAvg2 = buffer2.getDouble(inputAggBufferOffset)
+      val yAvg2 = buffer2.getDouble(inputAggBufferOffsetPlus1)
+      val Ck2 = buffer2.getDouble(inputAggBufferOffsetPlus2)
+      val MkX2 = buffer2.getDouble(inputAggBufferOffsetPlus3)
+      val MkY2 = buffer2.getDouble(inputAggBufferOffsetPlus4)
+
+      val totalCount = count + count2
+      val deltaX = xAvg - xAvg2
+      val deltaY = yAvg - yAvg2
+      Ck += Ck2 + deltaX * deltaY * count / totalCount * count2
+      xAvg = (xAvg * count + xAvg2 * count2) / totalCount
+      yAvg = (yAvg * count + yAvg2 * count2) / totalCount
+      MkX += MkX2 + deltaX * deltaX * count / totalCount * count2
+      MkY += MkY2 + deltaY * deltaY * count / totalCount * count2
+      count = totalCount
+
+      buffer1.setDouble(mutableAggBufferOffset, xAvg)
+      buffer1.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+      buffer1.setDouble(mutableAggBufferOffsetPlus2, Ck)
+      buffer1.setDouble(mutableAggBufferOffsetPlus3, MkX)
+      buffer1.setDouble(mutableAggBufferOffsetPlus4, MkY)
+      buffer1.setLong(mutableAggBufferOffsetPlus5, count)
+    }
+  }
+
+  override def eval(buffer: InternalRow): Any = {
+    val count = buffer.getLong(mutableAggBufferOffsetPlus5)
+    if (count > 0) {
+      val Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      val MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+      val MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
+      val corr = Ck / math.sqrt(MkX * MkY)
+      if (corr.isNaN) {
+        null
+      } else {
+        corr
+      }
+    } else {
+      null
+    }
+  }
 }
 
 // scalastyle:off
@@ -974,7 +1133,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
    * @param centralMoments Length `momentOrder + 1` array of central moments (un-normalized)
    *                       needed to compute the aggregate stat.
    */
-  def getStatistic(n: Double, mean: Double, centralMoments: Array[Double]): Double
+  def getStatistic(n: Double, mean: Double, centralMoments: Array[Double]): Any
 
   override final def eval(buffer: InternalRow): Any = {
     val n = buffer.getDouble(nOffset)
@@ -992,9 +1151,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
       moments(4) = buffer.getDouble(fourthMomentOffset)
     }
 
-    if (n == 0.0) null
-    else if (n == 1.0) 0.0
-    else getStatistic(n, mean, moments)
+    getStatistic(n, mean, moments)
   }
 }
 
@@ -1012,11 +1169,11 @@ case class Stddev(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
 
-    if (n == 0.0) Double.NaN else math.sqrt(moments(2) / n)
+    if (n == 0.0) null else math.sqrt(moments(2) / n)
   }
 }
 
@@ -1035,11 +1192,11 @@ case class StddevPop(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
 
-    if (n == 0.0) Double.NaN else math.sqrt(moments(2) / n)
+    if (n == 0.0) null else math.sqrt(moments(2) / n)
   }
 }
 
@@ -1057,11 +1214,11 @@ case class StddevSamp(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
 
-    if (n == 0.0 || n == 1.0) Double.NaN else math.sqrt(moments(2) / (n - 1.0))
+    if (n == 0.0 || n == 1.0) null else math.sqrt(moments(2) / (n - 1.0))
   }
 }
 
@@ -1079,11 +1236,11 @@ case class Variance(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
 
-    if (n == 0.0) Double.NaN else moments(2) / n
+    if (n == 0.0) null else moments(2) / n
   }
 }
 
@@ -1101,11 +1258,11 @@ case class VarianceSamp(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
 
-    if (n == 0.0 || n == 1.0) Double.NaN else moments(2) / (n - 1.0)
+    if (n == 0.0 || n == 1.0) null else moments(2) / (n - 1.0)
   }
 }
 
@@ -1123,11 +1280,11 @@ case class VariancePop(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
 
-    if (n == 0.0) Double.NaN else moments(2) / n
+    if (n == 0.0) null else moments(2) / n
   }
 }
 
@@ -1145,13 +1302,13 @@ case class Skewness(child: Expression,
 
   override protected val momentOrder = 3
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
     val m2 = moments(2)
     val m3 = moments(3)
     if (n == 0.0 || m2 == 0.0) {
-      Double.NaN
+      null 
     } else {
       math.sqrt(n) * m3 / math.sqrt(m2 * m2 * m2)
     }
@@ -1173,13 +1330,13 @@ case class Kurtosis(child: Expression,
   override protected val momentOrder = 4
 
   // NOTE: this is the formula for excess kurtosis, which is default for R and SciPy
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
     val m2 = moments(2)
     val m4 = moments(4)
     if (n == 0.0 || m2 == 0.0) {
-      Double.NaN
+      null 
     } else {
       n * m4 / (m2 * m2) - 3.0
     }

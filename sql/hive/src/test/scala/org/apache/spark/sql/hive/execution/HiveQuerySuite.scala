@@ -563,6 +563,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("Specify the udtf output",
     "SELECT d FROM (SELECT explode(array(1,1)) d FROM src LIMIT 1) t")
 
+  createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #1",
+    "SELECT col FROM (SELECT explode(array(key,value)) FROM src LIMIT 1) t")
+
+  createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #2",
+    "SELECT key,value FROM (SELECT explode(map(key,value)) FROM src LIMIT 1) t")
+
   test("sampling") {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
     sql("SELECT * FROM src TABLESAMPLE(100 PERCENT) s")
@@ -951,6 +957,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
+  }
+
+  test("CREATE TEMPORARY FUNCTION") {
+    val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+    sql(s"ADD JAR $funcJar")
+    sql(
+      """CREATE TEMPORARY FUNCTION udtf_count2 AS
+        | 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'""".stripMargin)
+    assert(sql("DESCRIBE FUNCTION udtf_count2").count > 1)
+    sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 
   test("ADD FILE command") {

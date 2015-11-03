@@ -77,9 +77,11 @@ private[sql] object PartitioningUtils {
       defaultPartitionName: String,
       typeInference: Boolean): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
-    val pathsWithPartitionValues = paths.flatMap { path =>
-      parsePartition(path, defaultPartitionName, typeInference).map(path -> _)
-    }
+    val (partitionValues, optBasePaths) = paths.map { path =>
+      parsePartition(path, defaultPartitionName, typeInference)
+    }.unzip
+
+    val pathsWithPartitionValues = paths.zip(partitionValues).flatMap(x => x._2.map(x._1 -> _))
 
     if (pathsWithPartitionValues.isEmpty) {
       // This dataset is not partitioned.
@@ -87,6 +89,12 @@ private[sql] object PartitioningUtils {
     } else {
       // This dataset is partitioned. We need to check whether all partitions have the same
       // partition columns and resolve potential type conflicts.
+      val basePaths = optBasePaths.flatMap(x => x)
+      assert(
+        basePaths.distinct.size == 1,
+        "Conflicting directory structures detected. Suspicious paths:\b" +
+          basePaths.mkString("\n\t", "\n\t", "\n\n"))
+
       val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
 
       // Creates the StructType which represents the partition columns.
@@ -110,12 +118,12 @@ private[sql] object PartitioningUtils {
   }
 
   /**
-   * Parses a single partition, returns column names and values of each partition column.  For
-   * example, given:
+   * Parses a single partition, returns column names and values of each partition column, also
+   * the base path.  For example, given:
    * {{{
    *   path = hdfs://<host>:<port>/path/to/partition/a=42/b=hello/c=3.14
    * }}}
-   * it returns:
+   * it returns the partition:
    * {{{
    *   PartitionValues(
    *     Seq("a", "b", "c"),
@@ -124,34 +132,40 @@ private[sql] object PartitioningUtils {
    *       Literal.create("hello", StringType),
    *       Literal.create(3.14, FloatType)))
    * }}}
+   * and the base path:
+   * {{{
+   *   /path/to/partition
+   * }}}
    */
   private[sql] def parsePartition(
       path: Path,
       defaultPartitionName: String,
-      typeInference: Boolean): Option[PartitionValues] = {
+      typeInference: Boolean): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
     var chopped = path
+    var basePath = path
 
     while (!finished) {
       // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
       // uncleaned.  Here we simply ignore them.
       if (chopped.getName.toLowerCase == "_temporary") {
-        return None
+        return (None, None)
       }
 
       val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName, typeInference)
       maybeColumn.foreach(columns += _)
+      basePath = chopped
       chopped = chopped.getParent
-      finished = maybeColumn.isEmpty || chopped.getParent == null
+      finished = (maybeColumn.isEmpty && !columns.isEmpty) || chopped.getParent == null
     }
 
     if (columns.isEmpty) {
-      None
+      (None, Some(path))
     } else {
       val (columnNames, values) = columns.reverse.unzip
-      Some(PartitionValues(columnNames, values))
+      (Some(PartitionValues(columnNames, values)), Some(basePath))
     }
   }
 

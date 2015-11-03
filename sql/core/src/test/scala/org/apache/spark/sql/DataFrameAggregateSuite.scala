@@ -255,7 +255,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(var_samp('a)),
-      Row(0.0))
+      Row(null))
 
     checkAnswer(
       emptyTableData.agg(var_pop('a)),
@@ -263,11 +263,11 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(skewness('a)),
-      Row(0.0))
+      Row(null))
 
     checkAnswer(
       emptyTableData.agg(kurtosis('a)),
-      Row(0.0))
+      Row(null))
   }
 
   test("null moments") {

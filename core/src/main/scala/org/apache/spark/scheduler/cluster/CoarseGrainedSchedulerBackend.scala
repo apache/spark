@@ -125,22 +125,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
-
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
       case RegisterExecutor(executorId, executorRef, hostPort, cores, logUrls) =>
-        Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorDataMap.contains(executorId)) {
           context.reply(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
         } else {
-          logInfo("Registered executor: " + executorRef + " with ID " + executorId)
-          addressToExecutorId(executorRef.address) = executorId
+          // If the executor's rpc env is not listening for incoming connections, `hostPort`
+          // will be null, and the client connection should be used to contact the executor.
+          val executorAddress = if (executorRef.address != null) {
+              executorRef.address
+            } else {
+              context.senderAddress
+            }
+          logInfo(s"Registered executor $executorRef ($executorAddress) with ID $executorId")
+          addressToExecutorId(executorAddress) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
-          val (host, _) = Utils.parseHostPort(hostPort)
-          val data = new ExecutorData(executorRef, executorRef.address, host, cores, cores, logUrls)
+          val data = new ExecutorData(executorRef, executorRef.address, executorAddress.host,
+            cores, cores, logUrls)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -151,7 +156,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             }
           }
           // Note: some tests expect the reply to come after we put the executor in the map
-          context.reply(RegisteredExecutor)
+          context.reply(RegisteredExecutor(executorAddress.host))
           listenerBus.post(
             SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
           makeOffers()
@@ -189,7 +194,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       addressToExecutorId
         .get(remoteAddress)
-        .foreach(removeExecutor(_, SlaveLost("remote Rpc client disassociated")))
+        .foreach(removeExecutor(_, SlaveLost("Remote RPC client disassociated. Likely due to " +
+          "containers exceeding thresholds, or network issues. Check driver logs for WARN " +
+          "messages.")))
     }
 
     // Make fake resource offers on just one executor
