@@ -23,6 +23,25 @@ if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
+# Figure out where Spark is installed
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+
+# NOTE: This exact class name is matched downstream by SparkSubmit.
+# Any changes need to be reflected there.
+CLASS="org.apache.spark.deploy.master.Master"
+
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  pattern="usage"
+  pattern+="\|Using Spark's default log4j profile:"
+  pattern+="\|Registered signal handlers for"
+
+  "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  exit 1
+fi
+
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
+
 ORIGINAL_ARGS="$@"
 
 START_TACHYON=false
@@ -56,7 +75,7 @@ if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
   SPARK_MASTER_WEBUI_PORT=8080
 fi
 
-"${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 \
+"${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 \
   --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
   $ORIGINAL_ARGS
 

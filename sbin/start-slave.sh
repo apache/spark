@@ -31,11 +31,19 @@
 #                           worker.  Subsequent workers will increment this
 #                           number.  Default is 8081.
 
-usage="Usage: start-slave.sh <spark-master-URL> where <spark-master-URL> is like spark://localhost:7077"
+# Figure out where Spark is installed
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
-if [ $# -lt 1 ]; then
-  echo $usage
-  echo Called as start-slave.sh $*
+# NOTE: This exact class name is matched downstream by SparkSubmit.
+# Any changes need to be reflected there.
+CLASS="org.apache.spark.deploy.worker.Worker"
+
+if [[ $# -lt 1 ]] || [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  pattern="usage"
+  pattern+="\|Using Spark's default log4j profile:"
+  pattern+="\|Registered signal handlers for"
+
+  "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
   exit 1
 fi
 
@@ -72,7 +80,7 @@ function start_instance {
   fi
   WEBUI_PORT=$(( $SPARK_WORKER_WEBUI_PORT + $WORKER_NUM - 1 ))
 
-  "${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker $WORKER_NUM \
+  "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS $WORKER_NUM \
      --webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
 }
 
