@@ -56,7 +56,7 @@ echo "Generating dependency manifest"
 $MVN dependency:build-classpath \
   | grep "Building Spark Project Assembly" -A 5 \
   | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
-  > dev/pr-deps
+  | grep -v spark > dev/pr-deps
 
 if [ -n "$AMPLAB_JENKINS" ]; then
   git reset --hard HEAD
