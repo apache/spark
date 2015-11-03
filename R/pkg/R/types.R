@@ -16,26 +16,27 @@
 # types.R. This file handles the data type mapping between Spark and R
 
 # The primitive data types, where names(PRIMITIVE_TYPES) are Scala types whereas
-# values are equivalent R types.
-PRIMITIVE_TYPES <- c(
-  "byte"="integer",
+# values are equivalent R types. This is stored in an environment to allow for
+# more efficient look up (environments use hashmaps).
+PRIMITIVE_TYPES <- as.environment(list(
+  "smallint"="integer",
   "tinyint"="integer",
-  "integer"="integer",
+  "int"="integer",
+  "bigint"="numeric",
   "float"="numeric",
   "double"="numeric",
-  "numeric"="numeric",
-  "character"="character",
-  "string"="character",
-  "binary"=NA,
-  "raw"=NA,
-  "logical"="logical",
-  "boolean"="logical",
   "decimal"="numeric",
-  "timestamp"=NA,
-  "date"=NA)
+  "string"="character",
+  "binary"="raw",
+  "boolean"="logical",
+  "timestamp"="POSIXct",
+  "date"="Date"))
 
 # The complex data types. These do not have any direct mapping to R's types.
-COMPLEX_TYPES <- c("map"=NA, "array"=NA, "struct"=NA)
+COMPLEX_TYPES <- as.environment(list(
+  "map"=NA,
+  "array"=NA,
+  "struct"=NA))
 
 # The full list of data types.
-DATA_TYPES <- c(PRIMITIVE_TYPES, COMPLEX_TYPES)
+DATA_TYPES <- as.environment(c(as.list(PRIMITIVE_TYPES), as.list(COMPLEX_TYPES)))

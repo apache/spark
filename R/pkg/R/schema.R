@@ -116,6 +116,7 @@ structField.jobj <- function(x) {
 
 checkType <- function(type) {
   if (type %in% names(PRIMITIVE_TYPES)) {
+    cat("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
     return()
   } else {
     # Check complex types
