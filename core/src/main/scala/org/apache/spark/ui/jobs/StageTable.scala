@@ -19,7 +19,6 @@ package org.apache.spark.ui.jobs
 
 import java.util.Date
 
-import scala.collection.mutable.{HashMap}
 import scala.xml.{Node, Text}
 
 import org.apache.commons.lang3.StringEscapeUtils
