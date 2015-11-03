@@ -1027,3 +1027,7 @@ setGeneric("as.data.frame")
 #' @rdname attach
 #' @export
 setGeneric("attach")
+
+#' @rdname with
+#' @export
+setGeneric("with")

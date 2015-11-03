@@ -2045,3 +2045,34 @@ setMethod("attach",
             }
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
+
+#' Evaluate a R expression in an environment constructed from a DataFrame
+#' with() allows access to columns of a DataFrame by simply referring to
+#' their name. It appends every column of a DataFrame into a new
+#' environment. Then, the given expression is evaluated in this new
+#' environment.
+#'
+#' @rdname with
+#' @title Evaluate a R expression in an environment constructed from a DataFrame
+#' @param data (DataFrame) DataFrame to use for constructing an environment.
+#' @param expr (expression) Expression to evaluate.
+#' @param ... arguments to be passed to future methods.
+#' @examples
+#' \dontrun{
+#' with(irisDf, nrow(Sepal_Width))
+#' }
+#' @seealso \link{attach}
+setMethod("with",
+          signature(data = "DataFrame"),
+          function(data, expr, ...) {
+            stopifnot(!missing(data))
+            stopifnot(inherits(data, "DataFrame"))
+            cols <- columns(data)
+            stopifnot(length(cols) > 0)
+
+            newEnv <- new.env()
+            for (i in 1:length(cols)) {
+              assign(x = cols[i], value = data[, cols[i]], envir = newEnv)
+            }
+            eval(substitute(expr), envir = newEnv, enclos = newEnv)
+          })
