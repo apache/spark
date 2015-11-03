@@ -472,15 +472,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Data source filters that cannot be handled by `relation`
     val unhandledFilters = relation.unhandledFilters(translatedMap.values.toArray).toSet
 
+    val (unhandled, handled) = translated.partition {
+      case (predicate, filter) =>
+        unhandledFilters.contains(filter)
+    }
+
     // Catalyst predicate expressions that can be translated to data source filters, but cannot be
     // handled by `relation`.
-    val unhandledPredicates = for {
-      (predicate, filter) <- translated if unhandledFilters.contains(filter)
-    } yield predicate
+    val (unhandledPredicates, _) = unhandled.unzip
 
-    // Translated data source filters, no matter `relation` can handle them or not
-    val (_, translatedFilters) = translated.unzip
+    // Translated data source filters that can be handled by `relation`
+    val (_, handledFilters) = handled.unzip
 
-    (unrecognizedPredicates ++ unhandledPredicates, translatedFilters)
+    (unrecognizedPredicates ++ unhandledPredicates, handledFilters)
   }
 }

@@ -47,15 +47,15 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     def unhandled(filter: Filter): Boolean = {
       filter match {
-        case EqualTo("b", v) => true
-        case EqualNullSafe("b", v) => true
-        case LessThan("b", v: Int) => true
-        case LessThanOrEqual("b", v: Int) => true
-        case GreaterThan("b", v: Int) => true
-        case GreaterThanOrEqual("b", v: Int) => true
-        case In("b", values) => true
-        case IsNull("b") => true
-        case IsNotNull("b") => true
+        case EqualTo(col, v) => col == "b"
+        case EqualNullSafe(col, v) => col == "b"
+        case LessThan(col, v: Int) => col == "b"
+        case LessThanOrEqual(col, v: Int) => col == "b"
+        case GreaterThan(col, v: Int) => col == "b"
+        case GreaterThanOrEqual(col, v: Int) => col == "b"
+        case In(col, values) => col == "b"
+        case IsNull(col) => col == "b"
+        case IsNotNull(col) => col == "b"
         case Not(pred) => unhandled(pred)
         case And(left, right) => unhandled(left) || unhandled(right)
         case Or(left, right) => unhandled(left) || unhandled(right)
@@ -144,7 +144,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
       """.stripMargin)
 
     // UDF for testing filter push-down
-    caseInsensitiveContext.udf.register("udf_even", (_: Int) % 2 == 0)
+    caseInsensitiveContext.udf.register("udf_gt3", (_: Int) > 3)
   }
 
   sqlTest(
@@ -275,17 +275,23 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
   testPushDown("SELECT c FROM oneToTenFiltered WHERE c IN ('aaaaaAAAAA', 'foo')", 1, Set("c"))
 
   // Columns only referenced by UDF filter must be required, as UDF filters can't be pushed down.
-  testPushDown("SELECT c FROM oneToTenFiltered WHERE udf_even(A)", 10, Set("a", "c"))
+  testPushDown("SELECT c FROM oneToTenFiltered WHERE udf_gt3(A)", 10, Set("a", "c"))
+
+  // A query with an unconvertible filter, an unhandled filter, and a handled filter.
+  testPushDown(
+    """SELECT a
+      |  FROM oneToTenFiltered
+      | WHERE udf_gt3(b)
+      |   AND b < 16
+      |   AND c IN ('bbbbbBBBBB', 'cccccCCCCC', 'dddddDDDDD', 'foo')
+    """.stripMargin.split("\n").map(_.trim).mkString(" "), 3, Set("a", "b"))
 
   def testPushDown(
       sqlString: String,
       expectedCount: Int,
       requiredColumnNames: Set[String]): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {
-      val df = sql(sqlString)
-      df.show()
-
-      val queryExecution = df.queryExecution
+      val queryExecution = sql(sqlString).queryExecution
       val rawPlan = queryExecution.executedPlan.collect {
         case p: execution.PhysicalRDD => p
       } match {
