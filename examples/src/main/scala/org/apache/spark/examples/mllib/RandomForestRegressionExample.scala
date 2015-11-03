@@ -26,7 +26,7 @@ import org.apache.spark.mllib.util.MLUtils
 // $example off$
 
 object RandomForestRegressionExample {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("RandomForestRegressionExample")
     val sc = new SparkContext(conf)
     // $example on$

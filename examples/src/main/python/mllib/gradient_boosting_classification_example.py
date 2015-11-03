@@ -27,7 +27,9 @@ from pyspark import SparkContext
 from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
 from pyspark.mllib.util import MLUtils
 # $example off$
+
 if __name__ == "__main__":
+    sc = SparkContext(appName="PythonGradientBoostedTreesClassificationExample")
     # $example on$
     # Load and parse the data file.
     data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")

@@ -27,7 +27,7 @@ import org.apache.spark.mllib.util.MLUtils
 // $example off$
 
 object GradientBoostingRegressionExample {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("GradientBoostedTreesRegressionExample")
     val sc = new SparkContext(conf)
     // $example on$
