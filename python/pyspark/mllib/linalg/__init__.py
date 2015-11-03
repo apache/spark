@@ -43,7 +43,8 @@ from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayTyp
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
-           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices']
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices',
+           'QRDecomposition']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -1237,6 +1238,8 @@ class Matrices(object):
 
 class QRDecomposition(object):
     """
+    .. note:: Experimental
+
     Represents QR factors.
     """
     def __init__(self, Q, R):
