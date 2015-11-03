@@ -814,7 +814,10 @@ private[spark] object JsonProtocol {
         val exitCausedByApp = Utils.jsonOption(json \ "Exit Caused By App").map(_.extract[Boolean])
         val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
         val reason = Utils.jsonOption(json \ "Loss Reason").map(_.extract[String])
-        ExecutorLostFailure(executorId.getOrElse("Unknown"), exitCausedByApp.getOrElse(true), reason)
+        ExecutorLostFailure(
+          executorId.getOrElse("Unknown"),
+          exitCausedByApp.getOrElse(true),
+          reason)
       case `unknownReason` => UnknownReason
     }
   }
