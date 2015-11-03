@@ -171,8 +171,6 @@ class GroupedData(object):
     @since(1.6)
     def stddev(self, *cols):
         """Compute the sample standard deviation for each numeric columns for each group.
-        The resulting [[DataFrame]] will also contain the grouping columns.
-        When specified columns are given, only compute the stddev for them.
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
@@ -184,8 +182,6 @@ class GroupedData(object):
     @since(1.6)
     def stddev_samp(self, *cols):
         """Compute the sample standard deviation for each numeric columns for each group.
-        The resulting [[DataFrame]] will also contain the grouping columns.
-        When specified columns are given, only compute the stddev for them.
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
@@ -197,8 +193,6 @@ class GroupedData(object):
     @since(1.6)
     def stddev_pop(self, *cols):
         """Compute the population standard deviation for each numeric columns for each group.
-        The resulting [[DataFrame]] will also contain the grouping columns.
-        When specified columns are given, only compute the stddev for them.
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
@@ -210,8 +204,6 @@ class GroupedData(object):
     @since(1.6)
     def variance(self, *cols):
         """Compute the sample variance for each numeric columns for each group.
-        The resulting [[DataFrame]] will also contain the grouping columns.
-        When specified columns are given, only compute the variance for them.
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
@@ -223,8 +215,6 @@ class GroupedData(object):
     @since(1.6)
     def var_pop(self, *cols):
         """Compute the sample variance for each numeric columns for each group.
-        The resulting [[DataFrame]] will also contain the grouping columns.
-        When specified columns are given, only compute the variance for them.
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
@@ -236,8 +226,6 @@ class GroupedData(object):
     @since(1.6)
     def var_samp(self, *cols):
         """Compute the sample variance for each numeric columns for each group.
-        The resulting [[DataFrame]] will also contain the grouping columns.
-        When specified columns are given, only compute the variance for them.
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
@@ -249,8 +237,6 @@ class GroupedData(object):
     @since(1.6)
     def skewness(self, *cols):
         """Compute the skewness for each numeric columns for each group.
-        The resulting [[DataFrame]] will also contain the grouping columns.
-        When specified columns are given, only compute the skewness values for them.
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
@@ -262,8 +248,6 @@ class GroupedData(object):
     @since(1.6)
     def kurtosis(self, *cols):
         """Compute the kurtosis for each numeric columns for each group.
-        The resulting [[DataFrame]] will also contain the grouping columns.
-        When specified columns are given, only compute the kurtosis values for them.
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
