@@ -77,17 +77,11 @@ private[sql] object PartitioningUtils {
       defaultPartitionName: String,
       typeInference: Boolean): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
-    val partitionValuesWithBasePaths = paths.map { path =>
-      path -> parsePartition(path, defaultPartitionName, typeInference)
-    }
+    val (partitionValues, optBasePaths) = paths.map { path =>
+      parsePartition(path, defaultPartitionName, typeInference)
+    }.unzip
 
-    val pathsWithPartitionValues = partitionValuesWithBasePaths.flatMap { pathAndPart =>
-      pathAndPart._2._1.map(part => pathAndPart._1 -> part)
-    }
-
-    val basePaths = partitionValuesWithBasePaths.flatMap { pathAndPart =>
-      pathAndPart._2._2
-    }
+    val pathsWithPartitionValues = paths.zip(partitionValues).flatMap(x => x._2.map(x._1 -> _))
 
     if (pathsWithPartitionValues.isEmpty) {
       // This dataset is not partitioned.
@@ -95,13 +89,13 @@ private[sql] object PartitioningUtils {
     } else {
       // This dataset is partitioned. We need to check whether all partitions have the same
       // partition columns and resolve potential type conflicts.
-
+      val basePaths = optBasePaths.flatMap(x => x)
       assert(
         basePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
           basePaths.mkString("\n\t", "\n\t", "\n\n"))
 
-      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues, basePaths)
+      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
 
       // Creates the StructType which represents the partition columns.
       val fields = {
@@ -204,8 +198,7 @@ private[sql] object PartitioningUtils {
    * }}}
    */
   private[sql] def resolvePartitions(
-      pathsWithPartitionValues: Seq[(Path, PartitionValues)],
-      basePaths: Seq[Path]): Seq[PartitionValues] = {
+      pathsWithPartitionValues: Seq[(Path, PartitionValues)]): Seq[PartitionValues] = {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
