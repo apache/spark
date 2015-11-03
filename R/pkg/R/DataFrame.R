@@ -2189,12 +2189,12 @@ setMethod("coltypes",
                 stop(paste("Unsupported data type: ", x))
               }
             })
-            
+
             # Find which types could not be mapped
             naIndices <- which(is.na(rTypes))
-            
+
             # Assign the original scala data types to the unmatched ones
             rTypes[naIndices] <- types[naIndices]
-            
+
             rTypes
           })
