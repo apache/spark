@@ -152,24 +152,37 @@ class Dataset[T] private(
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
 
   /**
+   * (Scala-specific)
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    * @since 1.6.0
    */
   def filter(func: T => Boolean): Dataset[T] = mapPartitions(_.filter(func))
 
+  /**
+   * (Java-specific)
+   * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
+   * @since 1.6.0
+   */
   def filter(func: JFunction[T, java.lang.Boolean]): Dataset[T] =
     filter(t => func.call(t).booleanValue())
 
   /**
+   * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    * @since 1.6.0
    */
   def map[U : Encoder](func: T => U): Dataset[U] = mapPartitions(_.map(func))
 
+  /**
+   * (Java-specific)
+   * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
+   * @since 1.6.0
+   */
   def map[U](func: JFunction[T, U], encoder: Encoder[U]): Dataset[U] =
     map(t => func.call(t))(encoder)
 
   /**
+   * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    * @since 1.6.0
    */
@@ -184,6 +197,11 @@ class Dataset[T] private(
         logicalPlan))
   }
 
+  /**
+   * (Java-specific)
+   * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
+   * @since 1.6.0
+   */
   def mapPartitions[U](
       f: FlatMapFunction[java.util.Iterator[T], U],
       encoder: Encoder[U]): Dataset[U] = {
@@ -191,9 +209,21 @@ class Dataset[T] private(
     mapPartitions(func)(encoder)
   }
 
+  /**
+   * (Scala-specific)
+   * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
+   * and then flattening the results.
+   * @since 1.6.0
+   */
   def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
     mapPartitions(_.flatMap(func))
 
+  /**
+   * (Java-specific)
+   * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
+   * and then flattening the results.
+   * @since 1.6.0
+   */
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     val func: (T) => Iterable[U] = x => f.call(x).asScala
     flatMap(func)(encoder)
@@ -204,19 +234,31 @@ class Dataset[T] private(
    * ************** */
 
   /**
+   * (Scala-specific)
    * Runs `func` on each element of this Dataset.
    * @since 1.6.0
    */
   def foreach(func: T => Unit): Unit = rdd.foreach(func)
 
+  /**
+   * (Java-specific)
+   * Runs `func` on each element of this Dataset.
+   * @since 1.6.0
+   */
   def foreach(func: VoidFunction[T]): Unit = foreach(func.call(_))
 
   /**
+   * (Scala-specific)
    * Runs `func` on each partition of this Dataset.
    * @since 1.6.0
    */
   def foreachPartition(func: Iterator[T] => Unit): Unit = rdd.foreachPartition(func)
 
+  /**
+   * (Java-specific)
+   * Runs `func` on each partition of this Dataset.
+   * @since 1.6.0
+   */
   def foreachPartition(func: VoidFunction[java.util.Iterator[T]]): Unit =
     foreachPartition(it => func.call(it.asJava))
 
@@ -225,15 +267,23 @@ class Dataset[T] private(
    * ************* */
 
   /**
+   * (Scala-specific)
    * Reduces the elements of this Dataset using the specified  binary function.  The given function
    * must be commutative and associative or the result may be non-deterministic.
    * @since 1.6.0
    */
   def reduce(func: (T, T) => T): T = rdd.reduce(func)
 
+  /**
+   * (Java-specific)
+   * Reduces the elements of this Dataset using the specified  binary function.  The given function
+   * must be commutative and associative or the result may be non-deterministic.
+   * @since 1.6.0
+   */
   def reduce(func: JFunction2[T, T, T]): T = reduce(func.call(_, _))
 
   /**
+   * (Scala-specific)
    * Aggregates the elements of each partition, and then the results for all the partitions, using a
    * given associative and commutative function and a neutral "zero value".
    *
@@ -246,9 +296,16 @@ class Dataset[T] private(
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = rdd.fold(zeroValue)(op)
 
+  /**
+   * (Java-specific)
+   * Aggregates the elements of each partition, and then the results for all the partitions, using a
+   * given associative and commutative function and a neutral "zero value".
+   * @since 1.6.0
+   */
   def fold(zeroValue: T, func: JFunction2[T, T, T]): T = fold(zeroValue)(func.call(_, _))
 
   /**
+   * (Scala-specific)
    * Returns a [[GroupedDataset]] where the data is grouped by the given key function.
    * @since 1.6.0
    */
@@ -286,6 +343,11 @@ class Dataset[T] private(
       keyAttributes)
   }
 
+  /**
+   * (Java-specific)
+   * Returns a [[GroupedDataset]] where the data is grouped by the given key function.
+   * @since 1.6.0
+   */
   def groupBy[K](f: JFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
     groupBy(f.call(_))(encoder)
 
@@ -475,7 +537,15 @@ class Dataset[T] private(
   /** Collects the elements to an Array. */
   def collect(): Array[T] = rdd.collect()
 
-  def jcollect(): java.util.List[T] =
+  /**
+   * (Java-specific)
+   * Collects the elements to a Java list.
+   *
+   * Due to the incompatibility problem between Scala and Java, the return type of [[collect()]] at
+   * Java side is `java.lang.Object`, which is not easy to use.  Java user can use this method
+   * instead and keep the generic type for result.
+   */
+  def collectAsList(): java.util.List[T] =
     rdd.collect().toSeq.asJava
 
   /** Returns the first `num` elements of this [[Dataset]] as an Array. */
