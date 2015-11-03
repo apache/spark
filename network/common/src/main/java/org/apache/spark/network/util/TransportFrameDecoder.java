@@ -135,10 +135,18 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
   public static interface Interceptor {
 
+    /**
+     * Handles data received from the remote end.
+     *
+     * @param data Buffer containing data.
+     * @return "true" if the interceptor expects more data, "false" to uninstall the interceptor.
+     */
     boolean handle(ByteBuf data) throws Exception;
 
+    /** Called if an exception is thrown in the channel pipeline. */
     void exceptionCaught(Throwable cause) throws Exception;
 
+    /** Called if the channel is closed and the interceptor is still installed. */
     void channelInactive() throws Exception;
 
   }
