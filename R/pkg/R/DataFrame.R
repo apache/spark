@@ -34,7 +34,7 @@ setOldClass("jobj")
 #' @seealso \link{createDataFrame}, \link{jsonFile}, \link{table}
 #' @seealso \url{https://spark.apache.org/docs/latest/sparkr.html#sparkr-dataframes}
 #' @export
-#' examples
+#' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
@@ -54,7 +54,6 @@ setMethod("initialize", "DataFrame", function(.Object, sdf, isCached) {
 
 #' @rdname DataFrame
 #' @export
-#'
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @param isCached TRUE if the dataFrame is cached
 dataFrame <- function(sdf, isCached = FALSE) {
