@@ -17,13 +17,11 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.File
-
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
-import org.apache.spark.storage.{ShuffleBlockId, ShuffleIndexBlockId, ShuffleMapStatusBlockId}
+import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter, TmpDestShuffleFile}
+import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
@@ -50,7 +48,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   context.taskMetrics.shuffleWriteMetrics = Some(writeMetrics)
 
   /** Write a bunch of records to this task's output */
-  override def write(records: Iterator[Product2[K, V]]): Seq[(File, File)] = {
+  override def write(records: Iterator[Product2[K, V]]): Seq[TmpDestShuffleFile] = {
     sorter = if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
@@ -76,8 +74,8 @@ private[spark] class SortShuffleWriter[K, V, C](
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
     Seq(
-      tmpDataFile -> dataFile,
-      tmpIndexFile -> indexFile
+      TmpDestShuffleFile(tmpDataFile, dataFile),
+      TmpDestShuffleFile(tmpIndexFile, indexFile)
     )
   }
 

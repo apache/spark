@@ -74,10 +74,8 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
     }
 
     file = blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(shuffleId, mapId))
-    if (file.exists()) {
-      if (!file.delete()) {
-        logWarning(s"Error deleting MapStatus file ${file.getPath()}")
-      }
+    if (file.exists() && !file.delete()) {
+      logWarning(s"Error deleting MapStatus file ${file.getPath()}")
     }
   }
 

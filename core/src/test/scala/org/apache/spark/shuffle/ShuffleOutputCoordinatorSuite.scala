@@ -66,14 +66,14 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     }
   }
 
-  private def generateAttempt(attempt: Int): Seq[(File, File)] = {
+  private def generateAttempt(attempt: Int): Seq[TmpDestShuffleFile] = {
     (0 until 3).map { idx =>
       val j = attempt * 3 + idx
-      writeFile(s"t$j", j) -> new File(tempDir, s"d$idx")
+      TmpDestShuffleFile(writeFile(s"t$j", j), new File(tempDir, s"d$idx"))
     }
   }
 
-  private def commit(files: Seq[(File, File)], id: Int): (Boolean, MapStatus) = {
+  private def commit(files: Seq[TmpDestShuffleFile], id: Int): (Boolean, MapStatus) = {
     ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus(id), mapStatusFile, ser)
   }
 
@@ -83,7 +83,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(firstCommit._1)
     assert(firstCommit._2.location.port === 1)
     verifyFiles(0)
-    firstAttempt.foreach{ case (t, d) => assert(!t.exists())}
+    firstAttempt.foreach{ case TmpDestShuffleFile(t, d) => assert(!t.exists())}
 
     val secondAttempt = generateAttempt(1)
     // second commit fails, and also deletes the tmp files
@@ -93,7 +93,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(firstCommit._2.location.port === 1)
     verifyFiles(0)
     // make sure we delete the temp files if the dest exists
-    secondAttempt.foreach{ case (t, d) => assert(!t.exists())}
+    secondAttempt.foreach{ case TmpDestShuffleFile(t, d) => assert(!t.exists())}
   }
 
   test("move files if just map status file missing") {
@@ -102,7 +102,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(firstCommit._1)
     assert(firstCommit._2.location.port === 1)
     verifyFiles(0)
-    firstAttempt.foreach{ case (t, d) => assert(!t.exists())}
+    firstAttempt.foreach{ case TmpDestShuffleFile(t, d) => assert(!t.exists())}
 
     val secondAttempt = generateAttempt(1)
     mapStatusFile.delete()
@@ -111,13 +111,13 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(secondCommit._1)
     assert(secondCommit._2.location.port === 2)
     verifyFiles(1)
-    secondAttempt.foreach{ case (t, d) => assert(!t.exists())}
+    secondAttempt.foreach{ case TmpDestShuffleFile(t, d) => assert(!t.exists())}
   }
 
   test("missing tmp files become zero-length destination files") {
     val extraDestFile = new File(tempDir, "blah")
     val firstAttempt = generateAttempt(0) ++
-      Seq(new File(tempDir, "bogus") -> extraDestFile)
+      Seq(TmpDestShuffleFile(new File(tempDir, "bogus"), extraDestFile))
     assert(commit(firstAttempt, 1)._1)
     verifyFiles(0)
     assert(extraDestFile.exists())
@@ -127,7 +127,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     // do the move
     extraDestFile.delete()
     val secondAttempt = generateAttempt(1) ++
-      Seq(new File(tempDir, "flippy") -> extraDestFile)
+      Seq(TmpDestShuffleFile(new File(tempDir, "flippy"), extraDestFile))
     assert(commit(secondAttempt, 2)._1)
     verifyFiles(1)
     assert(extraDestFile.exists())

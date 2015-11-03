@@ -57,6 +57,7 @@ import org.apache.spark.serializer.*;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleOutputCoordinator;
+import org.apache.spark.shuffle.TmpDestShuffleFile;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
 
@@ -279,7 +280,7 @@ public class UnsafeShuffleWriterSuite {
   @Test
   public void writeEmptyIterator() throws Exception {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    Seq<Tuple2<File, File>> files = writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
+    Seq<TmpDestShuffleFile> files = writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus.get(), mapStatusFile,
@@ -301,7 +302,7 @@ public class UnsafeShuffleWriterSuite {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
+    Seq<TmpDestShuffleFile> files = writer.write(dataToWrite.iterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus.get(), mapStatusFile,
       serializer.newInstance());
@@ -348,7 +349,7 @@ public class UnsafeShuffleWriterSuite {
     writer.forceSorterToSpill();
     writer.insertRecordIntoSorter(dataToWrite.get(4));
     writer.insertRecordIntoSorter(dataToWrite.get(5));
-    Seq<Tuple2<File, File>> files = writer.closeAndWriteOutput();
+    Seq<TmpDestShuffleFile> files = writer.closeAndWriteOutput();
     final Option<MapStatus> mapStatus = writer.stop(true);
     ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus.get(), mapStatusFile,
       serializer.newInstance());
@@ -429,7 +430,7 @@ public class UnsafeShuffleWriterSuite {
     for (int i = 0; i < 128 + 1; i++) {
       dataToWrite.add(new Tuple2<Object, Object>(i, bigByteArray));
     }
-    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
+    Seq<TmpDestShuffleFile> files = writer.write(dataToWrite.iterator());
     verify(taskMemoryManager, times(5)).acquireExecutionMemory(anyLong());
     // this includes the tmp index & data files, before the output is committed
     assertEquals(4, tmpShuffleFilesCreated.size());
@@ -459,7 +460,7 @@ public class UnsafeShuffleWriterSuite {
     for (int i = 0; i < UnsafeShuffleWriter.INITIAL_SORT_BUFFER_SIZE; i++) {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
-    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
+    Seq<TmpDestShuffleFile> files = writer.write(dataToWrite.iterator());
     verify(taskMemoryManager, times(5)).acquireExecutionMemory(anyLong());
     // this includes the tmp index & data files, before the output is committed
     assertEquals(4, tmpShuffleFilesCreated.size());
@@ -484,7 +485,7 @@ public class UnsafeShuffleWriterSuite {
     final byte[] bytes = new byte[(int) (ShuffleExternalSorter.DISK_WRITE_BUFFER_SIZE * 2.5)];
     new Random(42).nextBytes(bytes);
     dataToWrite.add(new Tuple2<Object, Object>(1, ByteBuffer.wrap(bytes)));
-    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
+    Seq<TmpDestShuffleFile> files = writer.write(dataToWrite.iterator());
     MapStatus mapStatus = writer.stop(true).get();
     ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile,
       serializer.newInstance());
@@ -507,7 +508,7 @@ public class UnsafeShuffleWriterSuite {
     final byte[] exceedsMaxRecordSize = new byte[writer.maxRecordSizeBytes() + 1];
     new Random(42).nextBytes(exceedsMaxRecordSize);
     dataToWrite.add(new Tuple2<Object, Object>(3, ByteBuffer.wrap(exceedsMaxRecordSize)));
-    Seq<Tuple2<File, File>> files = writer.write(dataToWrite.iterator());
+    Seq<TmpDestShuffleFile> files = writer.write(dataToWrite.iterator());
     MapStatus mapStatus = writer.stop(true).get();
     ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile,
       serializer.newInstance());

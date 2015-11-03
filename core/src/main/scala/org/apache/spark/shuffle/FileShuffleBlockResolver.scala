@@ -137,10 +137,8 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
         for (mapId <- state.completedMapTasks.asScala) {
           val mapStatusFile =
             blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(shuffleId, mapId))
-          if (mapStatusFile.exists()) {
-            if (!mapStatusFile.delete()) {
-              logWarning(s"Error deleting MapStatus file ${mapStatusFile.getPath()}")
-            }
+          if (mapStatusFile.exists() && !mapStatusFile.delete()) {
+            logWarning(s"Error deleting MapStatus file ${mapStatusFile.getPath()}")
           }
         }
         logInfo("Deleted all files for shuffle " + shuffleId)

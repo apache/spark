@@ -135,7 +135,6 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
       blockId = new TempUncompressedShuffleBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
-
   }
 
   /**

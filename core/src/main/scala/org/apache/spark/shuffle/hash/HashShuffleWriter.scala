@@ -51,7 +51,7 @@ private[spark] class HashShuffleWriter[K, V](
     writeMetrics)
 
   /** Write a bunch of records to this task's output */
-  override def write(records: Iterator[Product2[K, V]]): Seq[(File, File)] = {
+  override def write(records: Iterator[Product2[K, V]]): Seq[TmpDestShuffleFile] = {
     val iter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         dep.aggregator.get.combineValuesByKey(records, context)
@@ -67,7 +67,7 @@ private[spark] class HashShuffleWriter[K, V](
       val bucketId = dep.partitioner.getPartition(elem._1)
       shuffle.writers(bucketId)._1.write(elem._1, elem._2)
     }
-    shuffle.writers.map { case (writer, destFile) => writer.file -> destFile}
+    shuffle.writers.map { case (writer, destFile) => TmpDestShuffleFile(writer.file, destFile) }
   }
 
   /** Close this writer, passing along whether the map completed */

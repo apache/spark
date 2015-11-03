@@ -53,10 +53,9 @@ import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.shuffle.IndexShuffleBlockResolver$;
+import org.apache.spark.shuffle.TmpDestShuffleFile;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.storage.ShuffleIndexBlockId;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
 
@@ -160,12 +159,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * This convenience method should only be called in test code.
    */
   @VisibleForTesting
-  public Seq<Tuple2<File, File>> write(Iterator<Product2<K, V>> records) throws IOException {
+  public Seq<TmpDestShuffleFile> write(Iterator<Product2<K, V>> records) throws IOException {
     return write(JavaConverters.asScalaIteratorConverter(records).asScala());
   }
 
   @Override
-  public Seq<Tuple2<File, File>> write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
+  public Seq<TmpDestShuffleFile> write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
     // Keep track of success so we know if we encountered an exception
     // We do this rather than a standard try/catch/re-throw to handle
     // generic throwables.
@@ -174,7 +173,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
       }
-      final Seq<Tuple2<File, File>> result = closeAndWriteOutput();
+      final Seq<TmpDestShuffleFile> result = closeAndWriteOutput();
       success = true;
       return result;
     } finally {
@@ -210,7 +209,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   @VisibleForTesting
-  Seq<Tuple2<File, File>> closeAndWriteOutput() throws IOException {
+  Seq<TmpDestShuffleFile> closeAndWriteOutput() throws IOException {
     assert(sorter != null);
     updatePeakMemoryUsed();
     serBuffer = null;
@@ -236,8 +235,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final File indexFile = shuffleBlockResolver.getIndexFile(shuffleId, mapId);
 
     return JavaConverters.asScalaBufferConverter(Arrays.asList(
-      new Tuple2<>(tmpIndexFile, indexFile),
-      new Tuple2<>(tmpDataFile, dataFile)
+      new TmpDestShuffleFile(tmpIndexFile, indexFile),
+      new TmpDestShuffleFile(tmpDataFile, dataFile)
     )).asScala();
   }
 
